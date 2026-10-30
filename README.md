@@ -149,6 +149,14 @@ psql -h 127.0.0.1 -p 54322 -U postgres -d postgres -X \
 SQL isolation tests are separate from the SQLite/unit tests. Neither substitutes
 for exercising a hosted project with its real auth configuration.
 
+Validated for this increment: 16 application tests, lint, typecheck and production
+build; 74 SQL assertions on PostgreSQL 16 using Supabase auth-role/`auth.uid()`
+fixtures; and three two-connection races (overlap, stale edits, and publication
+versus editing). Browser checks exercised demo login, overnight draft creation,
+department publication, employee visibility and a 390px mobile layout.
+The complete Supabase Docker stack and hosted email/password authentication were
+not exercised; those require project configuration before a pilot.
+
 ## Deployment
 
 Deploy to Vercel with Node.js 24 and the two public Supabase environment

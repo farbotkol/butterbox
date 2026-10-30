@@ -1,5 +1,5 @@
 import { DatabaseSync } from "node:sqlite";
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import {
@@ -107,6 +107,8 @@ export function scopeWorkspace(session: Session, data: Workspace): Workspace {
 /** Persistent local test double. Production always uses Supabase and RLS. */
 export class DemoStore {
   private db: DatabaseSync;
+  private passwordSalt = randomBytes(16);
+  private passwordHash = scryptSync("butterbox-demo", this.passwordSalt, 32);
   constructor(path = resolve(process.cwd(), ".local/butterbox.sqlite")) {
     if (path !== ":memory:") mkdirSync(dirname(path), { recursive: true });
     this.db = new DatabaseSync(path);
@@ -133,7 +135,7 @@ export class DemoStore {
     if (attempts && attempts.attempts >= 10) return null;
     this.db.prepare("INSERT INTO login_attempts VALUES (?,1,?) ON CONFLICT(key) DO UPDATE SET attempts=attempts+1").run(key, now + 15 * 60000);
     const account = demoAccounts.find(a => email === `${a}@demo.butterbox.test`);
-    const correct = timingSafeEqual(Buffer.from(digest(password)), Buffer.from(digest("butterbox-demo")));
+    const correct = timingSafeEqual(scryptSync(password, this.passwordSalt, 32), this.passwordHash);
     if (!account || !correct) return null;
     const token = randomBytes(32).toString("hex");
     this.db.prepare("INSERT INTO sessions VALUES (?,?,?)").run(digest(token), account, now + 8 * 3600000);
