@@ -1232,6 +1232,10 @@ test("owners configure venue conflict rules with protected history and scoped ac
       block_manual_unavailability: true, block_publish_unavailability: true,
       block_publish_overlap: true, block_publish_long_shift: true,
     });
+    // Clear the previous saved message so the unchanged save is observed completing before the next step.
+    await page.goto(`/settings/organisation?venue=${venueId}`);
+    await expect(page.getByRole("status")).toHaveCount(0);
+    for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("true");
     await form.getByRole("button", { name: "Save roster conflict rules" }).click();
     await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
     const unchangedHistory = await admin.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
@@ -5696,6 +5700,233 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await outsidePage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
     await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
     await expect(outsidePage.getByText("Weekly Worker", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("department managers approve or return scoped timesheet entries for correction", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, workerId, managerEmployeeId,
+    fohSession, bohSession, selfSession, openSession, fohClockIn, bohClockIn] = Array.from({ length: 14 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "foh", "boh", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `approval-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Approval cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside approval cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[3], name: "Split Worker", role_title: "Server" },
+      { id: managerEmployeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[1], name: "Working Manager", role_title: "Supervisor" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").insert([
+      { business_id: businessId, employee_id: workerId, department_id: bohId },
+    ])).error).toBeNull();
+    const sessions = [
+      { id: fohSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users[3] },
+      { id: bohSession, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: workerId, started_by: users[3] },
+      { id: selfSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: managerEmployeeId, started_by: users[1] },
+      { id: openSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users[3] },
+    ];
+    expect((await admin.from("attendance_sessions").insert(sessions)).error).toBeNull();
+    const event = (session, eventType, occurredAt, id = randomUUID()) => ({
+      id, session_id: session.id, business_id: session.business_id, venue_id: session.venue_id,
+      department_id: session.department_id, employee_id: session.employee_id, actor_id: session.started_by,
+      request_id: randomUUID(), event_type: eventType, occurred_at: occurredAt, source: "server_clock",
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[0], "clock_in", "2024-09-30T22:00:00Z", fohClockIn),
+      event(sessions[0], "clock_out", "2024-10-01T02:00:00Z"),
+      event(sessions[1], "clock_in", "2024-10-01T22:00:00Z", bohClockIn),
+      event(sessions[1], "clock_out", "2024-10-02T02:00:00Z"),
+      event(sessions[2], "clock_in", "2024-10-02T22:00:00Z"),
+      event(sessions[2], "clock_out", "2024-10-03T02:00:00Z"),
+      event(sessions[3], "clock_in", "2024-10-05T22:00:00Z"),
+    ])).error).toBeNull();
+    const signedIn = async (role) => {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `approval-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      return client;
+    };
+    const ownerApi = await signedIn("owner");
+    const fohApi = await signedIn("foh");
+    const outsideApi = await signedIn("outside");
+
+    const ownerApprovals = await ownerApi.rpc("list_weekly_timesheet_approvals", {
+      p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30", p_employee_id: null,
+    });
+    expect(ownerApprovals.error).toBeNull();
+    expect(Object.fromEntries(ownerApprovals.data.map((row) => [row.session_id, row.department_id]))).toEqual({
+      [fohSession]: fohId, [bohSession]: bohId, [selfSession]: fohId, [openSession]: fohId,
+    });
+    const decide = (client, sessionId, revision, decision, reason = null) => client.rpc("decide_attendance_timesheet", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: sessionId, p_request_id: randomUUID(),
+      p_expected_revision: revision, p_decision: decision, p_reason: reason,
+    });
+    const fohWeek = await fohApi.rpc("list_weekly_timesheet_approvals", {
+      p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30", p_employee_id: null,
+    });
+    expect(fohWeek.error).toBeNull();
+    expect(fohWeek.data.map((row) => row.session_id).sort()).toEqual([fohSession, selfSession, openSession].sort());
+    expect((await decide(fohApi, bohSession, "0".repeat(64), "approved")).error?.message)
+      .toBe("Session not found or permission denied");
+    expect((await decide(outsideApi, fohSession, "0".repeat(64), "approved")).error?.message)
+      .toBe("Permission denied");
+
+    const fohContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    fohPage.setDefaultTimeout(20_000);
+    await signIn(fohPage, `approval-foh-${suffix}@example.test`, password);
+    await fohPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(fohPage.getByRole("heading", { name: "Split Worker · FOH" })).toBeVisible();
+    await expect(fohPage.getByRole("heading", { name: "Split Worker · BOH" })).toHaveCount(0);
+    const fohRow = fohPage.locator(`#timesheet-session-${fohSession}`);
+    const selfRow = fohPage.locator(`#timesheet-session-${selfSession}`);
+    const openRow = fohPage.locator(`#timesheet-session-${openSession}`);
+    await expect(fohRow).toContainText("Awaiting department approval");
+    await expect(selfRow).toContainText("Another manager or the owner must decide your own attendance.");
+    await expect(selfRow.getByRole("button")).toHaveCount(0);
+    await expect(openRow).toContainText("Incomplete or invalid; return it for correction.");
+    await expect(openRow.getByRole("button", { name: "Approve time" })).toHaveCount(0);
+    await expect(openRow.getByRole("button", { name: "Return for correction" })).toBeVisible();
+    expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    await fohRow.getByLabel("Reason for returning").evaluate((input) => { input.required = false; });
+    await fohRow.getByRole("button", { name: "Return for correction" }).click();
+    await expect(fohPage.locator("main").getByRole("alert")).toContainText("Enter a reason of up to 500 characters");
+    await fohRow.getByLabel("Reason for returning").fill("Clock-out looks late; confirm your finish time");
+    await fohRow.getByRole("button", { name: "Return for correction" }).click();
+    await expect(fohPage.locator("main").getByRole("status"))
+      .toContainText("Timesheet entry returned to the employee for correction.");
+    await expect(fohRow).toContainText("Returned for correction");
+    await expect(fohRow).toContainText("Reason returned: Clock-out looks late; confirm your finish time");
+    await expect(fohRow.getByRole("button", { name: "Return for correction" })).toHaveCount(0);
+    await expect(fohRow.getByRole("button", { name: "Approve time" })).toBeVisible();
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    workerPage.setDefaultTimeout(20_000);
+    await signIn(workerPage, `approval-worker-${suffix}@example.test`, password);
+    await workerPage.goto("/attendance");
+    const decisions = workerPage.getByRole("region", { name: "Timesheet decisions" });
+    await expect(decisions).toContainText("Split Worker · FOH");
+    await expect(decisions).toContainText("Returned for correction");
+    await expect(decisions).toContainText("Reason returned: Clock-out looks late; confirm your finish time");
+    expect(await workerPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: fohSession, p_event_id: fohClockIn,
+      p_request_id: randomUUID(), p_expected_at: "2024-09-30T22:00:00Z",
+      p_new_at: "2024-09-30T22:15:00Z", p_reason: "Worker confirmed later start",
+    })).error).toBeNull();
+    await workerPage.reload();
+    await expect(decisions).toContainText("Corrected after return; review again");
+
+    await fohPage.reload();
+    await expect(fohRow).toContainText("Corrected after return; review again");
+    await fohRow.getByLabel("Approval note (optional)").fill("Corrected start confirmed");
+    await fohRow.getByRole("button", { name: "Approve time" }).click();
+    await expect(fohPage.locator("main").getByRole("status"))
+      .toContainText("Timesheet entry approved for your department and locked against corrections.");
+    await expect(fohRow).toContainText("Approved by department manager");
+    await expect(fohRow).toContainText("Approval note: Corrected start confirmed");
+    await expect(fohRow).toContainText("Already locked against corrections");
+    await expect(fohRow.getByRole("button", { name: "Approve time" })).toHaveCount(0);
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: fohSession, p_event_id: fohClockIn,
+      p_request_id: randomUUID(), p_expected_at: "2024-09-30T22:15:00Z",
+      p_new_at: "2024-09-30T22:20:00Z", p_reason: "Attempt after approval",
+    })).error?.message).toBe("Attendance edits are locked");
+    await workerPage.reload();
+    await expect(decisions).toContainText("Approved by department manager");
+
+    const bohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(bohContext);
+    const bohPage = await bohContext.newPage();
+    bohPage.setDefaultTimeout(20_000);
+    await signIn(bohPage, `approval-boh-${suffix}@example.test`, password);
+    await bohPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(bohPage.getByRole("heading", { name: "Split Worker · BOH" })).toBeVisible();
+    await expect(bohPage.getByRole("heading", { name: "Split Worker · FOH" })).toHaveCount(0);
+    const bohRow = bohPage.locator(`#timesheet-session-${bohSession}`);
+    await expect(bohRow).toContainText("Awaiting department approval");
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: bohSession, p_event_id: bohClockIn,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-01T22:00:00Z",
+      p_new_at: "2024-10-01T22:05:00Z", p_reason: "Changed while reviewing",
+    })).error).toBeNull();
+    await bohRow.getByRole("button", { name: "Approve time" }).click();
+    await expect(bohPage.locator("main").getByRole("alert")).toContainText("Attendance or its approval changed");
+    await bohRow.getByRole("button", { name: "Approve time" }).click();
+    await expect(bohPage.locator("main").getByRole("status")).toContainText("Timesheet entry approved");
+    await expect(bohRow).toContainText("Approved by department manager");
+
+    const history = await ownerApi.rpc("list_timesheet_decisions", { p_business_id: businessId, p_venue_id: venueId });
+    expect(history.error).toBeNull();
+    expect(history.data.map((row) => ({
+      session: row.session_id, department: row.department_name, decision: row.decision, actor: row.actor_id,
+    })).sort((a, b) => a.department.localeCompare(b.department))).toEqual([
+      { session: bohSession, department: "BOH", decision: "approved", actor: users[2] },
+      { session: fohSession, department: "FOH", decision: "approved", actor: users[1] },
+    ]);
+
+    const ownerPage = page;
+    await signIn(ownerPage, `approval-owner-${suffix}@example.test`, password);
+    await ownerPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    const ownerSelf = ownerPage.locator(`#timesheet-session-${selfSession}`);
+    await expect(ownerSelf).toContainText("Awaiting department approval");
+    await ownerSelf.getByRole("button", { name: "Approve time" }).click();
+    await expect(ownerPage.locator("main").getByRole("status")).toContainText("Timesheet entry approved");
+    await expect(ownerSelf).toContainText("Approved by department manager");
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `approval-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Split Worker", { exact: false })).toHaveCount(0);
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {

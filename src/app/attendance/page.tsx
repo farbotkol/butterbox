@@ -26,6 +26,9 @@ import {
   type OfflineOpenBreak, type OfflineOpenSession, type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 import { readAllPages } from "@/lib/paginated-rows";
+import {
+  parseTimesheetDecisions, timesheetApprovalLabels, type TimesheetDecision,
+} from "@/lib/timesheet-approvals";
 import { getWorkspace } from "@/lib/workspace";
 
 type AttendancePageProps = {
@@ -103,7 +106,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
 
   const canReview = managerRoles.includes(workspace.membership.role);
   const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, reviewResult, matchResult, openResult,
-    openBreakResult, breakResolutionResult, correctionResult] = await Promise.all([
+    openBreakResult, breakResolutionResult, correctionResult, decisionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
       .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (venue) => venue.id),
@@ -156,6 +159,10 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
     }, { count: "exact" }).order("sequence", { ascending: false }).order("id").range(from, to),
     (row) => row && typeof row.id === "string" ? row.id : ""),
+    readAllPages<TimesheetDecision>((from, to) => workspace.supabase.rpc("list_timesheet_decisions", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("decided_at", { ascending: false }).order("decision_id").range(from, to),
+    (row) => row && typeof row.decision_id === "string" ? row.decision_id : ""),
   ]);
   const options = parseClockOptions(optionResult.data);
   const state = parseAttendanceState(stateResult.data);
@@ -211,6 +218,13 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     pendingEndsByWorker.set(key, ends);
   }
   const corrections = parseAttendanceCorrections(correctionResult.data);
+  const timesheetDecisions = parseTimesheetDecisions(decisionResult.data);
+  if (decisionResult.error || !timesheetDecisions) {
+    console.error("Could not load timesheet decisions.", {
+      code: decisionResult.error?.code,
+      message: decisionResult.error?.message ?? "The server returned invalid timesheet decisions.",
+    });
+  }
   const clockVenueId = state?.state === "clocked_in" ? state.venue_id : workspace.venue.id;
   const clockVenue = venueResult.data?.find((venue) => venue.id === clockVenueId);
   const validClockPolicy = clockVenue && typeof clockVenue.clock_geofence_enabled === "boolean";
@@ -573,6 +587,29 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           {offlineOnly.map(renderClaim)}
         </ul>}
       </section>
+      <section aria-label="Timesheet decisions" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Timesheet decisions</h2>
+        <p className="mt-2 text-sm text-muted">
+          Department managers approve or return attended sessions. Returned entries show the reason so you can request a
+          correction above.
+        </p>
+        {decisionResult.error || !timesheetDecisions ? <p role="alert" className="mt-3 text-sm text-red-800">
+          We couldn&apos;t load timesheet decisions. Refresh and try again.
+        </p> : timesheetDecisions.length === 0 ? <p className="mt-3 text-sm text-muted">
+          No timesheet decisions in your scope for this venue.
+        </p> : <ul className="mt-4 space-y-3">{timesheetDecisions.map((item) => <li key={item.decision_id}
+          className="rounded-lg border border-line p-3 text-sm">
+          <p className="font-semibold">{item.employee_name} · {item.department_name}</p>
+          {item.clocked_in_at && <p className="mt-1 text-muted">Clocked in <time dateTime={item.clocked_in_at}>
+            {formatClockTime(item.clocked_in_at, workspace.venue.timezone)}</time></p>}
+          <p className="mt-1">{timesheetApprovalLabels[item.status]}</p>
+          {item.reason && <p className="mt-1">
+            {item.decision === "rejected" ? "Reason returned" : "Approval note"}: {item.reason}
+          </p>}
+          <p className="mt-1 text-muted">Decided <time dateTime={item.decided_at}>
+            {formatClockTime(item.decided_at, workspace.venue.timezone)}</time></p>
+        </li>)}</ul>}
+      </section>
       <section aria-label="Attendance correction history" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="text-lg font-semibold">Attendance correction history</h2>
         <p className="mt-2 text-sm text-muted">
@@ -586,8 +623,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         When enabled by the venue owner, location is requested only when clocking in or out.
         A failed location check is reviewed without removing the time recorded. Break events
         have no location check. Managers can see recorded breaks in work-time calculations;
-        scoped managers can correct finished sessions without overwriting original events. Timesheet
-        approvals are not available yet, and no break is automatically deducted unless it has a
+        scoped managers can correct finished sessions without overwriting original events. Department
+        managers approve or return timesheet entries on the Timesheets page, and no break is automatically deducted unless it has a
         recorded start and end.
       </p>
       {canReview && (

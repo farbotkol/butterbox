@@ -17,6 +17,7 @@ import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
 import { parseOfflineClaimReceipt, parseOfflineMatchOption } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
+import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
 import {
@@ -1253,6 +1254,71 @@ export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
   revalidatePath("/work-time");
   revalidatePath("/attendance");
   redirect(`${destination}&receipt=${encodeURIComponent(receipt.batchId)}`);
+}
+
+export async function decideTimesheetAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const sessions = uuidList(formData, "session_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1 || sessions?.length !== 1) {
+    console.error("Invalid timesheet decision scope.");
+    redirect("/timesheets?error=decision-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the timesheet decision workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const revisions = formData.getAll("revision");
+  const decisions = formData.getAll("decision");
+  const reasons = formData.getAll("reason");
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  const input = decisions.length === 1 && reasons.length <= 1
+    ? parseTimesheetDecisionInput(decisions[0], reasons.length === 1 ? reasons[0] : null) : null;
+  const revision = revisions.length === 1 && typeof revisions[0] === "string" &&
+    /^[0-9a-f]{64}$/.test(revisions[0]) ? revisions[0] : null;
+  if (!week || weeks[0] !== week || employee === undefined || !input || !revision) {
+    console.error("Invalid timesheet decision request.");
+    redirect(`${destination}&error=${decisions[0] === "rejected" ? "return-invalid" : "decision-invalid"}`);
+  }
+
+  const { data, error } = await workspace.supabase.rpc("decide_attendance_timesheet", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_session_id: sessions[0],
+    p_request_id: requests[0], p_expected_revision: revision, p_decision: input.decision, p_reason: input.reason,
+  });
+  if (error || typeof data !== "string") {
+    console.error("Timesheet decision failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid decision.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Invalid timesheet decision": "decision-invalid",
+      "Attendance changed; review again": "decision-stale",
+      "Session not found or permission denied": "decision-scope",
+      "Permission denied": "decision-scope",
+      "Request identifier already used": "decision-retry",
+      "You cannot approve or return your own attendance": "decision-self",
+      "Timesheet entry is already approved": "decision-stale",
+      "Timesheet entry is already returned for correction": "decision-stale",
+      "Incomplete or invalid attendance cannot be approved": "decision-incomplete",
+      "Unlock attendance before returning it for correction": "decision-locked",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "decision-save"}#timesheet-session-${sessions[0]}`);
+  }
+  revalidatePath("/timesheets");
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&decided=${input.decision}#timesheet-session-${sessions[0]}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

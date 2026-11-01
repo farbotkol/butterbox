@@ -206,8 +206,8 @@ labelled manager-reported, attributed in the employee-visible history and
 flagged in **Work time**. No break end is inferred automatically. Out-of-order
 or overlapping events, edit locks and overlapping sessions prevent completion.
 Reopening a previously linked claim does not allow it to create another
-attendance session or clock event. Timesheet approvals are not yet available.
-Pending claims are not encrypted; clearing browser data or losing the device
+attendance session or clock event. Department managers can approve or return
+the resulting attendance from **Timesheet review**. Pending claims are not encrypted; clearing browser data or losing the device
 can lose unsent claims. Device storage is shared by accounts using the same
 browser profile, so use a
 private device or separate browser profiles for different users. If account
@@ -273,8 +273,23 @@ again on the server, already-locked sessions are skipped, and changed records
 must be reviewed again. Location and reported-time source warnings still require
 attention; locking does not resolve them or approve payroll. The result is
 retrieved from an attributed, protected receipt, and individual lock history
-remains available under **Work time**. Timesheet approvals are not yet
-available. Apply the current migrations before using this screen.
+remains available under **Work time**.
+
+Each attendance session is approved by a manager of the department it was
+recorded in, so a worker who works in both FOH and BOH needs approval from each
+department for the matching sessions. Owners and general managers can decide any
+department. The server checks scope, the reviewed revision and the request
+identifier, so stale or repeated submissions cannot record a second decision.
+Approval requires complete, valid attendance and locks the session against
+corrections. If an owner or general manager later unlocks or changes it, the
+status becomes **Changed after approval** and it must be approved again. A
+return requires a reason, leaves the session correctable and is shown to the
+employee under **Timesheet decisions** on **Attendance**; once it is corrected
+it shows **Corrected after return** for another review. Managers cannot decide
+their own attendance; another manager or the owner must do so. Every decision
+is kept as an immutable, attributed record. Approval does not finalise payroll
+or verify award compliance. Apply the current migrations before using this
+screen.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule

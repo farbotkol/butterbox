@@ -1,12 +1,16 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { bulkLockWeeklyAttendanceAction } from "@/app/actions";
+import { bulkLockWeeklyAttendanceAction, decideTimesheetAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
 import { addDays, formatDay } from "@/lib/dates";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
+import {
+  parseTimesheetApprovals, timesheetApprovalLabels, timesheetApprovalsWithinSessions,
+  type TimesheetApproval,
+} from "@/lib/timesheet-approvals";
 import {
   groupWeeklyTimesheets, parseStoredBulkLockReceipt, parseTimesheetEditEvents, parseTimesheetEditTime,
   parseTimesheetEmployeeFilter, parseTimesheetEmployees, parseTimesheetPlannedShifts,
@@ -25,6 +29,19 @@ const errors: Record<string, string> = {
   "bulk-scope": "Some selected attendance is unavailable or your access changed. Refresh and review your scope.",
   "bulk-retry": "This request was already used for a different selection. Review the refreshed sessions and try again.",
   "bulk-save": "We couldn't confirm the edit locks. Check their history before retrying.",
+  "decision-invalid": "The approval request was invalid. Refresh the timesheet and try again.",
+  "return-invalid": "Enter a reason of up to 500 characters before returning time for correction.",
+  "decision-stale": "Attendance or its approval changed. Review the refreshed entry before deciding again.",
+  "decision-scope": "This attendance is unavailable or outside your department scope. Refresh and review your access.",
+  "decision-retry": "This request was already used for a different decision. Review the refreshed entry and try again.",
+  "decision-self": "You cannot approve or return your own attendance. Ask another manager or the owner.",
+  "decision-incomplete": "Incomplete or invalid attendance cannot be approved. Return it for correction instead.",
+  "decision-locked": "Locked attendance must be unlocked by an owner or general manager before it can be returned.",
+  "decision-save": "We couldn't confirm the timesheet decision. Check the entry before retrying.",
+};
+const decidedMessages: Record<string, string> = {
+  approved: "Timesheet entry approved for your department and locked against corrections.",
+  rejected: "Timesheet entry returned to the employee for correction.",
 };
 const sourceLabels: Record<TimesheetSourceEvent["source"], string> = {
   server_clock: "Server clock event",
@@ -46,7 +63,9 @@ function totalDuration(values: number[]): string {
 }
 
 export default async function TimesheetsPage({ searchParams }: {
-  searchParams: Promise<{ venue?: string; week?: string; employee?: string; error?: string; receipt?: string }>;
+  searchParams: Promise<{
+    venue?: string; week?: string; employee?: string; error?: string; receipt?: string; decided?: string;
+  }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
@@ -72,7 +91,8 @@ export default async function TimesheetsPage({ searchParams }: {
   const validFilters = week !== null && employee !== undefined;
   const receiptRequested = params.receipt !== undefined;
   const receiptId = receiptRequested ? parseTimesheetEmployeeFilter(params.receipt) : null;
-  const [venuesResult, employeesResult, plannedResult, actualResult, eventsResult, receiptResult] = await Promise.all([
+  const [venuesResult, employeesResult, plannedResult, actualResult, eventsResult, receiptResult, approvalsResult] =
+    await Promise.all([
     readAllPages<TimesheetEmployee>((from, to) => workspace.supabase.from("venues")
       .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (row) => row && typeof row.id === "string" ? row.id : ""),
@@ -103,6 +123,12 @@ export default async function TimesheetsPage({ searchParams }: {
         p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_batch_id: receiptId,
       })
       : Promise.resolve({ data: null, error: null }),
+    validFilters
+      ? readAllPages<TimesheetApproval>((from, to) => workspace.supabase.rpc("list_weekly_timesheet_approvals", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week, p_employee_id: employee,
+      }, { count: "exact" }).order("session_id").range(from, to),
+      (row) => row && typeof row.session_id === "string" ? row.session_id : "")
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const venues = parseTimesheetEmployees(venuesResult.data);
   const currentEmployees = parseTimesheetEmployees(employeesResult.data);
@@ -110,6 +136,8 @@ export default async function TimesheetsPage({ searchParams }: {
   const actual = parseTimesheetEditTime(actualResult.data);
   const events = parseTimesheetEditEvents(eventsResult.data);
   const receipt = parseStoredBulkLockReceipt(receiptResult.data);
+  const approvals = parseTimesheetApprovals(approvalsResult.data);
+  const approvalsBySession = new Map((approvals ?? []).map((row) => [row.session_id.toLowerCase(), row]));
   const receiptError = receiptRequested && (!receipt || receipt.weekStart !== week ||
     receipt.employeeId?.toLowerCase() !== employee?.toLowerCase());
   const employees = currentEmployees && planned && actual
@@ -118,14 +146,17 @@ export default async function TimesheetsPage({ searchParams }: {
     employees?.some((item) => item.id.toLowerCase() === employee.toLowerCase()));
   const groups = planned && actual ? groupWeeklyTimesheets(planned, actual) : null;
   const eventsConsistent = actual && events && timesheetEditSourcesMatch(actual, events);
+  const approvalsConsistent = actual && approvals && timesheetApprovalsWithinSessions(actual, approvals);
   const dataError = Boolean(venuesResult.error || employeesResult.error || plannedResult.error || actualResult.error ||
-    eventsResult.error || !venues || !employees || !planned || !actual || !events || !groups || !eventsConsistent);
+    eventsResult.error || approvalsResult.error || !venues || !employees || !planned || !actual || !events || !groups ||
+    !eventsConsistent || !approvalsConsistent);
   if (dataError) {
     console.error("Could not load the weekly timesheet.", {
       code: venuesResult.error?.code ?? employeesResult.error?.code ?? plannedResult.error?.code ??
-        actualResult.error?.code ?? eventsResult.error?.code,
+        actualResult.error?.code ?? eventsResult.error?.code ?? approvalsResult.error?.code,
       message: venuesResult.error?.message ?? employeesResult.error?.message ?? plannedResult.error?.message ??
-        actualResult.error?.message ?? eventsResult.error?.message ?? "The server returned inconsistent timesheet data.",
+        actualResult.error?.message ?? eventsResult.error?.message ?? approvalsResult.error?.message ??
+        "The server returned inconsistent timesheet data.",
     });
   }
   if (receiptError) {
@@ -137,13 +168,26 @@ export default async function TimesheetsPage({ searchParams }: {
   const actionError = typeof params.error === "string"
     ? (Object.hasOwn(errors, params.error) ? errors[params.error] : "The attendance action could not be completed.")
     : null;
+  const decidedMessage = typeof params.decided === "string" && Object.hasOwn(decidedMessages, params.decided)
+    ? decidedMessages[params.decided] : null;
+  const decisionHidden = (sessionId: string, revision: string, decision: "approved" | "rejected") => <>
+    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+    <input type="hidden" name="week" value={week ?? ""} />
+    <input type="hidden" name="employee_id" value={employee ?? ""} />
+    <input type="hidden" name="request_id" value={randomUUID()} />
+    <input type="hidden" name="session_id" value={sessionId} />
+    <input type="hidden" name="revision" value={revision} />
+    <input type="hidden" name="decision" value={decision} />
+  </>;
 
   return <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <div>
       <p className="text-sm font-medium text-muted">Attendance</p>
       <h1 className="mt-2 text-3xl font-semibold">Weekly timesheet review</h1>
-      <p className="mt-2 text-sm text-muted">Compare published shifts with recorded attendance in your permitted departments.</p>
+      <p className="mt-2 text-sm text-muted">
+        Compare published shifts with recorded attendance, then approve or return entries for the departments you manage.
+      </p>
     </div>
     <form action="/timesheets" className="mt-5 grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-4 sm:items-end">
       <div>
@@ -175,6 +219,9 @@ export default async function TimesheetsPage({ searchParams }: {
       belongs to the week of its corrected clock-in, or its clock-out or creation time if clock-in is missing.
       Overnight records are not split between weeks. Scheduled span is before planned breaks and is compared
       with recorded elapsed time, not paid time. Matching totals do not pair shifts with sessions or approve payroll.
+      Each session is approved by a manager of its own department. Approval locks it against corrections; if an owner
+      or general manager later unlocks or changes it, it must be approved again. Returned entries stay correctable and
+      are shown to the employee with your reason. Approval is not payroll finalisation.
     </p>
     {!validFilters && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
       Enter a valid date and choose an available employee before reviewing this week.
@@ -186,6 +233,9 @@ export default async function TimesheetsPage({ searchParams }: {
       We couldn&apos;t load a consistent timesheet. Refresh and check your access before reviewing it.
     </p>}
     {actionError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">{actionError}</p>}
+    {decidedMessage && !actionError && <p role="status" className="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-900">
+      {decidedMessage}
+    </p>}
     {receiptError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
       We couldn&apos;t verify the edit-lock result. Check the attendance history before retrying.
     </p>}
@@ -273,6 +323,46 @@ export default async function TimesheetsPage({ searchParams }: {
                           <p className="mt-1 text-muted">Elapsed: {row.elapsed_seconds === null
                             ? "Unavailable" : formatWorkedDuration(row.elapsed_seconds)} · Paid: {row.paid_seconds === null
                               ? "Unavailable" : formatWorkedDuration(row.paid_seconds)}</p>
+                          {(() => {
+                            const approval = approvalsBySession.get(row.session_id.toLowerCase());
+                            if (!approval) return <p className="mt-2 text-muted">Outside your department approval scope.</p>;
+                            const canApprove = !approval.self_owned && approval.status !== "approved" &&
+                              row.worked_seconds !== null;
+                            const canReturn = !approval.self_owned && approval.status !== "returned" && !row.edit_locked;
+                            return <div role="group" aria-label="Department approval"
+                              className="mt-3 rounded-lg border border-line bg-slate-50 p-3">
+                              <p className="font-semibold">{timesheetApprovalLabels[approval.status]}</p>
+                              {approval.reason && <p className="mt-1">
+                                {approval.decision === "rejected" ? "Reason returned" : "Approval note"}: {approval.reason}
+                              </p>}
+                              {approval.self_owned && <p className="mt-1 text-muted">
+                                Another manager or the owner must decide your own attendance.
+                              </p>}
+                              {canApprove && <div className="mt-2">
+                                <label htmlFor={`approve-note-${row.session_id}`} className="block">Approval note (optional)</label>
+                                <input id={`approve-note-${row.session_id}`} name="reason" maxLength={500}
+                                  form={`approve-${row.session_id}`} className="mt-1 block w-full rounded-lg border border-line bg-white p-2" />
+                                <button type="submit" form={`approve-${row.session_id}`}
+                                  className="mt-2 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+                                  Approve time
+                                </button>
+                              </div>}
+                              {!approval.self_owned && approval.status !== "approved" && row.worked_seconds === null &&
+                                <p className="mt-2 text-amber-900">Incomplete or invalid; return it for correction.</p>}
+                              {canReturn && <div className="mt-3">
+                                <label htmlFor={`return-reason-${row.session_id}`} className="block">Reason for returning</label>
+                                <input id={`return-reason-${row.session_id}`} name="reason" maxLength={500} required
+                                  form={`return-${row.session_id}`} className="mt-1 block w-full rounded-lg border border-line bg-white p-2" />
+                                <button type="submit" form={`return-${row.session_id}`}
+                                  className="mt-2 min-h-11 rounded-lg border border-line bg-white px-4 py-2 font-semibold">
+                                  Return for correction
+                                </button>
+                              </div>}
+                              {!approval.self_owned && approval.status !== "returned" && row.edit_locked && <p className="mt-2 text-muted">
+                                Locked; an owner or general manager must unlock it before it can be returned.
+                              </p>}
+                            </div>;
+                          })()}
                           {row.exceptions.length > 0 && <p className="mt-2 text-amber-900">
                             Exceptions: {row.exceptions.map((exception) => workTimeExceptionLabels[exception]).join("; ")}
                           </p>}
@@ -303,5 +393,17 @@ export default async function TimesheetsPage({ searchParams }: {
         </section>
       </form>
     )}
+    {validFilters && employeeAvailable && !dataError && actual?.map((row) => {
+      const approval = approvalsBySession.get(row.session_id.toLowerCase());
+      if (!approval || approval.self_owned) return null;
+      return <div key={row.session_id} hidden>
+        <form id={`approve-${row.session_id}`} action={decideTimesheetAction}>
+          {decisionHidden(row.session_id, row.edit_revision, "approved")}
+        </form>
+        <form id={`return-${row.session_id}`} action={decideTimesheetAction}>
+          {decisionHidden(row.session_id, row.edit_revision, "rejected")}
+        </form>
+      </div>;
+    })}
   </AppShell>;
 }

@@ -35,6 +35,7 @@ const result = spawnSync(
           "tests/offline-claim-sessions-concurrency.integration.test.mjs",
           "tests/weekly-timesheet.integration.test.mjs",
           "tests/weekly-timesheet-bulk-locks.integration.test.mjs",
+          "tests/timesheet-approvals.integration.test.mjs",
         ] : []),
   ],
   {

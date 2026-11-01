@@ -2,13 +2,13 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **28**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **51**.
+- Total stories: **87**. Verified Done: **29**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **50**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
-  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002 and BB-TIME-003.
+  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003 and BB-TIME-004.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -265,10 +265,12 @@
 
 ## Current story
 
+- **BB-TIME-004 — Department approval** is Done (verification below).
+  Next: **BB-TIME-005 — Finalise payroll period**, then BB-TIME-006 and
+  BB-PAY-001/002/003 (payroll-ready export) before Xero (BB-PAY-004).
 - **BB-TIME-003 — Employee correction request** is Done. It was recovered
   from pushed checkpoint commits after the Codespace upgrade (8 CPU, 31 GiB
-  RAM, 63 GB disk) and verified on a clean isolated replay. Next:
-  **BB-TIME-004 — Department approval**.
+  RAM, 63 GB disk) and verified on a clean isolated replay.
 - **BB-ATTEND-005 — Time capture fallback** is Done. Immutable,
   explicitly unverified offline claims retain the device time and server
   receipt time. The attendance page queues claims and retries idempotently after
@@ -462,6 +464,35 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-TIME-004 — Department approval (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-004.1 Approval scope is server-enforced | `decide_attendance_timesheet` locks the membership and session, re-checks department scope (FOH/BOH managers only their department; owners/GMs all), the reviewed revision and an idempotent request ID. Employees, other tenants and managers deciding their own attendance are refused (owners excepted). Approval requires complete attendance and locks the session; decisions are immutable and attributed, and the service role has no table access. | 50-assertion pgTAP suite passed anon/employee/cross-tenant/out-of-department denials, validation, stale revisions, retries, self-approval, immutability and cascade. The authenticated integration passed HTTP scope, 8 duplicate retries, 6 competing approvals (exactly one wins), a correction committed while an approval waited, and mid-flight membership revocation. Production Chromium verified out-of-department and cross-tenant API refusals, the self-owned notice without controls, a stale-revision error and the outside owner's unavailable page. | Pass |
+| TIME-004.2 Multiple department shifts are attributed correctly | Approvals are per session, attributed to the session's recorded department. `list_weekly_timesheet_approvals` returns only sessions in departments the caller manages, and the page verifies every approval matches a visible session and department. | pgTAP and integration verified a multi-department worker's FOH and BOH sessions are decided only by their own managers. Production Chromium verified the owner's attribution map, FOH and BOH managers each seeing and approving only their department's session, and the decision history recording each department manager as actor. | Pass |
+| TIME-004.3 Rejected entries return for correction | Returning requires a reason (max 500 characters) and an unlocked session; it leaves the entry correctable and is shown to the employee under **Timesheet decisions** on Attendance. A later correction marks it **Corrected after return** for re-approval; corrections after approval are blocked until unlocked, and an owner unlock or change marks the approval outdated. | pgTAP verified return, correct, resubmitted, re-approve and outdated-after-unlock. Production Chromium verified the missing-reason server error, return with reason, the employee seeing status and reason at mobile width, owner correction to resubmitted, re-approval with a note, and the correction-after-approval refusal. | Pass |
+
+Files: `supabase/migrations/20261102170000_timesheet_department_approvals.sql`,
+`supabase/tests/database/timesheet_department_approvals.test.sql`,
+`src/lib/timesheet-approvals.ts`, `src/app/actions.ts`,
+`src/app/timesheets/page.tsx`, `src/app/attendance/page.tsx`,
+`tests/timesheet-approvals.test.mjs`,
+`tests/timesheet-approvals.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs`, `README.md`
+and the backlog/progress files. A clean isolated replay of 40 migrations passed
+**1,877/1,877** pgTAP assertions across 40 files; 17/17 authenticated
+integrations, 107 Node tests (17 integrations skipped in that run and run
+separately), ESLint, TypeScript and the split production build passed. The
+first serialized browser regression passed 46/47. The failing scenario, the
+pre-existing venue conflict-rules test, was intermittent (it failed 1 of 3
+isolated reruns). Its unchanged-save step accepted the "saved" message left by
+the previous save, so a late navigation could discard the injected invalid
+option. The test now reloads, asserts that no status is shown and that the
+values were saved before resubmitting. No assertion was removed. It passed
+5/5 focused runs, and the complete regression then passed **47/47**. Disk stayed
+at 32 GB free. Assumptions: owners may decide their own attendance; approval
+is a department sign-off, not payroll finalisation or award compliance.
 
 ### BB-TIME-003 — Employee correction request (Done)
 
