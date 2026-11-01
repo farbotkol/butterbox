@@ -3877,6 +3877,8 @@ test("managers reconcile offline claims with existing attendance and an auditabl
       ["clock_out", "2024-01-10T17:00:00Z"],
       ["clock_in", "2024-01-10T08:00:00Z"],
       ["clock_out", "2024-01-10T17:20:00Z"],
+      ["clock_in", "2024-01-11T09:00:00.123456Z"],
+      ["clock_out", "2024-01-11T17:00:00.654321Z"],
     ]) {
       const result = await workerApi.rpc("submit_attendance_offline_claim", {
         p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
@@ -3935,6 +3937,40 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await expect(ownerClaim).toContainText("Reopened for review");
     await expect(ownerClaim).toContainText("Confirmed start from the claim");
 
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(`/attendance?venue=${venueId}`);
+    const create = claimCard(4).getByRole("form", { name: "Create attendance from offline claims" });
+    await create.getByLabel("Matching clock-out claim").selectOption(claims[5].claim_id);
+    await create.getByLabel("Reason for creating attendance").fill("Confirmed both times with employee");
+    await create.getByLabel("I checked both claimed times. They are unverified device times, and no breaks were captured.").check();
+    await create.getByRole("button", { name: "Create attendance from claims" }).click();
+    await expect(page.getByRole("status")).toContainText("Attendance created from unverified offline claims");
+    await expect(claimCard(4)).toContainText("Attendance created from unverified offline claims");
+    await expect(claimCard(5)).toContainText("Confirmed both times with employee");
+    const createdPair = await ownerApi.from("attendance_offline_claim_sessions").select("session_id")
+      .eq("clock_in_claim_id", claims[4].claim_id).single();
+    expect(createdPair.error).toBeNull();
+    const createdEvents = await ownerApi.from("attendance_events").select("event_type, occurred_at, source")
+      .eq("session_id", createdPair.data.session_id).order("event_type");
+    expect(createdEvents.error).toBeNull();
+    expect(createdEvents.data).toHaveLength(2);
+    expect(createdEvents.data.map((event) => event.source)).toEqual(["offline_claim", "offline_claim"]);
+    expect(createdEvents.data.find((event) => event.event_type === "clock_in").occurred_at)
+      .toContain("2024-01-11T09:00:00.123456");
+    expect(createdEvents.data.find((event) => event.event_type === "clock_out").occurred_at)
+      .toContain("2024-01-11T17:00:00.654321");
+    await ownerPage.goto(`/attendance?venue=${venueId}`);
+    const createdClaim = ownerPage.locator(`#offline-claim-${claims[4].claim_id}`);
+    const reopenCreated = createdClaim.getByRole("form", { name: "Reopen offline claim" });
+    await reopenCreated.getByLabel("Reason for reopening this claim").fill("Recheck this history");
+    await reopenCreated.getByRole("button", { name: "Reopen claim" }).click();
+    await expect(createdClaim).toContainText("This claim already created attendance");
+    await expect(createdClaim.getByRole("form", { name: "Create attendance from offline claims" })).toHaveCount(0);
+    await page.goto(`/work-time?venue=${venueId}`);
+    await expect(page.getByText("Unverified offline times; breaks were not captured")).toBeVisible();
+    expect(await page.locator("body")
+      .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
     const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
     contexts.push(workerContext);
     const workerPage = await workerContext.newPage();
@@ -3944,6 +3980,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await expect(workerClaims).toContainText("Confirmed start from the claim");
     await expect(workerClaims).toContainText("Reopened for review");
     await expect(workerClaims).toContainText("Duplicate device claim");
+    await expect(workerClaims).toContainText("Attendance created from unverified offline claims");
     await expect(workerPage.getByRole("region", { name: "Attendance correction history" }))
       .toContainText("Confirmed start from the claim");
     expect(await workerPage.locator("body")

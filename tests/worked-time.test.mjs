@@ -29,6 +29,8 @@ test("work-time results preserve exact durations and distinguish location except
     exceptions: ["location_review_required", "location_reviewed"],
   };
   assert.deepEqual(parseWorkedTime([precise]), [precise]);
+  const offline = { ...row, exceptions: ["offline_claim_unverified"] };
+  assert.deepEqual(parseWorkedTime([offline]), [offline]);
   const incomplete = {
     ...row, clocked_out_at: null, elapsed_seconds: null, worked_seconds: null,
     paid_seconds: null, paid_break_seconds: null, unpaid_break_seconds: null,

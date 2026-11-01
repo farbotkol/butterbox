@@ -19,7 +19,7 @@ import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
 import {
-  offlineMatchKey, parseOfflineClaimReviews, parseOfflineMatchEvents, parseSubmittedOfflineClaims,
+  offlineMatchKey, offlineWorkerKey, parseOfflineClaimReviews, parseOfflineMatchEvents, parseSubmittedOfflineClaims,
   type OfflineClaimReview as OfflineClaimReviewRow, type OfflineMatchEvent, type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 import { readAllPages } from "@/lib/paginated-rows";
@@ -53,6 +53,9 @@ const errors: Record<string, string> = {
   "claim-overlap": "The claimed time would overlap another attendance session.",
   "claim-time": "The claimed time must be in the past and different from the event. If it is already correct, match without changing it.",
   "claim-save": "We could not save the claim decision. Your access may have changed; refresh and try again.",
+  "claim-pair-invalid": "Choose matching clock-in and clock-out claims, confirm the warning, and enter a reason.",
+  "claim-pair-time": "The clock-out claim must be after the clock-in claim and in the past.",
+  "claim-pair-used": "A claim was already reviewed or used to create attendance. Refresh and check its history.",
 };
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
@@ -127,6 +130,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const matchEvents = parseOfflineMatchEvents(matchResult.data);
   const reviewsByClaim = new Map<string, OfflineClaimReviewRow[]>();
   const eventsByWorker = new Map<string, OfflineMatchEvent[]>();
+  const pendingEndsByWorker = new Map<string, SubmittedOfflineClaim[]>();
   for (const review of claimReviews ?? []) {
     const history = reviewsByClaim.get(review.claim_id) ?? [];
     history.push(review);
@@ -137,6 +141,16 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     const matches = eventsByWorker.get(key) ?? [];
     matches.push(event);
     eventsByWorker.set(key, matches);
+  }
+  for (const claim of offlineClaims ?? []) {
+    const history = reviewsByClaim.get(claim.id) ?? [];
+    const latest = history[0];
+    if (claim.event_type !== "clock_out" || history.some((review) => review.decision === "created") ||
+      (latest && latest.decision !== "reopened")) continue;
+    const key = offlineWorkerKey(claim);
+    const ends = pendingEndsByWorker.get(key) ?? [];
+    ends.push(claim);
+    pendingEndsByWorker.set(key, ends);
   }
   const corrections = parseAttendanceCorrections(correctionResult.data);
   const clockVenueId = state?.state === "clocked_in" ? state.venue_id : workspace.venue.id;
@@ -242,6 +256,11 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       {params.saved === "claim-reviewed" && (
         <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
           Claim decision saved. Recorded time changes only when a correction was explicitly selected.
+        </p>
+      )}
+      {params.saved === "claim-created" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          Attendance created from unverified offline claims. Check any missing breaks before approval.
         </p>
       )}
       {loadError || !venueResult.data || !options || !state || !validClockPolicy ? (
@@ -369,8 +388,9 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         <h2 className="text-lg font-semibold">Submitted offline attendance claims</h2>
         <p className="mt-2 text-sm text-muted">
           These device-reported times are unverified and require manager review. They do not automatically
-          change recorded attendance or calculated work time. Managers may match a finished clock event,
-          explicitly correct it to the claimed time, or reject a claim. Missing events cannot yet be created here.
+          change recorded attendance or calculated work time. Managers may match or correct a finished clock
+          event, reject a claim, or explicitly create a finished session from a matching pair of claims.
+          Device times remain unverified and no breaks are assumed.
           Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
         </p>
         {offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews || matchResult.error || !matchEvents ? (
@@ -382,6 +402,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         ) : <ul className="mt-4 space-y-3">
           {offlineClaims.map((claim) => <OfflineClaimReview key={claim.id} claim={claim}
             reviews={reviewsByClaim.get(claim.id) ?? []} events={eventsByWorker.get(offlineMatchKey(claim)) ?? []}
+            endClaims={pendingEndsByWorker.get(offlineWorkerKey(claim)) ?? []}
             venueId={workspace.venue.id}
             timezone={workspace.venue.timezone} canReview={canReview}
             canReopen={["owner", "admin", "general_manager"].includes(workspace.membership.role)} />)}

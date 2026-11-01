@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { reviewOfflineAttendanceClaimAction } from "@/app/actions";
+import { createAttendanceFromOfflineClaimsAction, reviewOfflineAttendanceClaimAction } from "@/app/actions";
 import type {
   OfflineClaimReview, OfflineMatchEvent, SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
@@ -9,6 +9,7 @@ const decisionLabels: Record<OfflineClaimReview["decision"], string> = {
   corrected: "Existing event corrected to the claimed time",
   rejected: "Rejected",
   reopened: "Reopened for review",
+  created: "Attendance created from unverified offline claims",
 };
 
 function formatTime(timestamp: string, timezone: string): string {
@@ -18,13 +19,15 @@ function formatTime(timestamp: string, timezone: string): string {
   }).format(new Date(timestamp));
 }
 
-export function OfflineClaimReview({ claim, reviews, events, venueId, timezone, canReview, canReopen }: {
+export function OfflineClaimReview({ claim, reviews, events, endClaims, venueId, timezone, canReview, canReopen }: {
   claim: SubmittedOfflineClaim; reviews: OfflineClaimReview[]; events: OfflineMatchEvent[];
+  endClaims: SubmittedOfflineClaim[];
   venueId: string; timezone: string; canReview: boolean; canReopen: boolean;
 }) {
   const history = reviews;
   const latest = history[0];
   const pending = !latest || latest.decision === "reopened";
+  const alreadyCreated = history.some((review) => review.decision === "created");
   const candidates = events;
 
   return <li id={`offline-claim-${claim.id}`} className="rounded-lg border border-line p-4 text-sm">
@@ -86,10 +89,47 @@ export function OfflineClaimReview({ claim, reviews, events, venueId, timezone, 
           Only use the claimed time after checking it. Device time is unverified; editing locks,
           overlap checks and correction audit rules still apply.
         </p>
-      </form> : <p className="mt-3 text-muted">
-        No matching finished clock event is available. This workflow cannot create a missing clock event;
-        leave the claim pending if it needs further investigation.
-      </p>}
+      </form> : <p className="mt-3 text-muted">No matching finished clock event is available.</p>}
+      {claim.event_type === "clock_in" && (alreadyCreated
+        ? <p className="mt-3 text-muted">
+          This claim already created attendance and cannot be used to create another session.
+        </p>
+        : endClaims.length > 0
+        ? <form action={createAttendanceFromOfflineClaimsAction}
+          aria-label="Create attendance from offline claims" className="mt-4 space-y-3 rounded-lg border border-line p-3">
+          <input type="hidden" name="venue_id" value={venueId} />
+          <input type="hidden" name="clock_in_claim_id" value={claim.id} />
+          <input type="hidden" name="request_id" value={randomUUID()} />
+          <label className="block">
+            Matching clock-out claim
+            <select name="clock_out_claim_id" required defaultValue=""
+              className="mt-1 block w-full max-w-md rounded-lg border border-line bg-white p-2">
+              <option value="" disabled>Choose a clock-out claim</option>
+              {endClaims.map((end) => <option key={end.id} value={end.id}>
+                {formatTime(end.claimed_at, timezone)} ({end.claimed_at}) · received {end.received_at}
+              </option>)}
+            </select>
+          </label>
+          <label className="block">
+            Reason for creating attendance
+            <textarea name="reason" required maxLength={500}
+              className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="acknowledge_unverified" value="yes" required className="mt-1" />
+            <span>I checked both claimed times. They are unverified device times, and no breaks were captured.</span>
+          </label>
+          <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+            Create attendance from claims
+          </button>
+          <p className="text-muted">
+            Only create a session after checking the times and breaks with the employee. The source remains
+            visible in work time, and overlapping sessions are rejected.
+          </p>
+        </form>
+        : <p className="mt-3 text-muted">
+          A pending clock-out claim from the same worker is needed to create a finished session.
+        </p>)}
       <form action={reviewOfflineAttendanceClaimAction} aria-label="Reject offline claim" className="mt-4 space-y-3">
         <input type="hidden" name="venue_id" value={venueId} />
         <input type="hidden" name="claim_id" value={claim.id} />
@@ -119,7 +159,9 @@ export function OfflineClaimReview({ claim, reviews, events, venueId, timezone, 
       <button type="submit" className="min-h-11 rounded-lg border border-line px-4 py-2 font-semibold">
         Reopen claim
       </button>
-      <p className="text-muted">Reopening the claim does not undo any previous attendance correction.</p>
+      <p className="text-muted">
+        Reopening the claim does not undo a previous correction or attendance created from claims.
+      </p>
     </form>}
   </li>;
 }

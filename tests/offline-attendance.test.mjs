@@ -48,9 +48,15 @@ test("offline review history validates decision-specific audit details and seque
     ...reviewed, id: "af000000-0000-4000-8000-000000000002", sequence: 2, decision: "reopened",
     session_id: null, event_id: null, old_at: null, correction_id: null,
   };
+  const created = {
+    ...reviewed, id: "af000000-0000-4000-8000-000000000003", sequence: 3,
+    decision: "created", old_at: null, correction_id: null,
+  };
   assert.deepEqual(parseOfflineClaimReviews([reviewed, reopened]), [reopened, reviewed]);
+  assert.deepEqual(parseOfflineClaimReviews([created]), [created]);
   for (const invalid of [null, [reviewed, reviewed], [{ ...reviewed, correction_id: null }],
     [{ ...reviewed, decision: "matched" }], [{ ...reopened, event_id: id }],
+    [{ ...created, old_at: reviewed.old_at }], [{ ...created, event_id: null }],
     [reviewed, { ...reopened, sequence: 1 }], [{ ...reviewed, reason: " " }]]) {
     assert.equal(parseOfflineClaimReviews(invalid), null);
   }

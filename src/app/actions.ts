@@ -880,6 +880,54 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
   redirect(`${destination}&saved=claim-reviewed`);
 }
 
+export async function createAttendanceFromOfflineClaimsAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const starts = uuidList(formData, "clock_in_claim_id", 1);
+  const ends = uuidList(formData, "clock_out_claim_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const reasons = formData.getAll("reason");
+  const confirmations = formData.getAll("acknowledge_unverified");
+  if (venues?.length !== 1 || starts?.length !== 1 || ends?.length !== 1 ||
+    starts[0] === ends[0] || requests?.length !== 1 || reasons.length !== 1 ||
+    typeof reasons[0] !== "string" || !reasons[0].trim() || reasons[0].trim().length > 500 ||
+    confirmations.length !== 1 || confirmations[0] !== "yes") {
+    console.error("Invalid offline attendance creation request.");
+    redirect("/attendance?error=claim-pair-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the offline attendance workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const { data, error } = await workspace.supabase.rpc("create_attendance_from_offline_claims", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    p_clock_in_claim_id: starts[0], p_clock_out_claim_id: ends[0], p_request_id: requests[0],
+    p_reason: reasons[0].trim(), p_acknowledge_unverified: true,
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Creating attendance from offline claims failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid session receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Claims must belong to the same worker and department": "claim-pair-invalid",
+      "Invalid offline attendance pair": "claim-pair-invalid",
+      "Claimed clock times are invalid": "claim-pair-time",
+      "A claim already created attendance": "claim-pair-used",
+      "A claim has already been reviewed": "claim-pair-used",
+      "Claimed attendance overlaps another session": "claim-overlap",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "claim-save"}`);
+  }
+  revalidatePath("/attendance");
+  revalidatePath("/work-time");
+  redirect(`${destination}&saved=claim-created`);
+}
+
 async function correctionActionContext(formData: FormData) {
   const venues = uuidList(formData, "venue_id", 1);
   const sessions = uuidList(formData, "session_id", 1);

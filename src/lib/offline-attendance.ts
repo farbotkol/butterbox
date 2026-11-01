@@ -27,7 +27,7 @@ export type OfflineClaimReview = {
   sequence: number;
   claim_id: string;
   actor_id: string;
-  decision: "matched" | "corrected" | "rejected" | "reopened";
+  decision: "matched" | "corrected" | "rejected" | "reopened" | "created";
   session_id: string | null;
   event_id: string | null;
   old_at: string | null;
@@ -112,12 +112,15 @@ export function parseOfflineClaimReviews(value: unknown): OfflineClaimReview[] |
     if (!isRecord(row) || !isUuid(row.id) || !isUuid(row.claim_id) || !isUuid(row.actor_id) ||
       typeof row.sequence !== "number" || !Number.isSafeInteger(row.sequence) || row.sequence < 1 ||
       (row.decision !== "matched" && row.decision !== "corrected" &&
-        row.decision !== "rejected" && row.decision !== "reopened") ||
+        row.decision !== "rejected" && row.decision !== "reopened" && row.decision !== "created") ||
       typeof row.reason !== "string" || !row.reason.trim() || !isTimestamp(row.created_at)) return null;
     if (row.correction_id !== null && !isUuid(row.correction_id)) return null;
     if (row.decision === "matched" || row.decision === "corrected") {
       if (!isUuid(row.session_id) || !isUuid(row.event_id) || !isTimestamp(row.old_at) ||
         (row.decision === "matched" ? row.correction_id !== null : row.correction_id === null)) return null;
+    } else if (row.decision === "created") {
+      if (!isUuid(row.session_id) || !isUuid(row.event_id) || row.old_at !== null ||
+        row.correction_id !== null) return null;
     } else if (row.session_id !== null || row.event_id !== null || row.old_at !== null ||
       row.correction_id !== null) return null;
     const key = row.id.toLowerCase();
@@ -160,8 +163,14 @@ export function parseOfflineMatchOption(value: unknown): { eventId: string; expe
   return { eventId: parts[0], expectedAt: parts[1] };
 }
 
+export function offlineWorkerKey(value: {
+  employee_id: string; department_id: string; actor_id: string;
+}): string {
+  return `${value.employee_id}:${value.department_id}:${value.actor_id}`.toLowerCase();
+}
+
 export function offlineMatchKey(value: {
   employee_id: string; department_id: string; actor_id: string; event_type: OfflineEventType;
 }): string {
-  return `${value.employee_id}:${value.department_id}:${value.actor_id}:${value.event_type}`.toLowerCase();
+  return `${offlineWorkerKey(value)}:${value.event_type}`;
 }

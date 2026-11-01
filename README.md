@@ -175,11 +175,19 @@ can review a claim against an existing finished clock event: match it without
 changing time, explicitly correct that event to the claimed time, or reject
 the claim with a reason. The decision, actor and any correction are recorded;
 employees can see the history. An owner, admin or appropriately scoped general
-manager can reopen a decision with a reason, without undoing a prior correction.
-Claims without a matching event cannot yet create missing clock events and
-should remain pending if further investigation is needed. Timesheet approvals
-are not yet available. The page cannot be opened offline, and clearing browser
-data or losing the device can lose unsent claims.
+manager can reopen a decision with a reason, without undoing a prior correction
+or an attendance session already created from claims. If both clock-in and
+clock-out claims exist for the same employee, department and account, a scoped
+manager can explicitly create a finished session after checking the claims and
+acknowledging that the device times are unverified and no breaks were captured.
+The original claims, receipt times and attributed decision remain available.
+The resulting events are marked as offline-sourced, cannot overlap other
+attendance for the worker or a linked profile, and are flagged in **Work time**.
+No breaks are fabricated or deducted; check missing breaks with the employee.
+Mixed cases such as a server clock-in with only an offline clock-out claim
+cannot yet be completed by this workflow. Timesheet approvals are not yet
+available. The page cannot be opened offline, and clearing browser data or
+losing the device can lose unsent claims.
 Device storage is shared by accounts using the same browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the

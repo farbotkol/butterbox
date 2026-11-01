@@ -31,6 +31,7 @@ const result = spawnSync(
           "tests/attendance-location-concurrency.integration.test.mjs",
           "tests/offline-attendance-concurrency.integration.test.mjs",
           "tests/offline-claim-reconciliation-concurrency.integration.test.mjs",
+          "tests/offline-claim-sessions-concurrency.integration.test.mjs",
         ] : []),
   ],
   {
