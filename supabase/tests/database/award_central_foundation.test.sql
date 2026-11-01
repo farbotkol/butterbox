@@ -1,0 +1,18 @@
+begin;
+select plan(14);
+select has_table('public', 'award_central_instruments', 'shared central instrument table exists');
+select has_table('public', 'award_central_versions', 'shared version table exists');
+select has_column('public', 'award_central_versions', 'source_sha256', 'content provenance stored');
+select has_column('public', 'award_central_versions', 'effective_from', 'date boundaries stored');
+select has_column('public', 'award_central_versions', 'reviewed_by', 'specialist reviewer identity field exists');
+select has_column('public', 'award_central_versions', 'source_clause_refs', 'source clause references exist');
+select has_column('public', 'award_central_versions', 'rule_proposal', 'draft rule contract exists');
+select has_pk('public', 'award_central_versions', 'version primary key exists');
+select has_fk('public', 'award_central_versions', 'instrument foreign key exists');
+select is((select relrowsecurity from pg_class where oid='public.award_central_versions'::regclass), true, 'RLS enforced');
+select is((select relrowsecurity from pg_class where oid='public.award_central_instruments'::regclass), true, 'instrument RLS enforced');
+select ok(not has_table_privilege('authenticated', 'public.award_central_versions', 'INSERT'), 'customers cannot insert award rules');
+select ok(not has_table_privilege('authenticated', 'public.award_central_versions', 'UPDATE'), 'customers cannot change award rules');
+select ok(not has_table_privilege('authenticated', 'public.award_central_versions', 'DELETE'), 'customers cannot delete award rules');
+select * from finish();
+rollback;
