@@ -2,12 +2,13 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **22**. In Progress: **5**.
-  Blocked: **1**. Not started (Backlog): **59**.
+- Total stories: **87**. Verified Done: **23**. In Progress: **6**.
+  Blocked: **1**. Not started (Backlog): **57**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006,
-  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002 and BB-ATTEND-003.
+  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003
+  and BB-TIME-001.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -31,6 +32,15 @@
   guard and review-error wording change; a rebuilt focused location scenario
   then passed against the final schema, including the review failure path.
   The disposable fixtures and temporary app server were removed.
+- BB-ATTEND-003 was committed as `250ad36` and pushed to the requested
+  development branch; the remote SHA matched the local checkpoint.
+- BB-TIME-001's fresh isolated migration replay and complete pgTAP suite
+  passed **1,210/1,210 assertions across 27 files**, including 35 worked-time
+  assertions. All six authenticated tenant/concurrency tests passed. The
+  serialized Node suite passed **66 tests**, with those six integrations run
+  separately. Full ESLint, TypeScript, split production compile/generate and
+  the complete **34/34** production-browser scenarios passed. Disposable
+  fixtures were removed and the temporary application server stopped.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -93,6 +103,11 @@
 
 ## Current story
 
+- **BB-TIME-001 — Compute worked time** is Done. Scoped calculations and the
+  manager work-time page passed all four criteria and the regression checks.
+- **BB-ATTEND-005 — Time capture fallback** is In Progress: location failures
+  record a reviewable server event, but offline capture, safe reconciliation
+  and claimed-versus-confirmed time are not implemented.
 - **BB-ATTEND-003 — Location verification** is Done. Optional per-venue
   verification, event-time capture and scoped exception review passed all
   three criteria and the final regression checks below.
@@ -175,6 +190,34 @@ tests, five authenticated integration tests, 32 browser scenarios, full lint,
 TypeScript and split production build passed. Payroll calculations, corrections
 and timesheets remain unfinished.
 
+### BB-TIME-001 — Compute worked time (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-001.1 Cross-midnight and timezone changes | Calculations use elapsed instants and retain the actual venue's current display timezone. | The 35-assertion pgTAP suite verified cross-midnight spring-forward, repeated fall-back time and a subsequent venue-timezone change. Production Chromium showed the cross-midnight shift and the correct actual duration. | Pass |
+| TIME-001.2 Actual breaks are applied | Explicit paid and unpaid break events are calculated separately; no break is assumed. Worked time excludes both; paid time includes paid breaks. | pgTAP and production Chromium verified a four-hour session with a 15-minute paid and 30-minute unpaid break: 3h 15m worked and 3h 30m paid. No recorded break means zero deduction. | Pass |
+| TIME-001.3 Explicit, non-destructive rounding | Source instants and database calculations retain microsecond precision; only displayed durations round to the nearest second. No payroll or award rules are applied. | pgTAP verified exact fractional-second source events and arithmetic; three unit tests verified validation and display rounding. Chromium verified the policy explanation and original event instants. | Pass |
+| TIME-001.4 Exceptions are flagged | Incomplete, invalid or overlapping clock/break data withholds totals; historical, pending and reviewed location checks remain visible. Results are scoped to manageable departments and actual venues. | pgTAP verified each implemented flag, role/tenant restrictions and location-review transitions. Production Chromium verified missing clock-out, incomplete break, location review, FOH/BOH separation, venue switching, employee denial and cross-tenant denial. | Pass |
+
+Files: `supabase/migrations/20261102040000_compute_worked_time.sql`,
+`supabase/tests/database/worked_time.test.sql`, `src/lib/worked-time.ts`,
+`src/lib/attendance.ts`, `src/app/work-time/page.tsx`,
+`src/app/attendance/page.tsx`, `src/components/main-navigation.tsx`,
+`tests/worked-time.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`.
+The first two focused browser attempts exposed overlapping paid/unpaid label
+locators and Next.js's route announcer; both locators were made exact without
+removing assertions. A rebuilt focused run and all 34 full browser scenarios
+then passed. The result is a calculation view, not a payroll approval, award
+interpretation, correction or export workflow.
+
+### BB-ATTEND-005 — Time capture fallback (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ATTEND-005.1 Pending or exception status | Location permission failures produce a recorded server event and visible review status. Offline capture is not implemented. | Location failure and no-JavaScript fallback passed the BB-ATTEND-003 database and browser checks; offline status has not been tested. | Pending |
+| ATTEND-005.2 Safe reconciliation | No offline queue or manager reconciliation exists. | Not implemented or tested. | Pending |
+| ATTEND-005.3 Claimed and confirmed times | Original server clock events are retained, but a separate offline claimed time is not captured. | Not implemented or tested. | Pending |
+
 ### BB-ATTEND-003 — Location verification (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
@@ -207,7 +250,7 @@ before the final tenant/venue safeguard and review-error wording change.
 | --- | --- | --- | --- |
 | ORG-005.1 Venue selector scopes views | Roster and people views select only permitted venues; requests are checked server-side. | Scoped permission pgTAP and authenticated browser role/venue scenarios passed in the full 953-assertion and 29-scenario regressions. | Pass |
 | ORG-005.2 Detect shared-staff cross-venue overlap | Owners explicitly confirm profile links; generic overlap results contain only manageable shift IDs. Automatic assignment and configured publication blocking use the same linked-worker identity. | 44 shared-profile and 26 conflict pgTAP assertions, authenticated link/assignment/publication races, and the shared-worker and 1,001-shift browser scenarios passed. | Pass |
-| ORG-005.3 Timesheets retain actual venue attribution | Attendance events now preserve the actual venue, but the timesheet workflow is not yet implemented. | Attendance attribution passes pgTAP and browser tests; timesheet attribution cannot yet be tested. | In Progress |
+| ORG-005.3 Timesheets retain actual venue attribution | Attendance and work-time calculations preserve the actual venue, but the complete timesheet workflow is not yet implemented. | Work-time attribution passed pgTAP and venue-switching browser tests; timesheet approval and export attribution remain unverified. | In Progress |
 
 ### BB-ORG-002 — Configure venue and geofence (Done)
 
@@ -645,10 +688,9 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-TIME-001 — Compute worked time** as a prerequisite for
-  reliable timesheets, corrections and payroll. Preserve exact original
-  events, account for actual paid and unpaid breaks, and flag incomplete or
-  otherwise exceptional records.
+- Implement **BB-ROSTER-004 — Copy week and roster template**, preserving
+  private drafts, revalidating availability/leave/overlaps and notifying only
+  on publication. Continue toward corrections, timesheet review and approval.
 - The new location migration has been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:

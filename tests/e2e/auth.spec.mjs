@@ -3982,3 +3982,172 @@ test("optional clock location is requested only at clock events and exceptions a
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
+
+test("work time uses actual events and breaks with venue, role and exception scope", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, firstVenue, secondVenue, outsideVenue, fohId, bohId, secondDepartment,
+    workerId, cookId, secondWorkerId, completeSession, openSession, cookSession, secondSession, paidBreak,
+    unpaidBreak, openBreak] = Array.from({ length: 18 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "foh", "boh", "worker", "cook", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `worked-time-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Work time cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside work time ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: firstVenue, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+        geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 100 },
+      { id: secondVenue, business_id: businessId, name: "Riverside", timezone: "Australia/Perth" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: firstVenue, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: firstVenue, name: "BOH" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Service" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: firstVenue, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: firstVenue, department_id: bohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: firstVenue, department_id: fohId },
+      { business_id: businessId, user_id: users[4], role: "employee", venue_id: firstVenue, department_id: bohId },
+      { business_id: outsideBusiness, user_id: users[5], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: firstVenue, department_id: fohId,
+        auth_user_id: users[3], name: "Time Worker", role_title: "Server" },
+      { id: cookId, business_id: businessId, venue_id: firstVenue, department_id: bohId,
+        auth_user_id: users[4], name: "Time Cook", role_title: "Cook" },
+      { id: secondWorkerId, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        auth_user_id: users[3], name: "Riverside Worker", role_title: "Server" },
+    ])).error).toBeNull();
+    const sessions = [
+      { id: completeSession, business_id: businessId, venue_id: firstVenue, department_id: fohId,
+        employee_id: workerId, started_by: users[3] },
+      { id: openSession, business_id: businessId, venue_id: firstVenue, department_id: fohId,
+        employee_id: workerId, started_by: users[3] },
+      { id: cookSession, business_id: businessId, venue_id: firstVenue, department_id: bohId,
+        employee_id: cookId, started_by: users[4] },
+      { id: secondSession, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        employee_id: secondWorkerId, started_by: users[3] },
+    ];
+    expect((await admin.from("attendance_sessions").insert(sessions)).error).toBeNull();
+    expect((await admin.from("attendance_breaks").insert([
+      { id: paidBreak, session_id: completeSession, business_id: businessId, classification: "paid" },
+      { id: unpaidBreak, session_id: completeSession, business_id: businessId, classification: "unpaid" },
+      { id: openBreak, session_id: openSession, business_id: businessId, classification: "paid" },
+    ])).error).toBeNull();
+    const event = (session, eventType, occurredAt, breakId = null) => ({
+      session_id: session.id, business_id: session.business_id, venue_id: session.venue_id,
+      department_id: session.department_id, employee_id: session.employee_id, actor_id: session.started_by,
+      request_id: randomUUID(), event_type: eventType, occurred_at: occurredAt, break_id: breakId,
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[0], "clock_in", "2024-10-05T13:30:00Z"),
+      event(sessions[0], "break_start", "2024-10-05T14:15:00Z", paidBreak),
+      event(sessions[0], "break_end", "2024-10-05T14:30:00Z", paidBreak),
+      event(sessions[0], "break_start", "2024-10-05T15:45:00Z", unpaidBreak),
+      event(sessions[0], "break_end", "2024-10-05T16:15:00Z", unpaidBreak),
+      event(sessions[0], "clock_out", "2024-10-05T17:30:00Z"),
+      event(sessions[2], "clock_in", "2024-04-06T15:30:00Z"),
+      event(sessions[2], "clock_out", "2024-04-06T16:30:00Z"),
+      event(sessions[3], "clock_in", "2024-01-15T08:00:00Z"),
+      event(sessions[3], "clock_out", "2024-01-15T10:00:00Z"),
+    ])).error).toBeNull();
+    expect((await admin.from("venues").update({ clock_geofence_enabled: true }).eq("id", firstVenue)).error).toBeNull();
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[1], "clock_in", "2024-10-07T08:00:00Z"),
+      event(sessions[1], "break_start", "2024-10-07T08:30:00Z", openBreak),
+    ])).error).toBeNull();
+
+    await signIn(page, `worked-time-owner-${suffix}@example.test`, password);
+    await page.goto(`/work-time?venue=${firstVenue}`);
+    await expect(page.getByRole("heading", { name: "Work time", exact: true })).toBeVisible();
+    await expect(page.getByText("displayed to the nearest second", { exact: false })).toBeVisible();
+    const recorded = page.getByRole("region", { name: "Recorded work time" });
+    const complete = recorded.locator("li").filter({ hasText: "Time Worker · FOH" }).filter({ hasText: "5 Oct 2024" });
+    await expect(complete).toContainText("6 Oct 2024");
+    const measure = (card, label) => card.getByText(label, { exact: true }).locator("..").locator("dd");
+    await expect(measure(complete, "Elapsed")).toHaveText("4h 0m 0s");
+    await expect(measure(complete, "Worked")).toHaveText("3h 15m 0s");
+    await expect(measure(complete, "Paid time")).toHaveText("3h 30m 0s");
+    await expect(measure(complete, "Paid break")).toHaveText("0h 15m 0s");
+    await expect(measure(complete, "Unpaid break")).toHaveText("0h 30m 0s");
+    await expect(complete).toContainText("No exceptions");
+    const cook = recorded.locator("li").filter({ hasText: "Time Cook · BOH" });
+    await expect(measure(cook, "Elapsed")).toHaveText("1h 0m 0s");
+    const open = recorded.locator("li").filter({ hasText: "Time Worker · FOH" }).filter({ hasText: "Clock-out missing" });
+    await expect(open).toContainText("Break start or end missing");
+    await expect(open).toContainText("Location review required");
+    await expect(measure(open, "Worked")).toHaveText("Unavailable");
+
+    await page.getByLabel("Venue", { exact: true }).selectOption(secondVenue);
+    await page.getByRole("button", { name: "Switch venue" }).click();
+    await expect(recorded).toContainText("Riverside Worker · Service");
+    await expect(recorded).not.toContainText("Time Worker · FOH");
+    await expect(recorded).toContainText("Australia/Perth");
+    await page.goto(`/work-time?venue=${outsideVenue}`);
+    await expect(page.locator('p[role="alert"]')).toContainText("couldn't load the selected venue");
+
+    const managerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(managerContext);
+    const manager = await managerContext.newPage();
+    await signIn(manager, `worked-time-foh-${suffix}@example.test`, password);
+    await manager.goto(`/work-time?venue=${firstVenue}`);
+    await expect(manager.getByRole("region", { name: "Recorded work time" })).toContainText("Time Worker · FOH");
+    await expect(manager.getByText("Time Cook", { exact: false })).toHaveCount(0);
+    expect(await manager.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await manager.goto(`/attendance?venue=${firstVenue}`);
+    await manager.getByRole("region", { name: "Location exceptions" })
+      .getByRole("button", { name: "Mark as reviewed" }).click();
+    await expect(manager.getByRole("status")).toContainText("original clock event is unchanged");
+    await manager.goto(`/work-time?venue=${firstVenue}`);
+    const reviewed = manager.getByRole("region", { name: "Recorded work time" }).locator("li")
+      .filter({ hasText: "Clock-out missing" });
+    await expect(reviewed).toContainText("Location exception reviewed");
+    await expect(reviewed).not.toContainText("Location review required");
+    await expect(measure(reviewed, "Worked")).toHaveText("Unavailable");
+
+    const otherContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(otherContext);
+    const other = await otherContext.newPage();
+    await signIn(other, `worked-time-boh-${suffix}@example.test`, password);
+    await other.goto(`/work-time?venue=${firstVenue}`);
+    await expect(other.getByRole("region", { name: "Recorded work time" })).toContainText("Time Cook · BOH");
+    await expect(other.getByText("Time Worker", { exact: false })).toHaveCount(0);
+    const workerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(workerContext);
+    const worker = await workerContext.newPage();
+    await signIn(worker, `worked-time-worker-${suffix}@example.test`, password);
+    await expect(worker.getByRole("link", { name: "Work time" })).toHaveCount(0);
+    await worker.goto(`/work-time?venue=${firstVenue}`);
+    await expect(worker).toHaveURL(/\/\?error=permission/);
+    const outsider = createClient(apiUrl, anonKey, options);
+    expect((await outsider.auth.signInWithPassword({
+      email: `worked-time-outside-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await outsider.rpc("list_worked_time", { p_business_id: businessId, p_venue_id: firstVenue }))
+      .error?.message).toBe("Permission denied");
+    const originals = await admin.from("attendance_events").select("event_type, occurred_at")
+      .eq("session_id", completeSession).order("occurred_at");
+    expect(originals.error).toBeNull();
+    expect(originals.data).toHaveLength(6);
+    expect(new Date(originals.data[0].occurred_at).toISOString()).toBe("2024-10-05T13:30:00.000Z");
+    expect(new Date(originals.data[5].occurred_at).toISOString()).toBe("2024-10-05T17:30:00.000Z");
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});

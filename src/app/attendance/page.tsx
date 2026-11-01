@@ -282,8 +282,9 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       <p className="mt-5 text-sm leading-6 text-muted">
         When enabled by the venue owner, location is requested only when clocking in or out.
         A failed location check is reviewed without removing the time recorded. Break events
-        have no location check; corrections and timesheets are not available yet, and no break
-        is automatically deducted.
+        have no location check. Managers can see recorded breaks in work-time calculations;
+        corrections and timesheet approvals are not available yet, and no break is automatically
+        deducted unless it has a recorded start and end.
       </p>
       {canReview && (
         <section aria-label="Location exceptions" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">

@@ -101,8 +101,8 @@ while more than one has an open session.
 While clocked in, start and end each break explicitly as paid or unpaid; ask
 your manager which classification applies if unsure. End an open break before
 clocking out. The original classification and server-recorded times are
-retained; no break is assumed or automatically deducted. This does not
-calculate payroll or establish award compliance. If location verification is
+retained; no break is assumed. This does not calculate payroll or establish
+award compliance. If location verification is
 enabled, the browser requests location only at clock-in or clock-out; breaks
 do not request it. A check passes only when the server-calculated distance plus
 the device-reported accuracy fits within the venue radius. Permission denial,
@@ -113,9 +113,21 @@ time. Checks retain derived distance, accuracy and the radius, not raw device
 coordinates. Device-reported location can be spoofed and is not proof of
 physical presence. Verification results are separate records: original events
 retain their original unverified status, and older events are not retroactively
-checked. Network-offline clock capture, time corrections and timesheets are not
-yet implemented. If account access is removed during a session, contact an
-owner for review. Apply the current migrations before using the clock.
+checked. Network-offline clock capture, time corrections and timesheet
+approvals are not yet implemented. If account access is removed during a
+session, contact an owner for review. Apply the current migrations before
+using the clock.
+
+Managers can use **Work time** to inspect actual attendance sessions in their
+permitted departments and venue. Calculations use elapsed instants, including
+across midnight and daylight-saving transitions, and display timestamps in
+the venue's current timezone. Worked time excludes explicitly recorded paid
+and unpaid breaks; paid time includes the paid breaks. Original event
+precision is retained, and only the displayed duration is rounded to the
+nearest second; no payroll rounding or award rules are applied. Missing,
+invalid or overlapping events are flagged and have no calculated totals.
+Location exceptions remain visible even after review. This is not a payroll
+approval or export workflow.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule

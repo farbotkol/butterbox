@@ -30,7 +30,7 @@ function record(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function validTimezone(value: string) {
+export function validTimezone(value: string) {
   try {
     new Intl.DateTimeFormat("en-AU", { timeZone: value });
     return true;
