@@ -13,6 +13,10 @@ alter table public.attendance_events
   add constraint attendance_events_source_check
     check (source in ('server_clock', 'offline_claim', 'manager_reported', 'employee_request'));
 
+create index attendance_claim_reviews_correction_idx
+  on public.attendance_offline_claim_reviews (correction_id)
+  where correction_id is not null;
+
 create function public.submit_attendance_claim(
   p_business_id uuid, p_venue_id uuid, p_department_id uuid, p_employee_id uuid,
   p_actor_id uuid, p_request_id uuid, p_event_type text, p_claimed_at timestamptz,
