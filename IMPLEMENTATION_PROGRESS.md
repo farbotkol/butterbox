@@ -49,8 +49,10 @@
   unfinished publication/versioning workflow.
 - **BB-ROSTER-003 — Unassigned open shift** now has opt-in manual role
   qualification controls without changing the existing automatic-only policy.
-  Database and concurrency checks pass; production-browser verification is
-  running. Availability and leave eligibility remain incomplete.
+  Database and concurrency checks pass. The first production-browser run
+  exposed a form reset after a rejected assignment; a fix has been made and
+  needs a rebuilt-browser rerun. Availability and leave eligibility remain
+  incomplete.
 
 ### BB-PEOPLE-004 — Submit availability exceptions (In Progress)
 
@@ -77,7 +79,7 @@ blockers; conflict enforcement belongs to the unfinished roster stories.
 | ROSTER-003.1 Employee is optional | Draft creation and editing support an unassigned worker. | Existing production-browser draft-editing scenario creates and edits open shifts; focused manual-policy SQL also creates open shifts. Pass. | Pass |
 | ROSTER-003.2 Open shifts are clearly styled | The roster has a separate amber open-shifts section and needs-cover labels. | Existing production-browser roster scenario checks the open-shifts section and label. Pass. | Pass |
 | ROSTER-003.3 Count updates | The roster counts assigned and open shifts and shows an open-to-fill total. | Existing production-browser roster/draft-editing scenarios and manual-policy SQL verify the count changes. Pass. | Pass |
-| ROSTER-003.4 Eligibility rules apply when assigning | Active, linked staff and non-overlap are enforced; managers may separately enable manual role-qualification restrictions. Existing automatic-only restrictions retain their prior meaning, and enabling a manual restriction does not invalidate existing assignments. | 37/37 isolated pgTAP assertions and authenticated qualification/concurrency checks pass; new browser validation is running. Recurring availability, date blocks and approved leave are not enforced. | In Progress |
+| ROSTER-003.4 Eligibility rules apply when assigning | Active, linked staff and non-overlap are enforced; managers may separately enable manual role-qualification restrictions. Existing automatic-only restrictions retain their prior meaning, and enabling a manual restriction does not invalidate existing assignments. | 37/37 isolated pgTAP assertions and authenticated qualification/concurrency checks pass. The first new browser run found input reset on an eligibility error; the fix awaits rerun. Recurring availability, date blocks and approved leave are not enforced. | In Progress |
 
 Files: `supabase/migrations/20261101150000_manual_assignment_eligibility.sql`,
 `supabase/tests/database/manual_assignment_eligibility.test.sql`,
@@ -341,10 +343,10 @@ not yet run remotely.
 - Build separate images per environment: Next.js embeds `NEXT_PUBLIC_` values
   at build time. Never use a secret/service-role key in those values.
 - Stories are marked Done only after every acceptance criterion is verified.
-- A concurrent manual commit (`6191789`) captured the then-current work. The
-  local feature branch is ahead of and behind its remote: the remote also has
-  an `AGENTS.md` commit (`563e026`). Neither history nor the other change was
-  rewritten; review and reconcile the divergence before any push.
+- Concurrent commits (`6191789` and `e32038a`) captured the then-current work.
+  The local feature branch is ahead of and behind its remote: the remote also
+  has an `AGENTS.md` commit (`563e026`). Neither history nor the other change
+  was rewritten; review and reconcile the divergence before any push.
 
 ## Next story
 

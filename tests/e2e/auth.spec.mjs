@@ -929,6 +929,7 @@ test("manual role restrictions protect open shifts without changing automatic-on
     await add.getByLabel("Ends").fill("2032-03-16T16:00");
     await add.getByRole("button", { name: "Save draft shift" }).click();
     await expect(add.getByText("Choose a worker qualified for this role, or leave the shift open.")).toBeVisible();
+    await expect(add.getByLabel("Role")).toHaveValue("barista");
     await expect(add.getByLabel("Team member")).toHaveValue(unqualifiedId);
     await expect(add.getByLabel("Starts")).toHaveValue("2032-03-16T08:00");
 
