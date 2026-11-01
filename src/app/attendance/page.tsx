@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { clockInAction, clockOutAction } from "@/app/actions";
+import {
+  clockInAction,
+  clockOutAction,
+  endAttendanceBreakAction,
+  startAttendanceBreakAction,
+} from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { parseAttendanceState, parseClockOptions, type ClockOption } from "@/lib/attendance";
 import { readAllPages } from "@/lib/paginated-rows";
@@ -15,7 +20,10 @@ type AttendancePageProps = {
 const errors: Record<string, string> = {
   "already-in": "An attendance session is already open for this account or linked staff profile. If you cannot see it, contact an owner.",
   "already-out": "This session is already finished. Check your current state before trying again.",
-  invalid: "That clock request was invalid. Refresh the page and try again.",
+  "already-break": "A break is already running. End it before starting another.",
+  "break-ended": "This break has already ended. Check your current state before trying again.",
+  "break-open": "End your current break before clocking out.",
+  invalid: "That attendance request was invalid. Refresh the page and try again.",
   permission: "Your employee link or venue access has changed. Contact an owner before clocking.",
   reused: "That request was already used for another action. Refresh the page and try again.",
   unavailable: "This profile or department is no longer available for a new session.",
@@ -54,7 +62,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     }, { count: "exact" }).order("employee_id").order("department_id").range(from, to),
     (option) => option && typeof option.employee_id === "string" &&
       typeof option.department_id === "string" ? `${option.employee_id}:${option.department_id}` : ""),
-    workspace.supabase.rpc("get_my_attendance_state", {
+    workspace.supabase.rpc("get_my_attendance_state_with_break", {
       p_business_id: workspace.business.id,
     }).single(),
   ]);
@@ -75,6 +83,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     }).format(new Date(timestamp));
   const optionValue = (option: ClockOption) => `${option.employee_id}:${option.department_id}`;
   const requestId = randomUUID();
+  const breakRequestId = randomUUID();
 
   return (
     <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
@@ -111,6 +120,11 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           Clock request recorded. Your current state is shown below.
         </p>
       )}
+      {params.saved === "break-recorded" && (
+        <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
+          Break request recorded. Your current state is shown below.
+        </p>
+      )}
       {loadError || !venueResult.data || !options || !state ? (
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your attendance. Try again before making changes.
@@ -135,14 +149,58 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
                   {formatClockTime(state.clocked_in_at, state.venue_timezone)}
                 </time>{" "}({state.venue_timezone.replaceAll("_", " ")})
               </p>
-              <form action={clockOutAction} className="mt-5">
-                <input type="hidden" name="venue_id" value={workspace.venue.id} />
-                <input type="hidden" name="session_id" value={state.session_id} />
-                <input type="hidden" name="request_id" value={requestId} />
-                <button type="submit" className="min-h-11 rounded-lg bg-ocean px-5 py-3 font-semibold text-white hover:bg-ocean/90">
-                  Clock out
-                </button>
-              </form>
+              {state.active_break ? (
+                <>
+                  <p className="mt-4 text-sm font-semibold">
+                    On {state.active_break.classification === "paid" ? "a paid" : "an unpaid"} break since{" "}
+                    <time dateTime={state.active_break.started_at}>
+                      {formatClockTime(state.active_break.started_at, state.venue_timezone)}
+                    </time>
+                  </p>
+                  <p className="mt-2 text-sm text-muted">End this break before clocking out.</p>
+                  <form action={endAttendanceBreakAction} className="mt-4">
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <input type="hidden" name="session_id" value={state.session_id} />
+                    <input type="hidden" name="break_id" value={state.active_break.id} />
+                    <input type="hidden" name="request_id" value={breakRequestId} />
+                    <button type="submit" className="min-h-11 rounded-lg bg-ocean px-5 py-3 font-semibold text-white hover:bg-ocean/90">
+                      End break
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <>
+                  <form action={startAttendanceBreakAction} className="mt-5">
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <input type="hidden" name="session_id" value={state.session_id} />
+                    <input type="hidden" name="request_id" value={breakRequestId} />
+                    <fieldset>
+                      <legend className="text-sm font-semibold">Start a break</legend>
+                      <p className="mt-1 text-sm text-muted">
+                        Choose its paid or unpaid classification; ask your manager if unsure.
+                      </p>
+                      <div className="mt-3 flex flex-wrap gap-3">
+                        <button type="submit" name="classification" value="paid"
+                          className="min-h-11 rounded-lg border border-line px-4 py-3 text-sm font-semibold">
+                          Start paid break
+                        </button>
+                        <button type="submit" name="classification" value="unpaid"
+                          className="min-h-11 rounded-lg border border-line px-4 py-3 text-sm font-semibold">
+                          Start unpaid break
+                        </button>
+                      </div>
+                    </fieldset>
+                  </form>
+                  <form action={clockOutAction} className="mt-5">
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <input type="hidden" name="session_id" value={state.session_id} />
+                    <input type="hidden" name="request_id" value={requestId} />
+                    <button type="submit" className="min-h-11 rounded-lg bg-ocean px-5 py-3 font-semibold text-white hover:bg-ocean/90">
+                      Clock out
+                    </button>
+                  </form>
+                </>
+              )}
             </>
           ) : (
             <>
@@ -182,8 +240,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         </section>
       )}
       <p className="mt-5 text-sm leading-6 text-muted">
-        Clock events are unverified. Location checks, breaks, corrections and timesheets are not
-        available yet; no break is automatically deducted.
+        Clock events are unverified, including break events. Location checks, corrections and
+        timesheets are not available yet; no break is automatically deducted.
       </p>
     </AppShell>
   );

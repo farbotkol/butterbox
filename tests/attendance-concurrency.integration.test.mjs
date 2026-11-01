@@ -191,3 +191,202 @@ test(
     }
   },
 );
+
+test(
+  "break requests, clock-out and permission changes serialize safely",
+  {
+    skip: container ? false : "requires an explicitly configured disposable database container",
+    timeout: 90_000,
+  },
+  async () => {
+    assert.ok(url && anonKey && serviceKey);
+    const { holdLock, waitForLock } = await disposableDatabase(container, url);
+    const options = { auth: { autoRefreshToken: false, persistSession: false } };
+    const admin = createClient(url, serviceKey, options);
+    const worker = createClient(url, anonKey, options);
+    const suffix = randomUUID();
+    const password = `${randomBytes(18).toString("base64url")}aA1!`;
+    const [businessId, venueId, departmentId, otherDepartment, employeeId] =
+      Array.from({ length: 5 }, () => randomUUID());
+    const users = [];
+    const clockIn = () => worker.rpc("clock_in_attendance", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: departmentId,
+      p_employee_id: employeeId, p_request_id: randomUUID(),
+    });
+    const clockOut = (sessionId, requestId = randomUUID()) =>
+      worker.rpc("clock_out_attendance", {
+        p_business_id: businessId, p_session_id: sessionId, p_request_id: requestId,
+      });
+    const startBreak = (sessionId, classification, requestId = randomUUID()) =>
+      worker.rpc("start_attendance_break", {
+        p_business_id: businessId, p_session_id: sessionId,
+        p_classification: classification, p_request_id: requestId,
+      });
+    const endBreak = (sessionId, breakId, requestId = randomUUID()) =>
+      worker.rpc("end_attendance_break", {
+        p_business_id: businessId, p_session_id: sessionId,
+        p_break_id: breakId, p_request_id: requestId,
+      });
+    const state = async () => {
+      const result = await worker.rpc("get_my_attendance_state_with_break", {
+        p_business_id: businessId,
+      }).single();
+      assert.ifError(result.error);
+      return result.data;
+    };
+
+    try {
+      for (const role of ["owner", "worker"]) {
+        const result = await admin.auth.admin.createUser({
+          email: `break-race-${role}-${suffix}@example.test`, password, email_confirm: true,
+        });
+        assert.ifError(result.error);
+        users.push(result.data.user.id);
+      }
+      assert.ifError((await admin.from("businesses").insert({
+        id: businessId, name: "Break race business",
+      })).error);
+      assert.ifError((await admin.from("venues").insert({
+        id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+      })).error);
+      assert.ifError((await admin.from("departments").insert([
+        { id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH" },
+        { id: otherDepartment, business_id: businessId, venue_id: venueId, name: "BOH" },
+      ])).error);
+      assert.ifError((await admin.from("business_memberships").insert([
+        { business_id: businessId, user_id: users[0], role: "owner" },
+        { business_id: businessId, user_id: users[1], role: "employee",
+          venue_id: venueId, department_id: departmentId },
+      ])).error);
+      assert.ifError((await admin.from("employees").insert({
+        id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[1], name: "Break worker", role_title: "Server",
+      })).error);
+      assert.ifError((await worker.auth.signInWithPassword({
+        email: `break-race-worker-${suffix}@example.test`, password,
+      })).error);
+
+      const firstIn = await clockIn();
+      assert.ifError(firstIn.error);
+      const firstSession = firstIn.data[0].session_id;
+      const startKey = randomUUID();
+      const starts = await Promise.all(Array.from({ length: 6 }, () =>
+        startBreak(firstSession, "paid", startKey)));
+      for (const result of starts) {
+        assert.ifError(result.error);
+        assert.deepEqual(result.data[0], starts[0].data[0]);
+      }
+      const firstBreak = (await state()).break_id;
+      assert.ok(firstBreak);
+      const changedReplay = await startBreak(firstSession, "unpaid", startKey);
+      assert.equal(changedReplay.error?.message, "Request identifier already used");
+      const breakRows = await admin.from("attendance_breaks").select("id, classification")
+        .eq("session_id", firstSession);
+      assert.ifError(breakRows.error);
+      assert.deepEqual(breakRows.data, [{ id: firstBreak, classification: "paid" }]);
+      assert.equal((await clockOut(firstSession)).error?.message, "End the open break before clocking out");
+
+      const endKey = randomUUID();
+      const ends = await Promise.all(Array.from({ length: 6 }, () =>
+        endBreak(firstSession, firstBreak, endKey)));
+      for (const result of ends) {
+        assert.ifError(result.error);
+        assert.deepEqual(result.data[0], ends[0].data[0]);
+      }
+      const firstEvents = await admin.from("attendance_events").select("event_type")
+        .eq("session_id", firstSession);
+      assert.ifError(firstEvents.error);
+      assert.deepEqual(firstEvents.data.map((event) => event.event_type).sort(),
+        ["break_end", "break_start", "clock_in"]);
+
+      const competingStarts = await Promise.all([
+        startBreak(firstSession, "paid"),
+        startBreak(firstSession, "unpaid"),
+      ]);
+      assert.equal(competingStarts.filter((result) => !result.error).length, 1);
+      assert.equal(competingStarts.find((result) => result.error).error.message, "Already on a break");
+      const secondBreak = (await state()).break_id;
+      const outKey = randomUUID();
+      const [ended, out] = await Promise.all([
+        endBreak(firstSession, secondBreak),
+        clockOut(firstSession, outKey),
+      ]);
+      assert.ifError(ended.error);
+      if (out.error) {
+        assert.equal(out.error.message, "End the open break before clocking out");
+        assert.ifError((await clockOut(firstSession, outKey)).error);
+      }
+      assert.equal((await state()).state, "clocked_out");
+
+      const nextIn = await clockIn();
+      assert.ifError(nextIn.error);
+      const nextSession = nextIn.data[0].session_id;
+      const [racingStart, racingOut] = await Promise.all([
+        startBreak(nextSession, "unpaid"),
+        clockOut(nextSession),
+      ]);
+      assert.equal(Number(!racingStart.error) + Number(!racingOut.error), 1);
+      if (!racingStart.error) {
+        assert.equal(racingOut.error?.message, "End the open break before clocking out");
+        assert.ifError((await endBreak(nextSession, (await state()).break_id)).error);
+        assert.ifError((await clockOut(nextSession)).error);
+      } else {
+        assert.equal(racingStart.error.message, "Attendance session is not open");
+      }
+
+      const permissionIn = await clockIn();
+      assert.ifError(permissionIn.error);
+      const permissionSession = permissionIn.data[0].session_id;
+      assert.ifError((await startBreak(permissionSession, "paid")).error);
+      const permissionBreak = (await state()).break_id;
+      const revocation = await holdLock(
+        `update public.business_memberships set department_id = '${otherDepartment}'::uuid ` +
+          `where business_id = '${businessId}'::uuid and user_id = '${users[1]}'::uuid returning user_id`,
+        users[1],
+      );
+      const pendingKey = randomUUID();
+      let pendingEnd;
+      try {
+        pendingEnd = Promise.resolve(endBreak(permissionSession, permissionBreak, pendingKey));
+        await waitForLock("end_attendance_break");
+        await revocation.release(true);
+        const denied = await pendingEnd;
+        assert.equal(denied.error?.message, "Session not found or permission denied");
+      } finally {
+        await revocation.release(false);
+        await Promise.allSettled([pendingEnd].filter(Boolean));
+      }
+      assert.ifError((await admin.from("business_memberships").update({ department_id: departmentId })
+        .eq("business_id", businessId).eq("user_id", users[1])).error);
+      assert.ifError((await endBreak(permissionSession, permissionBreak, pendingKey)).error);
+      assert.ifError((await clockOut(permissionSession)).error);
+
+      const unlinkIn = await clockIn();
+      assert.ifError(unlinkIn.error);
+      const unlinkSession = unlinkIn.data[0].session_id;
+      const unlink = await holdLock(
+        `update public.employees set auth_user_id = null where id = '${employeeId}'::uuid returning id`,
+        employeeId,
+      );
+      let pendingStart;
+      try {
+        pendingStart = Promise.resolve(startBreak(unlinkSession, "unpaid"));
+        await waitForLock("start_attendance_break");
+        await unlink.release(true);
+        const denied = await pendingStart;
+        assert.equal(denied.error?.message, "Session not found or permission denied");
+      } finally {
+        await unlink.release(false);
+        await Promise.allSettled([pendingStart].filter(Boolean));
+      }
+      assert.ifError((await admin.from("employees").update({ auth_user_id: users[1] })
+        .eq("id", employeeId)).error);
+      assert.ifError((await startBreak(unlinkSession, "unpaid")).error);
+      assert.ifError((await endBreak(unlinkSession, (await state()).break_id)).error);
+      assert.ifError((await clockOut(unlinkSession)).error);
+    } finally {
+      assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);
+      for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
+    }
+  },
+);

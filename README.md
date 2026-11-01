@@ -95,11 +95,15 @@ option is available, choose the correct one before clocking in. The server
 records the actual timestamp, employee, venue and department in immutable
 original events; retrying the same request does not duplicate it. A worker
 cannot start a second open session, including through an explicitly linked
-profile at another venue. An archived
-profile can finish an already-open session while its account and scope remain
-valid. Owners cannot link profiles while more than one has an open session.
-Events are currently unverified: location checks, breaks, corrections and
-timesheets are not yet implemented, and no break is automatically deducted.
+profile at another venue. An archived profile can finish an already-open
+session while its account and scope remain valid. Owners cannot link profiles
+while more than one has an open session.
+While clocked in, start and end each break explicitly as paid or unpaid; ask
+your manager which classification applies if unsure. End an open break before
+clocking out. The original classification and server-recorded times are
+retained; no break is assumed or automatically deducted. This does not
+calculate payroll or establish award compliance. Events are currently
+unverified: location checks, corrections and timesheets are not yet implemented.
 If account access is removed during a session, contact an owner for review.
 Apply the current migrations before using the clock.
 

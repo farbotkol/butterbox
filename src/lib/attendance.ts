@@ -7,6 +7,8 @@ export type ClockOption = {
   department_name: string;
 };
 
+export type BreakClassification = "paid" | "unpaid";
+
 export type AttendanceState =
   | { state: "clocked_out" | "needs_review" }
   | {
@@ -17,6 +19,11 @@ export type AttendanceState =
       venue_timezone: string;
       department_name: string;
       clocked_in_at: string;
+      active_break: null | {
+        id: string;
+        classification: BreakClassification;
+        started_at: string;
+      };
     };
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -62,6 +69,10 @@ export function parseClockOptionValue(value: FormDataEntryValue | null) {
   return { employeeId: parts[0], departmentId: parts[1] };
 }
 
+export function parseBreakClassification(value: FormDataEntryValue | null): BreakClassification | null {
+  return value === "paid" || value === "unpaid" ? value : null;
+}
+
 export function parseClockReceipt(value: unknown) {
   if (!Array.isArray(value) || value.length !== 1 || !record(value[0])) return null;
   const row = value[0];
@@ -76,7 +87,8 @@ export function parseAttendanceState(value: unknown): AttendanceState | null {
   if (value.state === "clocked_out" || value.state === "needs_review") {
     if (value.session_id !== null || value.venue_id !== null || value.venue_name !== null ||
       value.venue_timezone !== null || value.department_name !== null ||
-      value.clocked_in_at !== null) return null;
+      value.clocked_in_at !== null || value.break_id !== null ||
+      value.break_classification !== null || value.break_started_at !== null) return null;
     return { state: value.state };
   }
   if (value.state !== "clocked_in" || typeof value.session_id !== "string" ||
@@ -87,6 +99,18 @@ export function parseAttendanceState(value: unknown): AttendanceState | null {
     typeof value.clocked_in_at !== "string" || Number.isNaN(Date.parse(value.clocked_in_at))) {
     return null;
   }
+  let activeBreak: Extract<AttendanceState, { state: "clocked_in" }>["active_break"] = null;
+  if (value.break_id !== null || value.break_classification !== null || value.break_started_at !== null) {
+    if (typeof value.break_id !== "string" || !uuid.test(value.break_id) ||
+      (value.break_classification !== "paid" && value.break_classification !== "unpaid") ||
+      typeof value.break_started_at !== "string" || Number.isNaN(Date.parse(value.break_started_at)) ||
+      Date.parse(value.break_started_at) < Date.parse(value.clocked_in_at)) return null;
+    activeBreak = {
+      id: value.break_id,
+      classification: value.break_classification,
+      started_at: value.break_started_at,
+    };
+  }
   return {
     state: "clocked_in",
     session_id: value.session_id,
@@ -95,5 +119,6 @@ export function parseAttendanceState(value: unknown): AttendanceState | null {
     venue_timezone: value.venue_timezone,
     department_name: value.department_name,
     clocked_in_at: value.clocked_in_at,
+    active_break: activeBreak,
   };
 }

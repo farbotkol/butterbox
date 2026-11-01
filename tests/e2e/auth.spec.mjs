@@ -3495,7 +3495,10 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
     workerPage = await workerContext.newPage();
     await signIn(workerPage, `clock-worker-${suffix}@example.test`, password);
     await workerPage.goto(`/attendance?venue=${firstVenue}`);
-    const firstCloseRequest = await workerPage.locator('input[name="request_id"]').inputValue();
+    const firstCloseForm = workerPage.locator("form").filter({
+      has: workerPage.getByRole("button", { name: "Clock out", exact: true }),
+    });
+    const firstCloseRequest = await firstCloseForm.locator('input[name="request_id"]').inputValue();
     await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
     await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
     const repeatedClose = await workerApi.rpc("clock_out_attendance", {
@@ -3510,7 +3513,9 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
 
     await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
     await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
-    const laterSession = await workerPage.locator('input[name="session_id"]').inputValue();
+    const laterSession = await workerPage.locator("form").filter({
+      has: workerPage.getByRole("button", { name: "Clock out", exact: true }),
+    }).locator('input[name="session_id"]').inputValue();
     expect((await admin.from("employees").update({ auth_user_id: null }).eq("id", firstEmployee)).error).toBeNull();
     await workerPage.reload();
     await expect(workerPage.getByRole("heading", { name: "Attendance needs review" })).toBeVisible();
@@ -3532,7 +3537,9 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
     await workerPage.goto(`/attendance?venue=${secondVenue}`);
     await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
     await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
-    const secondSession = await workerPage.locator('input[name="session_id"]').inputValue();
+    const secondSession = await workerPage.locator("form").filter({
+      has: workerPage.getByRole("button", { name: "Clock out", exact: true }),
+    }).locator('input[name="session_id"]').inputValue();
     const venueEvents = await admin.from("attendance_events").select("venue_id, department_id, verification_status")
       .eq("session_id", secondSession);
     expect(venueEvents.error).toBeNull();
@@ -3608,5 +3615,146 @@ test("multi-department workers explicitly select their clock-in department", asy
   } finally {
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
+test("employees record multiple explicitly classified breaks without assumed deductions", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, venueId, departmentId, employeeId] =
+    Array.from({ length: 4 }, () => randomUUID());
+  const users = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["owner", "worker"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `break-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({
+      id: businessId, name: `Break cafe ${suffix}`,
+    })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      auth_user_id: users[1], name: "Break worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await workerApi.auth.signInWithPassword({
+      email: `break-browser-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `break-browser-worker-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const region = page.getByRole("region", { name: "Current attendance" });
+    await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    await expect(page.getByText("no break is automatically deducted", { exact: false })).toBeVisible();
+    await region.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(region.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    const startForm = region.locator("form").filter({
+      has: page.getByRole("button", { name: "Start unpaid break", exact: true }),
+    });
+    const sessionId = await startForm.locator('input[name="session_id"]').inputValue();
+    const startKey = await startForm.locator('input[name="request_id"]').inputValue();
+    const stalePage = await page.context().newPage();
+    await stalePage.goto(`/attendance?venue=${venueId}`);
+    await expect(stalePage.getByRole("button", { name: "Clock out", exact: true })).toBeVisible();
+    const before = Date.now();
+    await startForm.getByRole("button", { name: "Start unpaid break", exact: true }).click();
+    await expect(page.getByRole("status")).toHaveText("Break request recorded. Your current state is shown below.");
+    await expect(region.getByText("On an unpaid break since", { exact: false })).toBeVisible();
+    await expect(region.getByRole("button", { name: "Clock out", exact: true })).toHaveCount(0);
+    await expect(region.getByRole("button", { name: "Start paid break", exact: true })).toHaveCount(0);
+    await expect(region.getByText("End this break before clocking out.")).toBeVisible();
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const unpaidBreak = await admin.from("attendance_breaks").select("id, classification, session_id")
+      .eq("session_id", sessionId).single();
+    expect(unpaidBreak.error).toBeNull();
+    expect(unpaidBreak.data).toMatchObject({ classification: "unpaid", session_id: sessionId });
+    const started = await admin.from("attendance_events").select("id, break_id, occurred_at")
+      .eq("request_id", startKey).single();
+    expect(started.error).toBeNull();
+    expect(started.data.break_id).toBe(unpaidBreak.data.id);
+    expect(Date.parse(started.data.occurred_at)).toBeGreaterThanOrEqual(before - 5_000);
+    expect(Date.parse(started.data.occurred_at)).toBeLessThanOrEqual(Date.now() + 5_000);
+    const replayStart = await workerApi.rpc("start_attendance_break", {
+      p_business_id: businessId, p_session_id: sessionId,
+      p_classification: "unpaid", p_request_id: startKey,
+    });
+    expect(replayStart.error).toBeNull();
+    expect(replayStart.data[0].event_id).toBe(started.data.id);
+    const blockedOut = await workerApi.rpc("clock_out_attendance", {
+      p_business_id: businessId, p_session_id: sessionId, p_request_id: randomUUID(),
+    });
+    expect(blockedOut.error?.message).toBe("End the open break before clocking out");
+    await stalePage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(stalePage.getByRole("alert").filter({ hasText: "End your current break before clocking out." }))
+      .toBeVisible();
+    await expect(stalePage.getByText("On an unpaid break since", { exact: false })).toBeVisible();
+    await stalePage.close();
+    await page.reload();
+    await expect(region.getByText("On an unpaid break since", { exact: false })).toBeVisible();
+    const endForm = region.locator("form").filter({
+      has: page.getByRole("button", { name: "End break", exact: true }),
+    });
+    const endKey = await endForm.locator('input[name="request_id"]').inputValue();
+    await endForm.getByRole("button", { name: "End break", exact: true }).click();
+    await expect(region.getByRole("button", { name: "Start paid break", exact: true })).toBeVisible();
+    const replayEnd = await workerApi.rpc("end_attendance_break", {
+      p_business_id: businessId, p_session_id: sessionId,
+      p_break_id: unpaidBreak.data.id, p_request_id: endKey,
+    });
+    expect(replayEnd.error).toBeNull();
+    const endEvent = await admin.from("attendance_events").select("id")
+      .eq("request_id", endKey).single();
+    expect(endEvent.error).toBeNull();
+    expect(replayEnd.data[0].event_id).toBe(endEvent.data.id);
+
+    await region.getByRole("button", { name: "Start paid break", exact: true }).click();
+    await expect(region.getByText("On a paid break since", { exact: false })).toBeVisible();
+    await region.getByRole("button", { name: "End break", exact: true }).click();
+    await expect(region.getByRole("button", { name: "Clock out", exact: true })).toBeVisible();
+    await region.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    const breaks = await admin.from("attendance_breaks").select("classification")
+      .eq("session_id", sessionId).order("classification");
+    expect(breaks.error).toBeNull();
+    expect(breaks.data.map((item) => item.classification)).toEqual(["paid", "unpaid"]);
+    const events = await admin.from("attendance_events").select("event_type, occurred_at")
+      .eq("session_id", sessionId).order("occurred_at");
+    expect(events.error).toBeNull();
+    expect(events.data.map((event) => event.event_type)).toEqual([
+      "clock_in", "break_start", "break_end", "break_start", "break_end", "clock_out",
+    ]);
+
+    await region.getByRole("button", { name: "Clock in", exact: true }).click();
+    const noBreakForm = region.locator("form").filter({
+      has: page.getByRole("button", { name: "Clock out", exact: true }),
+    });
+    const noBreakSession = await noBreakForm.locator('input[name="session_id"]').inputValue();
+    await noBreakForm.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    const noBreaks = await admin.from("attendance_breaks").select("id", { count: "exact", head: true })
+      .eq("session_id", noBreakSession);
+    expect(noBreaks.error).toBeNull();
+    expect(noBreaks.count).toBe(0);
+    const noBreakEvents = await admin.from("attendance_events").select("event_type")
+      .eq("session_id", noBreakSession).order("event_type");
+    expect(noBreakEvents.error).toBeNull();
+    expect(noBreakEvents.data.map((event) => event.event_type)).toEqual(["clock_in", "clock_out"]);
+  } finally {
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });

@@ -2,26 +2,23 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **20**. In Progress: **5**.
-  Blocked: **1**. Not started (Backlog): **61**.
+- Total stories: **87**. Verified Done: **21**. In Progress: **5**.
+  Blocked: **1**. Not started (Backlog): **60**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006,
-  BB-ROSTER-007, BB-ROSTER-010 and BB-ATTEND-001.
-- The latest serialized Node run passed **59 tests**, with four integration
+  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001 and BB-ATTEND-002.
+- The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
-  **1,025/1,025 assertions across 24 files**, including 72 attendance
+  **1,104/1,104 assertions across 25 files**, including 72 clock and 79 break
   assertions. Authenticated two-tenant, linked-worker, attendance and ordered
-  concurrency tests passed, including duplicate clock requests, simultaneous
-  assignments, link/publication ordering and membership revocation.
+  concurrency tests passed, including duplicate clock/break requests, competing
+  transitions, link/publication ordering and membership revocation.
 - Production compile, explicit TypeScript, generate and full ESLint passed.
-  All **30/30 existing production-browser scenarios** passed in serialized,
-  low-memory mode before the multi-department clock-in safeguard was added.
-  The application was then rebuilt and both clock-specific browser scenarios,
-  including explicit department selection, passed. Coverage includes scoped
-  cross-venue workflows and a real 1,001-shift roster; the temporary application
-  server stopped.
+  All **32/32 production-browser scenarios** passed in serialized, low-memory
+  mode. Coverage includes classified breaks, scoped cross-venue workflows and a
+  real 1,001-shift roster; the temporary application server stopped.
 - Each exact staged checkpoint is checked with a network-disabled, redacted
   Gitleaks scan before committing.
 - The historical local checkpoint-ref credential blocker described below remains
@@ -86,6 +83,12 @@
 
 ## Current story
 
+- **BB-ATTEND-002 — Clock breaks** is Done. Immutable paid/unpaid break events,
+  scoped transitions, safe retries and mobile controls are verified. The
+  first break browser scenario timed out because a nested test locator was
+  rooted incorrectly; it was corrected without removing assertions, the
+  leftover disposable user was removed, and the focused and full regressions
+  passed.
 - **BB-ATTEND-001 — Clock in and out** is Done. Employees record immutable,
   server-timestamped, currently unverified clock events with scoped venue and
   department attribution, safe retries and current-state feedback. The full
@@ -136,8 +139,27 @@ Files: `supabase/migrations/20261102010000_attendance_clock_events.sql`,
 `tests/shared-worker-concurrency.integration.test.mjs`,
 `tests/helpers/disposable-database.mjs`, `tests/e2e/auth.spec.mjs`,
 `scripts/test-tenant-isolation.mjs` and `README.md`. The migration was applied
-only to the isolated project. Location verification, breaks, corrections and
-timesheets are not yet implemented; no break is silently deducted.
+only to the isolated project. Location verification, corrections and timesheets
+are not yet implemented; no break is silently deducted.
+
+### BB-ATTEND-002 — Clock breaks (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ATTEND-002.1 Break transitions are validated | Scoped RPCs serialize against clock-out and permission changes, enforce one open break, reject invalid starts/ends, and require an open break to end before clock-out. Server timestamps cannot move backwards. | The 79-assertion break pgTAP suite passed invalid-transition, permission, retry and clock-rollback cases. Authenticated races and a stale-browser-tab clock-out rejection passed. | Pass |
+| ATTEND-002.2 Multiple breaks are supported | Each break has its own immutable record and start/end event pair in the attendance session. | pgTAP and mobile Chromium each recorded and completed two breaks in one session; both passed. Authenticated concurrent competing starts produced one winner. | Pass |
+| ATTEND-002.3 Paid/unpaid classification is retained | Employees explicitly choose paid or unpaid; the classification is immutable and tied to the original session and events. | pgTAP verified both classifications, direct-write and privileged mutation denial, access scope and survival after account removal. Chromium confirmed both persisted classifications. All passed. | Pass |
+| ATTEND-002.4 No assumed break is silently deducted | Only explicitly started breaks create records; clock-out never inserts or assumes a break, and payroll/timesheet calculations are not yet implemented. | pgTAP and mobile Chromium each clocked a separate session in and out without breaks and found only the two clock events and zero break records. Both passed. | Pass |
+
+Files: `supabase/migrations/20261102020000_attendance_break_events.sql`,
+`supabase/tests/database/attendance_break_events.test.sql`,
+`src/app/attendance/page.tsx`, `src/app/actions.ts`, `src/lib/attendance.ts`,
+`tests/attendance.test.mjs`, `tests/attendance-concurrency.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs` and `README.md`. The disposable database was rebuilt
+from all migrations; the complete 1,104-assertion database regression, 60 Node
+tests, five authenticated integration tests, 32 browser scenarios, full lint,
+TypeScript and split production build passed. Payroll calculations, corrections
+and location verification remain unfinished.
 
 ### BB-ORG-005 — Multiple venues (In Progress)
 
@@ -583,11 +605,11 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-ATTEND-002 — Clock breaks** using immutable events, explicit
-  paid/unpaid classification, validated transitions and idempotent retries.
-  Never silently deduct an assumed break. Employee invitations and reliable
-  email/push also remain outstanding.
-- Migrations through `20261102010000` are applied only to the isolated stack.
+- Implement **BB-ATTEND-003 — Location verification** with optional geofencing,
+  event-time-only browser location requests, server-side distance/accuracy
+  checks and reviewable exceptions without discarding attendance. Employee
+  invitations and reliable email/push also remain outstanding.
+- Migrations through `20261102020000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

@@ -2,7 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
+import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
 import { authCallbackUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
@@ -545,6 +545,33 @@ async function attendanceActionContext(formData: FormData) {
   };
 }
 
+async function attendanceSessionActionContext(formData: FormData) {
+  const context = await attendanceActionContext(formData);
+  const sessions = uuidList(formData, "session_id", 1);
+  if (!sessions || sessions.length !== 1) {
+    console.error("Invalid attendance session.");
+    redirect(`${context.destination}&error=invalid`);
+  }
+  return { ...context, sessionId: sessions[0] };
+}
+
+function attendanceFailureReason(message: string | undefined) {
+  if (message?.toLowerCase().includes("permission denied")) return "permission";
+  switch (message) {
+    case "Already clocked in": return "already-in";
+    case "Already clocked out":
+    case "Attendance session is not open": return "already-out";
+    case "Employee or department is unavailable": return "unavailable";
+    case "Request identifier already used": return "reused";
+    case "Already on a break": return "already-break";
+    case "Break already ended": return "break-ended";
+    case "End the open break before clocking out": return "break-open";
+    case "Invalid break request":
+    case "Invalid clock request": return "invalid";
+    default: return "save";
+  }
+}
+
 export async function clockInAction(formData: FormData) {
   const { workspace, requestId, destination } = await attendanceActionContext(formData);
   const values = formData.getAll("clock_option");
@@ -564,40 +591,77 @@ export async function clockInAction(formData: FormData) {
     console.error("Clock-in failed.", {
       code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
     });
-    const reason = error?.message === "Already clocked in" ? "already-in"
-      : error?.message === "Employee or department is unavailable" ? "unavailable"
-        : error?.message.toLowerCase().includes("permission denied") ? "permission"
-          : error?.message === "Request identifier already used" ? "reused" : "save";
-    redirect(`${destination}&error=${reason}`);
+    redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
   }
   revalidatePath("/attendance");
   redirect(`${destination}&saved=recorded`);
 }
 
 export async function clockOutAction(formData: FormData) {
-  const { workspace, requestId, destination } = await attendanceActionContext(formData);
-  const sessions = uuidList(formData, "session_id", 1);
-  if (!sessions || sessions.length !== 1) {
-    console.error("Invalid attendance session.");
-    redirect(`${destination}&error=invalid`);
-  }
+  const { workspace, requestId, destination, sessionId } = await attendanceSessionActionContext(formData);
   const { data, error } = await workspace.supabase.rpc("clock_out_attendance", {
     p_business_id: workspace.business.id,
-    p_session_id: sessions[0],
+    p_session_id: sessionId,
     p_request_id: requestId,
   });
   const receipt = parseClockReceipt(data);
-  if (error || !receipt || receipt.sessionId.toLowerCase() !== sessions[0].toLowerCase()) {
+  if (error || !receipt || receipt.sessionId.toLowerCase() !== sessionId.toLowerCase()) {
     console.error("Clock-out failed.", {
       code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
     });
-    const reason = error?.message === "Already clocked out" ? "already-out"
-      : error?.message.toLowerCase().includes("permission denied") ? "permission"
-        : error?.message === "Request identifier already used" ? "reused" : "save";
-    redirect(`${destination}&error=${reason}`);
+    redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
   }
   revalidatePath("/attendance");
   redirect(`${destination}&saved=recorded`);
+}
+
+export async function startAttendanceBreakAction(formData: FormData) {
+  const { workspace, requestId, destination, sessionId } = await attendanceSessionActionContext(formData);
+  const values = formData.getAll("classification");
+  const classification = values.length === 1 ? parseBreakClassification(values[0]) : null;
+  if (!classification) {
+    console.error("Invalid attendance break classification.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("start_attendance_break", {
+    p_business_id: workspace.business.id,
+    p_session_id: sessionId,
+    p_classification: classification,
+    p_request_id: requestId,
+  });
+  const receipt = parseClockReceipt(data);
+  if (error || !receipt || receipt.sessionId.toLowerCase() !== sessionId.toLowerCase()) {
+    console.error("Break start failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid break receipt.",
+    });
+    redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=break-recorded`);
+}
+
+export async function endAttendanceBreakAction(formData: FormData) {
+  const { workspace, requestId, destination, sessionId } = await attendanceSessionActionContext(formData);
+  const breaks = uuidList(formData, "break_id", 1);
+  if (!breaks || breaks.length !== 1) {
+    console.error("Invalid attendance break.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("end_attendance_break", {
+    p_business_id: workspace.business.id,
+    p_session_id: sessionId,
+    p_break_id: breaks[0],
+    p_request_id: requestId,
+  });
+  const receipt = parseClockReceipt(data);
+  if (error || !receipt || receipt.sessionId.toLowerCase() !== sessionId.toLowerCase()) {
+    console.error("Break end failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid break receipt.",
+    });
+    redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=break-recorded`);
 }
 
 async function availabilityActionContext(formData: FormData) {
