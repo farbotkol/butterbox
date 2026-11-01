@@ -715,7 +715,8 @@ test("owners configure venue conflict rules with protected history and scoped ac
       "Manual assignment with unavailable worker", "Publish with unavailable worker",
       "Publish with overlapping shifts", "Publish a shift longer than 24 hours",
     ];
-    await expect(region).toContainText("Cross-venue worker overlaps are not yet detected");
+    await expect(region).toContainText("Cross-venue overlaps are detected when an owner explicitly links");
+    await expect(region).toContainText("automatic selection avoids them and publication follows the overlap rule");
     await expect(region).toContainText("No rule changes yet.");
     for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
     for (const label of labels) await form.getByLabel(label).selectOption("true");
@@ -3014,6 +3015,7 @@ test("required shift acknowledgements stay scoped and survive later publications
       const result = await admin.auth.admin.createUser({
         email: `ack-${name}-${suffix}@example.test`, password, email_confirm: true,
       });
+
       expect(result.error).toBeNull();
       users.push(result.data.user.id);
     }
@@ -3130,5 +3132,223 @@ test("required shift acknowledgements stay scoped and survive later publications
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
     for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
+test("owners link shared workers and scoped rosters enforce cross-venue conflicts", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId, firstVenue, secondVenue, outsideVenue,
+    firstDepartment, secondDepartment, outsideDepartment, firstEmployee, secondEmployee,
+    alternateEmployee, outsideEmployee, firstShift, secondShift] =
+    Array.from({ length: 14 }, () => randomUUID());
+  const users = [];
+  let managerContext;
+  try {
+    for (const name of ["owner", "manager", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `shared-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Shared cafe ${suffix}` },
+      { id: outsideBusinessId, name: `Other shared cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: firstVenue, business_id: businessId, name: "Harbour", timezone: "UTC" },
+      { id: secondVenue, business_id: businessId, name: "Riverside", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideBusinessId, name: "Other business", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: firstDepartment, business_id: businessId, venue_id: firstVenue, name: "Front of House" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Back of House" },
+      { id: outsideDepartment, business_id: outsideBusinessId, venue_id: outsideVenue, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: firstVenue, department_id: firstDepartment },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: firstVenue, department_id: firstDepartment },
+      { business_id: outsideBusinessId, user_id: users[3], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: firstEmployee, business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+        auth_user_id: users[2], name: "Alex Shared", role_title: "Server" },
+      { id: secondEmployee, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        name: "Alex Shared", role_title: "Cook" },
+      { id: alternateEmployee, business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+        name: "Zoe Alternative", role_title: "Server" },
+      { id: outsideEmployee, business_id: outsideBusinessId, venue_id: outsideVenue, department_id: outsideDepartment,
+        name: "Alex Shared", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: firstShift, business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+        employee_id: firstEmployee, role_title: "Visible service",
+        starts_at: "2032-03-15T09:00:00Z", ends_at: "2032-03-15T12:00:00Z" },
+      { id: secondShift, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        employee_id: secondEmployee, role_title: "Private other venue",
+        starts_at: "2032-03-15T10:00:00Z", ends_at: "2032-03-15T11:00:00Z" },
+      { id: randomUUID(), business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        employee_id: secondEmployee, role_title: "Private afternoon",
+        starts_at: "2032-03-15T16:00:00Z", ends_at: "2032-03-15T17:00:00Z" },
+    ])).error).toBeNull();
+
+    managerContext = await browser.newContext({ baseURL: appUrl });
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `shared-manager-${suffix}@example.test`, password);
+    const roster = `/roster?week=2032-03-15&venue=${firstVenue}&department=${firstDepartment}`;
+    await managerPage.goto(roster);
+    const visibleCard = managerPage.locator("article", { hasText: "Visible service" });
+    await expect(visibleCard.getByRole("note")).toHaveCount(0);
+    await expect(managerPage.getByText("Private other venue", { exact: true })).toHaveCount(0);
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `shared-owner-${suffix}@example.test`, password);
+    await page.goto(`/people?venue=${firstVenue}`);
+    const section = page.getByRole("region", { name: "Shared staff across venues" });
+    const form = section.getByRole("form", { name: "Link shared staff" });
+    await expect(section).toContainText("do not link accounts or grant access");
+    await expect(form.locator(`option[value="${outsideEmployee}"]`)).toHaveCount(0);
+    await form.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await form.getByLabel("Profile at another venue").selectOption(secondEmployee);
+    await form.evaluate((element) => { element.noValidate = true; });
+    await form.getByRole("button", { name: "Link profiles" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("Confirm the shared-profile change");
+    await form.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await form.getByLabel("Profile at another venue").selectOption(secondEmployee);
+    await form.getByLabel("I have confirmed that these profiles belong to the same person.").check();
+    await form.getByRole("button", { name: "Link profiles" }).click();
+    await expect(page.locator('p[role="status"]')).toHaveText("Shared-worker profiles linked.");
+    await expect(section).toContainText(`Alex Shared — Riverside — ${secondEmployee}`);
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    const linkedAccount = await admin.from("employees").select("auth_user_id").eq("id", secondEmployee).single();
+    expect(linkedAccount.error).toBeNull();
+    expect(linkedAccount.data.auth_user_id).toBeNull();
+
+    await managerPage.reload();
+    await expect(visibleCard.getByRole("note")).toContainText("Overlaps another shift");
+    await expect(managerPage.getByText("Private other venue", { exact: true })).toHaveCount(0);
+    const managerApi = createClient(apiUrl, anonKey, options);
+    expect((await managerApi.auth.signInWithPassword({
+      email: `shared-manager-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await managerApi.rpc("list_shared_worker_profiles", {
+      p_business_id: businessId, p_venue_id: firstVenue,
+    })).error?.message).toBe("Permission denied");
+    await managerPage.goto(`/people?venue=${firstVenue}`);
+    await expect(managerPage.getByRole("region", { name: "Shared staff across venues" })).toHaveCount(0);
+    await managerPage.goto(roster);
+    const create = managerPage.getByRole("form", { name: "Add draft shift" });
+    await create.getByLabel("Role").fill("Automatic shared-worker check");
+    await create.getByLabel("Team member").selectOption("auto");
+    await create.getByLabel("Starts").fill("2032-03-15T16:00");
+    await create.getByLabel("Ends").fill("2032-03-15T17:00");
+    await create.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(managerPage.locator('p[role="status"]')).toHaveText("Shift saved to the draft roster.");
+    const automatic = await admin.from("shifts").select("employee_id")
+      .eq("business_id", businessId).eq("role_title", "Automatic shared-worker check").single();
+    expect(automatic.error).toBeNull();
+    expect(automatic.data.employee_id).toBe(alternateEmployee);
+
+    await page.goto(`/settings/organisation?venue=${firstVenue}`);
+    const policy = page.getByRole("form", { name: "Configure roster conflict rules" });
+    await policy.getByLabel("Publish with overlapping shifts").selectOption("true");
+    await policy.getByRole("button", { name: "Save roster conflict rules" }).click();
+    await expect(page.locator('p[role="status"]')).toHaveText("Roster conflict rules saved.");
+    await managerPage.goto(roster);
+    await managerPage.getByRole("button", { name: "Publish this department" }).click();
+    await expect(managerPage.locator('p[role="alert"]')).toContainText("overlapping shifts");
+    await expect(managerPage.getByText("Private other venue", { exact: true })).toHaveCount(0);
+    const blocked = await admin.from("shifts").select("is_published").eq("id", firstShift).single();
+    expect(blocked.error).toBeNull();
+    expect(blocked.data.is_published).toBe(false);
+
+    await page.goto(`/people?venue=${firstVenue}`);
+    const unlink = page.getByRole("form", { name: `Unlink Alex Shared ${firstEmployee}` });
+    await unlink.getByLabel("Remove this profile from all its linked venues.").check();
+    await unlink.getByRole("button", { name: "Unlink profile" }).click();
+    await expect(page.locator('p[role="status"]')).toHaveText("Shared-worker profile unlinked.");
+    await managerPage.goto(roster);
+    await expect(visibleCard.getByRole("note")).toHaveCount(0);
+    await managerPage.getByRole("button", { name: "Publish this department" }).click();
+    await expect(managerPage.locator('p[role="status"]')).toHaveText("Front of House roster published.");
+    const otherVenue = await admin.from("shifts").select("is_published").eq("id", secondShift).single();
+    expect(otherVenue.error).toBeNull();
+    expect(otherVenue.data.is_published).toBe(false);
+  } finally {
+    try {
+      if (managerContext && browser.isConnected()) await managerContext.close();
+    } finally {
+      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+    }
+  }
+});
+
+test("cross-venue roster conflicts remain visible beyond 1000 shifts", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, firstVenue, secondVenue, firstDepartment, secondDepartment, firstEmployee, secondEmployee] =
+    Array.from({ length: 7 }, () => randomUUID());
+  let userId;
+  try {
+    const user = await admin.auth.admin.createUser({
+      email: `shared-pagination-${suffix}@example.test`, password, email_confirm: true,
+    });
+    expect(user.error).toBeNull();
+    userId = user.data.user.id;
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Large roster ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: firstVenue, business_id: businessId, name: "First", timezone: "UTC" },
+      { id: secondVenue, business_id: businessId, name: "Second", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: firstDepartment, business_id: businessId, venue_id: firstVenue, name: "First FOH" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Second FOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: userId, role: "owner",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: firstEmployee, business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+        name: "Paged worker", role_title: "Server" },
+      { id: secondEmployee, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        name: "Paged worker", role_title: "Server" },
+    ])).error).toBeNull();
+    const openShifts = Array.from({ length: 1000 }, () => ({
+      business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+      employee_id: null, role_title: "Early open coverage",
+      starts_at: "2032-03-15T00:00:00Z", ends_at: "2032-03-15T01:00:00Z",
+    }));
+    expect((await admin.from("shifts").insert(openShifts)).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { business_id: businessId, venue_id: firstVenue, department_id: firstDepartment, employee_id: firstEmployee,
+        role_title: "Beyond the first page", starts_at: "2032-03-16T09:00:00Z", ends_at: "2032-03-16T10:00:00Z" },
+      { business_id: businessId, venue_id: secondVenue, department_id: secondDepartment, employee_id: secondEmployee,
+        role_title: "Hidden paged conflict", starts_at: "2032-03-16T09:00:00Z", ends_at: "2032-03-16T10:00:00Z" },
+    ])).error).toBeNull();
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `shared-pagination-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("link_shared_worker_profiles", {
+      p_business_id: businessId, p_venue_id: firstVenue,
+      p_employee_id: firstEmployee, p_other_employee_id: secondEmployee,
+    })).error).toBeNull();
+    const count = await admin.from("shifts").select("id", { count: "exact", head: true })
+      .eq("venue_id", firstVenue);
+    expect(count.error).toBeNull();
+    expect(count.count).toBe(1001);
+
+    await signIn(page, `shared-pagination-${suffix}@example.test`, password);
+    await page.goto(`/roster?week=2032-03-15&venue=${firstVenue}&department=${firstDepartment}`);
+    await expect(page.locator("#open-shifts")).toContainText("1000 to fill");
+    await expect(page.locator("article", { hasText: "Beyond the first page" }).getByRole("note"))
+      .toContainText("Overlaps another shift");
+    await expect(page.getByText("Hidden paged conflict", { exact: true })).toHaveCount(0);
+  } finally {
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });

@@ -190,11 +190,13 @@ export default async function OrganisationPage({
             <section aria-label="Roster conflict rules" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster conflict rules</h2>
               <p id="conflict-policy-help" className="mt-3 text-sm leading-6 text-muted">
-                Rules apply to this venue. New assignments always reject overlaps for the same worker.
+                Rules apply to this venue. New assignments reject overlaps for the same venue profile.
+                Cross-venue overlaps are detected when an owner explicitly links a worker&apos;s profiles;
+                automatic selection avoids them and publication follows the overlap rule below.
                 Unsubmitted availability is unknown; pending leave does not block a shift. Existing
                 assignments are not changed when a rule is enabled. Availability for assigned shifts
                 longer than 24 hours cannot be verified and is blocked when publication requires
-                available workers. Cross-venue worker overlaps are not yet detected.
+                available workers.
               </p>
               <form action={saveVenueConflictPolicyAction} aria-label="Configure roster conflict rules"
                 aria-describedby="conflict-policy-help" className="mt-4 grid gap-4 sm:grid-cols-2">

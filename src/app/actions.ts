@@ -458,6 +458,70 @@ export async function setEmployeeAuthUserAction(formData: FormData) {
   redirect(`${destination}&saved=account`);
 }
 
+async function sharedWorkerActionContext(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid shared-worker venue submitted.");
+    redirect("/people?error=shared");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the shared-worker workspace.", { message: workspace.message });
+    redirect("/people?error=filter");
+  }
+  const destination = `/people?venue=${encodeURIComponent(workspace.venue.id)}`;
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const confirmation = formData.getAll("confirmed");
+  if (!employeeIds || employeeIds.length !== 1 ||
+    confirmation.length !== 1 || confirmation[0] !== "yes") {
+    console.error("Invalid or unconfirmed shared-worker change.");
+    redirect(`${destination}&error=shared-confirm`);
+  }
+  return { workspace, destination, employeeId: employeeIds[0] };
+}
+
+export async function linkSharedWorkerAction(formData: FormData) {
+  const { workspace, destination, employeeId } = await sharedWorkerActionContext(formData);
+  const otherIds = uuidList(formData, "other_employee_id", 1);
+  if (!otherIds || otherIds.length !== 1) {
+    console.error("Invalid shared-worker profile submitted.");
+    redirect(`${destination}&error=shared`);
+  }
+  const { error } = await workspace.supabase.rpc("link_shared_worker_profiles", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_employee_id: employeeId,
+    p_other_employee_id: otherIds[0],
+  });
+  if (error) {
+    console.error("Shared-worker link failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "A profile from this venue is already linked" ? "shared-venue"
+        : error.message === "Profiles belong to different shared workers" ? "shared-groups" : "shared";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/roster");
+  redirect(`${destination}&saved=shared-link`);
+}
+
+export async function unlinkSharedWorkerAction(formData: FormData) {
+  const { workspace, destination, employeeId } = await sharedWorkerActionContext(formData);
+  const { error } = await workspace.supabase.rpc("unlink_shared_worker_profile", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_employee_id: employeeId,
+  });
+  if (error) {
+    console.error("Shared-worker unlink failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "shared"}`);
+  }
+  revalidatePath("/roster");
+  redirect(`${destination}&saved=shared-unlink`);
+}
+
 async function availabilityActionContext(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
   if (!venueIds || venueIds.length !== 1) {
@@ -755,6 +819,8 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
       state.errors.end = "A shift must end after it starts and last no longer than 24 hours.";
     } else if (message.includes("published")) {
       state.errors.form = "Published shifts cannot be edited.";
+    } else if (message.includes("roster changed while scheduling")) {
+      state.errors.form = "The roster changed while you were scheduling. Please try again.";
     } else if (message.includes("inactive")) {
       state.errors.form = "That department or job role is inactive. Choose an active one for changes.";
     } else if (message.includes("permission") || message.includes("shift not found")) {

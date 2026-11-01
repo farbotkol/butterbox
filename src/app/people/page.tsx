@@ -1,12 +1,15 @@
 import { redirect } from "next/navigation";
 import {
+  linkSharedWorkerAction,
   saveEmployeeAction,
   setEmployeeAuthUserAction,
   setEmployeeDepartmentsAction,
   setEmployeeEligibleRolesAction,
   setEmployeePrimaryRoleAction,
+  unlinkSharedWorkerAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace, type BusinessMember } from "@/lib/workspace";
 
@@ -23,6 +26,12 @@ type Employee = {
 type Department = { id: string; name: string; active?: boolean };
 type JobRole = { id: string; name: string; department_id: string; active: boolean };
 type Qualification = { employee_id: string; department_id: string; job_role_id: string; is_primary: boolean };
+type Venue = { id: string; name: string };
+type OtherEmployee = { id: string; name: string; venue_id: string; role_title: string; active: boolean };
+type SharedProfile = {
+  employee_id: string; linked_employee_id: string; linked_name: string;
+  linked_venue_name: string; linked_active: boolean;
+};
 
 function memberHasEmployeeScope(member: BusinessMember, employee: Employee, venueId: string) {
   if (["owner", "admin"].includes(member.role)) return true;
@@ -202,6 +211,73 @@ function PrimaryRoleForm({ employee, departments, roles, qualifications, venueId
   );
 }
 
+function SharedWorkersSection({ employees, otherEmployees, sharedProfiles, venues, venue }: {
+  employees: Employee[]; otherEmployees: OtherEmployee[]; sharedProfiles: SharedProfile[];
+  venues: Venue[]; venue: Venue;
+}) {
+  const linkedEmployees = employees.filter((employee) =>
+    sharedProfiles.some((profile) => profile.employee_id === employee.id));
+  return (
+    <section aria-label="Shared staff across venues" className="mt-6 rounded-xl border border-line bg-white p-5">
+      <h2 className="font-semibold">Shared staff across venues</h2>
+      <p className="mt-2 text-sm text-muted">
+        Link profiles only after confirming they belong to the same person. Links help detect overlapping
+        shifts; they do not link accounts or grant access to another venue.
+      </p>
+      {employees.length && otherEmployees.length ? (
+        <form action={linkSharedWorkerAction} aria-label="Link shared staff" className="mt-4 grid gap-4 sm:grid-cols-2">
+          <input type="hidden" name="venue_id" value={venue.id} />
+          <label className="text-sm">Profile in {venue.name}
+            <select name="employee_id" required defaultValue="" className="mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink">
+              <option value="" disabled>Choose a profile</option>
+              {employees.map((employee) => <option key={employee.id} value={employee.id}>
+                {employee.name} — {employee.role_title} — {employee.id}{employee.active ? "" : " (archived)"}
+              </option>)}
+            </select>
+          </label>
+          <label className="text-sm">Profile at another venue
+            <select name="other_employee_id" required defaultValue="" className="mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink">
+              <option value="" disabled>Choose a profile</option>
+              {otherEmployees.map((employee) => <option key={employee.id} value={employee.id}>
+                {employee.name} — {venues.find((item) => item.id === employee.venue_id)?.name ?? employee.venue_id}
+                {" "}— {employee.role_title} — {employee.id}{employee.active ? "" : " (archived)"}
+              </option>)}
+            </select>
+          </label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2">
+            <input type="checkbox" name="confirmed" value="yes" required className="mt-1" />
+            I have confirmed that these profiles belong to the same person.
+          </label>
+          <button type="submit" className="justify-self-start rounded-lg border border-line px-4 py-2 text-sm font-semibold">Link profiles</button>
+        </form>
+      ) : <p className="mt-4 text-sm text-muted">Profiles in this venue and another venue are needed to create a link.</p>}
+      <h3 className="mt-5 text-sm font-semibold">Links for the displayed team</h3>
+      {linkedEmployees.length ? <ul className="mt-2 space-y-4">
+        {linkedEmployees.map((employee) => <li key={employee.id} className="rounded-lg border border-line p-3 text-sm">
+          <p className="break-words font-semibold">{employee.name} — {employee.id}</p>
+          <ul className="mt-1">
+            {sharedProfiles.filter((profile) => profile.employee_id === employee.id).map((profile) => (
+              <li key={profile.linked_employee_id} className="break-words">
+                {profile.linked_name} — {profile.linked_venue_name} — {profile.linked_employee_id}
+                {profile.linked_active ? "" : " (archived)"}
+              </li>
+            ))}
+          </ul>
+          <form action={unlinkSharedWorkerAction} aria-label={`Unlink ${employee.name} ${employee.id}`} className="mt-3">
+            <input type="hidden" name="venue_id" value={venue.id} />
+            <input type="hidden" name="employee_id" value={employee.id} />
+            <label className="flex items-start gap-2">
+              <input type="checkbox" name="confirmed" value="yes" required className="mt-1" />
+              Remove this profile from all its linked venues.
+            </label>
+            <button type="submit" className="mt-2 rounded-lg border border-line px-4 py-2 font-semibold">Unlink profile</button>
+          </form>
+        </li>)}
+      </ul> : <p className="mt-2 text-sm text-muted">No linked profiles in the displayed team.</p>}
+    </section>
+  );
+}
+
 export default async function PeoplePage({
   searchParams,
 }: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; department?: string; role?: string; q?: string; status?: string }> }) {
@@ -214,8 +290,9 @@ export default async function PeoplePage({
     redirect("/?error=permission");
   }
   const params = await searchParams;
-  const venues = await workspace.supabase.from("venues").select("id, name")
-    .eq("business_id", workspace.business.id).order("name");
+  const venues = await readAllPages((from, to) => workspace.supabase.from("venues")
+    .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
+    .order("name").order("id").range(from, to), (venue) => venue.id);
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) {
     console.error("Directory requested an unavailable venue.");
@@ -270,14 +347,29 @@ export default async function PeoplePage({
   if (params.status && params.status !== "all") employeesQuery = employeesQuery.eq("active", params.status === "active");
   if (query) employeesQuery = employeesQuery.ilike("name", `%${query.replace(/[\\%_]/g, "\\$&")}%`);
   const employees = await employeesQuery;
-  const links = await workspace.supabase.from("employee_departments").select("employee_id, department_id")
-    .in("employee_id", employees.data?.map((employee) => employee.id) ?? []);
+  const [links, otherEmployees, sharedProfiles] = await Promise.all([
+    workspace.supabase.from("employee_departments").select("employee_id, department_id")
+      .in("employee_id", employees.data?.map((employee) => employee.id) ?? []),
+    workspace.membership.role === "owner"
+      ? readAllPages((from, to) => workspace.supabase.from("employees")
+        .select("id, name, venue_id, role_title, active", { count: "exact" })
+        .eq("business_id", workspace.business.id).neq("venue_id", venueId)
+        .order("name").order("id").range(from, to), (employee) => employee.id)
+      : Promise.resolve({ data: [], error: null }),
+    workspace.membership.role === "owner"
+      ? readAllPages<SharedProfile>((from, to) => workspace.supabase.rpc("list_shared_worker_profiles", {
+        p_business_id: workspace.business.id, p_venue_id: venueId,
+      }, { count: "exact" }).order("employee_id").order("linked_employee_id").range(from, to),
+      (profile) => `${profile.employee_id}:${profile.linked_employee_id}`)
+      : Promise.resolve({ data: [], error: null }),
+  ]);
   const linkedDepartments = (employeeId: string) =>
     links.data?.filter((link) => link.employee_id === employeeId).map((link) => link.department_id) ?? [];
   const departmentName = (id: string) => departments.data?.find((department) => department.id === id)?.name;
   const canAssignDepartments = ["owner", "admin", "general_manager"].includes(workspace.membership.role);
   const loadError = venues.error || departments.error || profileRoles.error || jobRoles.error ||
-    qualifications.error || preferences.error || members.error || filterError || employees.error || links.error;
+    qualifications.error || preferences.error || members.error || filterError || employees.error || links.error ||
+    otherEmployees.error || sharedProfiles.error;
   if (loadError) console.error("Could not load employee profiles.", { code: loadError.code, message: loadError.message });
   return (
     <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -296,6 +388,10 @@ export default async function PeoplePage({
             ? "Could not save roles. Choose active roles in the worker's linked departments." : params.error === "inactive"
           ? "Inactive departments cannot be newly assigned." : params.error === "account"
           ? "Could not link that account. Choose a business member in this worker's venue and department who is not already linked there."
+          : params.error === "shared-confirm" ? "Confirm the shared-profile change before saving."
+          : params.error === "shared-venue" ? "This worker already has a linked profile at that venue."
+          : params.error === "shared-groups" ? "These profiles belong to different shared workers. Unlink the incorrect profiles before linking them."
+          : params.error === "shared" ? "Could not change the shared-worker link. Check the profiles and try again."
           : params.error === "filter"
           ? "That directory filter is unavailable. Choose a permitted venue, department and role."
           : "Could not save employee. Check the details and try again."}
@@ -304,7 +400,9 @@ export default async function PeoplePage({
         {params.saved === "departments" ? "Department membership saved."
           : params.saved === "roles" ? "Eligible roles saved."
             : params.saved === "primary" ? "Primary role saved."
-              : params.saved === "account" ? "Account link saved." : "Employee profile saved."}
+              : params.saved === "account" ? "Account link saved."
+                : params.saved === "shared-link" ? "Shared-worker profiles linked."
+                  : params.saved === "shared-unlink" ? "Shared-worker profile unlinked." : "Employee profile saved."}
       </p>}
       {loadError ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-800">Could not load employee profiles. Try again.</p> : <>
         <form action="/people" aria-label="Directory filters" className="mt-6 grid gap-4 rounded-xl border border-line bg-white p-5 sm:grid-cols-2 xl:grid-cols-3">
@@ -343,6 +441,10 @@ export default async function PeoplePage({
             <EmployeeForm departments={departments.data.filter((department) => department.active)} venueId={venueId} />
           </section>
         ) : <p className="mt-6">No manageable departments are available.</p>}
+        {workspace.membership.role === "owner" && selectedVenue && (
+          <SharedWorkersSection employees={employees.data ?? []} otherEmployees={otherEmployees.data ?? []}
+            sharedProfiles={sharedProfiles.data ?? []} venues={venues.data ?? []} venue={selectedVenue} />
+        )}
         <div className="mt-6 space-y-4">
           {employees.data?.map((employee) => {
             const employeePreferences = preferences.data?.find((item) => item.employee_id === employee.id);

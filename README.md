@@ -122,9 +122,17 @@ Each rule defaults to a warning, preserving existing behaviour, and real changes
 are recorded in owner-only history. Existing assignments are not changed by
 enabling a rule, although publication can be blocked. Availability cannot be
 verified for legacy assigned shifts longer than 24 hours, so the unavailable
-worker publication rule also blocks them. If a simultaneous edit is in progress,
-publication asks the manager to retry instead of publishing unchecked data.
-These warnings and rules do not yet cover cross-venue worker overlaps.
+worker publication rule also blocks them.
+
+On **People**, a business owner can explicitly link profiles for the same
+person at different venues after confirming their identity. Names and email
+addresses are never used to infer links, and linking does not connect accounts
+or grant venue access. Unlinking a profile removes it from all its linked
+venues. Managers see only their own affected shift when a linked profile
+overlaps elsewhere. Automatic selection avoids those overlaps; manual
+cross-venue assignments show a warning and the venue's publication overlap rule
+can block publishing. Concurrent link, edit, assignment and publication
+changes are coordinated; when necessary the manager is asked to retry.
 
 When a department roster is published, a numbered version and a snapshot of its
 published shifts are recorded for that venue-local week. Authorised managers

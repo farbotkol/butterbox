@@ -1,4 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { readAllPages } from "./paginated-rows.ts";
+
+type Acknowledgement = { shift_id: string; acknowledged_at: string | null };
 
 export function parseShiftAcknowledgements(
   data: unknown,
@@ -25,18 +28,25 @@ export async function shiftAcknowledgements(
   venueId: string,
   shiftIds: readonly string[],
 ): Promise<Map<string, string | null> | null> {
-  if (shiftIds.length === 0) return new Map();
-  const { data, error } = await supabase.rpc("list_shift_acknowledgements", {
-    p_business_id: businessId,
-    p_venue_id: venueId,
-    p_shift_ids: [...new Set(shiftIds)],
-  });
-  const result = error ? null : parseShiftAcknowledgements(data, shiftIds);
-  if (!result) {
-    console.error("Could not load shift acknowledgement status.", {
-      code: error?.code,
-      message: error?.message ?? "The server returned incomplete or invalid acknowledgement status.",
-    });
+  const ids = [...new Set(shiftIds)];
+  const statuses = new Map<string, string | null>();
+  for (let offset = 0; offset < ids.length; offset += 1000) {
+    const batch = ids.slice(offset, offset + 1000);
+    const { data, error } = await readAllPages<Acknowledgement>((from, to) => supabase.rpc("list_shift_acknowledgements", {
+      p_business_id: businessId,
+      p_venue_id: venueId,
+      p_shift_ids: batch,
+    }, { count: "exact" }).order("shift_id").range(from, to),
+    (row) => row && typeof row.shift_id === "string" ? row.shift_id : "");
+    const result = error ? null : parseShiftAcknowledgements(data, batch);
+    if (!result) {
+      console.error("Could not load shift acknowledgement status.", {
+        code: error?.code,
+        message: error?.message ?? "The server returned incomplete or invalid acknowledgement status.",
+      });
+      return null;
+    }
+    for (const [shiftId, acknowledgedAt] of result) statuses.set(shiftId, acknowledgedAt);
   }
-  return result;
+  return statuses;
 }

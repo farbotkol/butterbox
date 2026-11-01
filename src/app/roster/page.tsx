@@ -26,6 +26,7 @@ import {
 } from "@/lib/availability";
 import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
+import { rosterOverlapConflicts } from "@/lib/roster-overlap-conflicts";
 import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
@@ -61,6 +62,7 @@ type PublicationReachability = {
   publication_id: string;
   inaccessible_count: number;
 };
+type OwnDepartment = { employee_id: string; department_id: string; name: string; active: boolean };
 
 const errorMessages: Record<string, string> = {
   invalid: "Check the shift details and try again.",
@@ -169,29 +171,28 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
   const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, shiftResult] = await Promise.all([
-    workspace.supabase.from("venues").select("id, name, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
-      .eq("business_id", workspace.business.id).order("created_at"),
-    workspace.supabase
-      .from("departments")
-      .select("id, name, active")
-      .eq("venue_id", workspace.venue.id)
-      .order("name"),
-    workspace.supabase
-      .from("employees")
-      .select("id, name, department_id, role_title, active")
-      .eq("venue_id", workspace.venue.id)
-      .order("name"),
-    workspace.supabase
-      .from("job_roles")
-      .select("name, department_id")
-      .eq("venue_id", workspace.venue.id)
-      .eq("active", true)
-      .order("name"),
-    workspace.supabase.from("employee_departments").select("employee_id, department_id"),
-    workspace.supabase.rpc("list_own_linked_roster_departments", {
+    readAllPages((from, to) => workspace.supabase.from("venues")
+      .select("id, name, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift", { count: "exact" })
+      .eq("business_id", workspace.business.id).order("created_at").order("id").range(from, to),
+    (venue) => venue.id),
+    readAllPages((from, to) => workspace.supabase.from("departments")
+      .select("id, name, active", { count: "exact" }).eq("venue_id", workspace.venue.id)
+      .order("name").order("id").range(from, to), (department) => department.id),
+    readAllPages((from, to) => workspace.supabase.from("employees")
+      .select("id, name, department_id, role_title, active", { count: "exact" })
+      .eq("venue_id", workspace.venue.id).order("name").order("id").range(from, to), (employee) => employee.id),
+    readAllPages((from, to) => workspace.supabase.from("job_roles")
+      .select("id, name, department_id", { count: "exact" }).eq("venue_id", workspace.venue.id)
+      .eq("active", true).order("name").order("id").range(from, to), (role) => role.id),
+    readAllPages((from, to) => workspace.supabase.from("employee_departments")
+      .select("employee_id, department_id", { count: "exact" }).eq("business_id", workspace.business.id)
+      .order("employee_id").order("department_id").range(from, to),
+    (link) => `${link.employee_id}:${link.department_id}`),
+    readAllPages<OwnDepartment>((from, to) => workspace.supabase.rpc("list_own_linked_roster_departments", {
       p_business_id: workspace.business.id,
       p_venue_id: workspace.venue.id,
-    }),
+    }, { count: "exact" }).order("employee_id").order("department_id").range(from, to),
+    (department) => `${department.employee_id}:${department.department_id}`),
     readAllPages((from, to) => workspace.supabase.from("employee_availability_patterns")
       .select("employee_id", { count: "exact" })
       .eq("venue_id", workspace.venue.id).order("employee_id").range(from, to),
@@ -200,10 +201,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .select("id, employee_id, weekday, start_minute, end_minute", { count: "exact" })
       .eq("venue_id", workspace.venue.id).order("id").range(from, to),
       (interval) => interval.id),
-    workspace.supabase.from("shifts")
-      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement")
+    readAllPages((from, to) => workspace.supabase.from("shifts")
+      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement", { count: "exact" })
       .eq("venue_id", workspace.venue.id).eq("status", "scheduled")
-      .gte("starts_at", startAt).lt("starts_at", endAt).order("starts_at"),
+      .gte("starts_at", startAt).lt("starts_at", endAt).order("starts_at").order("id").range(from, to),
+    (shift) => shift.id),
   ]);
   const exceptionDates = [
     week,
@@ -222,17 +224,13 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .lte("starts_on", addDays(exceptionDates[exceptionDates.length - 1], 2))
       .gte("ends_on", addDays(exceptionDates[0], -2))
       .order("id").range(from, to), (exception) => exception.id),
-    workspace.supabase.rpc("list_roster_overlap_conflicts", {
-      p_business_id: workspace.business.id,
-      p_venue_id: workspace.venue.id,
-      p_shift_ids: (shiftResult.data ?? []).map((shift) => shift.id),
-    }),
+    rosterOverlapConflicts(workspace.supabase, workspace.business.id, workspace.venue.id,
+      (shiftResult.data ?? []).map((shift) => shift.id)),
   ]);
   const departmentRows = departmentResult.data;
   const employeeRows = employeeResult.data;
   const jobRoleRows = jobRoleResult.data;
-  const ownDepartments: { employee_id: string; department_id: string; name: string; active: boolean }[] =
-    ownDepartmentsResult.data ?? [];
+  const ownDepartments = ownDepartmentsResult.data ?? [];
   const linkRows = [
     ...(linkResult.data ?? []),
     ...ownDepartments.map(({ employee_id, department_id }) => ({ employee_id, department_id })),
@@ -657,7 +655,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 ? "Availability warnings do not block manual assignment or publication."
                 : `Manual assignment ${currentVenue.block_manual_unavailability ? "blocks" : "warns about"} unavailable workers; publication ${currentVenue.block_publish_unavailability ? "blocks" : "warns about"} unavailable workers.`}
               {" "}Automatic selection checks submitted availability, date blocks and approved leave.
-              New overlaps for the same worker at this venue are rejected.
+              New overlaps for the same profile at this venue are rejected. Linked profiles at other venues
+              are checked for automatic assignment and displayed as overlap warnings.
               {" "}Publication {currentVenue.block_publish_overlap ? "blocks" : "warns about"} overlapping shifts and
               {" "}{currentVenue.block_publish_long_shift ? "blocks" : "warns about"} shifts longer than 24 hours.
               {currentVenue.block_publish_unavailability && " Assigned shifts longer than 24 hours cannot be verified for availability."}

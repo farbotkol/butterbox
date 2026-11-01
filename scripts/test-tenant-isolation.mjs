@@ -20,7 +20,10 @@ const result = spawnSync(
     "--experimental-strip-types", "--test", "--test-concurrency=1",
     "tests/tenant-isolation.integration.test.mjs",
     ...(process.env.BUTTERBOX_TEST_DB_CONTAINER
-      ? ["tests/auto-assignment-concurrency.integration.test.mjs"] : []),
+      ? [
+          "tests/auto-assignment-concurrency.integration.test.mjs",
+          "tests/shared-worker-concurrency.integration.test.mjs",
+        ] : []),
   ],
   {
     stdio: "inherit",
