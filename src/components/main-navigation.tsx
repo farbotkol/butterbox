@@ -20,7 +20,8 @@ export function MainNavigation({ role }: { role: string }) {
     <nav aria-label="Main navigation" className="flex gap-2 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:px-3 md:pb-0">
       {[...links,
         ...(["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"].includes(role)
-          ? [{ href: "/work-time", label: "Work time", icon: ClipboardList },
+          ? [{ href: "/timesheets", label: "Timesheet review", icon: ClipboardList },
+            { href: "/work-time", label: "Work time", icon: ClipboardList },
             { href: "/people", label: "People", icon: UsersRound },
             { href: "/settings/organisation", label: "Departments", icon: Building2 }] : []),
         ...(role === "owner" ? [{ href: "/settings/permissions", label: "Permissions", icon: ShieldCheck }] : [])].map(({ href, label, icon: Icon }) => {

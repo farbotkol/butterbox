@@ -229,6 +229,20 @@ are not payroll approvals, and a future timesheet approval workflow must apply
 its own finalisation rules. Work time is not a payroll approval or export
 workflow.
 
+On **Timesheet review**, managers can filter a venue-local week by employee
+and compare published assigned shifts with recorded attendance within their
+permitted departments. Historical workers remain selectable when they have
+records in that scope. Shifts belong to the week they start; sessions use their
+corrected clock-in, or clock-out or creation time if clock-in is missing.
+Overnight records are not split between weeks. The planned span is before
+unclassified planned breaks and is compared with recorded elapsed time, not
+paid time. Matching totals do not pair individual shifts with sessions or
+approve payroll. Incomplete attendance is excluded from recorded totals and
+flagged for review. Expand a session to inspect its original and effective
+event timestamps and source; corrections and edit-lock history are available
+from **Work time**. Bulk review actions and timesheet approvals are not yet
+available. Apply the current migrations before using this screen.
+
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
 updates and leave decisions on **Availability**. These preferences are not

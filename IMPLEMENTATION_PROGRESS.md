@@ -2,8 +2,8 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **25**. In Progress: **7**.
-  Blocked: **2**. Not started (Backlog): **53**.
+- Total stories: **87**. Verified Done: **25**. In Progress: **8**.
+  Blocked: **2**. Not started (Backlog): **52**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
@@ -158,6 +158,21 @@
   passed without removing assertions. Disposable fixtures were removed, the
   sample policy remained disabled, and the temporary app server stopped.
   Offline page reopening is still incomplete.
+- The break-resolution checkpoint was committed as `f6eff54` and pushed to the
+  requested branch; the remote SHA matched.
+- BB-TIME-002 now has a scoped, read-only weekly review of published assigned
+  shifts and recorded attendance, including employee/venue/week filters,
+  discrepancies and original/effective source events. A fresh isolated replay
+  passed **1,723/1,723 pgTAP assertions across 37 files**, including 46 new
+  weekly-review assertions. All **14 authenticated integrations**, **94
+  serialized Node tests**, full ESLint, TypeScript, split production build and
+  both focused production-browser scenarios passed. The Node-only run skipped
+  those 14 integrations, which passed separately. Initial browser runs exposed
+  fixture, label and test-locator problems; these were corrected without
+  removing acceptance assertions. A timed-out run left isolated test fixtures,
+  which were identified and removed; the final project has no users or
+  businesses, the sample policy is disabled and the app server has stopped.
+  Bulk actions remain unimplemented; the story is In Progress.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -220,6 +235,11 @@
 
 ## Current story
 
+- **BB-TIME-002 — Weekly timesheet review** is In Progress. The manager view,
+  filtering, comparison and source-event inspection are verified; implement a
+  genuine server-enforced bulk action that excludes invalid records before
+  marking the story Done. Existing attendance edit locks are not payroll
+  approvals.
 - **BB-ATTEND-005 — Time capture fallback** is In Progress. Immutable,
   explicitly unverified offline claims retain the device time and server
   receipt time. The attendance page queues claims and retries idempotently after
@@ -409,6 +429,32 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-TIME-002 — Weekly timesheet review (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-002.1 Employee, venue and period filters work | The manager page and scoped RPCs select a venue, venue-local Monday-to-Sunday week and optional employee. Records remain separated by department; scoped historical workers with records remain selectable. Invalid or inaccessible filters display an error. | 46 focused pgTAP assertions passed, covering tenant, venue, FOH/BOH, employee filters and Sydney's daylight-saving week boundaries. The authenticated HTTP test passed cross-tenant, employee, venue and revoked-membership denials. Production Chromium passed all three filters, invalid input and a 375-pixel historical-worker scenario. | Pass |
+| TIME-002.2 Discrepancies are visible | Employee/department cards show published scheduled spans, recorded elapsed totals, missing or invalid sessions, differing counts and exact-duration differences. Incomplete sessions never produce a full-match claim. | Six weekly-helper unit tests passed, including microsecond differences and incomplete results; pgTAP passed actual-break, corrected-clock and invalid-session cases. Production Chromium showed the differing span, missing clock-out and unverified offline source. | Pass |
+| TIME-002.3 Bulk actions exclude invalid records | No bulk action has been implemented. Existing per-session edit locks are not payroll approvals and must not be represented as such. | Not tested: a real scoped bulk action and server-side invalid-record exclusion do not yet exist. | Incomplete |
+| TIME-002.4 Source events can be inspected | Scoped source-event RPC and page show original and effective timestamps, event type, break classification and offline/manager-reported provenance, with a link to correction and edit-lock history. Clock-event/results inconsistencies fail closed. | pgTAP verified original/corrected microseconds, break classification, offline provenance and tenant/department isolation. Authenticated HTTP and production Chromium verified source visibility and role restrictions, including mobile. | Pass |
+
+Files: `supabase/migrations/20261102140000_weekly_timesheet_review.sql`,
+`supabase/tests/database/weekly_timesheet_review.test.sql`,
+`src/app/timesheets/page.tsx`, `src/lib/weekly-timesheet.ts`,
+`src/components/main-navigation.tsx`, `tests/weekly-timesheet.test.mjs`,
+`tests/weekly-timesheet.integration.test.mjs`, `tests/e2e/auth.spec.mjs`,
+`scripts/test-tenant-isolation.mjs`, `README.md` and the backlog/progress files.
+The fresh isolated migration replay passed 1,723 pgTAP assertions in 37 files;
+14 authenticated integrations, 94 Node tests, full ESLint, TypeScript, split
+production build and two focused browser scenarios passed. The first browser
+attempts exposed a misplaced test, incomplete fixture defaults, an overlapping
+fixture, ambiguous labels and a route-announcer locator. These were fixed;
+the timed-out run's identified test fixtures were removed. Period attribution
+uses the venue's current timezone and the corrected clock-in, then clock-out or
+session creation time. Overnight records remain in their starting week. Planned
+span is before unclassified scheduled breaks and is compared with elapsed,
+not paid, time; neither matching totals nor edit locks constitute approval.
 
 ### BB-ATTEND-007 — Attendance corrections (Done)
 
@@ -948,8 +994,8 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Timesheet venue attribution, employee invitation and email/push notification
-  remain incomplete. The historical credential
+- Timesheet bulk review and approval, cross-business employee invitation and
+  email/push notification remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
 - Attendance edit locks are not timesheet approvals; future payroll
@@ -959,13 +1005,16 @@ not yet run remotely.
 
 ## Next story
 
-- Continue **BB-ATTEND-005 — Time capture fallback**. Design and test offline
-  page reopening without caching private authenticated responses or exposing
-  another browser account's claims.
-  Completing invitations for existing other-business users requires
-  **BB-FOUND-006** safe per-request switching. Continue toward corrections,
-  timesheet review and approval. Revisit BB-SAAS-003 only after production
-  isolation and any historical sample data can be verified safely.
+- Continue **BB-TIME-002 — Weekly timesheet review**. Implement a meaningful,
+  scoped bulk action that excludes invalid records on the server, safely
+  handles stale selections, retries and concurrent edits, and is not
+  misrepresented as payroll approval. Add database, authenticated race and
+  production-browser acceptance tests before deciding whether the criterion
+  passes. Then return to **BB-ATTEND-005** and design offline page reopening
+  without caching private authenticated responses or exposing another account's
+  claims. Completing invitations for existing other-business users requires
+  **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
+  production isolation and historical sample data can be verified safely.
 - The new location migration has been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:

@@ -4919,6 +4919,223 @@ test("work time uses actual events and breaks with venue, role and exception sco
   }
 });
 
+test("weekly timesheet review filters, discrepancies, source events and scoped historical workers", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, secondVenue, outsideVenue, fohId, bohId, secondDepartment,
+    outsideDepartment, workerId, cookId, historicId, secondWorkerId, completeSession, openSession, bohSession,
+    historicSession, cookSession, secondSession, unpaidBreak, clockInId] = Array.from({ length: 21 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "foh", "worker", "cook", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `weekly-review-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Weekly review cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside weekly cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: secondVenue, business_id: businessId, name: "Riverside", timezone: "Australia/Perth" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Riverside service" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside service" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: bohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[2], name: "Weekly Worker", role_title: "Server" },
+      { id: cookId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        auth_user_id: users[3], name: "Weekly Cook", role_title: "Cook" },
+      { id: historicId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        name: "Historical Worker", role_title: "Server" },
+      { id: secondWorkerId, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        auth_user_id: users[2], name: "Riverside Worker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").insert([
+      { business_id: businessId, employee_id: workerId, department_id: bohId },
+      { business_id: businessId, employee_id: historicId, department_id: fohId },
+    ])).error).toBeNull();
+    const shifts = [
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        role_title: "Server", starts_at: "2024-10-05T13:30:00Z", ends_at: "2024-10-05T17:30:00Z",
+        break_minutes: 30, is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: workerId,
+        role_title: "Cook", starts_at: "2024-10-06T12:00:00Z", ends_at: "2024-10-06T14:00:00Z",
+        is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: cookId,
+        role_title: "Cook", starts_at: "2024-10-02T00:00:00Z", ends_at: "2024-10-02T02:00:00Z",
+        is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: historicId,
+        role_title: "Server", starts_at: "2024-10-04T00:00:00Z", ends_at: "2024-10-04T01:00:00Z",
+        is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        role_title: "Private draft", starts_at: "2024-10-03T00:00:00Z", ends_at: "2024-10-03T02:00:00Z",
+        is_published: false },
+      { business_id: businessId, venue_id: secondVenue, department_id: secondDepartment, employee_id: secondWorkerId,
+        role_title: "Server", starts_at: "2024-10-02T00:00:00Z", ends_at: "2024-10-02T02:00:00Z",
+        is_published: true },
+    ];
+    expect((await admin.from("shifts").insert(shifts.map((shift) => ({ break_minutes: 0, ...shift })))).error).toBeNull();
+    const sessions = [
+      { id: completeSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users[2] },
+      { id: openSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users[2] },
+      { id: bohSession, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: workerId, started_by: users[2] },
+      { id: historicSession, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: historicId, started_by: users[2] },
+      { id: cookSession, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: cookId, started_by: users[3] },
+      { id: secondSession, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        employee_id: secondWorkerId, started_by: users[2] },
+    ];
+    expect((await admin.from("attendance_sessions").insert(sessions)).error).toBeNull();
+    expect((await admin.from("attendance_breaks").insert({
+      id: unpaidBreak, session_id: completeSession, business_id: businessId, classification: "unpaid",
+    })).error).toBeNull();
+    const event = (session, eventType, occurredAt, id = randomUUID(), breakId = null, source = "server_clock") => ({
+      id, session_id: session.id, business_id: session.business_id, venue_id: session.venue_id,
+      department_id: session.department_id, employee_id: session.employee_id, actor_id: session.started_by,
+      request_id: randomUUID(), event_type: eventType, occurred_at: occurredAt, break_id: breakId, source,
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[0], "clock_in", "2024-10-05T13:29:00.123456Z", clockInId),
+      event(sessions[0], "break_start", "2024-10-05T15:00:00Z", randomUUID(), unpaidBreak),
+      event(sessions[0], "break_end", "2024-10-05T15:30:00Z", randomUUID(), unpaidBreak),
+      event(sessions[0], "clock_out", "2024-10-05T17:00:00.123456Z"),
+      event(sessions[1], "clock_in", "2024-10-06T10:00:00Z"),
+      event(sessions[2], "clock_in", "2024-10-06T12:00:00Z", randomUUID(), null, "offline_claim"),
+      event(sessions[2], "clock_out", "2024-10-06T14:00:00Z", randomUUID(), null, "offline_claim"),
+      event(sessions[3], "clock_in", "2024-10-04T00:00:00Z"),
+      event(sessions[3], "clock_out", "2024-10-04T01:00:00Z"),
+      event(sessions[4], "clock_in", "2024-10-02T00:00:00Z"),
+      event(sessions[4], "clock_out", "2024-10-02T02:00:00Z"),
+      event(sessions[5], "clock_in", "2024-10-02T00:00:00Z"),
+      event(sessions[5], "clock_out", "2024-10-02T02:00:00Z"),
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").delete().eq("employee_id", historicId)
+      .eq("department_id", fohId)).error).toBeNull();
+
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `weekly-review-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: completeSession, p_event_id: clockInId,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-05T13:29:00.123456Z",
+      p_new_at: "2024-10-05T13:30:00.123456Z", p_reason: "Confirmed with worker",
+    })).error).toBeNull();
+
+    await signIn(page, `weekly-review-owner-${suffix}@example.test`, password);
+    await expect(page.getByRole("link", { name: "Timesheet review" })).toBeVisible();
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-10-02`);
+    await expect(page.getByRole("heading", { name: "Weekly timesheet review" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /30 Sept.*6 Oct/ })).toBeVisible();
+    const fohCard = page.getByRole("heading", { name: "Weekly Worker · FOH" }).locator("..");
+    const bohCard = page.getByRole("heading", { name: "Weekly Worker · BOH" }).locator("..");
+    await expect(fohCard).toContainText("Incomplete or invalid attendance is excluded from recorded totals.");
+    await expect(fohCard).toContainText("Known recorded elapsed differs from scheduled span");
+    await expect(fohCard).toContainText("Clock-out missing");
+    await expect(bohCard).toContainText("Unverified offline times");
+    await expect(page.getByRole("heading", { name: "Weekly Cook · BOH" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Historical Worker · FOH" })).toBeVisible();
+    await expect(page.getByText("Private draft", { exact: false })).toHaveCount(0);
+    const complete = page.locator(`#timesheet-session-${completeSession}`);
+    await complete.getByText("Inspect source events").click();
+    await expect(complete).toContainText("Original: 2024-10-05T13:29:00.123456");
+    await expect(complete).toContainText("Effective: 2024-10-05T13:30:00.123456");
+    await expect(complete).toContainText("unpaid break");
+    await expect(complete.getByRole("link", { name: "Open correction and edit-lock history" }))
+      .toHaveAttribute("href", `/work-time?venue=${venueId}#attendance-session-${completeSession}`);
+
+    await page.getByLabel("Employee", { exact: true }).selectOption(workerId);
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly Worker · BOH" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly Cook · BOH" })).toHaveCount(0);
+    await page.getByLabel("Week containing date", { exact: true }).fill("2024-10-07");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("heading", { name: /7 Oct.*13 Oct/ })).toBeVisible();
+    await expect(page.getByText("No published shifts or attendance sessions", { exact: false })).toBeVisible();
+    await page.getByLabel("Week containing date", { exact: true }).fill("2024-09-30");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toBeVisible();
+    await page.getByLabel("Employee", { exact: true }).selectOption("");
+    await page.getByLabel("Venue", { exact: true }).selectOption(secondVenue);
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("heading", { name: "Riverside Worker · Riverside service" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toHaveCount(0);
+    await page.goto(`/timesheets?venue=${venueId}&week=bad&employee=bad`);
+    await expect(page.locator("main").getByRole("alert")).toContainText("Enter a valid date");
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-09-30&employee=${randomUUID()}`);
+    await expect(page.locator("main").getByRole("alert")).toContainText("selected employee is unavailable");
+
+    const fohContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    fohPage.setDefaultTimeout(20_000);
+    await signIn(fohPage, `weekly-review-foh-${suffix}@example.test`, password);
+    await fohPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(fohPage.getByRole("heading", { name: "Weekly Worker · FOH" })).toBeVisible();
+    await expect(fohPage.getByRole("heading", { name: "Weekly Worker · BOH" })).toHaveCount(0);
+    await expect(fohPage.getByText("Weekly Cook", { exact: false })).toHaveCount(0);
+    await expect(fohPage.getByRole("heading", { name: "Historical Worker · FOH" })).toBeVisible();
+    await fohPage.locator(`#timesheet-session-${completeSession}`).getByText("Inspect source events").click();
+    await expect(fohPage.locator(`#timesheet-session-${completeSession}`))
+      .toContainText("Effective: 2024-10-05T13:30:00.123456");
+    expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+    await expect(fohPage.getByLabel("Employee", { exact: true }).locator(`option[value="${historicId}"]`))
+      .toHaveText("Historical Worker");
+    await fohPage.getByLabel("Employee", { exact: true }).selectOption(historicId);
+    await fohPage.getByRole("button", { name: "Apply filters" }).click();
+    await expect(fohPage.getByRole("heading", { name: "Historical Worker · FOH" })).toBeVisible();
+    await expect(fohPage.getByRole("heading", { name: "Weekly Worker · FOH" })).toHaveCount(0);
+    expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    const workerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `weekly-review-worker-${suffix}@example.test`, password);
+    await expect(workerPage.getByRole("link", { name: "Timesheet review" })).toHaveCount(0);
+    await workerPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(workerPage).toHaveURL(/\/\?error=permission/);
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `weekly-review-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
+    await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Weekly Worker", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("managers copy scoped draft rosters with conflict checks and publication-only notifications", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
