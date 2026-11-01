@@ -10,7 +10,7 @@ const disposable = process.env.BUTTERBOX_TEST_DISPOSABLE;
 const configured = [url, anonKey, serviceKey, disposable].some(Boolean);
 
 test(
-  "two authenticated tenants cannot read or modify each other's data over the API",
+  "two tenants remain isolated and concurrent shift assignments cannot overlap",
   { skip: configured ? false : "requires an explicitly configured disposable local Supabase" },
   async () => {
     assert.ok(url && anonKey && serviceKey, "All test Supabase settings are required");
@@ -147,11 +147,81 @@ test(
       assert.equal(remove.error?.message, "Permission denied");
     }
 
+    async function assertConcurrentAssignments(tenant) {
+      const employeeId = randomUUID();
+      const employee = await admin.from("employees").insert({
+        id: employeeId,
+        business_id: tenant.business,
+        venue_id: tenant.venue,
+        department_id: tenant.department,
+        name: "Concurrent test worker",
+        role_title: "Server",
+      });
+      assert.ifError(employee.error);
+      const details = {
+        p_business_id: tenant.business,
+        p_venue_id: tenant.venue,
+        p_department_id: tenant.department,
+        p_role_title: "Server",
+        p_break_minutes: 0,
+      };
+      async function openShift(day) {
+        const result = await tenant.client.rpc("save_shift", {
+          ...details,
+          p_employee_id: null,
+          p_start_local: `${day} 08:00`,
+          p_end_local: `${day} 09:00`,
+        });
+        assert.ifError(result.error);
+        assert.ok(result.data);
+        return result.data;
+      }
+      const [first, second] = await Promise.all([openShift("2033-06-01"), openShift("2033-06-01")]);
+      const edit = (shiftId, day) => tenant.client.rpc("update_draft_shift", {
+        ...details,
+        p_shift_id: shiftId,
+        p_employee_id: employeeId,
+        p_start_local: `${day} 15:00`,
+        p_end_local: `${day} 17:00`,
+      });
+      const assertOneWinner = (results, expectedErrors) => {
+        assert.equal(results.filter((result) => !result.error).length, 1);
+        const failed = results.filter((result) => result.error);
+        assert.equal(failed.length, 1);
+        assert.ok(expectedErrors.includes(failed[0].error.message), failed[0].error.message);
+      };
+      assertOneWinner(await Promise.all([edit(first, "2033-06-01"), edit(second, "2033-06-01")]),
+        ["Employee has an overlapping shift"]);
+      const stored = await admin.from("shifts").select("id, employee_id").in("id", [first, second]);
+      assert.ifError(stored.error);
+      assert.equal(stored.data.filter((shift) => shift.employee_id === employeeId).length, 1);
+      assert.equal(stored.data.filter((shift) => shift.employee_id === null).length, 1);
+
+      const third = await openShift("2033-06-02");
+      assertOneWinner(await Promise.all([
+        edit(third, "2033-06-02"),
+        tenant.client.rpc("save_shift", {
+          ...details, p_employee_id: employeeId,
+          p_start_local: "2033-06-02 15:00", p_end_local: "2033-06-02 17:00",
+        }),
+      ]), ["Employee has an overlapping shift"]);
+
+      const fourth = await openShift("2033-06-03");
+      assertOneWinner(await Promise.all([
+        edit(fourth, "2033-06-03"),
+        tenant.client.rpc("save_shift_auto_assign", {
+          ...details,
+          p_start_local: "2033-06-03 15:00", p_end_local: "2033-06-03 17:00",
+        }),
+      ]), ["Employee has an overlapping shift", "No eligible employee available for automatic assignment"]);
+    }
+
     try {
       const first = await createTenant("a");
       const second = await createTenant("b");
       await assertIsolation(first, second);
       await assertIsolation(second, first);
+      await assertConcurrentAssignments(first);
     } finally {
       const cleanupErrors = [];
       if (businesses.length > 0) {

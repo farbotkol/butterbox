@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   addDays,
+  formatLocalDateTime,
   getVenueDate,
   getWeekStart,
   localMidnightAsUtc,
@@ -33,4 +34,11 @@ test("shift day grouping uses the venue timezone", () => {
     getVenueDate("2026-10-03T14:30:00.000Z", "Australia/Sydney"),
     "2026-10-04",
   );
+});
+
+test("editable shift fields use the venue-local date and time across daylight saving", () => {
+  assert.equal(formatLocalDateTime("2026-10-03T13:00:00Z", "Australia/Sydney"), "2026-10-03T23:00");
+  assert.equal(formatLocalDateTime("2026-10-03T17:00:00Z", "Australia/Sydney"), "2026-10-04T04:00");
+  assert.equal(formatLocalDateTime("2026-10-03T13:00:00Z", "UTC"), "2026-10-03T13:00");
+  assert.equal(formatLocalDateTime("2032-03-19T21:00:31.123Z", "Australia/Sydney"), "2032-03-20T08:00");
 });

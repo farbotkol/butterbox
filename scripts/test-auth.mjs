@@ -4,6 +4,7 @@ import { cp } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { testSupabaseStatus } from "./test-supabase-status.mjs";
 
 if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
   throw new Error(
@@ -18,19 +19,7 @@ if (process.argv.length > 4 || (process.argv[3] && !useDevServer && !useSplitBui
   throw new Error("Usage: node scripts/test-auth.mjs <disposable-workdir> [--dev|--split-build]");
 }
 
-const status = spawnSync(
-  "npx",
-  ["--yes", "supabase@2.122.0", "status", "--workdir", workdir, "-o", "json"],
-  { encoding: "utf8" },
-);
-if (status.error) throw status.error;
-if (status.status !== 0) {
-  throw new Error(
-    `Could not read local Supabase status (exit ${status.status}); check Docker and the local project.`,
-  );
-}
-
-const settings = JSON.parse(status.stdout);
+const settings = testSupabaseStatus(workdir);
 if (!settings.API_URL || !settings.MAILPIT_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
   throw new Error("Local Supabase status is missing API, Mailpit or test authentication settings.");
 }
@@ -95,6 +84,18 @@ async function waitForApp(server) {
 }
 
 let server;
+async function stopServer() {
+  if (server && server.exitCode === null && server.signalCode === null) {
+    const exited = once(server, "exit");
+    server.kill("SIGTERM");
+    if (!(await Promise.race([exited.then(() => true), delay(5_000, false)]))) {
+      server.kill("SIGKILL");
+      await exited;
+    }
+  }
+  server = undefined;
+}
+
 try {
   await checkPortAvailable();
   const appEnv = {
@@ -103,13 +104,7 @@ try {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: settings.ANON_KEY,
     NEXT_PUBLIC_SITE_URL: appUrl.origin,
   };
-  if (useDevServer) {
-    server = spawn(
-      process.execPath,
-      ["node_modules/next/dist/bin/next", "dev", "--hostname", host, "--port", String(port)],
-      { stdio: "inherit", env: { ...appEnv, NODE_ENV: "development" } },
-    );
-  } else {
+  if (!useDevServer) {
     const commands = useSplitBuild
       ? [
           ["npm", ["run", "build", "--", "--experimental-build-mode", "compile"]],
@@ -127,41 +122,73 @@ try {
 
     await cp("public", ".next/standalone/public", { recursive: true });
     await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
-    server = spawn(process.execPath, [".next/standalone/server.js"], {
-      stdio: "inherit",
-      env: { ...appEnv, NODE_ENV: "production", HOSTNAME: host, PORT: String(port) },
-    });
   }
-  await waitForApp(server);
 
-  const browser = spawn(
-    process.execPath,
-    ["node_modules/@playwright/test/cli.js", "test", "tests/e2e/auth.spec.mjs"],
-    { stdio: "inherit", env: testEnv },
-  );
-  const browserExit = once(browser, "exit");
-  const serverExit = once(server, "exit");
-  const outcome = await Promise.race([
-    browserExit.then(([code, signal]) => ({ source: "browser", code, signal })),
-    serverExit.then(([code, signal]) => ({ source: "server", code, signal })),
-  ]);
-  if (outcome.source === "server") {
-    if (browser.exitCode === null && browser.signalCode === null) {
-      browser.kill("SIGTERM");
-      await browserExit;
+  const testFile = "tests/e2e/auth.spec.mjs";
+  const cli = "node_modules/@playwright/test/cli.js";
+  const grepArgs = process.env.BUTTERBOX_TEST_GREP
+    ? ["--grep", process.env.BUTTERBOX_TEST_GREP] : [];
+  let selections = [testFile];
+  if (process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes") {
+    const listing = spawnSync(process.execPath, [cli, "test", testFile, "--list", "--reporter=json", ...grepArgs], {
+      encoding: "utf8", env: testEnv,
+    });
+    if (listing.error) throw listing.error;
+    if (listing.status !== 0) {
+      process.stderr.write(listing.stderr);
+      throw new Error(`Could not discover browser tests (exit ${listing.status}, signal ${listing.signal}).`);
     }
-    throw new Error(
-      `The disposable test server exited during browser tests (code ${outcome.code}, signal ${outcome.signal}).`,
+    const report = JSON.parse(listing.stdout);
+    function collectSpecs(suite) {
+      return [...(suite.specs ?? []), ...(suite.suites ?? []).flatMap(collectSpecs)];
+    }
+    const specs = report.suites.flatMap(collectSpecs);
+    if (!specs.length || specs.some((spec) => !Number.isInteger(spec.line) || spec.file !== "auth.spec.mjs")) {
+      throw new Error("Browser test discovery returned no valid test locations.");
+    }
+    selections = [...new Set(specs.map((spec) => `${testFile}:${spec.line}`))];
+    console.log(`Low-memory mode: running ${selections.length} scenarios in separate app and browser processes.`);
+  }
+
+  for (const selection of selections) {
+    await checkPortAvailable();
+    server = useDevServer
+      ? spawn(
+          process.execPath,
+          ["node_modules/next/dist/bin/next", "dev", "--hostname", host, "--port", String(port)],
+          { stdio: "inherit", env: { ...appEnv, NODE_ENV: "development" } },
+        )
+      : spawn(process.execPath, [".next/standalone/server.js"], {
+          stdio: "inherit",
+          env: { ...appEnv, NODE_ENV: "production", HOSTNAME: host, PORT: String(port) },
+        });
+    await waitForApp(server);
+    const serverExit = once(server, "exit");
+    const browser = spawn(
+      process.execPath,
+      [cli, "test", selection, ...grepArgs],
+      { stdio: "inherit", env: testEnv },
     );
-  }
-  process.exitCode = outcome.code ?? 1;
-} finally {
-  if (server && server.exitCode === null && server.signalCode === null) {
-    const exited = once(server, "exit");
-    server.kill("SIGTERM");
-    if (!(await Promise.race([exited.then(() => true), delay(5_000, false)]))) {
-      server.kill("SIGKILL");
-      await exited;
+    const browserExit = once(browser, "exit");
+    const outcome = await Promise.race([
+      browserExit.then(([code, signal]) => ({ source: "browser", code, signal })),
+      serverExit.then(([code, signal]) => ({ source: "server", code, signal })),
+    ]);
+    if (outcome.source === "server") {
+      if (browser.exitCode === null && browser.signalCode === null) {
+        browser.kill("SIGTERM");
+        await browserExit;
+      }
+      throw new Error(
+        `The disposable test server exited during browser tests (code ${outcome.code}, signal ${outcome.signal}).`,
+      );
     }
+    if (outcome.code !== 0) {
+      if (outcome.signal) console.error(`Browser test process terminated by ${outcome.signal}.`);
+      process.exitCode = outcome.code ?? 1;
+    }
+    await stopServer();
   }
+} finally {
+  await stopServer();
 }

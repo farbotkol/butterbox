@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import { testSupabaseStatus } from "./test-supabase-status.mjs";
 
 if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
   throw new Error(
@@ -8,19 +9,7 @@ if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
 }
 
 const workdir = resolve(process.argv[2] ?? ".");
-const status = spawnSync(
-  "npx",
-  ["--yes", "supabase@2.122.0", "status", "--workdir", workdir, "-o", "json"],
-  { encoding: "utf8" },
-);
-if (status.error) throw status.error;
-if (status.status !== 0) {
-  throw new Error(
-    `Could not read local Supabase status (exit ${status.status}); check Docker and the local project.`,
-  );
-}
-
-const settings = JSON.parse(status.stdout);
+const settings = testSupabaseStatus(workdir);
 if (!settings.API_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
   throw new Error("Local Supabase status is missing API or test authentication settings.");
 }

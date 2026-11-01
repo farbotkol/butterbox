@@ -2,22 +2,145 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **8**. In Progress: **11**.
-  Blocked: **1**. Not started (Backlog): **67**.
+- Total stories: **87**. Verified Done: **13**. In Progress: **8**.
+  Blocked: **1**. Not started (Backlog): **65**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-003,
-  BB-ORG-004, BB-PEOPLE-001 and BB-PEOPLE-006.
-- Production build, TypeScript, lint and 8 unit tests pass.
-  Isolated SQL suite: 184/184; authenticated HTTP regression: 1/1;
-  production browser scenarios: 4/4 (latest run 35.6s).
+  BB-ORG-004, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-006,
+  BB-ROSTER-001, BB-ROSTER-002 and BB-ROSTER-006.
+- The latest serialized Node unit run passed 27 tests; the HTTP integration
+  was explicitly skipped without disposable-project settings. The isolated SQL
+  regression passed 388/388 pgTAP assertions through `psql`, including 78 draft-editing
+  assertions and 28 linked-roster authorization assertions. The authenticated
+  two-tenant HTTP regression and concurrent edit/edit, edit/create and
+  edit/automatic-assignment checks passed against the disposable stack.
+- Production compile, explicit TypeScript, generate and `npm run lint` passed.
+  The complete production Chromium regression passed all 16 isolated scenarios,
+  including signup/recovery, cross-tab expiry, five live permission transitions,
+  both people stories, department/delegated management, weekly mobile roster,
+  draft editing, historical timestamp preservation and the personal schedule.
 - Redacted Gitleaks scan: current branch and pending tracked diff have no
   findings. The older local checkpoint-ref blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
-- No failed test remains. Temporary app servers are stopped by the runner.
+- Earlier browser renderer/context failures and a signup runner process exit
+  were observed under host memory pressure. Both full Chromium and headless
+  shell were tried. The successful isolated-scenario run preserves each live
+  permission transition and recovery-before-expiry coverage. Temporary app
+  servers are stopped by the runner.
 
 ## Current story
 
-- No story is mid-edit. BB-ORG-004 was completed and verified.
-- Next ready slice: **BB-PEOPLE-002 — multiple roles and qualifications**.
+- **BB-PEOPLE-004 — Submit availability exceptions** is in implementation:
+  date blocks, leave requests and scoped manager review are being validated
+  before availability rules are used for roster conflict detection.
+- **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
+  it remains In Progress because required shift acknowledgements depend on the
+  unfinished publication/versioning workflow.
+- **BB-ROSTER-003 — Unassigned open shift** follows its availability/conflict
+  prerequisites: assignment eligibility needs to be completed without
+  changing the existing automatic-assignment-only role restriction.
+
+### BB-ROSTER-001 — Weekly people-by-day roster (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-001.1 Group by department; show venue-local dates, role and times | Grouped rows show each department's shifts, including visible historical assignments. A scoped roster lookup preserves employees' own secondary-department shifts without broadening management access. | Three grouping unit tests and 28 linked-roster SQL assertions pass. Authenticated requests to the standalone server verify grouped role/time/date markup, archived history and manager/employee scope. | Pass |
+| ROSTER-001.2 Week navigation and responsive overflow | Week links retain the selected department; the grid has a horizontal mobile scroller. | Date/DST unit tests, authenticated next-week HTTP checks and production Chromium next/previous navigation and actual 375px horizontal scrolling pass. | Pass |
+
+Files: `src/app/roster/page.tsx`, `src/lib/roster-groups.ts`,
+`tests/roster-groups.test.mjs`, `tests/e2e/auth.spec.mjs`,
+`supabase/migrations/20261101110000_linked_roster_departments.sql`,
+`supabase/tests/database/linked_roster_departments.test.sql` and README.
+The migration has been applied only to the disposable test database. It also
+revokes own-shift access when membership is removed or no longer covers the
+employee profile; managers do not acquire authority over personally linked
+secondary departments.
+
+### BB-ROSTER-002 — Create and edit shift (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-002.1 Form supports venue, department, role, worker, dates, start/end and break | Permission-filtered venue selector and controlled create/edit form; scoped create/edit RPCs; venue-local time and DST handling. | Production Chromium creates and edits assigned and open drafts, checks all fields, changes venue and verifies the stored timezone. 78 isolated SQL assertions cover authorization, validation, DST and sub-minute timestamps; a separate production Chromium test verifies microseconds survive an unchanged-time edit. Pass. | Pass |
+| ROSTER-002.2 Errors are inline | Form associates validation and server-side conflict errors with fields and retains input. | Production Chromium triggers missing role/start, invalid break and overlapping employee errors, verifies inline messages and preserved values. Pass. | Pass |
+| ROSTER-002.3 Successful save updates grid | Revalidated roster and redirect preserve venue, department, week and collapsed state; creation form resets after success. Published shifts remain protected. | Production Chromium creates, edits and assigns shifts, verifies rendered cards, stored values, reset behavior and scope denial. Authenticated concurrent edit/create/auto-assignment HTTP cases pass. | Pass |
+
+Files: `src/components/shift-editor.tsx`, `src/app/roster/page.tsx`,
+`src/app/actions.ts`, `src/lib/shift-form.ts`, `src/lib/dates.ts`,
+`src/lib/workspace.ts`, `src/lib/roster-view.ts`,
+`supabase/migrations/20261101120000_edit_draft_shifts.sql`,
+`supabase/migrations/20261101130000_consistent_shift_creation.sql`,
+`supabase/tests/database/edit_draft_shifts.test.sql`,
+`tests/shift-form.test.mjs`, `tests/dates.test.mjs`,
+`tests/tenant-isolation.integration.test.mjs`, `tests/e2e/auth.spec.mjs`
+and README. The migrations were applied only to the disposable test database.
+Manual assignment currently checks active linked employees and overlap, not
+restricted-role qualifications or availability.
+
+### BB-ROSTER-010 — Simple employee roster (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-010.1 Only published assigned shifts appear | `/my-schedule` queries only scheduled, published shifts for employee profiles linked to the signed-in user and selected venue, with RLS still authoritative. | Production Chromium and authenticated Supabase requests verify own primary/secondary-department shifts, exclude drafts, unassigned shifts, other workers and another tenant; a manager with wider RLS still sees only their own personal shifts. Anonymous access and an unlinked account are also checked. Pass. | Pass |
+| ROSTER-010.2 Venue-local time and location display clearly | Next-shift card and seven-day mobile schedule show venue-local dates/times, venue name/address and timezone; overnight overlaps appear in the week. | Three unit tests cover grouping, week boundaries and DST. Production Chromium at 375px verifies next shift, overnight overlap, local time, address, navigation and no page-level horizontal overflow. Pass. | Pass |
+| ROSTER-010.3 Updates visible and acknowledged when required | Refresh fetches current published data; the UI explicitly states acknowledgements are not yet available. | Production Chromium publishes a draft through the scoped owner RPC and verifies it appears after refresh. Acknowledgement requirements and versioning are not implemented. | In Progress |
+
+Files: `src/app/my-schedule/page.tsx`, `src/app/my-schedule/loading.tsx`,
+`src/lib/employee-schedule.ts`, `tests/employee-schedule.test.mjs`,
+`src/components/main-navigation.tsx`, `tests/e2e/auth.spec.mjs`, `tsconfig.json`
+and README. TypeScript permits `.ts` import extensions so Node's native
+type-stripping unit runner can load the shared date helpers without another
+dependency. The new route uses existing RLS and adds no database migration.
+
+### BB-ROSTER-006 — Filter and collapse departments (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-006.1 FOH/BOH filtering and collapsing | Server-rendered, keyboard-operable department buttons use `aria-expanded` and hide their rows; the filter retains permitted departments. | Three state unit tests, authenticated HTTP requests and production Chromium verify filtering, collapse/expand buttons and independent groups. | Pass |
+| ROSTER-006.2 Permission scope takes precedence | Collapse IDs are filtered against departments available to the caller; existing RLS and narrowly scoped personal-roster lookup limit underlying data and controls. | Linked-roster pgTAP suite and manager/employee HTTP checks pass, including forged collapsed IDs and denied secondary editing. | Pass |
+| ROSTER-006.3 State persists while navigating | Week links, filter and disclosure forms, and shift/publish/delete redirects preserve the selected department and collapsed IDs. | Unit tests and authenticated HTTP checks verify week navigation, filtering and a successful shift save retain state. | Pass |
+
+Files: `src/lib/roster-view.ts`, `tests/roster-view.test.mjs`,
+`src/app/roster/page.tsx`, `src/app/actions.ts`, `tests/e2e/auth.spec.mjs`
+and README. The targeted browser test passed collapse/expand, week/filter
+navigation, shift save, forbidden IDs and manager/employee scopes.
+
+### BB-PEOPLE-003 — Set recurring availability (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PEOPLE-003.1 Save multiple weekly intervals | Owner-controlled member/profile linking; employee-only `set_employee_recurring_availability` RPC; `/availability` editor; explicit distinction between an unsubmitted and an empty pattern. | 53 availability pgTAP assertions and production Chromium scenario save two Monday intervals, check persistence, deny other employees and exercise an empty week. Pass. | Pass |
+| PEOPLE-003.2 Handle overnight intervals | Venue-local weekday/minute intervals interpret an end at or before the start as the next day; the roster computes cyclic weekly coverage. | pgTAP stores Sunday 22:00–02:00; unit tests verify overnight/week rollover and 24-hour ranges; production Chromium shows Sunday and Monday boundaries. Pass. | Pass |
+| PEOPLE-003.3 Show unavailable periods | RLS-scoped roster indicators display the complement of saved intervals; unsubmitted availability is labelled unknown. | Production Chromium verifies Monday's three gaps, Tuesday's full-day unavailability, Sunday overnight coverage and a separate unsubmitted worker. Pass. | Pass |
+
+Files: `20261101100000_recurring_availability.sql`,
+`recurring_availability.test.sql`, `src/lib/availability.ts`, its unit test,
+`src/app/availability/page.tsx`, `src/components/availability-editor.tsx`,
+People, roster, navigation, workspace types, actions, README and browser tests.
+The migration has been applied only to the disposable test database.
+Only owners link existing members; invitations are not yet implemented.
+Managers can view scoped availability but cannot edit it. Availability is an
+indicator only and does not yet constrain shift assignments or leave.
+
+### BB-PEOPLE-002 — Manage skills and eligible roles (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PEOPLE-002.1 Multiple roles per employee | Scoped `employee_job_roles` links, qualification editor and role filter. | 45-assertion eligibility pgTAP suite and production Chromium scenario save two roles and filter by a secondary role. Pass. | Pass |
+| PEOPLE-002.2 Set a primary role | `set_employee_primary_role` and People primary-role form preserve exactly one structured primary role. | pgTAP and Chromium set and change a primary role, validate its profile title and prevent accidental removal. Pass. | Pass |
+| PEOPLE-002.3 Exclude unqualified automatic assignments for restricted roles | Opt-in role restriction and `save_shift_auto_assign` validate role qualification and overlapping shifts under locks. | pgTAP and Chromium reject an unqualified employee, select a qualified employee and verify only one overlapping concurrent request succeeds. Pass. | Pass |
+
+Files: `supabase/migrations/20261101090000_employee_role_eligibility.sql`,
+`supabase/tests/database/employee_role_eligibility.test.sql`, `src/app/actions.ts`,
+People, roster, organisation settings, `tests/e2e/auth.spec.mjs`, the browser
+runner and README. The role migration has only been applied to the disposable
+database. Existing free-text titles are not assumed to be verified
+qualifications; automatic assignment does not check availability or leave.
+
+The full current production-browser regression passed all 16 scenarios. Each
+permission role transition has its own test process, retaining the previous
+role, live signed-in session and scope assertions. Signup/recovery and
+recovered-session expiry were separated while retaining real recovery before
+the two-tab expiry check. Earlier renderer/context failures occurred under
+host memory pressure; the cause was not established.
 
 ## Completed authentication and setup
 
@@ -144,16 +267,19 @@ not yet run remotely.
 
 ## Test environment and outcomes
 
-- Supabase CLI 2.122.0 runs through `npx` in a separate temporary project on
-  ports 55421/55422, using copied migrations. The existing Butterbox stack was
-  not modified. SQL fixtures are rolled back; HTTP fixtures are cleaned up.
-- `npm test`: 8 passing unit tests; the HTTP test is explicitly skipped without
-  disposable-project settings and passes when run against the isolated stack.
-- `npm run lint` passed after the current changes. The isolated database suite
-  passes 184/184 assertions and the two-tenant HTTP integration passes.
-- The previous clean-checkout build and container liveness test passed. A
-  concurrent build was terminated under resource pressure. Sequential compile,
-  TypeScript and generate phases now pass, as do both production browser tests.
+- Supabase CLI 2.122.0 runs in a separate temporary project on ports
+  55421/55422. The existing Butterbox stack was not modified. SQL fixtures are
+  rolled back and HTTP fixtures are cleaned up. Following interrupted reset and
+  migration attempts under host pressure, the disposable schema was restored
+  transactionally with `psql`; later migration-history rows have empty
+  `statements` arrays. A future normal reset should rebuild standard CLI history.
+- Serialized Node unit run: 27 passed, one HTTP integration explicitly
+  skipped without disposable settings. The isolated database regression
+  passed 388/388 pgTAP assertions and the separately configured two-tenant
+  HTTP integration passed with race cases.
+- Production split compile, explicit TypeScript, generate and lint passed.
+  All 16 production-browser scenarios passed in isolated processes, including
+  signup/recovery and recovered-session expiry.
 - The test helper rejects missing disposable confirmation and non-local URLs.
 - `npm audit --omit=dev` reported no production dependency vulnerabilities;
   `npm ci` reported 16 moderate development-dependency advisories.
@@ -167,12 +293,9 @@ not yet run remotely.
 
 ## Next story
 
-- BB-PEOPLE-002 (multiple roles and qualifications): read its criteria in the
-  product backlog. Build on `job_roles`: add employee-to-role links, plus
-  qualification expiry if required. Enforce them in `save_shift`, where shift
-  roles are free text matched by name. Then do BB-PEOPLE-003 (recurring
-  availability), BB-ROSTER-001/002/007/008.
-- Migrations through `20261101080000` are applied only to the isolated stack.
+- Continue BB-ROSTER-003/007/008 and add the publication version and
+  acknowledgement mechanism needed to complete BB-ROSTER-010.
+- Migrations through `20261101130000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.
@@ -181,4 +304,5 @@ not yet run remotely.
 - Known environment workaround: sequential `--split-build` with
   `BUTTERBOX_TEST_LOW_MEMORY=yes`; use the existing session browser library
   directory in `LD_LIBRARY_PATH` if Chromium reports missing system libraries.
+  `BUTTERBOX_TEST_SUPABASE_CLI` accepts the cached native CLI path.
 - No background execution or scheduling is promised after this session ends.

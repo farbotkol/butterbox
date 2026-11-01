@@ -10,9 +10,6 @@ export default defineConfig({
   use: {
     baseURL: process.env.BUTTERBOX_TEST_APP_URL,
     headless: true,
-    launchOptions: process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes"
-      ? { args: ["--renderer-process-limit=2"] }
-      : undefined,
     screenshot: "off",
     trace: "off",
     video: "off",

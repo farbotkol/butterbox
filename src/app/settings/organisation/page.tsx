@@ -1,11 +1,17 @@
 import { redirect } from "next/navigation";
-import { saveDepartmentAction, saveJobRoleAction } from "@/app/actions";
+import { saveDepartmentAction, saveJobRoleAction, setJobRoleAutoRestrictionAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
 type Department = { id: string; name: string; active: boolean };
-type JobRole = { id: string; name: string; active: boolean; department_id: string };
+type JobRole = {
+  id: string;
+  name: string;
+  active: boolean;
+  department_id: string;
+  restrict_auto_assignment: boolean;
+};
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const departmentManagerRoles = ["owner", "admin", "general_manager"];
@@ -51,7 +57,7 @@ export default async function OrganisationPage({
   const [departments, roles] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
-    workspace.supabase.from("job_roles").select("id, name, active, department_id")
+    workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment")
       .eq("venue_id", venueId).order("name"),
   ]);
   const loadError = venues.error || departments.error || roles.error;
@@ -67,7 +73,8 @@ export default async function OrganisationPage({
       <p className="mt-3 text-sm leading-6 text-muted">
         Front of House and Back of House are created with every venue. Add custom departments and job roles,
         or mark them inactive to stop new staff and shifts using them. Deactivating never deletes anything:
-        existing shifts and staff keep their original department and role.
+        existing shifts and staff keep their original department and role. Restricting automatic assignment
+        requires an explicitly qualified worker; manual assignment remains available.
       </p>
 
       {(venues.data?.length ?? 0) > 1 && (
@@ -88,7 +95,9 @@ export default async function OrganisationPage({
       )}
       {params.saved && (
         <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-ocean">
-          {params.saved === "role" ? "Job role saved." : "Department saved."}
+          {params.saved === "role" ? "Job role saved."
+            : params.saved === "restriction" ? "Automatic assignment setting saved."
+              : "Department saved."}
         </p>
       )}
 
@@ -143,6 +152,17 @@ export default async function OrganisationPage({
                         </label>
                         <StatusSelect active={role.active} label="Role status" />
                         <button type="submit" className="self-end rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save role</button>
+                      </form>
+                      <form action={setJobRoleAutoRestrictionAction} className="mt-3 flex flex-wrap items-end gap-3">
+                        <input type="hidden" name="venue_id" value={venueId} />
+                        <input type="hidden" name="job_role_id" value={role.id} />
+                        <label className="text-sm">Automatic assignment
+                          <select name="restricted" defaultValue={String(role.restrict_auto_assignment)} className={fieldClass}>
+                            <option value="false">Any linked worker</option>
+                            <option value="true">Qualified workers only</option>
+                          </select>
+                        </label>
+                        <button type="submit" className="rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save restriction</button>
                       </form>
                     </li>
                   ))}

@@ -43,6 +43,59 @@ The directory searches names and filters by permitted venue, department,
 job title and active/archive status. Select **All roles** and **All departments**
 when switching venues if the previous filters are not available there.
 
+Managers can record each worker's eligible job roles in their linked
+departments and choose a qualified primary role. An existing free-text job
+title does **not** by itself establish a qualification. Removing a secondary
+department also removes its role qualifications; change the primary role first
+if it belongs to that department. Renaming a primary role updates the employee
+profile without changing historical shifts.
+
+On **Departments**, a manager can restrict a role's automatic assignments to
+qualified workers. On the roster, **Automatically choose an eligible worker**
+selects an active linked worker without an overlapping shift, respecting that
+restriction; if none qualifies, no shift is created. This opt-in selection
+does not yet check recurring availability, leave, preferred hours or fairness.
+Existing open-shift and explicit manual assignment behaviour is unchanged.
+
+Owners can link an existing business member to an employee profile on
+**People**; the member's venue and department scope must permit that profile.
+Invitations for new members are not yet implemented. Linked active employees
+can save multiple weekly time ranges on **Availability**, in the venue's local
+time zone. An end time at or before the start is on the following day; equal
+times represent 24 hours. An explicitly empty pattern means unavailable all
+week, while an unsubmitted pattern is unknown. The roster displays the
+complement of saved ranges as unavailable periods, including overnight ranges.
+Managers can view availability within their permitted departments but cannot
+edit a worker's self-reported pattern. These indicators do not yet block
+manual or automatic shift assignment.
+
+The weekly roster groups workers by department. Staff linked to multiple
+departments appear in each group, with that department's shifts shown in its
+row. Archived or no-longer-linked workers remain visible when they have shifts
+in the displayed week; a worker's name is replaced by a generic label if the
+viewer can no longer access their profile. Week navigation keeps the selected
+department or all-departments view. Linked employees can see their own
+published shifts in a secondary department while their membership still covers
+their profile; this does not grant management permissions for that department.
+Use the department headers to collapse or expand groups. The department filter
+and collapsed groups are preserved during week navigation and roster changes.
+Where a user has access to multiple venues, select the venue on the roster;
+only its departments and workers are offered. Managers can edit assigned and
+open draft shifts from the grid. Published shifts remain protected from edits
+and deletion. Shift validation appears beside the relevant field. Times use
+the selected venue's timezone: an earlier or equal time on the same date ends
+the following day, and nonexistent daylight-saving clock times are rejected.
+When clocks repeat a local time, newly entered values use the later occurrence;
+editing an unchanged time preserves its original instant, including any
+historical seconds not displayed by the minute-precision form.
+
+**My schedule** shows a linked team member their next published shift and a
+mobile-friendly weekly list, including overnight shifts that overlap the
+week. It displays the selected venue's local time and address and never
+includes unassigned, draft or other people's shifts. Refresh the schedule
+after a manager publishes changes. Publication acknowledgements are not yet
+available.
+
 ```sh
 npm run dev
 npm test
@@ -65,12 +118,15 @@ BUTTERBOX_TEST_DISPOSABLE=yes node scripts/test-tenant-isolation.mjs /path/to/di
 ```
 
 The test obtains the local keys from the CLI without printing them, creates
-two temporary users and businesses, and deletes those fixtures afterward. It
+two temporary users and businesses, checks concurrent roster assignments,
+and deletes those fixtures afterward. It
 refuses non-loopback URLs, but a loopback connection can still be a tunnel to
 another database: use an isolated test project, never a shared or production
 one. Without test settings, the normal `npm test` run explicitly skips this
 integration test. CI runs both the database suite and the HTTP test on a fresh
 local Supabase project.
+If the pinned CLI is already installed locally, set `BUTTERBOX_TEST_SUPABASE_CLI`
+to its executable path to avoid launching `npx` for the test status check.
 
 To exercise authentication/recovery, resumable setup, permission assignment,
 employee profiles and directory filters in a real browser, install Chromium and its
@@ -93,8 +149,11 @@ For a lower-memory local functional run, append `--dev` to use a disposable
 development server instead. This does not replace the production build check.
 Alternatively, append `--split-build` to use Next.js's experimental separate
 compile and generate phases with an explicit TypeScript check between them.
-On memory-constrained machines, `BUTTERBOX_TEST_LOW_MEMORY=yes` limits the
-number of Chromium renderer processes without changing the tested behavior.
+On memory-constrained machines, `BUTTERBOX_TEST_LOW_MEMORY=yes` runs each
+discovered scenario with fresh application and browser processes; all
+scenarios still run and any failure remains fatal. To run a focused scenario
+instead, set `BUTTERBOX_TEST_GREP` to a Playwright test-name pattern; run the
+unfiltered suite separately for regression coverage.
 
 ## Staging and production
 

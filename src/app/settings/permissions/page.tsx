@@ -2,15 +2,7 @@ import { redirect } from "next/navigation";
 import { assignMemberRoleAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { getWorkspace } from "@/lib/workspace";
-
-type BusinessMember = {
-  user_id: string;
-  email: string;
-  role: string;
-  venue_id: string | null;
-  department_id: string | null;
-};
+import { getWorkspace, type BusinessMember } from "@/lib/workspace";
 
 export default async function PermissionsPage({
   searchParams,

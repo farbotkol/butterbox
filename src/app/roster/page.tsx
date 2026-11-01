@@ -2,6 +2,8 @@ import {
   ArrowLeft,
   ArrowRight,
   CalendarDays,
+  ChevronDown,
+  Pencil,
   Plus,
   Send,
   Trash2,
@@ -12,13 +14,17 @@ import { redirect } from "next/navigation";
 import {
   deleteShiftAction,
   publishRosterAction,
-  saveShiftAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { ShiftEditor } from "@/components/shift-editor";
+import { availabilityForDate, formatWallTime } from "@/lib/availability";
+import { groupRosterEmployees } from "@/lib/roster-groups";
+import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
   formatDay,
+  formatLocalDateTime,
   formatTime,
   getVenueDate,
   getWeekStart,
@@ -29,11 +35,15 @@ import {
 type RosterPageProps = {
   searchParams: Promise<{
     week?: string;
+    venue?: string;
     department?: string;
+    collapsed?: string | string[];
     error?: string;
     saved?: string;
     deleted?: string;
     published?: string;
+    edit?: string;
+    created?: string;
   }>;
 };
 
@@ -45,6 +55,7 @@ const errorMessages: Record<string, string> = {
   delete: "We couldn't delete that shift. Published shifts cannot be deleted.",
   publish: "We couldn't publish this roster. Check your permissions and try again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
+  "no-eligible": "No eligible worker is free of overlapping shifts. Choose another time, role or assignment.",
 };
 
 function isManager(role: string) {
@@ -55,19 +66,40 @@ function weekInput(date: string, hour: number) {
   return `${date}T${String(hour).padStart(2, "0")}:00`;
 }
 
+function CollapsedFields({ departments }: { departments: readonly string[] }) {
+  return departments.map((departmentId) => (
+    <input key={departmentId} type="hidden" name="collapsed" value={departmentId} />
+  ));
+}
+
 export default async function RosterPage({ searchParams }: RosterPageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace();
+  const params = await searchParams;
+  const workspace = await getWorkspace(params.venue);
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
-  if (workspace.status === "error") redirect("/?error=workspace");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster workspace.", { message: workspace.message });
+    return (
+      <main className="mx-auto mt-20 max-w-lg rounded-2xl bg-white p-8">
+        <h1 className="text-xl font-semibold">Roster unavailable</h1>
+        <p role="alert" className="mt-3 text-sm text-muted">
+          We couldn&apos;t load the selected venue. Check your access and connection, then try again.
+        </p>
+        <Link href="/roster" className="mt-4 inline-block text-sm font-semibold text-ocean">
+          Return to an available roster
+        </Link>
+      </main>
+    );
+  }
 
-  const params = await searchParams;
   const week = getWeekStart(params.week, workspace.venue.timezone);
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
-  const [{ data: departmentRows }, { data: employeeRows }, { data: jobRoleRows }, { data: linkRows }] = await Promise.all([
+  const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, exceptionResult] = await Promise.all([
+    workspace.supabase.from("venues").select("id, name")
+      .eq("business_id", workspace.business.id).order("created_at"),
     workspace.supabase
       .from("departments")
       .select("id, name, active")
@@ -75,9 +107,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .order("name"),
     workspace.supabase
       .from("employees")
-      .select("id, name, department_id, role_title")
+      .select("id, name, department_id, role_title, active")
       .eq("venue_id", workspace.venue.id)
-      .eq("active", true)
       .order("name"),
     workspace.supabase
       .from("job_roles")
@@ -86,20 +117,50 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .eq("active", true)
       .order("name"),
     workspace.supabase.from("employee_departments").select("employee_id, department_id"),
+    workspace.supabase.rpc("list_own_linked_roster_departments", {
+      p_business_id: workspace.business.id,
+      p_venue_id: workspace.venue.id,
+    }),
+    workspace.supabase.from("employee_availability_patterns").select("employee_id")
+      .eq("venue_id", workspace.venue.id),
+    workspace.supabase.from("employee_availability_intervals")
+      .select("employee_id, weekday, start_minute, end_minute")
+      .eq("venue_id", workspace.venue.id),
+    workspace.supabase.from("employee_availability_exceptions")
+      .select("employee_id, starts_on, ends_on, exception_type, status")
+      .eq("venue_id", workspace.venue.id)
+      .lte("starts_on", addDays(weekEnd, -1)).gte("ends_on", week),
   ]);
-  let departments = departmentRows ?? [];
-  if (workspace.membership.department_id) {
-    departments = departments.filter(
-      (department) => department.id === workspace.membership.department_id,
-    );
+  const departmentRows = departmentResult.data;
+  const employeeRows = employeeResult.data;
+  const jobRoleRows = jobRoleResult.data;
+  const ownDepartments: { employee_id: string; department_id: string; name: string; active: boolean }[] =
+    ownDepartmentsResult.data ?? [];
+  const linkRows = [
+    ...(linkResult.data ?? []),
+    ...ownDepartments.map(({ employee_id, department_id }) => ({ employee_id, department_id })),
+  ];
+  const departmentMap = new Map((departmentRows ?? []).map((department) => [department.id, department]));
+  for (const department of ownDepartments) {
+    if (!departmentMap.has(department.department_id)) {
+      departmentMap.set(department.department_id, {
+        id: department.department_id,
+        name: department.name,
+        active: department.active,
+      });
+    }
   }
+  const departments = [...departmentMap.values()].sort((a, b) => a.name.localeCompare(b.name));
+  const defaultDepartment =
+    departments.find((department) => department.id === workspace.membership.department_id)?.id ??
+    departments[0]?.id;
   const selectedDepartment =
     params.department === "all"
       ? undefined
       : departments.find((department) => department.id === params.department)?.id ??
-        departments[0]?.id;
+        defaultDepartment;
 
-  const { data: shifts } = await workspace.supabase
+  const shiftResult = await workspace.supabase
     .from("shifts")
     .select(
       "id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published",
@@ -109,27 +170,73 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     .gte("starts_at", startAt)
     .lt("starts_at", endAt)
     .order("starts_at");
+  const loadError = venueResult.error || departmentResult.error || employeeResult.error || jobRoleResult.error ||
+    linkResult.error || ownDepartmentsResult.error || patternResult.error || intervalResult.error ||
+    exceptionResult.error || shiftResult.error;
+  if (loadError) {
+    console.error("Could not load the roster.", { code: loadError.code, message: loadError.message });
+    return (
+      <AppShell businessName={workspace.business.name} email={workspace.user.email ?? ""}
+        role={workspace.membership.role} venueName={workspace.venue.name}>
+        <h1 className="text-3xl font-semibold">Weekly roster</h1>
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-red-800">
+          We couldn&apos;t load the roster. Try again before making changes.
+        </p>
+      </AppShell>
+    );
+  }
+  const shifts = shiftResult.data;
 
   const visibleShifts = (shifts ?? []).filter(
     (shift) => !selectedDepartment || shift.department_id === selectedDepartment,
   );
   const employees = (employeeRows ?? []).filter(
     (employee) =>
-      !selectedDepartment ||
-      (linkRows ?? []).some(
-        (link) => link.employee_id === employee.id && link.department_id === selectedDepartment,
-      ),
+      employee.active && (!selectedDepartment ||
+        (linkRows ?? []).some(
+          (link) => link.employee_id === employee.id && link.department_id === selectedDepartment,
+        )),
+  );
+  const rosterGroups = groupRosterEmployees(
+    departments.filter((department) => !selectedDepartment || department.id === selectedDepartment),
+    employeeRows ?? [],
+    linkRows ?? [],
+    visibleShifts,
   );
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const canManage = isManager(workspace.membership.role);
+  const canManageDepartment = (departmentId: string) => {
+    const { role, venue_id: venueId, department_id: departmentIdScope } = workspace.membership;
+    if (["owner", "admin"].includes(role)) return true;
+    if (venueId && venueId !== workspace.venue.id) return false;
+    return role === "general_manager" ||
+      (["foh_manager", "boh_manager", "department_manager"].includes(role) &&
+        departmentIdScope === departmentId);
+  };
+  const canManageSelectedDepartment = selectedDepartment
+    ? canManageDepartment(selectedDepartment) : false;
   const selectedDepartmentActive =
     departments.find((department) => department.id === selectedDepartment)?.active ?? false;
+  const editingShift = params.edit && selectedDepartment && canManageSelectedDepartment && selectedDepartmentActive
+    ? visibleShifts.find((shift) =>
+        shift.id === params.edit && shift.department_id === selectedDepartment && !shift.is_published)
+    : undefined;
+  const unavailableEmployee = editingShift?.employee_id &&
+    !employees.some((employee) => employee.id === editingShift.employee_id)
+    ? employeeRows?.find((employee) => employee.id === editingShift.employee_id) ?? {
+        id: editingShift.employee_id,
+        name: "Former team member",
+        role_title: "Profile unavailable",
+      }
+    : undefined;
   const roleSuggestions = (jobRoleRows ?? []).filter(
     (role) => role.department_id === selectedDepartment,
   );
   const errorMessage = params.error ? errorMessages[params.error] : undefined;
   const previousWeek = addDays(week, -7);
   const nextWeek = addDays(week, 7);
+  const filterDepartment = selectedDepartment ?? (params.department === "all" ? "all" : undefined);
+  const collapsed = collapsedRosterDepartments(params.collapsed, departments.map((department) => department.id));
   const weekLabel = `${formatDay(week)} – ${formatDay(addDays(week, 6))}`;
 
   return (
@@ -151,7 +258,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 sm:justify-start">
           <Link
-            href={`/roster?week=${previousWeek}${selectedDepartment ? `&department=${selectedDepartment}` : ""}`}
+            href={rosterViewHref(previousWeek, filterDepartment, collapsed, workspace.venue.id)}
             aria-label="Previous week"
             className="rounded-lg p-2 text-muted hover:bg-soft-sea"
           >
@@ -161,7 +268,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             {weekLabel}
           </div>
           <Link
-            href={`/roster?week=${nextWeek}${selectedDepartment ? `&department=${selectedDepartment}` : ""}`}
+            href={rosterViewHref(nextWeek, filterDepartment, collapsed, workspace.venue.id)}
             aria-label="Next week"
             className="rounded-lg p-2 text-muted hover:bg-soft-sea"
           >
@@ -171,8 +278,23 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       </div>
 
       <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        {(venueResult.data ?? []).length > 1 && (
+          <form action="/roster" className="flex items-center gap-2">
+            <input type="hidden" name="week" value={week} />
+            <label htmlFor="venue-filter" className="text-sm text-muted">Venue</label>
+            <select id="venue-filter" name="venue" defaultValue={workspace.venue.id}
+              className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-ocean">
+              {venueResult.data?.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+            <button type="submit" className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
+              Switch venue
+            </button>
+          </form>
+        )}
         <form action="/roster" className="flex items-center gap-2">
           <input type="hidden" name="week" value={week} />
+          <input type="hidden" name="venue" value={workspace.venue.id} />
+          <CollapsedFields departments={collapsed} />
           <label htmlFor="department-filter" className="text-sm text-muted">
             Department
           </label>
@@ -214,20 +336,32 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         >
           {errorMessage ??
             (params.saved
-              ? "Shift saved to the draft roster."
+              ? params.saved === "edited" ? "Draft shift updated." : "Shift saved to the draft roster."
               : params.deleted
                 ? "Draft shift removed."
                 : `${selectedDepartment ? departments.find((item) => item.id === selectedDepartment)?.name : "Roster"} roster published.`)}
         </p>
       )}
 
-      {canManage && selectedDepartment && !selectedDepartmentActive && (
+      {params.edit && !editingShift && (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+          This draft shift is unavailable or you cannot edit it.
+        </p>
+      )}
+
+      {canManage && selectedDepartment && !canManageSelectedDepartment && (
+        <p role="note" className="mt-5 rounded-xl border border-line bg-white p-4 text-sm text-muted">
+          You can view your published shifts in this department, but you cannot change its roster.
+        </p>
+      )}
+
+      {canManageSelectedDepartment && selectedDepartment && !selectedDepartmentActive && (
         <p role="note" className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
           This department is inactive. Existing shifts are kept, but new shifts can&apos;t be added.
         </p>
       )}
 
-      {canManage && selectedDepartment && selectedDepartmentActive && (
+      {canManageSelectedDepartment && selectedDepartment && selectedDepartmentActive && (
         <section className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
@@ -235,14 +369,17 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 <Plus size={19} aria-hidden="true" />
               </span>
               <div>
-                <h2 className="font-semibold">Add a shift</h2>
+                <h2 className="font-semibold">{editingShift ? "Edit draft shift" : "Add a shift"}</h2>
                 <p className="mt-0.5 text-xs text-muted">
-                  Times use {workspace.venue.timezone.replaceAll("_", " ")} local time.
+                  {workspace.venue.name} · {departments.find((department) => department.id === selectedDepartment)?.name}.
+                  {" "}Times use {workspace.venue.timezone.replaceAll("_", " ")} local time.
                 </p>
               </div>
             </div>
             <form action={publishRosterAction}>
               <input name="week" type="hidden" value={week} />
+              <input name="venue_id" type="hidden" value={workspace.venue.id} />
+              <CollapsedFields departments={collapsed} />
               <input
                 name="department_id"
                 type="hidden"
@@ -257,82 +394,18 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               </button>
             </form>
           </div>
-          <form action={saveShiftAction} className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
-            <input name="week" type="hidden" value={week} />
-            <input
-              name="department_id"
-              type="hidden"
-              value={selectedDepartment}
-            />
-            <label className="text-xs font-medium text-muted">
-              Role
-              <input
-                className="mt-1.5 block w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-ocean"
-                maxLength={80}
-                name="role_title"
-                placeholder="Barista"
-                list="role-suggestions"
-                required
-              />
-              <datalist id="role-suggestions">
-                {roleSuggestions.map((role) => <option key={role.name} value={role.name} />)}
-              </datalist>
-            </label>
-            <label className="text-xs font-medium text-muted">
-              Team member
-              <select
-                className="mt-1.5 block w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink outline-none focus:border-ocean"
-                defaultValue=""
-                name="employee_id"
-              >
-                <option value="">Open shift</option>
-                {employees.map((employee) => (
-                  <option key={employee.id} value={employee.id}>
-                    {employee.name} · {employee.role_title}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="text-xs font-medium text-muted">
-              Starts
-              <input
-                className="mt-1.5 block w-full min-w-0 rounded-lg border border-line px-2.5 py-2.5 text-sm text-ink outline-none focus:border-ocean"
-                defaultValue={weekInput(week, 8)}
-                name="start"
-                required
-                type="datetime-local"
-              />
-            </label>
-            <label className="text-xs font-medium text-muted">
-              Ends
-              <input
-                className="mt-1.5 block w-full min-w-0 rounded-lg border border-line px-2.5 py-2.5 text-sm text-ink outline-none focus:border-ocean"
-                defaultValue={weekInput(week, 16)}
-                name="end"
-                required
-                type="datetime-local"
-              />
-            </label>
-            <label className="text-xs font-medium text-muted">
-              Break (mins)
-              <input
-                className="mt-1.5 block w-full rounded-lg border border-line px-3 py-2.5 text-sm text-ink outline-none focus:border-ocean"
-                defaultValue={30}
-                max={240}
-                min={0}
-                name="break_minutes"
-                type="number"
-              />
-            </label>
-            <div className="flex items-end">
-              <button
-                className="w-full rounded-lg bg-ocean px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ocean/90"
-                type="submit"
-              >
-                Save draft shift
-              </button>
-            </div>
-          </form>
+          <ShiftEditor key={`${workspace.venue.id}:${selectedDepartment}:${week}:${editingShift?.id ?? params.created ?? "new"}`}
+            week={week} venueId={workspace.venue.id} departmentId={selectedDepartment}
+            collapsed={collapsed} employees={employees} unavailableEmployee={unavailableEmployee}
+            roleSuggestions={roleSuggestions.map((role) => role.name)} shiftId={editingShift?.id}
+            cancelHref={rosterViewHref(week, selectedDepartment, collapsed, workspace.venue.id)}
+            initialValues={{
+              role: editingShift?.role_title ?? "",
+              employee: editingShift?.employee_id ?? "",
+              start: editingShift ? formatLocalDateTime(editingShift.starts_at, workspace.venue.timezone) : weekInput(week, 8),
+              end: editingShift ? formatLocalDateTime(editingShift.ends_at, workspace.venue.timezone) : weekInput(week, 16),
+              break: String(editingShift?.break_minutes ?? 30),
+            }} />
         </section>
       )}
 
@@ -380,12 +453,33 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 })}
               </tr>
             </thead>
-            <tbody>
-              {employees.map((employee) => (
-                <tr key={employee.id} className="border-b border-line/70 last:border-0">
+            {rosterGroups.map(({ department, employees: groupEmployees }) => (
+              <tbody key={department.id} aria-label={`Department ${department.name}`}>
+                <tr className="bg-cloud">
+                  <th colSpan={8} scope="rowgroup" className="border-b border-line px-4 py-2 text-sm font-semibold text-ocean">
+                    <form action="/roster">
+                      <input type="hidden" name="week" value={week} />
+                      <input type="hidden" name="venue" value={workspace.venue.id} />
+                      {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
+                      <CollapsedFields departments={toggleRosterDepartment(collapsed, department.id)} />
+                      <button type="submit"
+                        aria-label={`${collapsed.includes(department.id) ? "Expand" : "Collapse"} ${department.name}`}
+                        aria-expanded={!collapsed.includes(department.id)}
+                        aria-controls={groupEmployees.map((employee) => `roster-row-${department.id}-${employee.id}`).join(" ")}
+                        className="inline-flex items-center gap-2 rounded py-1 text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean">
+                        <ChevronDown size={16} aria-hidden="true"
+                          className={collapsed.includes(department.id) ? "-rotate-90" : ""} />
+                        {department.name}{department.active ? "" : " (inactive)"}
+                      </button>
+                    </form>
+                  </th>
+                </tr>
+                {groupEmployees.map((employee) => (
+                <tr key={employee.id} id={`roster-row-${department.id}-${employee.id}`}
+                  hidden={collapsed.includes(department.id)} className="border-b border-line/70 last:border-0">
                   <th className="sticky left-0 z-10 border-r border-line bg-white px-4 py-3 align-top">
                     <span className="block truncate text-sm font-semibold text-ink">
-                      {employee.name}
+                      {employee.name}{!employee.active && !employee.profileUnavailable ? " (Archived)" : ""}
                     </span>
                     <span className="mt-1 block truncate text-xs font-normal text-muted">
                       {employee.role_title}
@@ -395,11 +489,56 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                     const employeeShifts = visibleShifts.filter(
                       (shift) =>
                         shift.employee_id === employee.id &&
+                        shift.department_id === department.id &&
                         getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
                     );
+                    const hasAvailability = patternResult.data?.some(
+                      (pattern) => pattern.employee_id === employee.id,
+                    );
+                    const availability = availabilityForDate(
+                      date,
+                      hasAvailability ? (intervalResult.data ?? [])
+                        .filter((interval) => interval.employee_id === employee.id) : null,
+                      (exceptionResult.data ?? []).filter((item) => item.employee_id === employee.id),
+                    );
+                    const unavailable = availability.unavailable;
                     return (
                       <td key={date} className="border-r border-line/60 px-2 py-2 align-top last:border-r-0">
                         <div className="space-y-1.5">
+                          {availability.pendingLeave && (
+                            <span aria-label={`Pending leave ${employee.name} ${date} in ${department.name}`}
+                              className="block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-900">
+                              Leave pending
+                            </span>
+                          )}
+                          {availability.approvedLeave && (
+                            <span aria-label={`Approved leave ${employee.name} ${date} in ${department.name}`}
+                              className="block rounded-md border border-teal-200 bg-teal-50 px-2 py-1 text-[10px] font-semibold text-teal-900">
+                              Approved leave
+                            </span>
+                          )}
+                          {availability.blocked && (
+                            <span aria-label={`Date blocked ${employee.name} ${date} in ${department.name}`}
+                              className="block rounded-md border border-rose-200 bg-rose-50 px-2 py-1 text-[10px] font-semibold text-rose-900">
+                              Date blocked
+                            </span>
+                          )}
+                          {unavailable === null ? (
+                            <span className="block rounded-md bg-slate-50 px-2 py-1 text-[10px] text-muted">
+                              {employee.profileUnavailable ? "Availability unavailable" : "Availability not submitted"}
+                            </span>
+                          ) : unavailable.length > 0 && (
+                            <div aria-label={`Unavailable ${employee.name} ${date} in ${department.name}`}
+                              className="rounded-md border border-rose-100 bg-rose-50 px-2 py-1 text-[10px] text-rose-800">
+                              {unavailable.map((period) => (
+                                <span key={`${period.start}-${period.end}`} className="block">
+                                  {period.start === 0 && period.end === 1440
+                                    ? "Unavailable all day"
+                                    : `Unavailable ${formatWallTime(period.start)}–${formatWallTime(period.end)}`}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                           {employeeShifts.map((shift) => (
                             <article
                               key={shift.id}
@@ -421,10 +560,21 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                 <span className={`text-[9px] font-semibold ${shift.is_published ? "text-teal-800" : "text-sky-800"}`}>
                                   {shift.is_published ? "Published" : "Draft"}
                                 </span>
-                                {canManage && !shift.is_published && (
+                                {canManageDepartment(shift.department_id) && !shift.is_published &&
+                                  departments.find((item) => item.id === shift.department_id)?.active && (
+                                  <Link href={`${rosterViewHref(week, shift.department_id, collapsed, workspace.venue.id)}&edit=${shift.id}`}
+                                    aria-label={`Edit ${employee.name} shift`} title="Edit draft shift"
+                                    className="rounded p-1 text-muted/70 hover:bg-white hover:text-ocean">
+                                    <Pencil size={12} aria-hidden="true" />
+                                  </Link>
+                                )}
+                                {canManageDepartment(shift.department_id) && !shift.is_published && (
                                   <form action={deleteShiftAction}>
                                     <input name="shift_id" type="hidden" value={shift.id} />
                                     <input name="week" type="hidden" value={week} />
+                                    <input name="venue_id" type="hidden" value={workspace.venue.id} />
+                                    {filterDepartment && <input name="filter_department" type="hidden" value={filterDepartment} />}
+                                    <CollapsedFields departments={collapsed} />
                                     <button
                                       className="rounded p-1 text-muted/70 hover:bg-white hover:text-red-700"
                                       aria-label={`Delete ${employee.name} shift`}
@@ -438,7 +588,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                               </div>
                             </article>
                           ))}
-                          {employeeShifts.length === 0 && (
+                          {employeeShifts.length === 0 && unavailable?.length === 0 && (
                             <span className="block px-2 py-3 text-center text-[11px] text-muted/50">
                               —
                             </span>
@@ -448,15 +598,18 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                     );
                   })}
                 </tr>
-              ))}
-              {employees.length === 0 && (
+                ))}
+              </tbody>
+            ))}
+            {rosterGroups.length === 0 && (
+              <tbody>
                 <tr>
                   <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted">
                     Add active team members to build a weekly roster.
                   </td>
                 </tr>
-              )}
-            </tbody>
+              </tbody>
+            )}
           </table>
         </div>
       </section>
@@ -488,7 +641,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       {formatTime(shift.ends_at, workspace.venue.timezone)}
                     </p>
                   </div>
-                  <span className="text-xs font-medium text-amber-800">Needs cover</span>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-medium text-amber-800">Needs cover</span>
+                    {canManageDepartment(shift.department_id) && !shift.is_published &&
+                      departments.find((item) => item.id === shift.department_id)?.active && (
+                      <Link href={`${rosterViewHref(week, shift.department_id, collapsed, workspace.venue.id)}&edit=${shift.id}`}
+                        className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-900">
+                        Edit open shift
+                      </Link>
+                    )}
+                  </div>
                 </div>
               ))}
           </div>

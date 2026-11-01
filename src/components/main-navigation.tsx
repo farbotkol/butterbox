@@ -1,12 +1,14 @@
 "use client";
 
-import { Building2, CalendarDays, LayoutDashboard, ShieldCheck, UsersRound } from "lucide-react";
+import { Building2, CalendarCheck, CalendarDays, Clock, LayoutDashboard, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/my-schedule", label: "My schedule", icon: CalendarCheck },
   { href: "/roster", label: "Rostering", icon: CalendarDays },
+  { href: "/availability", label: "Availability", icon: Clock },
 ];
 
 export function MainNavigation({ role }: { role: string }) {

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 export {
   addDays,
   formatDay,
+  formatLocalDateTime,
   formatTime,
   getVenueDate,
   getWeekStart,
@@ -16,7 +17,15 @@ export type Membership = {
   department_id: string | null;
 };
 
-export async function getWorkspace() {
+export type BusinessMember = {
+  user_id: string;
+  email: string;
+  role: string;
+  venue_id: string | null;
+  department_id: string | null;
+};
+
+export async function getWorkspace(venueId?: string) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -46,26 +55,27 @@ export async function getWorkspace() {
     return { status: "needs_setup" as const, user, supabase };
   }
 
-  const [{ data: business, error: businessError }, { data: venues }] =
+  const venueQuery = supabase
+    .from("venues")
+    .select("id, name, timezone")
+    .eq("business_id", membership.business_id);
+  const selectedVenueQuery = venueId ? venueQuery.eq("id", venueId) : venueQuery;
+  const [{ data: business, error: businessError }, { data: venues, error: venueError }] =
     await Promise.all([
       supabase
         .from("businesses")
         .select("id, name")
         .eq("id", membership.business_id)
         .single(),
-      supabase
-        .from("venues")
-        .select("id, name, timezone")
-        .eq("business_id", membership.business_id)
-        .order("created_at")
-        .limit(1),
+      selectedVenueQuery.order("created_at").limit(1),
     ]);
 
-  if (businessError || !business || !venues?.[0]) {
+  if (businessError || venueError || !business || !venues?.[0]) {
     return {
       status: "error" as const,
       user,
-      message: businessError?.message ?? "No venue is configured.",
+      message: businessError?.message ?? venueError?.message ??
+        (venueId ? "The selected venue is unavailable." : "No venue is configured."),
     };
   }
 
