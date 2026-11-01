@@ -46,6 +46,12 @@ create index award_central_versions_active_lookup
 create function public.guard_award_central_version_mutation()
 returns trigger language plpgsql set search_path = public, pg_temp as $$
 begin
+  if tg_op = 'INSERT' then
+    if new.status <> 'draft' then
+      raise exception 'New Award Central versions must enter as drafts';
+    end if;
+    return new;
+  end if;
   if tg_op = 'DELETE' then
     raise exception 'Award Central versions cannot be deleted';
   end if;
@@ -71,7 +77,7 @@ end;
 $$;
 
 create trigger award_central_version_guard
-  before update or delete on public.award_central_versions
+  before insert or update or delete on public.award_central_versions
   for each row execute function public.guard_award_central_version_mutation();
 
 alter table public.award_central_instruments enable row level security;
