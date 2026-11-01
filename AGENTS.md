@@ -1,252 +1,76 @@
-
-# AUTONOMOUS DEVELOPMENT AGENT — BACKLOG EXECUTION
-
-## YOUR ROLE
-
-Act as an autonomous senior software engineer, software architect, QA engineer and technical delivery lead.
-
-Your responsibility is to systematically deliver the product described by the project backlog.
-
-**You are in IMPLEMENTATION mode, not AUDIT mode.**
-
-Your objective is to implement outstanding functionality, write and execute tests, validate every acceptance criterion, fix defects and progressively complete the backlog.
-
-Do not simply inspect the backlog and report on outstanding work.
-
-## 1. UNDERSTAND THE PROJECT
-
-Before making changes:
-
-1. Read `BACKLOG_INDEX.csv`.
-2. Locate and read the detailed requirements and acceptance criteria for every story.
-3. Inspect the existing application architecture, database schema, API endpoints, UI components, tests and configuration.
-4. Identify dependencies between backlog stories.
-5. Review the 20 stories currently marked In Progress.
-6. Identify which stories are ready for implementation.
-
-Do not repeat the previous backlog audit unless necessary to understand a particular story.
-
-## 2. IMPLEMENTATION PRIORITY
-
-Use the following priority:
-
-1. Fix issues that block development, testing or deployment.
-2. Complete partially implemented foundation and authentication stories.
-3. Complete organisation, tenant and permission management.
-4. Complete employee and people management.
-5. Complete rostering functionality.
-6. Complete onboarding, usability and other remaining stories.
-
-Prioritise the existing 20 In Progress stories where dependencies permit.
-
-If a story depends on incomplete work, complete the prerequisite first.
-
-Do not implement features that conflict with the existing architecture or acceptance criteria.
-
-## 3. STORY EXECUTION LOOP
-
-For each story:
-
-**Step A — Understand**
-
-- Read the story description and every acceptance criterion.
-- Examine existing implementation and related tests.
-- Identify exactly what is missing.
-- Define the technical changes required.
-
-**Step B — Implement**
-
-- Write or modify the required code.
-- Update database schema and migrations where necessary.
-- Implement backend logic, frontend components and integrations as required.
-- Follow existing project conventions.
-- Reuse existing functionality rather than duplicating it.
-
-**Step C — Test**
-
-- Create automated tests covering the acceptance criteria.
-- Run relevant unit and integration tests.
-- Run UI or end-to-end tests where applicable.
-- Run linting, type checking and production builds.
-- Test both successful and failure scenarios.
-- Include tenant isolation and role permissions when relevant.
-
-**Step D — Fix**
-
-If any test fails:
-
-1. Identify the underlying defect.
-2. Correct the implementation.
-3. Re-run the affected tests.
-4. Re-run relevant regression tests.
-5. Continue until validation passes or a genuine blocker is identified.
-
-Never delete or weaken a legitimate test merely to make the result pass.
-
-**Step E — Validate acceptance criteria**
-
-For every acceptance criterion, record:
-
-- Criterion identifier and description.
-- Implementation evidence.
-- Test used to validate it.
-- Actual test result.
-- Pass, Fail or Blocked status.
-
-Do not claim a criterion passed based only on code inspection when it requires runtime verification.
-
-**Step F — Update the backlog**
-
-Update `BACKLOG_INDEX.csv`.
-
-Use these statuses:
-
-- Backlog — Not started.
-- In Progress — Implementation incomplete.
-- Blocked — A genuine dependency prevents completion.
-- Done — All acceptance criteria have been verified.
-
-Mark a story Done only when every required acceptance criterion has passed.
-
-Record the files changed, tests executed, results and remaining issues.
-
-**Step G — Continue**
-
-Immediately select the next ready story.
-
-Do not stop merely because one story is complete.
-
-## 4. SUPABASE AND DATABASE TESTING
-
-The earlier audit identified missing Supabase CLI support.
-
-Investigate whether the Supabase CLI and required test dependencies can be installed or configured safely in the current development environment.
-
-If possible:
-
-1. Configure an isolated local or test Supabase environment.
-2. Apply the required database migrations.
-3. Execute database acceptance tests.
-4. Validate row-level security and tenant isolation using multiple test tenants.
-5. Verify authentication and role-based access.
-
-Never perform destructive tests against production data.
-
-If a required dependency cannot be configured, record the blocker and continue with other independent stories.
-
-Do not mark database acceptance criteria as passed without appropriate evidence.
-
-## 5. REGRESSION AND QUALITY
-
-After each completed story:
-
-- Run relevant regression tests.
-- Verify existing functionality remains intact.
-- Check for unintended changes to other tenants or roles.
-- Run lint, type checking and build checks.
-- Check for obvious security vulnerabilities and exposed secrets.
-- Confirm that the implementation remains consistent with the application's architecture.
-
-Maintain or improve existing code quality.
-
-## 6. DEVELOPMENT TRACKING
-
-Create and maintain an `IMPLEMENTATION_PROGRESS.md` file containing:
-
-- Current story being implemented.
-- Stories completed and verified.
-- Stories blocked and reasons.
-- Tests executed and outcomes.
-- Outstanding defects.
-- Technical decisions.
-- Next story to implement.
-
-Update this file after every story.
-
-Use it as the recovery point if the development session ends or context is lost.
-
-Keep backlog status and progress documentation consistent.
-
-## 7. AUTONOMOUS OPERATING RULES
-
-You are authorised to:
-
-- Inspect the project.
-- Create and modify application code.
-- Create tests.
-- Run development commands.
-- Install project-local development dependencies where safe.
-- Execute non-destructive database migrations in isolated test environments.
-- Fix defects.
-- Update backlog statuses.
-- Commit verified changes to a feature branch.
-
-You are NOT authorised to:
-
-- Deploy to production.
-- Modify production data.
-- Disable security protections.
-- Remove valid acceptance criteria.
-- Mark unverified stories Done.
-- Expose credentials or secrets.
-- Bypass failing tests.
-- Make destructive changes outside the development environment.
-
-Do not ask for confirmation for ordinary development and testing decisions.
-
-Ask for intervention only when required access is missing, requirements are materially ambiguous, or a high-risk operation is necessary.
-
-Limit repeated attempts on the same unresolved blocker. Record the blocker and continue with independent work.
-
-## 8. CONTINUOUS EXECUTION
-
-Continue processing the backlog while the current execution session has capacity.
-
-Do not stop after:
-
-- Completing an audit.
-- Completing a single story.
-- Fixing one defect.
-- Running the existing test suite.
-- Updating backlog statuses.
-
-Your task is to progressively complete the backlog through actual software implementation.
-
-If execution limits, context limits or environmental restrictions prevent further work, save the exact current state and next action in `IMPLEMENTATION_PROGRESS.md`.
-
-Do not claim the agent will continue running after the session ends unless an actual scheduling or orchestration mechanism is configured.
-
-## 9. COMPLETION REPORTING
-
-After each story, provide a concise progress update including:
-
-- Story ID and title.
-- Functionality implemented.
-- Acceptance criteria passed.
-- Tests executed and their results.
-- Files changed.
-- Outstanding blockers.
-- Next story selected.
-
-At the end of the execution, provide a summary showing:
-
-- Total backlog stories.
-- Verified Done.
-- In Progress.
-- Blocked.
-- Not Started.
-- Current test/build status.
-- Next recommended implementation steps.
-
-## START NOW
-
-Read `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md` if it exists.
-
-Begin with the highest-priority actionable story, favouring the 20 partially implemented stories.
-
-Implement real functionality, create tests, validate against acceptance criteria, update progress and move to the next story.
-
-**Do not produce another backlog audit as the primary output. Begin implementation immediately.**
+# Butterbox engineering instructions
+
+## Product and architecture
+
+Butterbox is a multi-tenant hospitality workforce-management SaaS for Australian
+venues. The application uses Next.js, React and TypeScript with Supabase
+PostgreSQL, Auth and Row Level Security (RLS). Server-side checks, not hidden UI
+controls, enforce tenant, venue, department and role permissions. Preserve the
+FOH/BOH delegated-management model and existing application conventions.
+
+## Session recovery and story selection
+
+- Before coding, read `BACKLOG_INDEX.csv`, `IMPLEMENTATION_PROGRESS.md` and the
+  relevant stories and acceptance criteria in `BUTTERBOX_PRODUCT_BACKLOG.md`.
+- Inspect the active branch, Git status, recent commits, other worktrees and
+  outstanding blockers. Preserve uncommitted or concurrent work; do not
+  recreate completed functionality or overwrite existing migrations.
+- Select the highest-priority ready story, favouring partially implemented work
+  and completing prerequisites first. Resolve development, authentication,
+  tenant and people foundations before dependent rostering features. Prefer
+  reliable rostering, attendance and payroll workflows over advanced AI.
+
+## Implementation and verification
+
+- Implement an end-to-end vertical slice using existing patterns and helpers.
+  Include scoped server-side authorization, tenant isolation, validation,
+  failure states, accessibility and mobile behaviour where relevant.
+- Test successful, invalid, unauthorized, cross-tenant and concurrency paths as
+  applicable. Run targeted Node unit, Supabase pgTAP, authenticated integration
+  and Playwright production-browser tests, plus ESLint, TypeScript and a
+  production build. Run broader regression suites at meaningful checkpoints.
+- Use only an explicitly identified isolated, disposable Supabase project for
+  database migrations and destructive test resets; verify its project ID and
+  ports first. Never perform destructive tests on shared or production data.
+  Use the established serialized, low-memory browser runner when necessary.
+- Fix underlying failures and rerun affected tests. Never weaken or remove
+  legitimate tests or acceptance criteria, bypass failures, fabricate results
+  or claim runtime acceptance from inspection alone.
+- For each acceptance criterion, record its identifier, implementation
+  evidence, test, actual result and Pass, Fail or Blocked status. Mark a story
+  Done only after every criterion is verified; record genuine blockers and
+  continue with independent ready work.
+
+## Security and operational safeguards
+
+- Protect credentials and customer data; do not commit secrets, disable
+  security controls, deploy, alter live data, make destructive changes outside
+  development or rewrite Git history without explicit approval. Historical
+  credential findings require owner assessment and rotation; never expose
+  their values.
+- Preserve immutable original timekeeping events. Corrections must be
+  attributable, auditable additions rather than silent overwrites.
+- Preserve tenant ownership, scoped permissions and RLS in every schema,
+  server action, API, job and user interface. Test two-tenant isolation where
+  relevant. Document compliance assumptions without claiming unverified
+  Australian award or payroll compliance.
+
+## Tracking and Git workflow
+
+- Keep `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md` consistent. Record
+  the current story, verified criteria, files, test results, decisions,
+  outstanding defects, blockers and exact next action after each story.
+- Work on `copilot/finish-roadmap-for-app`. At each verified feature or safe
+  logical checkpoint, inspect the diff for secrets, commit descriptive changes,
+  push the development branch and verify its remote SHA. Never merge into
+  `main` without approval.
+- Provide a concise update after each story with its ID, criteria, tests, files,
+  commit and push result, blockers and next story. Continue through ready
+  stories while the authorized session has capacity; stop for missing access,
+  genuine blockers or required high-risk decisions, recording recovery state.
+  Do not ask for routine development confirmation or claim work will continue
+  after the session without actual orchestration. At the end, report backlog
+  status counts, current validation and recommended next steps.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
