@@ -6052,6 +6052,18 @@ test("authorised managers finalise payroll periods after exceptions and reopen t
     await expect(period).toContainText("Finalised for payroll");
     await expect(period).toContainText("Finalised by you (owner)");
     await expect(period).toContainText("2 sessions, worked 9h");
+    await ownerPage.setViewportSize({ width: 375, height: 812 });
+    await period.getByText("Finalised payroll records (2)", { exact: true }).click();
+    const payrollRecords = period.getByRole("list", { name: "Finalised payroll records" });
+    await expect(payrollRecords.getByRole("listitem")).toHaveCount(2);
+    await expect(payrollRecords).toContainText("Payroll Worker");
+    await expect(payrollRecords).toContainText("Worked 4h 0m 0s · paid 4h 0m 0s");
+    await expect(payrollRecords).toContainText("Worked 5h 0m 0s · paid 5h 0m 0s");
+    await expect(payrollRecords).toContainText("0 recorded breaks");
+    await expect(period).toContainText("Provider employee mappings and pay codes are not assigned yet");
+    await expect(period).toContainText("this preview is not an export or an award calculation");
+    expect(await ownerPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
     await expect(finaliseButton).toHaveCount(0);
     await expect(ownerPage.getByRole("button", { name: "Lock selected sessions" })).toBeDisabled();
     await expect(ownerPage.locator(`#timesheet-session-${completeSession}`))
@@ -6073,6 +6085,7 @@ test("authorised managers finalise payroll periods after exceptions and reopen t
     await expect(fohPeriod).toContainText("Finalised for payroll");
     await expect(fohPeriod).toContainText("Only an owner, admin or general manager with access to every department");
     await expect(fohPeriod.getByRole("button")).toHaveCount(0);
+    await expect(fohPeriod.getByText("Finalised payroll records", { exact: false })).toHaveCount(0);
     expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
     expect((await fohApi.rpc("reopen_payroll_period", {
@@ -6090,6 +6103,7 @@ test("authorised managers finalise payroll periods after exceptions and reopen t
     await expect(ownerPage.locator("main").getByRole("status"))
       .toContainText("Payroll period reopened. The previous finalisation and your reason remain in its history.");
     await expect(period).toContainText("Reopened — not finalised");
+    await expect(period.getByText("Finalised payroll records", { exact: false })).toHaveCount(0);
     await expect(finaliseButton).toBeEnabled();
     await period.getByText("Payroll period history (2)").click();
     const history = period.getByRole("list", { name: "Payroll period history" }).getByRole("listitem");

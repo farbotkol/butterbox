@@ -3,14 +3,25 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **30**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **71**.
+  BB-PAYRULES stories). Verified Done: **31**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **70**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
-  BB-TIME-005.
+  BB-TIME-005 and BB-PAY-001.
+- BB-PAY-001's final 42-migration disposable replay passed **1,979/1,979**
+  pgTAP assertions across 42 files, including 45 canonical-record assertions.
+  An independent real pre-migration finalisation rehearsal passed **11/11**
+  assertions after applying the new migration. All **18/18** authenticated
+  tenant/concurrency integrations and **121** serialized Node tests passed;
+  the 18 integrations skipped in the Node-only run were run separately. Full
+  ESLint, TypeScript and split production compile/generate passed. The full
+  **48/48** low-memory browser regression passed before the final timezone
+  lock; a rebuilt focused payroll scenario passed against the final schema.
+  The disposable users and businesses were removed, the test server stopped and
+  free disk remained at approximately 32 GB.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -267,10 +278,12 @@
 
 ## Current story
 
+- **BB-PAY-001 — Canonical payroll record** is Done (verification below).
+  Next is BB-PAY-002, with BB-TIME-006's batch/version and reconciliation
+  requirements considered before any export can be delivered.
 - **BB-TIME-005 — Finalise payroll period** is Done (verification below).
-  Next: **BB-PAY-001 — Canonical payroll record**, then BB-PAY-002 (generic
-  CSV), BB-TIME-006 (export traceability) and BB-PAY-003 (employee mapping)
-  before Xero (BB-PAY-004). The new BB-PAYRULES award stories depend on
+  Next: BB-PAY-002 (generic CSV), BB-TIME-006 (export traceability) and
+  BB-PAY-003 (employee mapping) before Xero (BB-PAY-004). The new BB-PAYRULES award stories depend on
   BB-RULES-001/003 and should follow reliable export.
 - **BB-TIME-004 — Department approval** is Done.
 - **BB-TIME-003 — Employee correction request** is Done. It was recovered
@@ -469,6 +482,33 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-PAY-001 — Canonical payroll record (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-001.1 Schema includes worker mapping, venue, date, hours, breaks, codes and approval/version | The finalisation transaction captures immutable tenant-associated details alongside each approved `payroll_period_entries` row. Version 1 records contain the Butterbox employee ID, explicitly null provider mapping and pay codes, venue/department/timezone, local date, exact corrected event times, elapsed/worked/paid seconds, individual paid/unpaid breaks, approval revision and finalisation ID/sequence. Venue timezone is locked and checked against the period before a snapshot is inserted. Only a scoped full-venue payroll manager may call the preview RPC. | 45/45 canonical pgTAP assertions passed, covering exact corrected microseconds, Sydney's overnight DST transition, break classifications and totals, approval/version, empty weeks, scoped denial, immutable old versions, cross-tenant association and stale/incomplete periods. The authenticated integration passed owner/GM access, FOH/employee/other-tenant denial, direct-table denial, and both orders of the venue-timezone/finalisation race. Production Chromium verified the owner preview and mobile layout, FOH denial and removal after reopening. | Pass |
+| PAY-001.2 Malformed records fail clearly | `validateCanonicalPayrollRecord` checks exact shapes, IDs, timezone/local date and week bounds, timestamp precision, break order/provenance, integer-microsecond totals, approved revisions, provider mapping and pay-code totals. Collection validation rejects duplicate, incomplete, cross-tenant or mixed-version rows. The RPC and UI explicitly reject stale and incomplete snapshots. | All 7 canonical Node tests passed, including malformed fields, mismatched totals, duplicate and cross-tenant rows, stale versions, DST and invalid mapping/codes. The 45 pgTAP assertions passed invalid input and stale/incomplete snapshot cases. A genuine pre-migration finalisation was created before applying the migration: all 11 legacy assertions passed, including the clear missing-details error, reasoned reopen/refinalise and preservation of original entries and events. | Pass |
+| PAY-001.3 Provider adapters never mutate source timesheets | The provider-preparation boundary has no database write capability, requires an explicit matching employee mapping and assigned codes, and returns a detached deeply frozen validated record. Attendance events, approvals and finalisation snapshots remain immutable; a provider-specific integration is not yet implemented and must use and retest this boundary. | The provider-boundary unit tests passed mutation attempts, detached nested records, explicit mapping, missing/mismatched IDs and pay-code validation. The authenticated integration prepared a real finalised record, rejected mutation of its copy and re-read the unchanged persisted record. Database and legacy tests confirmed original attendance and historical snapshots remain unchanged. | Pass |
+
+Files: `supabase/migrations/20261102190000_canonical_payroll_records.sql`,
+`supabase/tests/database/canonical_payroll_records.test.sql`,
+`supabase/tests/migrations/canonical_payroll_legacy_setup.sql`,
+`supabase/tests/migrations/canonical_payroll_legacy_verify.sql`,
+`src/lib/canonical-payroll.ts`, `src/app/timesheets/page.tsx`,
+`tests/canonical-payroll.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+The full test counts and final browser rerun are recorded in the execution
+summary above.
+
+Decisions and limits: older finalisations without detailed snapshots are not
+reconstructed from live data; an authorised manager must reopen with a reason,
+review and finalise again. Seconds retain microsecond precision, while display
+durations round. Provider mappings and codes are unassigned, not inferred.
+The preview is not an export, Xero integration or award calculation. A future
+export must atomically recheck the finalisation, exceptions, mapping and
+reconciliation under appropriate locks.
 
 ### BB-TIME-005 — Finalise payroll period (Done)
 
@@ -1150,11 +1190,10 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-PAY-001 — Canonical payroll record**: a versioned, validated
-  record built from finalised `payroll_period_entries` (worker mapping, venue,
-  date, hours, breaks, codes, approval/version) that adapters cannot mutate.
-  Then BB-PAY-002 generic CSV, BB-TIME-006 export traceability and BB-PAY-003
-  employee mapping, before BB-PAY-004 Xero.
+- Implement **BB-PAY-002 — Generic CSV export**, accounting for
+  **BB-TIME-006** batch/version, duplicate and reconciliation requirements
+  before making any payroll export available. Follow with BB-PAY-003 employee
+  mapping before BB-PAY-004 Xero.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.

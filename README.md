@@ -307,6 +307,25 @@ reopening is kept as an immutable, attributed history entry with its totals, and
 earlier snapshots are retained. Finalising does not export payroll or verify
 award compliance.
 
+For newly finalised weeks, **Finalised payroll records** is a whole-venue,
+read-only preview available to those same full-venue payroll managers. Each
+versioned record retains the employee and venue IDs, venue-local work date,
+corrected clock-event IDs and timestamps, individual paid and unpaid breaks,
+worked and paid time, and the approving decision and revision. Timestamps and
+decimal seconds retain microsecond precision; displayed durations are rounded.
+Provider employee mappings and pay codes remain unassigned until explicitly
+configured by future payroll work. The preview is not an export, provider
+integration or award calculation, and outstanding exceptions still need
+resolution before any future export.
+
+Finalisations created before detailed snapshots were introduced cannot safely
+be reconstructed from subsequently changed attendance. If their details are
+missing, the preview explains that an authorised manager must reopen the period
+with a reason, review it and finalise it again. The earlier finalisation and
+original attendance remain in the audit history. Provider preparation validates
+explicit employee mapping and pay-code totals on a detached, immutable copy;
+it never updates source attendance or approval records.
+
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
 updates and leave decisions on **Availability**. These preferences are not
@@ -410,6 +429,25 @@ The Supabase CLI applies the local migrations when starting a new local
 project. Database tests require Docker and use the local database. Use a
 separate Supabase project and credentials for each environment; do not point
 local tests or destructive reset commands at staging or production.
+
+To rehearse the canonical-record migration against a real pre-migration
+finalisation, copy the repository migrations into an isolated disposable
+Supabase workdir. Verify its project ID and its published database and API
+ports, and set `WORKDIR` and `DISPOSABLE_DB_CONTAINER` to that project.
+**These resets erase that project's database**:
+
+```sh
+npx --yes supabase@2.122.0 db reset --local --no-seed --version 20261102180000 --workdir "$WORKDIR"
+docker exec -i "$DISPOSABLE_DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  < supabase/tests/migrations/canonical_payroll_legacy_setup.sql
+npx --yes supabase@2.122.0 migration up --local --workdir "$WORKDIR"
+docker exec -i "$DISPOSABLE_DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At -q \
+  < supabase/tests/migrations/canonical_payroll_legacy_verify.sql
+npx --yes supabase@2.122.0 db reset --local --no-seed --workdir "$WORKDIR"
+```
+
+Check the pgTAP output for the full plan and any `not ok` lines; a successful
+`psql` exit alone does not establish that the assertions passed.
 
 For the HTTP tenant-isolation test, start a **disposable** local Supabase
 project in its own work directory, with distinct ports and the repository's

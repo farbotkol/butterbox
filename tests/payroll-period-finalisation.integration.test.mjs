@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
+import {
+  prepareCanonicalPayrollForProvider, validateCanonicalPayrollRows,
+} from "../src/lib/canonical-payroll.ts";
 import { disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
@@ -103,6 +106,8 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
       assert.ifError(result.error);
       return result.data[0].status;
     };
+    const canonical = (client, finalisationId) =>
+      client.rpc("list_canonical_payroll_records", { ...scope, p_finalisation_id: finalisationId });
     const asOwner = (statement) =>
       `select set_config('request.jwt.claim.sub', '${users.owner}', true); set local role authenticated; ${statement}`;
 
@@ -116,9 +121,38 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     await approveAll();
     assert.deepEqual(await exceptions(clients.owner), []);
 
+    const changingTimezone = await holdLock(
+      `update public.venues set timezone = 'UTC' where id = '${venueId}'::uuid returning id`, venueId,
+    );
+    let pendingFinalise;
+    try {
+      pendingFinalise = Promise.resolve(finalise(clients.owner));
+      await waitForLock("finalise_payroll_period");
+      await changingTimezone.release(true);
+      assert.equal((await pendingFinalise).error?.message, "Cannot snapshot payroll: the venue period changed",
+        "finalisation fails instead of recording boundaries from a stale venue timezone");
+    } finally {
+      await changingTimezone.release(false);
+      await Promise.allSettled([pendingFinalise].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+
+    const capturedTimezone = await holdLock(asOwner(`select public.finalise_payroll_period('${businessId}'::uuid, ` +
+      `'${venueId}'::uuid, '${week}'::date, '${randomUUID()}'::uuid, null)`));
+    let pendingTimezone;
+    try {
+      pendingTimezone = Promise.resolve(admin.from("venues").update({ timezone: "Australia/Melbourne" }).eq("id", venueId));
+      await waitForLock("venues");
+      await capturedTimezone.release(false);
+      assert.ifError((await pendingTimezone).error);
+    } finally {
+      await capturedTimezone.release(false);
+      await Promise.allSettled([pendingTimezone].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+
     const unlocking = await holdLock(asOwner(`select public.set_attendance_edit_lock('${businessId}'::uuid, ` +
       `'${venueId}'::uuid, '${sessions[0]}'::uuid, '${randomUUID()}'::uuid, false, 'Late change')`));
-    let pendingFinalise;
     try {
       pendingFinalise = Promise.resolve(finalise(clients.gm));
       await waitForLock("finalise_payroll_period");
@@ -195,6 +229,66 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     const workerEntries = await clients.worker.from("payroll_period_entries").select("session_id");
     assert.ifError(workerEntries.error);
     assert.equal(workerEntries.data.length, 4, "the employee can read only snapshots of their own attendance");
+
+    const finalisationId = competing.find((result) => !result.error)?.data;
+    assert.ok(finalisationId);
+    const ownerRecords = await canonical(clients.owner, finalisationId);
+    assert.ifError(ownerRecords.error);
+    const records = validateCanonicalPayrollRows(ownerRecords.data, {
+      businessId, venueId, weekStart: week, finalisationId, sessionCount: 2,
+    });
+    assert.equal(records.length, 2);
+    assert.ok(records.every((record) => record.approval.status === "approved" &&
+      record.worker.providerMapping === null && record.payCodes === null));
+    assert.ifError((await canonical(clients.gm, finalisationId)).error);
+    for (const role of ["foh", "worker", "outsider"]) {
+      assert.equal((await canonical(clients[role], finalisationId)).error?.message, "Permission denied");
+    }
+    assert.ok((await clients.worker.from("payroll_canonical_details").select("session_id")).error,
+      "direct access cannot bypass the full-venue RPC");
+    const originalRecord = JSON.stringify(ownerRecords.data[0].record);
+    const prepared = prepareCanonicalPayrollForProvider(ownerRecords.data[0].record, {
+      businessId, employeeId, provider: "example", connectionId: randomUUID(),
+      externalEmployeeId: "explicit-worker-id", payCodes: [{ code: "example", seconds: records[0].hours.paid }],
+    });
+    assert.equal(prepared.worker.providerMapping.externalEmployeeId, "explicit-worker-id");
+    assert.throws(() => { prepared.attendance.clockInAt = "changed"; }, TypeError);
+    assert.equal(JSON.stringify(ownerRecords.data[0].record), originalRecord,
+      "preparing a detached provider record does not alter the source snapshot");
+    const reloaded = await canonical(clients.owner, finalisationId);
+    assert.ifError(reloaded.error);
+    assert.equal(JSON.stringify(reloaded.data[0].record), originalRecord,
+      "preparing a provider record does not alter persisted attendance or its snapshot");
+
+    const revocation = await holdLock(
+      `delete from public.business_memberships where business_id = '${businessId}'::uuid ` +
+        `and user_id = '${users.gm}'::uuid returning user_id`,
+      users.gm,
+    );
+    let pendingPreview;
+    try {
+      pendingPreview = Promise.resolve(canonical(clients.gm, finalisationId));
+      await waitForLock("list_canonical_payroll_records");
+      await revocation.release(true);
+      assert.equal((await pendingPreview).error?.message, "Permission denied",
+        "a payroll preview waiting on membership revocation rechecks access");
+    } finally {
+      await revocation.release(false);
+      await Promise.allSettled([pendingPreview].filter(Boolean));
+    }
+
+    const reopening = await holdLock(asOwner(`select public.reopen_payroll_period('${businessId}'::uuid, ` +
+      `'${venueId}'::uuid, '${week}'::date, '${randomUUID()}'::uuid, 'Review late request')`));
+    try {
+      pendingPreview = Promise.resolve(canonical(clients.owner, finalisationId));
+      await waitForLock("list_canonical_payroll_records");
+      await reopening.release(true);
+      assert.equal((await pendingPreview).error?.message, "Payroll period changed; refresh before reviewing records",
+        "a preview waiting on reopening cannot return a stale finalisation");
+    } finally {
+      await reopening.release(false);
+      await Promise.allSettled([pendingPreview].filter(Boolean));
+    }
   } finally {
     for (const id of [businessId, outsideId]) {
       assert.ifError((await admin.from("businesses").delete().eq("id", id)).error);

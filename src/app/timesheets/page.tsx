@@ -4,6 +4,10 @@ import { redirect } from "next/navigation";
 import { bulkLockWeeklyAttendanceAction, decidePayrollPeriodAction, decideTimesheetAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
+import {
+  PayrollRecordValidationError, validateCanonicalPayrollRows,
+  type CanonicalPayrollRecord, type CanonicalPayrollScope,
+} from "@/lib/canonical-payroll";
 import { addDays, formatDay } from "@/lib/dates";
 import { readAllPages } from "@/lib/paginated-rows";
 import {
@@ -183,6 +187,42 @@ export default async function TimesheetsPage({ searchParams }: {
   }
   // Fail closed: if the period cannot be read, attendance controls stay unavailable.
   const periodFinalised = week !== null && (periodError || period?.status === "finalised");
+  const canonicalScope: CanonicalPayrollScope | null = week && !periodError && period?.canFinalise &&
+    period.status === "finalised" && period.eventId && period.sessionCount !== null
+    ? {
+      businessId: workspace.business.id, venueId: workspace.venue.id, weekStart: week,
+      finalisationId: period.eventId, sessionCount: period.sessionCount,
+    }
+    : null;
+  const canonicalResult = canonicalScope
+    ? await readAllPages<{ session_id: string; record: unknown }>((from, to) =>
+      workspace.supabase.rpc("list_canonical_payroll_records", {
+        p_business_id: canonicalScope.businessId, p_venue_id: canonicalScope.venueId,
+        p_week_start: canonicalScope.weekStart, p_finalisation_id: canonicalScope.finalisationId,
+      }, { count: "exact" }).order("session_id").range(from, to),
+    (row) => row && typeof row.session_id === "string" ? row.session_id : "")
+    : null;
+  let canonicalRecords: readonly CanonicalPayrollRecord[] | null = null;
+  let canonicalError: string | null = null;
+  if (canonicalScope && canonicalResult) {
+    if (canonicalResult.error) {
+      console.error("Could not load canonical payroll records.", {
+        code: canonicalResult.error.code, message: canonicalResult.error.message,
+      });
+      canonicalError = canonicalResult.error.message ===
+        "Finalised period lacks complete payroll details; reopen and finalise it again"
+        ? "The finalised period lacks complete payroll details. Reopen it with a reason, review the entries and finalise it again."
+        : "We couldn't load the finalised payroll records. Refresh the period and check your access.";
+    } else {
+      try {
+        canonicalRecords = validateCanonicalPayrollRows(canonicalResult.data, canonicalScope);
+      } catch (error) {
+        if (!(error instanceof PayrollRecordValidationError)) throw error;
+        console.error("The server returned invalid canonical payroll records.", { message: error.message });
+        canonicalError = "The finalised payroll records are inconsistent. Refresh and contact support before using them.";
+      }
+    }
+  }
   const venues = parseTimesheetEmployees(venuesResult.data);
   const currentEmployees = parseTimesheetEmployees(employeesResult.data);
   const planned = parseTimesheetPlannedShifts(plannedResult.data);
@@ -368,6 +408,49 @@ export default async function TimesheetsPage({ searchParams }: {
               Reopen payroll period
             </button>
           </form>}
+          {canonicalError && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-red-800">
+            {canonicalError}
+          </p>}
+          {canonicalRecords && <details className="mt-3">
+            <summary className="cursor-pointer font-semibold">
+              Finalised payroll records ({canonicalRecords.length})
+            </summary>
+            <p className="mt-2 text-muted">
+              This whole-venue snapshot is not filtered by employee. Provider employee mappings and pay codes are
+              not assigned yet; this preview is not an export or an award calculation.
+              {periodExceptions.length > 0 && " Resolve the outstanding exceptions before exporting."}
+            </p>
+            {canonicalRecords.length === 0 ? <p className="mt-2 text-muted">No attendance in this period.</p>
+              : <ul aria-label="Finalised payroll records" className="mt-2 space-y-2">
+                {canonicalRecords.map((record) => {
+                  const employeeName = currentEmployees?.find((item) =>
+                    item.id.toLowerCase() === record.worker.employeeId.toLowerCase())?.name;
+                  return <li key={record.sessionId} className="rounded-lg border border-line p-3">
+                    <p className="font-semibold">{employeeName ?? `Employee ${record.worker.employeeId}`}
+                      {" "}· {formatDay(record.workDate)}</p>
+                    <p className="mt-1">
+                      <time dateTime={record.attendance.clockInAt}>
+                        {formatClockTime(record.attendance.clockInAt, record.venue.timezone)}
+                      </time>{" "}to{" "}
+                      <time dateTime={record.attendance.clockOutAt}>
+                        {formatClockTime(record.attendance.clockOutAt, record.venue.timezone)}
+                      </time>
+                    </p>
+                    <p className="mt-1 text-muted">
+                      Worked {formatWorkedDuration(Number(record.hours.worked))} · paid{" "}
+                      {formatWorkedDuration(Number(record.hours.paid))} · paid breaks{" "}
+                      {formatWorkedDuration(Number(record.hours.paidBreak))} · unpaid breaks{" "}
+                      {formatWorkedDuration(Number(record.hours.unpaidBreak))}
+                    </p>
+                    <p className="mt-1 text-muted">
+                      {record.breaks.length} recorded {record.breaks.length === 1 ? "break" : "breaks"} ·
+                      {" "}department-approved · payroll version {record.period.version}
+                    </p>
+                  </li>;
+                })}
+              </ul>}
+            <p className="mt-2 text-muted">Displayed durations are rounded; the snapshot retains exact seconds.</p>
+          </details>}
           {periodEvents.length > 0 && <details className="mt-3">
             <summary className="cursor-pointer font-semibold">Payroll period history ({periodEvents.length})</summary>
             <ol aria-label="Payroll period history" className="mt-2 space-y-2">
