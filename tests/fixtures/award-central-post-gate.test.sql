@@ -6,10 +6,17 @@ select plan(10);
 select is((select status from public.award_central_versions
   where id = 'a1310000-0000-4000-8000-000000000003'), 'active',
   'an existing active version remains active after the publication-block migration');
+insert into auth.users (id, email, raw_user_meta_data)
+values ('a1310000-0000-4000-8000-000000000005', 'award-legacy-member@example.test', '{}'::jsonb);
+insert into public.businesses (id, name)
+values ('b1310000-0000-4000-8000-000000000001', 'Synthetic legacy member business');
+insert into public.business_memberships (business_id, user_id, role)
+values ('b1310000-0000-4000-8000-000000000001', 'a1310000-0000-4000-8000-000000000005', 'owner');
 set local role authenticated;
+select set_config('request.jwt.claim.sub', 'a1310000-0000-4000-8000-000000000005', true);
 select is((select count(*)::int from public.award_central_versions
   where id = 'a1310000-0000-4000-8000-000000000003'), 1,
-  'authenticated users can still read an existing active version');
+  'a business member can still read an existing active version');
 select is((select count(*)::int from public.award_central_versions
   where id = 'a1310000-0000-4000-8000-000000000004'), 0,
   'authenticated users cannot read an existing pending-review version');
