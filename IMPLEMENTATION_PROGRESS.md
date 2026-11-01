@@ -2,13 +2,13 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **27**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **52**.
+- Total stories: **87**. Verified Done: **28**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **51**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
-  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001 and BB-TIME-002.
+  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002 and BB-TIME-003.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -265,6 +265,10 @@
 
 ## Current story
 
+- **BB-TIME-003 — Employee correction request** is Done. It was recovered
+  from pushed checkpoint commits after the Codespace upgrade (8 CPU, 31 GiB
+  RAM, 63 GB disk) and verified on a clean isolated replay. Next:
+  **BB-TIME-004 — Department approval**.
 - **BB-ATTEND-005 — Time capture fallback** is Done. Immutable,
   explicitly unverified offline claims retain the device time and server
   receipt time. The attendance page queues claims and retries idempotently after
@@ -458,6 +462,29 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-TIME-003 — Employee correction request (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-003.1 Request records proposed time and reason | A linked employee submits a missed clock-in or clock-out with a venue-local proposed time (microseconds retained; DST gaps/repeats require explicit handling; future and infinite times rejected) and a required reason of at most 500 characters. The immutable request records actor, server receipt time and idempotent request ID, and creates no clock event. | 53-assertion pgTAP suite passed validation, colleague/actor impersonation, cross-tenant and cross-department denials, retries and immutability. The authenticated concurrency test passed retries, decisions and scope changes. Production Chromium passed submission, DST/future errors, microsecond time and the employee's own request history. | Pass |
+| TIME-003.2 Manager can approve/reject with explanation | A scoped FOH/BOH manager approves by applying an attributed correction, completing an open session or creating a session from a matching pair, or rejects; every decision requires an explanation, rechecks stale times and edit locks, and is immutable and employee-visible. Employees cannot decide their own requests. | pgTAP verified scoped approval and rejection, stale-time and edit-lock refusal, retries, BOH/FOH and out-of-scope denial and employee visibility. Production Chromium verified approve, mismatched-time error, reject, open-session completion, pair creation and employee-visible explanations. | Pass |
+| TIME-003.3 Original records remain unchanged | Approvals append corrections or new events labelled `employee_request`; original events and requests are never updated. Requested times are flagged as unverified in Work time and weekly review. | pgTAP verified unchanged originals, true sources, flagged recalculation and immutable requests/decisions. Production Chromium compared original timestamps before and after decisions and verified the Work time and timesheet flags. | Pass |
+
+Files: `supabase/migrations/20261102160000_employee_correction_requests.sql`,
+`supabase/tests/database/employee_correction_requests.test.sql`,
+`src/app/attendance/page.tsx`, `src/app/actions.ts`,
+`src/components/offline-claim-review.tsx`, `src/lib/offline-attendance.ts`,
+`src/lib/weekly-timesheet.ts`, `src/lib/worked-time.ts`,
+`tests/employee-correction-requests.integration.test.mjs`, unit tests,
+`tests/e2e/auth.spec.mjs`, `scripts/test-tenant-isolation.mjs`, `README.md`
+and the backlog/progress files. The clean isolated replay of 39 migrations passed
+**1,827/1,827** pgTAP assertions; 16/16 authenticated integrations, 101 Node tests,
+ESLint, TypeScript and the split production build passed. The serialized
+production-browser regression passed 45/46; the failing clock scenario's
+unscoped locator matched the new request section's correct "no linked profile"
+message, so it now asserts the message in both regions, and the rebuilt
+scenario passed (46/46 overall).
 
 ### BB-TIME-002 — Weekly timesheet review (Done)
 
@@ -1050,9 +1077,9 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-TIME-003 — Employee correction request**, starting with
-  employee-proposed missed-clock times and reasons, scoped manager decisions,
-  immutable originals and the existing attendance reconciliation safeguards.
+- Implement **BB-TIME-004 — Department approval**: scoped FOH/BOH approval of
+  valid weekly timesheets with explicit exceptions, immutable approval
+  records, and reopening rules, building on weekly review and edit locks.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.

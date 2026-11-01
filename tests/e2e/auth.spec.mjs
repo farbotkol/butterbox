@@ -4683,7 +4683,10 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
 
     await signIn(page, `clock-owner-${suffix}@example.test`, password);
     await page.goto(`/attendance?venue=${firstVenue}`);
-    await expect(page.getByText("No active employee profile is linked to your account", { exact: false })).toBeVisible();
+    for (const region of ["Current attendance", "Request an attendance correction"]) {
+      await expect(page.getByRole("region", { name: region })
+        .getByText("No active employee profile is linked to your account", { exact: false })).toBeVisible();
+    }
     await expect(page.getByRole("button", { name: "Clock in", exact: true })).toHaveCount(0);
 
     workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
