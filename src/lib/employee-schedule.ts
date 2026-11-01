@@ -7,16 +7,16 @@ export type EmployeeScheduleShift = {
   ends_at: string;
 };
 
-export function groupEmployeeSchedule(
+export function groupEmployeeSchedule<T extends EmployeeScheduleShift>(
   week: string,
-  shifts: readonly EmployeeScheduleShift[],
+  shifts: readonly T[],
   timezone: string,
 ) {
   const start = Date.parse(localMidnightAsUtc(week, timezone));
   const end = Date.parse(localMidnightAsUtc(addDays(week, 7), timezone));
   const days = Array.from({ length: 7 }, (_, index) => ({
     date: addDays(week, index),
-    shifts: [] as EmployeeScheduleShift[],
+    shifts: [] as T[],
   }));
   const byDate = new Map(days.map((day) => [day.date, day]));
 

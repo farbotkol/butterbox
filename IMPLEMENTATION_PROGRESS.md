@@ -2,26 +2,31 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **17**. In Progress: **7**.
+- Total stories: **87**. Verified Done: **18**. In Progress: **6**.
   Blocked: **1**. Not started (Backlog): **62**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
-  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003 and BB-ROSTER-006.
-- The latest serialized Node run passed **49 tests**, with two integration
+  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006
+  and BB-ROSTER-010.
+- The latest serialized Node run passed **51 tests**, with two integration
   tests skipped in that invocation and subsequently passed against the isolated
   project. After a clean isolated database reset, the full pgTAP regression
-  passed **824/824 assertions across 20 files**, including 69 notification,
-  47 publication-version, 53 conflict-policy, 51 availability-exception,
+  passed **883/883 assertions across 21 files**, including 59 acknowledgement,
+  69 notification, 47 publication-version, 53 conflict-policy, 51 availability-exception,
   57 employee-preference, 78 draft-editing, 37 manual-assignment and 28
   linked-roster authorization assertions. Authenticated two-tenant tests and
   ordered leave, assignment, policy-change, simultaneous-publication and
-  duplicate-read races passed.
+  duplicate-read races passed. Requirement/publication, account-unlink,
+  membership-revocation and duplicate-acknowledgement races also passed.
 - Production compile, explicit TypeScript, generate and full ESLint passed.
-  Focused Chromium notification, conflict-policy and mobile-schedule scenarios
-  passed. The full **26/26 production-browser scenarios passed** in serialized,
-  low-memory mode, and the temporary application server stopped.
-- An offline, network-disabled, redacted Gitleaks scan of the pending feature
-  changes and new files found no leaks.
+  The new production Chromium acknowledgement scenario passed, including
+  375px layout, blocked publication and revoked access. The expanded full
+  regression passed **27/27 production-browser scenarios** in serialized,
+  low-memory mode. After clarifying that email, not in-app delivery, remains
+  unavailable, both affected preference/directory browser scenarios passed.
+  The temporary application server stopped.
+- An offline, network-disabled, redacted Gitleaks scan of the staged
+  acknowledgement checkpoint found no leaks.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -102,9 +107,10 @@
 - **BB-COMMS-002 — In-app notification centre** is In Progress. Roster
   publication updates have unread/read state, authorized schedule links and
   deduplication; offers and approval events are not yet supported.
-- **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
-  published updates are visible and linked from the new notification centre,
-  but required shift acknowledgements are not implemented.
+- **BB-ROSTER-010 — Simple employee roster** is Done. Authorised managers can
+  require acknowledgement for assigned drafts, and the linked employee can
+  acknowledge the published snapshot from their mobile schedule. All three
+  criteria and the full database/browser regressions passed.
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
@@ -278,20 +284,30 @@ and README. The migrations were applied only to the disposable test database.
 Manual assignment checks active linked employees, overlap and any enabled role
 restriction; the venue can also opt into blocking unavailable assignments.
 
-### BB-ROSTER-010 — Simple employee roster (In Progress)
+### BB-ROSTER-010 — Simple employee roster (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ROSTER-010.1 Only published assigned shifts appear | `/my-schedule` queries only scheduled, published shifts for employee profiles linked to the signed-in user and selected venue, with RLS still authoritative. | Production Chromium and authenticated Supabase requests verify own primary/secondary-department shifts, exclude drafts, unassigned shifts, other workers and another tenant; a manager with wider RLS still sees only their own personal shifts. Anonymous access and an unlinked account are also checked. Pass. | Pass |
 | ROSTER-010.2 Venue-local time and location display clearly | Next-shift card and seven-day mobile schedule show venue-local dates/times, venue name/address and timezone; overnight overlaps appear in the week. | Three unit tests cover grouping, week boundaries and DST. Production Chromium at 375px verifies next shift, overnight overlap, local time, address, navigation and no page-level horizontal overflow. Pass. | Pass |
-| ROSTER-010.3 Updates visible and acknowledged when required | Refresh fetches current published data and in-app notices link to the affected week; the UI explicitly states acknowledgements are not yet available. | Production Chromium publishes drafts and verifies own updated shifts after refresh and through a notification link. Required acknowledgements are not implemented. | In Progress |
+| ROSTER-010.3 Updates visible and acknowledged when required | Refresh and in-app notices show updates. Managers may require acknowledgement on an assigned draft; after publishing the linked employee acknowledges its recorded snapshot, and managers see its status. Existing shifts default to no requirement. A later account link does not inherit another account's acknowledgement. | 59 focused pgTAP assertions and authenticated races cover scope, cross-tenant access, unlink/revocation, missing snapshots, atomic publication and duplicate submissions. Production Chromium at 375px verifies requirement, publication, acknowledgement, later versions and revoked-access errors. | Pass |
 
 Files: `src/app/my-schedule/page.tsx`, `src/app/my-schedule/loading.tsx`,
 `src/lib/employee-schedule.ts`, `tests/employee-schedule.test.mjs`,
 `src/components/main-navigation.tsx`, `tests/e2e/auth.spec.mjs`, `tsconfig.json`
-and README. TypeScript permits `.ts` import extensions so Node's native
+and README. Acknowledgement files: `src/app/actions.ts`,
+`src/app/roster/page.tsx`, `src/lib/shift-acknowledgements.ts`,
+`supabase/migrations/20261101230000_shift_acknowledgements.sql`,
+`supabase/tests/database/shift_acknowledgements.test.sql`,
+`tests/shift-acknowledgements.test.mjs` and
+`tests/auto-assignment-concurrency.integration.test.mjs`.
+TypeScript permits `.ts` import extensions so Node's native
 type-stripping unit runner can load the shared date helpers without another
-dependency. The new route uses existing RLS and adds no database migration.
+dependency. The new migration is applied only to the isolated test database.
+Acknowledgements assume the existing public API keeps published shifts
+immutable. A future published-shift editing workflow must create a new
+acknowledgement identity for changed content rather than reusing the old
+shift/account record.
 
 ### BB-ROSTER-006 — Filter and collapse departments (Done)
 
@@ -519,18 +535,18 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Cross-venue identity/overlap, employee invitation, email/push notification
-  and shift acknowledgement remain incomplete. The historical credential
+- Cross-venue identity/overlap, employee invitation and email/push notification
+  remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
 
 ## Next story
 
-- Continue with **BB-ROSTER-010** shift acknowledgements, preserving published
-  versions, draft privacy, scoped permissions and the new in-app notices. Then
-  implement explicit shared-worker identity and cross-venue overlap detection
-  for BB-ORG-005/BB-ROSTER-007, employee invitations and reliable email/push.
-- Migrations through `20261101220000` are applied only to the isolated stack.
+- Checkpoint the verified acknowledgement changes, then implement explicit
+  shared-worker identity and cross-venue overlap detection for
+  BB-ORG-005/BB-ROSTER-007. Employee invitations and reliable email/push also
+  remain outstanding.
+- Migrations through `20261101230000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

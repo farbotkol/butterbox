@@ -147,7 +147,7 @@ export default async function AvailabilityPage({
                     <h2 className="font-semibold">{employee.name}</h2>
                     <h3 className="mt-4 text-sm font-semibold">Work preferences</h3>
                     <p className="mt-2 text-sm text-muted">
-                      These are preferences, not contractual limits. Notification delivery is not yet available.
+                      These are preferences, not contractual limits. Email delivery is not yet available.
                     </p>
                     <form action={saveEmployeePreferencesAction} aria-label={`Work preferences for ${employee.name}`}
                       className="mt-3 grid gap-3 sm:grid-cols-3">

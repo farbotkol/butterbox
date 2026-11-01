@@ -1,10 +1,12 @@
 import { ArrowLeft, ArrowRight, MapPin } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { acknowledgeShiftAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { groupEmployeeSchedule, type EmployeeScheduleShift } from "@/lib/employee-schedule";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
+import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
@@ -17,14 +19,19 @@ import {
 } from "@/lib/workspace";
 
 type Venue = { id: string; name: string; address: string | null; timezone: string };
+type ScheduleShift = EmployeeScheduleShift & { requires_acknowledgement: boolean };
 
 function scheduleHref(week: string, venue: string) {
   return `/my-schedule?${new URLSearchParams({ week, venue })}`;
 }
 
-function ShiftDetails({ shift, venue }: { shift: EmployeeScheduleShift; venue: Venue }) {
+function ShiftDetails({ shift, venue, week, acknowledgements }: {
+  shift: ScheduleShift; venue: Venue; week: string;
+  acknowledgements: Map<string, string | null> | null;
+}) {
   const startDate = getVenueDate(shift.starts_at, venue.timezone);
   const endDate = getVenueDate(shift.ends_at, venue.timezone);
+  const acknowledgedAt = acknowledgements?.get(shift.id);
   return (
     <div className="rounded-lg border border-sea-glass/40 bg-soft-sea p-4">
       <p className="font-semibold text-ink">{shift.role_title}</p>
@@ -39,6 +46,33 @@ function ShiftDetails({ shift, venue }: { shift: EmployeeScheduleShift; venue: V
         <MapPin size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
         <span>{venue.name}{venue.address ? ` · ${venue.address}` : " · Address not provided"}</span>
       </p>
+      {shift.requires_acknowledgement && (
+        acknowledgedAt === undefined ? (
+          <p className="mt-3 text-sm font-semibold text-red-800">Acknowledgement status unavailable</p>
+        ) : acknowledgedAt ? (
+          <p className="mt-3 text-sm font-semibold text-ocean">
+            Acknowledged{" · "}
+            <time dateTime={acknowledgedAt}>
+              {new Intl.DateTimeFormat("en-AU", {
+                timeZone: venue.timezone, day: "numeric", month: "short", year: "numeric",
+                hour: "numeric", minute: "2-digit",
+              }).format(new Date(acknowledgedAt))}
+            </time>
+          </p>
+        ) : (
+          <form action={acknowledgeShiftAction} className="mt-3">
+            <input type="hidden" name="shift_id" value={shift.id} />
+            <input type="hidden" name="venue_id" value={venue.id} />
+            <input type="hidden" name="week" value={week} />
+            <p className="text-sm font-semibold text-amber-900">Acknowledgement required</p>
+            <button type="submit"
+              aria-label={`Acknowledge ${shift.role_title} shift on ${formatDay(startDate)} at ${formatTime(shift.starts_at, venue.timezone)}`}
+              className="mt-2 rounded-lg bg-ocean px-3 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
+              Acknowledge shift
+            </button>
+          </form>
+        )
+      )}
     </div>
   );
 }
@@ -46,7 +80,7 @@ function ShiftDetails({ shift, venue }: { shift: EmployeeScheduleShift; venue: V
 export default async function MySchedulePage({
   searchParams,
 }: {
-  searchParams: Promise<{ week?: string; venue?: string }>;
+  searchParams: Promise<{ week?: string; venue?: string; error?: string; acknowledged?: string }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
@@ -82,13 +116,13 @@ export default async function MySchedulePage({
   const employeeIds = (employeeResult.data ?? []).map((employee) => employee.id);
   const [weekResult, nextResult] = employeeIds.length
     ? await Promise.all([
-        workspace.supabase.from("shifts").select("id, role_title, starts_at, ends_at")
+        workspace.supabase.from("shifts").select("id, role_title, starts_at, ends_at, requires_acknowledgement")
           .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
           .eq("status", "scheduled").eq("is_published", true).in("employee_id", employeeIds)
           .lt("starts_at", localMidnightAsUtc(addDays(week, 7), workspace.venue.timezone))
           .gt("ends_at", localMidnightAsUtc(week, workspace.venue.timezone))
           .order("starts_at"),
-        workspace.supabase.from("shifts").select("id, role_title, starts_at, ends_at")
+        workspace.supabase.from("shifts").select("id, role_title, starts_at, ends_at, requires_acknowledgement")
           .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
           .eq("status", "scheduled").eq("is_published", true).in("employee_id", employeeIds)
           .gte("starts_at", new Date().toISOString()).order("starts_at").limit(1),
@@ -104,6 +138,11 @@ export default async function MySchedulePage({
 
   const days = groupEmployeeSchedule(week, weekResult.data ?? [], workspace.venue.timezone);
   const nextShift = nextResult.data?.[0];
+  const acknowledgementIds = [...(weekResult.data ?? []), ...(nextResult.data ?? [])]
+    .filter((shift) => shift.requires_acknowledgement).map((shift) => shift.id);
+  const acknowledgements = !loadError && venue
+    ? await shiftAcknowledgements(workspace.supabase, workspace.business.id, workspace.venue.id, acknowledgementIds)
+    : null;
   return (
     <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
@@ -132,6 +171,24 @@ export default async function MySchedulePage({
 
       <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} />
 
+      {params.error && (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+          {params.error === "ack-unknown"
+            ? "The server could not confirm your acknowledgement. Refresh the schedule before trying again."
+            : "We couldn't acknowledge this shift. Check your access and refresh the schedule, then try again."}
+        </p>
+      )}
+      {params.acknowledged && (
+        <p role="status" className="mt-4 rounded-xl bg-soft-sea px-4 py-3 text-sm text-ocean">
+          Shift acknowledged.
+        </p>
+      )}
+      {!loadError && venue && !acknowledgements && (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+          We couldn&apos;t load acknowledgement status. Refresh the schedule before responding.
+        </p>
+      )}
+
       {loadError || !venue ? (
         <p role="alert" className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your schedule. Check your connection and try again.
@@ -146,7 +203,7 @@ export default async function MySchedulePage({
             <h2 id="next-shift-heading" className="text-lg font-semibold">Next shift</h2>
             <div className="mt-3">
               {nextShift
-                ? <ShiftDetails shift={nextShift} venue={venue} />
+                ? <ShiftDetails shift={nextShift} venue={venue} week={week} acknowledgements={acknowledgements} />
                 : <p className="text-sm text-muted">You have no upcoming published shifts at this venue.</p>}
             </div>
           </section>
@@ -171,7 +228,9 @@ export default async function MySchedulePage({
                 <section key={day.date} aria-labelledby={`schedule-${day.date}`} className="border-t border-line pt-4">
                   <h3 id={`schedule-${day.date}`} className="mb-2 text-sm font-semibold">{formatDay(day.date)}</h3>
                   {day.shifts.length
-                    ? <div className="space-y-2">{day.shifts.map((shift) => <ShiftDetails key={shift.id} shift={shift} venue={venue} />)}</div>
+                    ? <div className="space-y-2">{day.shifts.map((shift) => (
+                      <ShiftDetails key={shift.id} shift={shift} venue={venue} week={week} acknowledgements={acknowledgements} />
+                    ))}</div>
                     : <p className="text-sm text-muted">No shifts</p>}
                 </section>
               ))}
@@ -184,7 +243,7 @@ export default async function MySchedulePage({
               </button>
             </form>
             <p className="mt-2 text-xs text-muted">
-              Refresh to see newly published shifts. Shift acknowledgements are not available yet.
+              Refresh to see newly published shifts. Acknowledge a shift when your manager requires it.
             </p>
           </section>
         </>

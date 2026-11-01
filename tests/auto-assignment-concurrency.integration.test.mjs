@@ -488,6 +488,93 @@ test(
       }
     }
 
+    async function runAcknowledgementRaces(day) {
+      await savePolicy(false, false);
+      const shift = await createShift(day, `Acknowledgement race ${day}`);
+      assert.ifError(shift.error);
+      const requirement = {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: departmentId,
+        p_shift_id: shift.data, p_required: true,
+      };
+      const acknowledgement = {
+        p_business_id: businessId, p_venue_id: venueId, p_shift_id: shift.data,
+      };
+      const shiftLock = await holdLock(
+        `select id from public.shifts where id = '${shift.data}'::uuid for update`, shift.data,
+      );
+      let setting;
+      try {
+        setting = Promise.resolve(owner.rpc("set_shift_acknowledgement_requirement", requirement));
+        await waitForLock("set_shift_acknowledgement_requirement");
+        const busy = await publish(day);
+        assert.equal(busy.error?.message, "Roster changed while publishing; please try again");
+        await shiftLock.release(true);
+        assert.ifError((await setting).error);
+        const published = await publish(day);
+        assert.ifError(published.error);
+        assert.equal(published.data, 1);
+      } finally {
+        try {
+          await shiftLock.release(false);
+        } finally {
+          await Promise.allSettled([setting].filter(Boolean));
+        }
+      }
+
+      const unlink = await holdLock(
+        `update public.employees set auth_user_id = null where id = '${employeeId}'::uuid returning id`, employeeId,
+      );
+      let whileUnlinking;
+      try {
+        whileUnlinking = Promise.resolve(worker.rpc("acknowledge_shift", acknowledgement));
+        await waitForLock("acknowledge_shift");
+        await unlink.release(true);
+        assert.equal((await whileUnlinking).error?.message, "Shift not found or permission denied");
+      } finally {
+        try {
+          await unlink.release(false);
+        } finally {
+          await Promise.allSettled([whileUnlinking].filter(Boolean));
+        }
+      }
+      assert.ifError((await owner.rpc("set_employee_auth_user", {
+        p_business_id: businessId, p_employee_id: employeeId, p_user_id: users[1],
+      })).error);
+
+      const revoke = await holdLock(
+        `delete from public.business_memberships where business_id = '${businessId}'::uuid and user_id = '${users[1]}'::uuid returning user_id`,
+        users[1],
+      );
+      let whileRevoking;
+      try {
+        whileRevoking = Promise.resolve(worker.rpc("acknowledge_shift", acknowledgement));
+        await waitForLock("acknowledge_shift");
+        await revoke.release(true);
+        assert.equal((await whileRevoking).error?.message, "Shift not found or permission denied");
+      } finally {
+        try {
+          await revoke.release(false);
+        } finally {
+          await Promise.allSettled([whileRevoking].filter(Boolean));
+        }
+      }
+      assert.ifError((await admin.from("business_memberships").insert({
+        business_id: businessId, user_id: users[1], role: "employee",
+        venue_id: venueId, department_id: departmentId,
+      })).error);
+      const [first, second] = await Promise.all([
+        worker.rpc("acknowledge_shift", acknowledgement),
+        worker.rpc("acknowledge_shift", acknowledgement),
+      ]);
+      assert.ifError(first.error);
+      assert.ifError(second.error);
+      assert.equal(first.data, second.data);
+      const records = await admin.from("shift_acknowledgements")
+        .select("user_id, acknowledged_at").eq("shift_id", shift.data);
+      assert.ifError(records.error);
+      assert.deepEqual(records.data, [{ user_id: users[1], acknowledged_at: first.data }]);
+    }
+
     try {
       for (const name of ["owner", "worker"]) {
         const result = await admin.auth.admin.createUser({
@@ -530,6 +617,7 @@ test(
       await runPolicyManualRace("2032-05-24", true);
       await runPolicyManualRace("2032-05-31", false);
       await runConcurrentVersionRace("2032-06-07");
+      await runAcknowledgementRaces("2032-06-14");
     } finally {
       assert.ifError((await admin.from("shifts").delete().eq("business_id", businessId)).error);
       assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);

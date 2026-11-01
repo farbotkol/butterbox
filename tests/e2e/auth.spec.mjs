@@ -1871,7 +1871,7 @@ test("employees save work preferences visible to eligible managers with change h
     await expect(form.getByLabel("Preferred weekly hours (optional)")).toHaveValue("");
     await expect(form.getByLabel("Email about schedule updates")).toHaveValue("");
     await expect(form.getByLabel("Email about leave decisions")).toHaveValue("");
-    await expect(workerPage.getByText("Notification delivery is not yet available.", { exact: false })).toBeVisible();
+    await expect(workerPage.getByText("Email delivery is not yet available.", { exact: false })).toBeVisible();
     await form.getByLabel("Preferred weekly hours (optional)").fill("24.75");
     await form.getByLabel("Email about schedule updates").selectOption("true");
     await form.getByLabel("Email about leave decisions").selectOption("false");
@@ -2784,7 +2784,8 @@ test("personal mobile schedules show only the member's published shifts", async 
     await page.getByRole("button", { name: "Refresh schedule" }).click();
     await expect(weekly).toContainText("Newly published service");
     await expect(page.getByText("Coworker private shift", { exact: true })).toHaveCount(0);
-    await expect(page.getByText(/Shift acknowledgements are not available yet/)).toBeVisible();
+    await expect(page.getByText(/Acknowledge a shift when your manager requires it/)).toBeVisible();
+    await expect(weekly.getByRole("button", { name: /^Acknowledge / })).toHaveCount(0);
     await page.goto(`/my-schedule?week=2099-03-16&venue=${outsideVenueId}`);
     await expect(page.getByRole("heading", { name: "Schedule unavailable" })).toBeVisible();
     await expect(page.locator('p[role="alert"]')).toContainText("couldn't load the selected venue");
@@ -2834,6 +2835,7 @@ test("published roster updates reach the right employees once and retain pending
       const user = await admin.auth.admin.createUser({
         email: `roster-notice-${name}-${suffix}@example.test`, password, email_confirm: true,
       });
+
       expect(user.error).toBeNull();
       userIds.push(user.data.user.id);
     }
@@ -2997,5 +2999,136 @@ test("published roster updates reach the right employees once and retain pending
       expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
+  }
+});
+
+test("required shift acknowledgements stay scoped and survive later publications", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, venueId, departmentId, workerId, coworkerId, shiftId] =
+    Array.from({ length: 6 }, () => randomUUID());
+  const users = [];
+  let workerContext;
+  try {
+    for (const name of ["owner", "worker", "coworker"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `ack-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Ack cafe ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Ack venue", timezone: "UTC", address: "1 Test Street",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[1], name: "Ack worker", role_title: "Server" },
+      { id: coworkerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[2], name: "Ack coworker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: shiftId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        employee_id: workerId, role_title: "Required service", starts_at: "2032-03-15T09:00:00Z",
+        ends_at: "2032-03-15T10:00:00Z", is_published: false },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: departmentId,
+        employee_id: coworkerId, role_title: "Coworker service", starts_at: "2032-03-15T11:00:00Z",
+        ends_at: "2032-03-15T12:00:00Z", is_published: false },
+    ])).error).toBeNull();
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `ack-worker-${suffix}@example.test`, password);
+    const schedule = `/my-schedule?week=2032-03-15&venue=${venueId}`;
+    await workerPage.goto(schedule);
+    await expect(workerPage.getByText("Required service", { exact: true })).toHaveCount(0);
+
+    await signIn(page, `ack-owner-${suffix}@example.test`, password);
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    await page.goto(roster);
+    const card = page.getByRole("article").filter({ has: page.getByText("Required service", { exact: true }) });
+    await card.getByRole("button", { name: /Require acknowledgement for Ack worker/ }).click();
+    await expect(page.getByRole("status")).toHaveText("Acknowledgement requirement updated.");
+    await expect(card).toContainText("Acknowledgement required");
+
+    await card.getByRole("link", { name: "Edit Ack worker shift" }).click();
+    let editor = page.getByRole("form", { name: "Edit draft shift" });
+    await editor.getByLabel("Team member").selectOption("");
+    await editor.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    const open = page.locator("#open-shifts").getByText("Required service", { exact: true }).locator("../..");
+    await expect(open).toContainText("Assign a worker or remove the requirement");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Assign the open shift" })).toBeVisible();
+    const blockedVersions = await admin.from("roster_publications").select("id").eq("department_id", departmentId);
+    expect(blockedVersions.error).toBeNull();
+    expect(blockedVersions.data).toHaveLength(0);
+
+    await open.getByRole("link", { name: "Edit open shift" }).click();
+    editor = page.getByRole("form", { name: "Edit draft shift" });
+    await editor.getByLabel("Team member").selectOption(workerId);
+    await editor.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    await expect(card).toContainText("Acknowledgement required");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    await expect(card).toContainText("Awaiting acknowledgement");
+
+    await workerPage.goto(schedule);
+    const weekly = workerPage.getByRole("region", { name: "Weekly schedule" });
+    await expect(weekly).toContainText("Required service");
+    await expect(weekly).not.toContainText("Coworker service");
+    await expect(weekly).toContainText("Acknowledgement required");
+    expect(await workerPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await weekly.getByRole("button", { name: /Acknowledge Required service shift/ }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Shift acknowledged.");
+    await expect(weekly).toContainText("Acknowledged");
+    await expect(weekly.getByRole("button", { name: /Acknowledge Required service shift/ })).toHaveCount(0);
+    await workerPage.reload();
+    await expect(weekly).toContainText("Acknowledged");
+    await page.reload();
+    await expect(card).toContainText("Acknowledged");
+
+    const create = page.getByRole("form", { name: "Add draft shift" });
+    await create.getByLabel("Role").fill("Later required service");
+    await create.getByLabel("Team member").selectOption(workerId);
+    await create.getByLabel("Starts").fill("2032-03-16T11:00");
+    await create.getByLabel("Ends").fill("2032-03-16T12:00");
+    await create.getByLabel("Break").fill("0");
+    await create.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    const laterCard = page.getByRole("article").filter({ hasText: "Later required service" });
+    await laterCard.getByRole("button", { name: /Require acknowledgement for Ack worker/ }).click();
+    await expect(page.getByRole("status")).toHaveText("Acknowledgement requirement updated.");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    await expect(card).toContainText("Acknowledged");
+    await expect(laterCard).toContainText("Awaiting acknowledgement");
+    await workerPage.goto(schedule);
+    await expect(weekly).toContainText("Later required service");
+    await expect(weekly).toContainText("Acknowledged");
+    await expect(weekly.getByRole("button", { name: /Acknowledge Later required service shift/ })).toBeVisible();
+
+    const unlink = await admin.from("employees").update({ auth_user_id: null }).eq("id", workerId);
+    expect(unlink.error).toBeNull();
+    await weekly.getByRole("button", { name: /Acknowledge Later required service shift/ }).click();
+    await expect(workerPage.getByRole("alert").filter({ hasText: "We couldn't acknowledge this shift" })).toBeVisible();
+    const acknowledgementRows = await admin.from("shift_acknowledgements").select("shift_id, user_id")
+      .eq("user_id", users[1]);
+    expect(acknowledgementRows.error).toBeNull();
+    expect(acknowledgementRows.data).toEqual([{ shift_id: shiftId, user_id: users[1] }]);
+  } finally {
+    if (workerContext) await workerContext.close();
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   }
 });

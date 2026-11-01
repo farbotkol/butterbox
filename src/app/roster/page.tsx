@@ -14,6 +14,7 @@ import { redirect } from "next/navigation";
 import {
   deleteShiftAction,
   publishRosterAction,
+  setShiftAcknowledgementRequirementAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { ShiftEditor } from "@/components/shift-editor";
@@ -26,6 +27,7 @@ import {
 import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
 import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
+import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
@@ -49,6 +51,7 @@ type RosterPageProps = {
     saved?: string;
     deleted?: string;
     published?: string;
+    ack_requirement?: string;
     edit?: string;
     created?: string;
   }>;
@@ -71,6 +74,8 @@ const errorMessages: Record<string, string> = {
   "publish-duration": "This roster has shifts longer than 24 hours. Review the affected shifts before publishing.",
   "publish-busy": "The roster is being changed. Wait for the other change to finish, then try publishing again.",
   "publish-unknown": "The server could not confirm the publication result. Reload the roster before trying again.",
+  "publish-acknowledgement": "Assign the open shift that requires acknowledgement, or remove its requirement before publishing.",
+  acknowledgement: "We couldn't update the acknowledgement requirement. Check the draft, employee and your permissions, then try again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
   "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
 };
@@ -112,6 +117,30 @@ function CollapsedFields({ departments }: { departments: readonly string[] }) {
   return departments.map((departmentId) => (
     <input key={departmentId} type="hidden" name="collapsed" value={departmentId} />
   ));
+}
+
+function AcknowledgementRequirementControl({
+  shiftId, departmentId, required, label, week, venueId, filterDepartment, collapsed,
+}: {
+  shiftId: string; departmentId: string; required: boolean; label: string;
+  week: string; venueId: string; filterDepartment?: string; collapsed: string[];
+}) {
+  return (
+    <form action={setShiftAcknowledgementRequirementAction} className="mt-1">
+      <input type="hidden" name="shift_id" value={shiftId} />
+      <input type="hidden" name="department_id" value={departmentId} />
+      <input type="hidden" name="venue_id" value={venueId} />
+      <input type="hidden" name="week" value={week} />
+      <input type="hidden" name="required" value={String(!required)} />
+      {filterDepartment && <input type="hidden" name="filter_department" value={filterDepartment} />}
+      <CollapsedFields departments={collapsed} />
+      <button type="submit"
+        aria-label={`${required ? "Remove acknowledgement requirement for" : "Require acknowledgement for"} ${label}`}
+        className="rounded border border-ocean/30 bg-white px-2 py-1 text-[10px] font-semibold text-ocean hover:bg-soft-sea">
+        {required ? "Remove requirement" : "Require acknowledgement"}
+      </button>
+    </form>
+  );
 }
 
 export default async function RosterPage({ searchParams }: RosterPageProps) {
@@ -172,7 +201,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .eq("venue_id", workspace.venue.id).order("id").range(from, to),
       (interval) => interval.id),
     workspace.supabase.from("shifts")
-      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published")
+      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement")
       .eq("venue_id", workspace.venue.id).eq("status", "scheduled")
       .gte("starts_at", startAt).lt("starts_at", endAt).order("starts_at"),
   ]);
@@ -305,6 +334,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   };
   const canManageSelectedDepartment = selectedDepartment
     ? canManageDepartment(selectedDepartment) : false;
+  const acknowledgementStatuses = await shiftAcknowledgements(
+    workspace.supabase, workspace.business.id, workspace.venue.id,
+    visibleShifts.filter((shift) => shift.is_published && shift.requires_acknowledgement)
+      .map((shift) => shift.id),
+  );
   const [publicationHistory, notificationReachability] = canManageSelectedDepartment && selectedDepartment
     ? await Promise.all([
         readAllPages((from, to) => workspace.supabase.from("roster_publications")
@@ -452,7 +486,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
       </div>
 
-      {(errorMessage || params.saved || params.deleted || params.published) && (
+      {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement) && (
         <p
           role={errorMessage ? "alert" : "status"}
           className={`mt-4 rounded-xl px-4 py-3 text-sm ${
@@ -462,7 +496,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           }`}
         >
           {errorMessage ??
-            (params.saved
+            (params.ack_requirement
+              ? "Acknowledgement requirement updated."
+              : params.saved
               ? params.saved === "edited" ? "Draft shift updated." : "Shift saved to the draft roster."
               : params.deleted
                 ? "Draft shift removed."
@@ -475,6 +511,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       {params.edit && !editingShift && (
         <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
           This draft shift is unavailable or you cannot edit it.
+        </p>
+      )}
+
+      {!acknowledgementStatuses && (
+        <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+          We couldn&apos;t load acknowledgement status. Reload the roster before following up with employees.
         </p>
       )}
 
@@ -619,6 +661,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               {" "}Publication {currentVenue.block_publish_overlap ? "blocks" : "warns about"} overlapping shifts and
               {" "}{currentVenue.block_publish_long_shift ? "blocks" : "warns about"} shifts longer than 24 hours.
               {currentVenue.block_publish_unavailability && " Assigned shifts longer than 24 hours cannot be verified for availability."}
+              {" "}Managers can require acknowledgement for an assigned draft before publishing.
             </p>
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
@@ -747,6 +790,22 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                               <ConflictNotice
                                 label={`Scheduling conflict for ${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}`}
                                 conflicts={conflictsByShift.get(shift.id) ?? []} />
+                              {shift.requires_acknowledgement && (
+                                <p className="mt-1 text-[10px] font-semibold text-ocean">
+                                  {!shift.is_published ? "Acknowledgement required"
+                                    : !acknowledgementStatuses ? "Acknowledgement status unavailable"
+                                      : acknowledgementStatuses.get(shift.id) === null
+                                        ? "Awaiting acknowledgement" : "Acknowledged"}
+                                </p>
+                              )}
+                              {canManageDepartment(shift.department_id) && !shift.is_published &&
+                                departments.find((item) => item.id === shift.department_id)?.active && (
+                                <AcknowledgementRequirementControl shiftId={shift.id} departmentId={shift.department_id}
+                                  required={shift.requires_acknowledgement}
+                                  label={`${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}`}
+                                  week={week} venueId={workspace.venue.id} filterDepartment={filterDepartment}
+                                  collapsed={collapsed} />
+                              )}
                               <div className="mt-1 flex items-center justify-between gap-1">
                                 <span className={`text-[9px] font-semibold ${shift.is_published ? "text-teal-800" : "text-sky-800"}`}>
                                   {shift.is_published ? "Published" : "Draft"}
@@ -834,9 +893,21 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                     <ConflictNotice open
                       label={`Scheduling conflict for open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)}`}
                       conflicts={conflictsByShift.get(shift.id) ?? []} />
+                    {shift.requires_acknowledgement && (
+                      <p className="mt-1 text-xs font-semibold text-amber-900">
+                        Acknowledgement required. Assign a worker or remove the requirement before publishing.
+                      </p>
+                    )}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-amber-800">Needs cover</span>
+                    {shift.requires_acknowledgement && canManageDepartment(shift.department_id) && !shift.is_published &&
+                      departments.find((item) => item.id === shift.department_id)?.active && (
+                      <AcknowledgementRequirementControl shiftId={shift.id} departmentId={shift.department_id}
+                        required label={`open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)}`}
+                        week={week} venueId={workspace.venue.id} filterDepartment={filterDepartment}
+                        collapsed={collapsed} />
+                    )}
                     {canManageDepartment(shift.department_id) && !shift.is_published &&
                       departments.find((item) => item.id === shift.department_id)?.active && (
                       <Link href={`${rosterViewHref(week, shift.department_id, collapsed, workspace.venue.id)}&edit=${shift.id}`}

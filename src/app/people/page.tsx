@@ -362,7 +362,7 @@ export default async function PeoplePage({
                     <p>Schedule emails: {employeePreferences.notify_schedule_email ? "Yes" : "No"}</p>
                     <p>Leave decision emails: {employeePreferences.notify_leave_email ? "Yes" : "No"}</p>
                   </> : <p className="mt-2 text-muted">No preferences submitted.</p>}
-                  <p className="mt-2 text-xs text-muted">Preferences are not contractual limits. Notification delivery is not yet available.</p>
+                  <p className="mt-2 text-xs text-muted">Preferences are not contractual limits. Email delivery is not yet available.</p>
                 </section>
                 {workspace.membership.role === "owner" && (
                   <EmployeeAccountForm employee={employee} members={members.data ?? []} venueId={venueId} />

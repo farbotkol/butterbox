@@ -94,8 +94,7 @@ hours (0–168 in quarter-hour increments) and separate email choices for schedu
 updates and leave decisions on **Availability**. These preferences are not
 contractual limits and do not change roster eligibility. Eligible managers can
 view them on **People**, and changes record the actor, time and previous/new
-values. Notification delivery is not implemented yet, regardless of the
-choices saved.
+values. Email delivery is not implemented yet, regardless of the choices saved.
 
 On **Availability**, a linked employee can block a date range immediately or
 request leave for manager review. Dates are inclusive venue-local days, with
@@ -106,7 +105,7 @@ own date blocks and pending requests and see pending, approved, rejected and
 cancelled statuses. A permitted manager can approve or reject pending leave,
 or explicitly cancel an approval. Leave and date blocks are displayed on the
 roster. Automatic selection excludes workers with date blocks or approved
-leave. No leave or schedule notifications are sent yet.
+leave. Leave notifications and schedule emails are not sent yet.
 
 Assigned shifts show advisory conflict labels when they overlap a submitted
 unavailable period, active date block or approved leave. Overnight shifts and
@@ -165,8 +164,13 @@ historical seconds not displayed by the minute-precision form.
 mobile-friendly weekly list, including overnight shifts that overlap the
 week. It displays the selected venue's local time and address and never
 includes unassigned, draft or other people's shifts. Refresh the schedule
-after a manager publishes changes. Publication acknowledgements are not yet
-available.
+after a manager publishes changes. Managers can require acknowledgement for an
+assigned draft shift; existing shifts do not require it by default. Once
+published, the linked employee can acknowledge the shift in their schedule and
+the manager can see its status on the roster. Acknowledgements are recorded
+against the published snapshot and account, and remain valid when an unchanged
+shift appears in a later version. If a required draft becomes unassigned, it
+must be reassigned or its requirement removed before publishing.
 
 ```sh
 npm run dev

@@ -799,6 +799,46 @@ export async function deleteShiftAction(formData: FormData) {
   );
 }
 
+export async function setShiftAcknowledgementRequirementAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const shiftIds = uuidList(formData, "shift_id", 1);
+  const week = text(formData, "week", 10);
+  const required = text(formData, "required", 5);
+  const filterDepartment = text(formData, "filter_department", 36);
+  if (!venueIds || venueIds.length !== 1 || !departmentIds || departmentIds.length !== 1 ||
+    !shiftIds || shiftIds.length !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(week) ||
+    !["true", "false"].includes(required)) {
+    console.error("Invalid shift acknowledgement requirement request.");
+    redirect("/roster?error=acknowledgement");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster workspace for acknowledgement requirements.", { message: workspace.message });
+    redirect("/roster?error=acknowledgement");
+  }
+  const destination = `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}${filterDepartment ? `&department=${encodeURIComponent(filterDepartment)}` : ""}${collapsedRosterQuery(formData)}`;
+  if (getWeekStart(week, workspace.venue.timezone) !== week) {
+    console.error("Invalid roster week for an acknowledgement requirement.");
+    redirect(`${destination}&error=acknowledgement`);
+  }
+  const { error } = await workspace.supabase.rpc("set_shift_acknowledgement_requirement", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_department_id: departmentIds[0],
+    p_shift_id: shiftIds[0],
+    p_required: required === "true",
+  });
+  if (error) {
+    console.error("Could not update the shift acknowledgement requirement.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=acknowledgement`);
+  }
+  revalidatePath("/roster");
+  redirect(`${destination}&ack_requirement=updated`);
+}
+
 export async function publishRosterAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
   const workspace = await getWorkspace(venueIds?.[0]);
@@ -827,6 +867,7 @@ export async function publishRosterAction(formData: FormData) {
       : error.message === "Roster has overlapping shifts" ? "publish-overlap"
         : error.message === "Roster has shifts longer than 24 hours" ? "publish-duration"
           : error.message === "Roster changed while publishing; please try again" ? "publish-busy"
+            : error.message === "Assign or remove the acknowledgement requirement before publication" ? "publish-acknowledgement"
             : "publish";
     redirect(`${destination}&error=${code}`);
   }
@@ -835,6 +876,44 @@ export async function publishRosterAction(formData: FormData) {
     redirect(`${destination}&error=publish-unknown`);
   }
   redirect(`${destination}&published=${data === 0 ? "none" : "1"}`);
+}
+
+export async function acknowledgeShiftAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const shiftIds = uuidList(formData, "shift_id", 1);
+  const week = text(formData, "week", 10);
+  if (!venueIds || venueIds.length !== 1 || !shiftIds || shiftIds.length !== 1 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(week)) {
+    console.error("Invalid shift acknowledgement request.");
+    redirect("/my-schedule?error=acknowledgement");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the schedule workspace for acknowledgement.", { message: workspace.message });
+    redirect("/my-schedule?error=acknowledgement");
+  }
+  const destination = `/my-schedule?${new URLSearchParams({ week, venue: workspace.venue.id })}`;
+  if (getWeekStart(week, workspace.venue.timezone) !== week) {
+    console.error("Invalid schedule week for acknowledgement.");
+    redirect(`${destination}&error=acknowledgement`);
+  }
+  const { data, error } = await workspace.supabase.rpc("acknowledge_shift", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_shift_id: shiftIds[0],
+  });
+  if (error || typeof data !== "string" || Number.isNaN(Date.parse(data))) {
+    console.error("Could not confirm shift acknowledgement.", {
+      code: error?.code,
+      message: error?.message ?? "The server returned an invalid acknowledgement time.",
+    });
+    redirect(`${destination}&error=${error ? "acknowledgement" : "ack-unknown"}`);
+  }
+  revalidatePath("/my-schedule");
+  revalidatePath("/roster");
+  redirect(`${destination}&acknowledged=1`);
 }
 
 export async function markRosterNotificationReadAction(formData: FormData) {
