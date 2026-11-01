@@ -27,6 +27,24 @@ deployed environment.
 After confirming an account, first-time owners can save partial business and
 venue details and resume setup later. The first venue requires an address and
 timezone; completing setup creates the owner membership atomically.
+The owner's dashboard includes a business, venue, staff, draft-shift and
+publication checklist, with links and brief guidance for the next steps.
+
+Fictional sample staff and shifts are disabled by default in every database.
+Only a database operator can enable them; ordinary application accounts and
+the Supabase service role cannot change the policy. To use samples, first
+verify that the connected database is an isolated local test instance with no
+live data, then, as its database owner only, run:
+
+```sql
+update public.demo_seed_policy set enabled = true where singleton;
+```
+
+Never enable this policy in production or any environment containing real
+customer data. Enabling it allows new test workspaces to opt into fictional
+staff and private draft shifts; it does not seed existing workspaces. Set
+`enabled = false` again when finished. Applying the onboarding migration does
+not remove sample data that was created before this safeguard.
 
 Owners can configure each venue's latitude, longitude and clocking radius on
 **Departments**. Coordinates accept up to six meaningful decimal places and
@@ -263,7 +281,7 @@ another database: use an isolated test project, never a shared or production
 one. Without test settings, the normal `npm test` run explicitly skips this
 integration test. CI runs both the database suite and the HTTP test on a fresh
 local Supabase project.
-To also verify concurrent leave, attendance and location-policy transitions,
+To also verify concurrent leave, attendance, location and sample-policy transitions,
 set `BUTTERBOX_TEST_DB_CONTAINER` to that disposable project's
 `supabase_db_<project-id>` Docker container. These tests verify the container's
 project label and API port before using temporary row locks.
@@ -285,7 +303,10 @@ server. It modifies the local `.next` build output and requires that port to
 be free. The Supabase project must have email confirmation enabled, Mailpit
 running and the application callback origin on its redirect allowlist. It
 creates and removes test users and businesses; never use a shared database or
-a loopback tunnel to a non-disposable project. Set `BUTTERBOX_TEST_APP_URL` to
+a loopback tunnel to a non-disposable project. The sample-data browser test
+requires the policy to be disabled initially, verifies the Docker project label
+and API port, temporarily enables the policy and restores it afterward.
+Set `BUTTERBOX_TEST_APP_URL` to
 another loopback origin if needed, and allow that origin in Supabase first.
 For a lower-memory local functional run, append `--dev` to use a disposable
 development server instead. This does not replace the production build check.

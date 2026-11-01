@@ -13,7 +13,9 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { BrandLockup } from "@/components/brand-lockup";
 import { CoastalIllustration } from "@/components/coastal-illustration";
+import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
+import { parseOnboardingProgress } from "@/lib/onboarding";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
@@ -114,7 +116,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
 
-  const [{ data: shifts }, { data: departments }, unreadNotifications] = await Promise.all([
+  const [{ data: shifts }, { data: departments }, unreadNotifications, onboarding] = await Promise.all([
     workspace.supabase
       .from("shifts")
       .select("id, employee_id, department_id, starts_at, ends_at, is_published")
@@ -128,7 +130,17 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       .eq("venue_id", workspace.venue.id)
       .order("name"),
     unreadRosterNotificationCount(workspace.supabase, workspace.business.id, workspace.venue.id),
+    workspace.membership.role === "owner"
+      ? workspace.supabase.rpc("get_onboarding_progress", { p_business_id: workspace.business.id })
+      : Promise.resolve(null),
   ]);
+  const onboardingProgress = onboarding ? parseOnboardingProgress(onboarding.data) : null;
+  if (onboarding && (onboarding.error || !onboardingProgress)) {
+    console.error("Could not load onboarding progress.", {
+      code: onboarding.error?.code,
+      message: onboarding.error?.message ?? "The server returned invalid onboarding data.",
+    });
+  }
 
   const roster = shifts ?? [];
   const staffed = new Set(
@@ -190,6 +202,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} />
+      {onboarding && (onboardingProgress
+        ? <OnboardingChecklist progress={onboardingProgress} venueId={workspace.venue.id} />
+        : <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+            We couldn&apos;t load your onboarding checklist. Refresh and try again.
+          </p>)}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

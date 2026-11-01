@@ -15,15 +15,22 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "ready") redirect("/");
   const params = await searchParams;
-  const draftResult =
+  const [draftResult, demoResult] =
     workspace.status === "needs_setup"
-      ? await workspace.supabase
+      ? await Promise.all([workspace.supabase
           .from("business_setup_drafts")
           .select("business_name, venue_name, venue_address, timezone, include_sample_data")
           .eq("user_id", workspace.user.id)
-          .maybeSingle()
-      : null;
+          .maybeSingle(), workspace.supabase.rpc("demo_seed_enabled")])
+      : [null, null];
   const draft = draftResult?.data;
+  const demoEnabled = demoResult?.data === true;
+  if (demoResult && (demoResult.error || typeof demoResult.data !== "boolean")) {
+    console.error("Could not load the sample-data policy.", {
+      code: demoResult.error?.code,
+      message: demoResult.error?.message ?? "The server returned an invalid sample-data policy.",
+    });
+  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-cloud px-5 py-12">
@@ -39,15 +46,17 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
         </h1>
         <p className="mt-3 leading-7 text-muted">
           You&apos;ll be the business owner. Add your first venue and start with
-          a clean roster or a fictional sample team.
+          a clean roster.
         </p>
         {params.error && (
           <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
             {params.error === "create"
               ? "We couldn't create your workspace. Check the venue details and try again."
-              : params.error === "draft"
-                ? "We couldn't save your setup progress. Please try again."
-                : "Business name, venue name, address and timezone are required."}
+              : params.error === "sample-disabled"
+                ? "Sample data is unavailable in this environment. Create a clean workspace instead."
+                : params.error === "draft"
+                  ? "We couldn't save your setup progress. Please try again."
+                  : "Business name, venue name, address and timezone are required."}
           </p>
         )}
         {params.saved && (
@@ -64,6 +73,11 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
         {draftResult?.error && (
           <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
             We couldn&apos;t load your saved setup progress. Please try again.
+          </p>
+        )}
+        {demoResult && (demoResult.error || typeof demoResult.data !== "boolean") && (
+          <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+            We couldn&apos;t check whether sample data is available. You can create a clean workspace.
           </p>
         )}
         <form action={createBusinessAction} className="mt-7 space-y-5">
@@ -119,18 +133,20 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
               <option value="Australia/Canberra">Canberra, ACT</option>
             </select>
           </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-cloud p-4">
+          <label className="flex items-start gap-3 rounded-xl border border-line bg-cloud p-4">
             <input
               className="mt-1 accent-ocean"
-              defaultChecked={draft?.include_sample_data ?? true}
+              defaultChecked={demoEnabled && (draft?.include_sample_data ?? false)}
+              disabled={!demoEnabled}
               name="sample_data"
               type="checkbox"
             />
             <span>
               <span className="block text-sm font-semibold">Add a sample team</span>
               <span className="mt-1 block text-xs leading-5 text-muted">
-                Adds 24 fictional staff and a draft FOH/BOH roster for this week.
-                You can delete the sample shifts before publishing.
+                {demoEnabled
+                  ? "Adds 24 fictional staff and a draft FOH/BOH roster for this week. Use only in an isolated test environment."
+                  : "Fictional samples are available only in explicitly enabled, isolated test environments."}
               </span>
             </span>
           </label>

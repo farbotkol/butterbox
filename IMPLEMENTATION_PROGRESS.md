@@ -2,8 +2,8 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **24**. In Progress: **6**.
-  Blocked: **1**. Not started (Backlog): **56**.
+- Total stories: **87**. Verified Done: **24**. In Progress: **5**.
+  Blocked: **2**. Not started (Backlog): **56**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
@@ -53,6 +53,14 @@
   the final clock-change guard and explanatory wording; the rebuilt focused
   scenario exercised the final guard. Disposable users and businesses were
   removed and the temporary application server stopped.
+- BB-SAAS-003's checklist and default-off sample policy passed the complete
+  isolated regression: **1,286/1,286 pgTAP assertions across 29 files**,
+  eight authenticated tenant/concurrency tests, 70 serialized Node tests,
+  full ESLint, TypeScript, split production build and **37/37** production
+  browser scenarios. The eight integration tests were run separately from the
+  Node-only invocation. All disposable users and businesses were removed,
+  the sample policy was disabled and the temporary app server stopped.
+  Production isolation remains unverified, so the story is Blocked, not Done.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -115,17 +123,22 @@
 
 ## Current story
 
-- **Next: BB-FOUND-005 — Invite and onboard users.** Investigate and implement
-  scoped email invitations as a prerequisite to onboarding unlinked staff and
-  completing roster notifications. The app currently chooses its first
-  membership; safe handling of existing multi-business users must be resolved
-  rather than silently selecting the wrong business. Supabase PKCE links
-  initiated in a manager's browser cannot be assumed to work in a recipient's
-  separate browser. Do not mark the story Done without end-to-end email,
-  expiration, reuse, revocation, audit and isolation tests.
+- **BB-SAAS-003 — Tenant onboarding and support** is Blocked. The owner
+  checklist, contextual help and default-off protected sample policy are
+  implemented and tested in the disposable environment. Production isolation
+  and whether historical production sample records exist have not been
+  verified; the policy can still be enabled deliberately by a database operator.
+- **Next: BB-FOUND-005 — Invite and onboard users.** Scoped email invitations
+  are a prerequisite to onboarding unlinked staff and completing roster
+  notifications. The app currently chooses its first membership; safe handling
+  of existing multi-business users must be resolved rather than silently
+  selecting the wrong business. Supabase PKCE links initiated in a manager's
+  browser cannot be assumed to work in a recipient's separate browser.
 - **BB-ROSTER-004 — Copy week and roster template** is Done. A scoped manager
   copies an entire department atomically into private, editable drafts, with
   eligibility rechecks, idempotent retries and safe clock-change handling.
+  Commit `de9e805` was pushed to the development branch and its remote SHA
+  matched.
 - **BB-TIME-001 — Compute worked time** is Done. Scoped calculations and the
   manager work-time page passed all four criteria and the regression checks.
 - **BB-ATTEND-005 — Time capture fallback** is In Progress: location failures
@@ -171,6 +184,25 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-SAAS-003 — Tenant onboarding and support (Blocked)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| SAAS-003.1 Checklist progresses business, venue, staff, shift and publication | Owner-only progress RPC and dashboard checklist use real records, with tenant and role checks. | The 29-assertion onboarding pgTAP suite and production Chromium scenario verified successive steps, archived staff, owner-only access and cross-tenant isolation. Both passed. | Pass |
+| SAAS-003.2 Seeded demo data is isolated from production | A database policy defaults to disabled; application accounts and the Supabase service role cannot enable it or call the unchecked helper. Explicit opt-in is documented for isolated test databases only. | pgTAP, eight authenticated integrations and Chromium verified default denial, rollback, scoped opt-in and a concurrent disable race in the disposable project. Actual production configuration and historical data were not inspected, and a database operator can deliberately enable the policy. | Blocked |
+| SAAS-003.3 Inline help covers common tasks | The checklist explains business and venue setup, staff, draft shifts and publishing, with links to the relevant pages. | Production Chromium followed the departments help link and exercised the staff, shift and publication workflow; the 37-scenario regression passed. | Pass |
+
+Files: `supabase/migrations/20261102060000_onboarding_and_demo_isolation.sql`,
+`supabase/tests/database/onboarding_and_demo_isolation.test.sql`,
+`supabase/tests/database/workspace_rls.test.sql`, `src/app/page.tsx`,
+`src/app/setup/page.tsx`, `src/app/actions.ts`,
+`src/components/onboarding-checklist.tsx`, `src/lib/onboarding.ts`,
+`tests/onboarding.test.mjs`, `tests/onboarding-demo-policy.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `scripts/test-auth.mjs`,
+`scripts/test-tenant-isolation.mjs` and `README.md`. A deployment owner must
+verify that production remains sample-disabled and assess any pre-existing
+sample records without modifying live data without approval.
 
 ### BB-ATTEND-001 — Clock in and out (Done)
 
@@ -733,9 +765,11 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-ROSTER-004 — Copy week and roster template**, preserving
-  private drafts, revalidating availability/leave/overlaps and notifying only
-  on publication. Continue toward corrections, timesheet review and approval.
+- Implement **BB-FOUND-005 — Invite and onboard users**. Preserve tenant and
+  membership isolation and do not assume manager-initiated PKCE email links
+  work in a recipient's browser. Continue toward corrections, timesheet review
+  and approval. Revisit BB-SAAS-003 only after production isolation and any
+  historical sample data can be verified safely.
 - The new location migration has been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:

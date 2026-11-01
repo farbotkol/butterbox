@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { cp } from "node:fs/promises";
+import { cp, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
@@ -23,6 +23,9 @@ const settings = testSupabaseStatus(workdir);
 if (!settings.API_URL || !settings.MAILPIT_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
   throw new Error("Local Supabase status is missing API, Mailpit or test authentication settings.");
 }
+const config = await readFile(resolve(workdir, "supabase/config.toml"), "utf8");
+const projectId = /^project_id\s*=\s*"([a-z0-9][a-z0-9_-]*)"\s*(?:#.*)?$/m.exec(config)?.[1];
+if (!projectId) throw new Error("The disposable Supabase project ID is missing or invalid.");
 
 function localOrigin(value) {
   const parsed = new URL(value);
@@ -49,6 +52,7 @@ const testEnv = {
   BUTTERBOX_TEST_MAIL_URL: settings.MAILPIT_URL,
   BUTTERBOX_TEST_SUPABASE_ANON_KEY: settings.ANON_KEY,
   BUTTERBOX_TEST_SUPABASE_SERVICE_KEY: settings.SERVICE_ROLE_KEY,
+  BUTTERBOX_TEST_DB_CONTAINER: `supabase_db_${projectId}`,
 };
 
 async function checkPortAvailable() {

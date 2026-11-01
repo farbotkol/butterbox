@@ -5,6 +5,7 @@ create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated;
 grant execute on all functions in schema extensions to authenticated;
 select extensions.plan(9);
+update public.demo_seed_policy set enabled = true where singleton;
 
 insert into auth.users (id, email, raw_user_meta_data)
 values

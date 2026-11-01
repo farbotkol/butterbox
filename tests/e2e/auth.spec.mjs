@@ -7,6 +7,7 @@ import {
   stringToBase64URL,
 } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
+import { disposableDatabase } from "../helpers/disposable-database.mjs";
 
 const appUrl = process.env.BUTTERBOX_TEST_APP_URL;
 const apiUrl = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -157,9 +158,16 @@ test("verified signup, resumable setup, cross-tab logout and recovery", async ({
     await expect(page).toHaveURL(/\/setup/);
     await page.getByLabel("Business name").fill("Authentication test business");
     await page.getByLabel("First venue").fill("Authentication test venue");
-    await page.getByRole("checkbox").uncheck();
+    await expect(page.getByRole("checkbox", { name: /Add a sample team/ })).toBeDisabled();
+    await expect(page.getByRole("checkbox", { name: /Add a sample team/ })).not.toBeChecked();
     await page.getByRole("button", { name: "Save progress" }).click();
     await expect(page.getByRole("status")).toContainText("Setup progress saved");
+    const pendingOwner = await findUser(email);
+    expect(pendingOwner).toBeDefined();
+    const savedDraft = await admin.from("business_setup_drafts").select("include_sample_data")
+      .eq("user_id", pendingOwner.id).single();
+    expect(savedDraft.error).toBeNull();
+    expect(savedDraft.data.include_sample_data).toBe(false);
 
     resumedContext = await browser.newContext({ baseURL: appUrl });
     const resumedPage = await resumedContext.newPage();
@@ -167,7 +175,8 @@ test("verified signup, resumable setup, cross-tab logout and recovery", async ({
     await expect(resumedPage).toHaveURL(/\/setup/);
     await expect(resumedPage.getByLabel("Business name")).toHaveValue("Authentication test business");
     await expect(resumedPage.getByLabel("First venue")).toHaveValue("Authentication test venue");
-    await expect(resumedPage.getByRole("checkbox")).not.toBeChecked();
+    await expect(resumedPage.getByRole("checkbox", { name: /Add a sample team/ })).toBeDisabled();
+    await expect(resumedPage.getByRole("checkbox", { name: /Add a sample team/ })).not.toBeChecked();
     await resumedPage.getByLabel("Venue address").fill("10 Test Street, Sydney NSW");
     await resumedPage.getByLabel("Venue timezone").selectOption("Australia/Perth");
     await resumedPage.getByRole("button", { name: "Create workspace" }).click();
@@ -4381,5 +4390,169 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
       expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("owner onboarding follows real staff, draft and publication progress without crossing tenants", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, departmentId, outsideDepartment,
+    outsideEmployee] = Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "employee", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `onboarding-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Onboarding cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "First venue", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[2], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: outsideEmployee, business_id: outsideBusiness, venue_id: outsideVenue,
+      department_id: outsideDepartment, name: "Outside worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      business_id: outsideBusiness, venue_id: outsideVenue, department_id: outsideDepartment,
+      employee_id: outsideEmployee, role_title: "Outside shift",
+      starts_at: "2032-03-29T09:00:00Z", ends_at: "2032-03-29T10:00:00Z",
+    })).error).toBeNull();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, `onboarding-owner-${suffix}@example.test`, password);
+    const checklist = page.getByRole("region", { name: "Get your first roster ready" });
+    await expect(checklist).toBeVisible();
+    await expect(checklist).toContainText("2 of 5 steps complete");
+    await expect(checklist.getByText("Complete", { exact: true })).toHaveCount(2);
+    await expect(checklist.getByText("To do", { exact: true })).toHaveCount(3);
+    await expect(page.getByText("Outside worker", { exact: true })).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await checklist.getByRole("link", { name: "Open departments" }).click();
+    await expect(page.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
+    await page.goto("/");
+
+    const employeeContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(employeeContext);
+    const employeePage = await employeeContext.newPage();
+    await signIn(employeePage, `onboarding-employee-${suffix}@example.test`, password);
+    await expect(employeePage.getByRole("region", { name: "Get your first roster ready" })).toHaveCount(0);
+    await employeeContext.close();
+
+    await checklist.getByRole("link", { name: "Add staff" }).click();
+    await expect(page).toHaveURL(/\/people/);
+    const newEmployee = page.getByRole("region", { name: "New employee" });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("First team member");
+    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
+    await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
+    await newEmployee.getByRole("button", { name: "Add employee" }).click();
+    await expect(page.getByRole("region", { name: "Employee First team member" })).toBeVisible();
+    const employee = await admin.from("employees").select("id")
+      .eq("business_id", businessId).eq("name", "First team member").single();
+    expect(employee.error).toBeNull();
+    await page.goto("/");
+    await expect(checklist).toContainText("3 of 5 steps complete");
+
+    await checklist.getByRole("link", { name: "Create a shift" }).click();
+    await expect(page).toHaveURL(/\/roster/);
+    await page.goto(`/roster?week=2032-03-29&venue=${venueId}&department=${departmentId}`);
+    const draft = page.getByRole("form", { name: "Add draft shift" });
+    await draft.getByLabel("Role").fill("Server");
+    await draft.getByLabel("Team member").selectOption(employee.data.id);
+    await draft.getByLabel("Starts").fill("2032-03-29T09:00");
+    await draft.getByLabel("Ends").fill("2032-03-29T10:00");
+    await draft.getByLabel("Break (mins)").fill("0");
+    await draft.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toContainText("Shift saved to the draft roster");
+    await page.goto("/");
+    await expect(checklist).toContainText("4 of 5 steps complete");
+
+    await checklist.getByRole("link", { name: "Open the roster" }).click();
+    await page.goto(`/roster?week=2032-03-29&venue=${venueId}&department=${departmentId}`);
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toContainText("roster published");
+    await page.goto("/");
+    await expect(checklist).toContainText("5 of 5 steps complete");
+    await expect(checklist.getByText("Complete", { exact: true })).toHaveCount(5);
+    const publications = await admin.from("roster_publications").select("id").eq("business_id", businessId);
+    expect(publications.error).toBeNull();
+    expect(publications.data).toHaveLength(1);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("sample teams are opt-in only after an isolated database operator enables them", async ({ page }) => {
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  expect(await sql("select enabled from public.demo_seed_policy where singleton")).toBe("f");
+  const suffix = randomUUID();
+  const email = `onboarding-sample-${suffix}@example.test`;
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  let userId;
+  try {
+    await sql("update public.demo_seed_policy set enabled = true where singleton");
+    const user = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    expect(user.error).toBeNull();
+    userId = user.data.user.id;
+    await signIn(page, email, password);
+    await expect(page).toHaveURL(/\/setup/);
+    const sample = page.getByRole("checkbox", { name: /Add a sample team/ });
+    await expect(sample).toBeEnabled();
+    await expect(sample).not.toBeChecked();
+    await sample.check();
+    await page.getByLabel("Business name").fill("Isolated sample cafe");
+    await page.getByLabel("First venue").fill("Test venue");
+    await page.getByLabel("Venue address").fill("10 Test Street");
+    await page.getByRole("button", { name: "Save progress" }).click();
+    await expect(page.getByRole("status")).toContainText("Setup progress saved");
+    await expect(sample).toBeChecked();
+    await page.getByRole("button", { name: "Create workspace" }).click();
+    const checklist = page.getByRole("region", { name: "Get your first roster ready" });
+    await expect(checklist).toContainText("4 of 5 steps complete");
+    const membership = await admin.from("business_memberships").select("business_id")
+      .eq("user_id", userId).single();
+    expect(membership.error).toBeNull();
+    const [staff, shifts, publications] = await Promise.all([
+      admin.from("employees").select("id").eq("business_id", membership.data.business_id),
+      admin.from("shifts").select("is_published").eq("business_id", membership.data.business_id),
+      admin.from("roster_publications").select("id").eq("business_id", membership.data.business_id),
+    ]);
+    expect(staff.error).toBeNull();
+    expect(shifts.error).toBeNull();
+    expect(publications.error).toBeNull();
+    expect(staff.data).toHaveLength(24);
+    expect(shifts.data).toHaveLength(48);
+    expect(shifts.data.every((shift) => shift.is_published === false)).toBe(true);
+    expect(publications.data).toHaveLength(0);
+  } finally {
+    await sql("update public.demo_seed_policy set enabled = false where singleton");
+    if (userId) {
+      const memberships = await admin.from("business_memberships").select("business_id").eq("user_id", userId);
+      expect(memberships.error).toBeNull();
+      for (const membership of memberships.data) {
+        expect((await admin.from("businesses").delete().eq("id", membership.business_id)).error).toBeNull();
+      }
+      expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+    }
   }
 });

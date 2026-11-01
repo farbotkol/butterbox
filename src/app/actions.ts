@@ -969,7 +969,11 @@ export async function createBusinessAction(formData: FormData) {
     p_timezone: timezone,
     p_include_sample_data: includeSampleData,
   });
-  if (error) redirect("/setup?error=create");
+  if (error) {
+    console.error("Workspace setup failed.", { code: error.code, message: error.message });
+    redirect(error.message === "Sample data is not enabled in this environment"
+      ? "/setup?error=sample-disabled" : "/setup?error=create");
+  }
   redirect("/");
 }
 
