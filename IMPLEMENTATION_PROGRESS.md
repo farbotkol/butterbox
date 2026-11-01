@@ -2,13 +2,13 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **6**. In Progress: **13**.
+- Total stories: **87**. Verified Done: **7**. In Progress: **12**.
   Blocked: **1**. Not started (Backlog): **67**.
-- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001,
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-003,
   BB-PEOPLE-001 and BB-PEOPLE-006.
-- Final standard production build, TypeScript, lint and 8 unit tests pass.
-  Isolated SQL suite: 128/128; authenticated HTTP regression: 1/1;
-  production browser scenarios: 2/2 (latest run 20.8s).
+- Production build, TypeScript, lint and 8 unit tests pass.
+  Isolated SQL suite: 159/159; authenticated HTTP regression: 1/1;
+  production browser scenarios: 3/3 (latest run 34.6s).
 - Redacted Gitleaks scan: current branch and pending tracked diff have no
   findings. The older local checkpoint-ref blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
@@ -16,11 +16,8 @@
 
 ## Current story
 
-- No story is mid-edit. This execution completed authentication, resumable
-  setup, permission assignment, employee profiles and the filtered directory.
-- Next ready slice: **BB-ORG-003 — Create departments and job roles**.
-  Implement custom create/deactivate workflows and preserve historical shift
-  references before attempting multiple employee roles.
+- No story is mid-edit. BB-ORG-003 was completed and verified.
+- Next ready slice: **BB-ORG-004 — Delegate departmental management**.
 
 ## Completed authentication and setup
 
@@ -46,6 +43,21 @@ existing development and deployed databases still need the normal reviewed
 migration process.
 
 ## Completed and verified
+
+### BB-ORG-003 — Create departments and job roles (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ORG-003.1 FOH and BOH can be seeded | Existing `create_business` seeding, unchanged. | `department_roles.test.sql` asserts both departments and their roles are seeded for a new business. Pass. | Pass |
+| ORG-003.2 Custom departments and roles can be created and deactivated | `20261101070000_department_role_management.sql`: `active` flags, `save_department`/`save_job_role` RPCs (owner/admin/GM for departments; department managers for their roles), duplicate/blank validation; `/settings/organisation` page, server actions, navigation link. | pgTAP covers create, rename, deactivate, reactivate, duplicates, cross-business/GM-venue/FOH-manager/employee/anonymous denial. Browser creates "Events", rejects a duplicate, adds and deactivates a role, renames and deactivates the department; employee page access denied. Pass. | Pass |
+| ORG-003.3 Existing shifts retain historical references | Deactivation only flips flags; triggers block new shifts/active staff in inactive departments or roles while leaving existing rows; roster labels inactive departments and hides add-shift; People excludes inactive departments for new staff. | pgTAP verifies retained and renamed shift history plus new-shift/staff denial. Browser saves a shift through the UI, deactivates, and verifies the identical shift row, inactive roster notice and no add-shift or new-staff option. Pass. | Pass |
+
+Files: migration, SQL test, `src/app/settings/organisation/page.tsx`,
+`src/app/actions.ts`, roster, People, navigation and `tests/e2e/auth.spec.mjs`.
+Fixed during testing: the inactive badge lacked a text separator, which gave
+the heading the accessible name "FunctionsInactive". Shift roles are free text,
+so inactive-role enforcement matches by name, case-insensitively. Publishing is
+hidden for inactive departments.
 
 ### BB-PEOPLE-006 — View team directory (Done)
 
@@ -122,7 +134,7 @@ not yet run remotely.
 - `npm test`: 8 passing unit tests; the HTTP test is explicitly skipped without
   disposable-project settings and passes when run against the isolated stack.
 - `npm run lint` passed after the current changes. The isolated database suite
-  passes 128/128 assertions and the two-tenant HTTP integration passes.
+  passes 159/159 assertions and the two-tenant HTTP integration passes.
 - The previous clean-checkout build and container liveness test passed. A
   concurrent build was terminated under resource pressure. Sequential compile,
   TypeScript and generate phases now pass, as do both production browser tests.
@@ -139,12 +151,13 @@ not yet run remotely.
 
 ## Next story
 
-- BB-ORG-003: read its three detailed acceptance criteria in the product backlog.
-  Existing FOH/BOH setup seeding passes, but custom CRUD/deactivation is absent.
-  Add active flags and safe owner/manager management RPCs; retain department
-  IDs/job-role historical references. Add SQL denial/history tests and a live
-  browser management scenario. Do not mark Done before runtime validation.
-- Migrations through `20261101060000` are applied only to the isolated stack.
+- BB-ORG-004: managers edit only assigned departments, the owner has a
+  consolidated view, and staff can belong to multiple departments. The last
+  criterion needs an employee-department link table. It must keep
+  `employees.department_id` as the primary department, and `save_shift` must
+  accept any linked department. Then do BB-PEOPLE-002 (multiple roles and
+  qualifications) and BB-PEOPLE-003 (recurring availability).
+- Migrations through `20261101070000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

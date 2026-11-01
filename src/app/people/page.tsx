@@ -13,7 +13,7 @@ type Employee = {
   employment_type: string;
   active: boolean;
 };
-type Department = { id: string; name: string };
+type Department = { id: string; name: string; active?: boolean };
 
 function EmployeeForm({ employee, departments, venueId }: { employee?: Employee; departments: Department[]; venueId: string }) {
   const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink";
@@ -77,7 +77,7 @@ export default async function PeoplePage({
   }
   const venueId = selectedVenue?.id ?? workspace.venue.id;
   const [departments, roles] = await Promise.all([
-    workspace.supabase.from("departments").select("id, name").eq("venue_id", venueId).order("name"),
+    workspace.supabase.from("departments").select("id, name, active").eq("venue_id", venueId).order("name"),
     workspace.supabase.from("employees").select("role_title").eq("venue_id", venueId).order("role_title"),
   ]);
   const roleTitles = [...new Set(roles.data?.map((employee) => employee.role_title) ?? [])];
@@ -147,7 +147,7 @@ export default async function PeoplePage({
         {departments.data?.length ? (
           <section aria-label="New employee" className="mt-6 rounded-xl border border-line bg-white p-5">
             <h2 className="font-semibold">Add employee</h2>
-            <EmployeeForm departments={departments.data} venueId={venueId} />
+            <EmployeeForm departments={departments.data.filter((department) => department.active)} venueId={venueId} />
           </section>
         ) : <p className="mt-6">No manageable departments are available.</p>}
         <div className="mt-6 space-y-4">

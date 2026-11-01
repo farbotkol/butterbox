@@ -147,6 +147,64 @@ export async function saveEmployeeAction(formData: FormData) {
   redirect(`${destination}&saved=1`);
 }
 
+const organisationErrors: Record<string, string> = {
+  "Permission denied": "permission",
+  "Department name already exists": "duplicate",
+  "Job role name already exists": "duplicate",
+  "Department is inactive": "inactive",
+};
+
+function activeFlag(formData: FormData) {
+  const active = formData.get("active");
+  return active === "true" ? true : active === "false" ? false : null;
+}
+
+export async function saveDepartmentAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
+  const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
+  const active = activeFlag(formData);
+  if (active === null) redirect(`${destination}&error=save`);
+
+  const { error } = await workspace.supabase.rpc("save_department", {
+    p_business_id: workspace.business.id,
+    p_venue_id: venueId,
+    p_department_id: text(formData, "department_id", 36) || null,
+    p_name: text(formData, "name", 80),
+    p_active: active,
+  });
+  if (error) {
+    console.error("Department save failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${organisationErrors[error.message] ?? "save"}`);
+  }
+  redirect(`${destination}&saved=department`);
+}
+
+export async function saveJobRoleAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
+  const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
+  const active = activeFlag(formData);
+  if (active === null) redirect(`${destination}&error=save`);
+
+  const { error } = await workspace.supabase.rpc("save_job_role", {
+    p_business_id: workspace.business.id,
+    p_department_id: text(formData, "department_id", 36),
+    p_job_role_id: text(formData, "job_role_id", 36) || null,
+    p_name: text(formData, "name", 80),
+    p_active: active,
+  });
+  if (error) {
+    console.error("Job role save failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${organisationErrors[error.message] ?? "save"}`);
+  }
+  redirect(`${destination}&saved=role`);
+}
+
 export async function saveBusinessDraftAction(formData: FormData) {
   const workspace = await getWorkspace();
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
@@ -233,9 +291,11 @@ export async function saveShiftAction(formData: FormData) {
   if (error) {
     const code = error.message.includes("overlap")
       ? "overlap"
-      : error.message.includes("permission")
-        ? "permission"
-        : "save";
+      : error.message.includes("inactive")
+        ? "inactive"
+        : error.message.includes("permission")
+          ? "permission"
+          : "save";
     redirect(`/roster?week=${encodeURIComponent(week)}&error=${code}`);
   }
   redirect(`/roster?week=${encodeURIComponent(week)}&saved=1`);

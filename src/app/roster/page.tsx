@@ -44,6 +44,7 @@ const errorMessages: Record<string, string> = {
   save: "We couldn't save that shift. Check the date, employee and role.",
   delete: "We couldn't delete that shift. Published shifts cannot be deleted.",
   publish: "We couldn't publish this roster. Check your permissions and try again.",
+  inactive: "That department or job role is inactive. Choose an active one for new shifts.",
 };
 
 function isManager(role: string) {
@@ -66,15 +67,21 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
-  const [{ data: departmentRows }, { data: employeeRows }] = await Promise.all([
+  const [{ data: departmentRows }, { data: employeeRows }, { data: jobRoleRows }] = await Promise.all([
     workspace.supabase
       .from("departments")
-      .select("id, name")
+      .select("id, name, active")
       .eq("venue_id", workspace.venue.id)
       .order("name"),
     workspace.supabase
       .from("employees")
       .select("id, name, department_id, role_title")
+      .eq("venue_id", workspace.venue.id)
+      .eq("active", true)
+      .order("name"),
+    workspace.supabase
+      .from("job_roles")
+      .select("name, department_id")
       .eq("venue_id", workspace.venue.id)
       .eq("active", true)
       .order("name"),
@@ -110,6 +117,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   );
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const canManage = isManager(workspace.membership.role);
+  const selectedDepartmentActive =
+    departments.find((department) => department.id === selectedDepartment)?.active ?? false;
+  const roleSuggestions = (jobRoleRows ?? []).filter(
+    (role) => role.department_id === selectedDepartment,
+  );
   const errorMessage = params.error ? errorMessages[params.error] : undefined;
   const previousWeek = addDays(week, -7);
   const nextWeek = addDays(week, 7);
@@ -168,7 +180,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             {departments.length > 1 && <option value="all">All departments</option>}
             {departments.map((department) => (
               <option key={department.id} value={department.id}>
-                {department.name}
+                {department.name}{department.active ? "" : " (inactive)"}
               </option>
             ))}
           </select>
@@ -204,7 +216,13 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </p>
       )}
 
-      {canManage && selectedDepartment && (
+      {canManage && selectedDepartment && !selectedDepartmentActive && (
+        <p role="note" className="mt-5 rounded-xl bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          This department is inactive. Existing shifts are kept, but new shifts can&apos;t be added.
+        </p>
+      )}
+
+      {canManage && selectedDepartment && selectedDepartmentActive && (
         <section className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6">
           <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
             <div className="flex items-center gap-3">
@@ -248,8 +266,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 maxLength={80}
                 name="role_title"
                 placeholder="Barista"
+                list="role-suggestions"
                 required
               />
+              <datalist id="role-suggestions">
+                {roleSuggestions.map((role) => <option key={role.name} value={role.name} />)}
+              </datalist>
             </label>
             <label className="text-xs font-medium text-muted">
               Team member

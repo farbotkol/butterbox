@@ -436,3 +436,111 @@ test("permissions, employee profiles and filtered team directory", async ({ page
         expect(remaining.data).toEqual([]);
       }
 });
+
+test("departments and job roles can be created, deactivated and keep shift history", async ({ page, browser }) => {
+      const suffix = randomUUID();
+      const password = `${randomBytes(18).toString("base64url")}aA1!`;
+      const userIds = [];
+      const businessId = randomUUID();
+      const venueId = randomUUID();
+      const fohId = randomUUID();
+      let employeeContext;
+      try {
+        for (const name of ["owner", "staff"]) {
+          const result = await admin.auth.admin.createUser({
+            email: `${name}-${suffix}@example.test`, password, email_confirm: true,
+          });
+          expect(result.error).toBeNull();
+          userIds.push(result.data.user.id);
+        }
+        expect((await admin.from("businesses").insert({ id: businessId, name: `Organisation ${suffix}` })).error).toBeNull();
+        expect((await admin.from("venues").insert({ id: venueId, business_id: businessId, name: "Harbour" })).error).toBeNull();
+        expect((await admin.from("departments").insert({
+          id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House",
+        })).error).toBeNull();
+        expect((await admin.from("business_memberships").insert([
+          { business_id: businessId, user_id: userIds[0], role: "owner" },
+          { business_id: businessId, user_id: userIds[1], role: "employee", venue_id: venueId, department_id: fohId },
+        ])).error).toBeNull();
+
+        await signIn(page, `owner-${suffix}@example.test`, password);
+        await page.getByRole("link", { name: "Departments", exact: true }).click();
+        await expect(page.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
+        const addDepartment = page.getByRole("region", { name: "Add department", exact: true });
+        await addDepartment.getByRole("textbox", { name: "Department name" }).fill("Events");
+        await addDepartment.getByRole("button", { name: "Add department" }).click();
+        await expect(page.getByRole("status")).toHaveText("Department saved.");
+        const events = page.getByRole("region", { name: "Department Events", exact: true });
+        await expect(events).toBeVisible();
+        const storedDepartment = await admin.from("departments").select("id, active")
+          .eq("business_id", businessId).eq("name", "Events").single();
+        expect(storedDepartment.error).toBeNull();
+        expect(storedDepartment.data.active).toBe(true);
+        const eventsId = storedDepartment.data.id;
+
+        await addDepartment.getByRole("textbox", { name: "Department name" }).fill("events");
+        await addDepartment.getByRole("button", { name: "Add department" }).click();
+        await expect(page.locator('p[role="alert"]')).toContainText("already used");
+
+        await events.getByRole("textbox", { name: "New role name" }).fill("Event host");
+        await events.getByRole("button", { name: "Add role" }).click();
+        await expect(page.getByRole("status")).toHaveText("Job role saved.");
+        await expect(events.getByRole("listitem", { name: "Job role Event host" })).toBeVisible();
+
+        expect((await admin.from("employees").insert({
+          business_id: businessId, venue_id: venueId, department_id: eventsId,
+          name: "Event worker", role_title: "Event host",
+        })).error).toBeNull();
+        await page.goto(`/roster?department=${eventsId}`);
+        await expect(page.locator("#role-suggestions option[value='Event host']")).toHaveCount(1);
+        await page.locator('input[name="role_title"]').fill("Event host");
+        await page.locator('select[name="employee_id"]').selectOption({ label: "Event worker · Event host" });
+        await page.getByRole("button", { name: "Save draft shift" }).click();
+        await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+        const shift = await admin.from("shifts").select("id, department_id, role_title")
+          .eq("business_id", businessId).single();
+        expect(shift.error).toBeNull();
+        expect(shift.data).toMatchObject({ department_id: eventsId, role_title: "Event host" });
+
+        await page.goto("/settings/organisation");
+        const eventsAgain = page.getByRole("region", { name: "Department Events", exact: true });
+        const roleRow = eventsAgain.getByRole("listitem", { name: "Job role Event host" });
+        await roleRow.getByRole("combobox", { name: "Role status" }).selectOption("false");
+        await roleRow.getByRole("button", { name: "Save role" }).click();
+        await expect(page.getByRole("status")).toHaveText("Job role saved.");
+        await eventsAgain.getByRole("textbox", { name: "Department name" }).fill("Functions");
+        await eventsAgain.getByRole("combobox", { name: "Department status" }).selectOption("false");
+        await eventsAgain.getByRole("button", { name: "Save department" }).click();
+        await expect(page.getByRole("status")).toHaveText("Department saved.");
+        const functions = page.getByRole("region", { name: "Department Functions", exact: true });
+        await expect(functions.getByRole("heading", { name: "Functions Inactive", exact: true })).toBeVisible();
+        await expect(functions.getByRole("button", { name: "Add role" })).toHaveCount(0);
+
+        const retained = await admin.from("shifts").select("id, department_id, role_title").eq("id", shift.data.id).single();
+        expect(retained.error).toBeNull();
+        expect(retained.data).toEqual(shift.data);
+        const roles = await admin.from("job_roles").select("name, active").eq("department_id", eventsId);
+        expect(roles.data).toEqual([{ name: "Event host", active: false }]);
+
+        await page.goto(`/roster?department=${eventsId}`);
+        await expect(page.locator("#department-filter option", { hasText: "Functions (inactive)" })).toHaveCount(1);
+        await expect(page.getByRole("note")).toContainText("This department is inactive");
+        await expect(page.getByRole("button", { name: "Save draft shift" })).toHaveCount(0);
+
+        await page.goto("/people");
+        const newEmployee = page.getByRole("region", { name: "New employee", exact: true });
+        await expect(newEmployee.locator(`select[name="department_id"] option[value="${eventsId}"]`)).toHaveCount(0);
+
+        employeeContext = await browser.newContext({ baseURL: appUrl });
+        const employeePage = await employeeContext.newPage();
+        await signIn(employeePage, `staff-${suffix}@example.test`, password);
+        await expect(employeePage.getByRole("link", { name: "Departments", exact: true })).toHaveCount(0);
+        await employeePage.goto("/settings/organisation");
+        await expect(employeePage).toHaveURL(/\/\?error=permission/);
+      } finally {
+        if (employeeContext && browser.isConnected()) await employeeContext.close();
+        expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+        expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+        for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+      }
+});
