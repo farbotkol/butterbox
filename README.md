@@ -131,8 +131,15 @@ When a department roster is published, a numbered version and a snapshot of its
 published shifts are recorded for that venue-local week. Authorised managers
 can see publication history on the roster. Publishing with no drafts, or a
 publication blocked by a conflict rule, does not create a version. Shifts
-published before version history was introduced are not retroactively logged;
-employee publication notifications are not yet available.
+published before version history was introduced are not retroactively logged.
+New publications create one in-app roster update per affected account, even
+when several shifts or linked profiles are involved. Employees can review and
+mark updates read in **Notifications**, or open their own schedule directly.
+Unlinked profiles retain their update until linked; managers are warned when
+affected profiles lack a linked account, eligible membership or department
+link. An in-app update is visible when the employee next signs in; this does
+not verify external delivery. Updates are not retroactively generated for
+older publications, and email and push delivery are not yet available.
 
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its

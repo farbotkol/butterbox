@@ -458,6 +458,27 @@ test(
           .select("shift_id").eq("publication_id", versions.data[1].id);
         assert.ifError(snapshot.error);
         assert.deepEqual(snapshot.data.map(({ shift_id }) => shift_id).sort(), [first.data, second.data].sort());
+        const recipients = await admin.from("roster_publication_recipients")
+          .select("publication_id, employee_id").in("publication_id", versions.data.map(({ id }) => id));
+        assert.ifError(recipients.error);
+        assert.equal(recipients.data.length, 2);
+        assert.ok(recipients.data.every(({ employee_id }) => employee_id === employeeId));
+        const notices = await worker.rpc("list_roster_notifications", {
+          p_business_id: businessId, p_venue_id: venueId,
+        }).in("publication_id", versions.data.map(({ id }) => id));
+        assert.ifError(notices.error);
+        assert.equal(notices.data.length, 2);
+        assert.ok(notices.data.every(({ unread }) => unread));
+        const [firstRead, secondRead] = await Promise.all([
+          worker.rpc("mark_roster_notification_read", { p_publication_id: versions.data[0].id }),
+          worker.rpc("mark_roster_notification_read", { p_publication_id: versions.data[0].id }),
+        ]);
+        assert.ifError(firstRead.error);
+        assert.ifError(secondRead.error);
+        const readRecords = await admin.from("roster_publication_notification_reads")
+          .select("user_id").eq("publication_id", versions.data[0].id);
+        assert.ifError(readRecords.error);
+        assert.deepEqual(readRecords.data, [{ user_id: users[1] }]);
       } finally {
         try {
           await lock.release(false);

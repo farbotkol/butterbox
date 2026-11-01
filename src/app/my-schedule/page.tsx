@@ -2,7 +2,9 @@ import { ArrowLeft, ArrowRight, MapPin } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { groupEmployeeSchedule, type EmployeeScheduleShift } from "@/lib/employee-schedule";
+import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
@@ -67,13 +69,14 @@ export default async function MySchedulePage({
   }
 
   const week = getWeekStart(params.week, workspace.venue.timezone);
-  const [venueResult, employeeResult] = await Promise.all([
+  const [venueResult, employeeResult, unreadNotifications] = await Promise.all([
     workspace.supabase.from("venues").select("id, name, address, timezone")
       .eq("business_id", workspace.business.id).order("created_at"),
     workspace.supabase.from("employees").select("id")
       .eq("business_id", workspace.business.id)
       .eq("venue_id", workspace.venue.id)
       .eq("auth_user_id", workspace.user.id),
+    unreadRosterNotificationCount(workspace.supabase, workspace.business.id, workspace.venue.id),
   ]);
   const venue = venueResult.data?.find((item) => item.id === workspace.venue.id);
   const employeeIds = (employeeResult.data ?? []).map((employee) => employee.id);
@@ -126,6 +129,8 @@ export default async function MySchedulePage({
           </form>
         )}
       </div>
+
+      <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} />
 
       {loadError || !venue ? (
         <p role="alert" className="mt-6 rounded-xl bg-red-50 p-4 text-sm text-red-800">

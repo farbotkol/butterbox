@@ -2,23 +2,24 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **17**. In Progress: **6**.
-  Blocked: **1**. Not started (Backlog): **63**.
+- Total stories: **87**. Verified Done: **17**. In Progress: **7**.
+  Blocked: **1**. Not started (Backlog): **62**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003 and BB-ROSTER-006.
-- The latest serialized Node run passed **47 tests**, with two integration
+- The latest serialized Node run passed **49 tests**, with two integration
   tests skipped in that invocation and subsequently passed against the isolated
   project. After a clean isolated database reset, the full pgTAP regression
-  passed **755/755 assertions across 19 files**, including 47 publication-version,
-  53 conflict-policy, 51 availability-exception, 57 employee-preference,
-  78 draft-editing, 37 manual-assignment and 28 linked-roster authorization
-  assertions. Authenticated two-tenant tests and ordered leave, assignment,
-  policy-change and simultaneous-publication races passed.
+  passed **824/824 assertions across 20 files**, including 69 notification,
+  47 publication-version, 53 conflict-policy, 51 availability-exception,
+  57 employee-preference, 78 draft-editing, 37 manual-assignment and 28
+  linked-roster authorization assertions. Authenticated two-tenant tests and
+  ordered leave, assignment, policy-change, simultaneous-publication and
+  duplicate-read races passed.
 - Production compile, explicit TypeScript, generate and full ESLint passed.
-  The expanded publication-history production Chromium scenario and the
-  **complete 25/25 scenario browser regression** passed in serialized,
-  low-memory mode. The test runner stopped its temporary app servers.
+  Focused Chromium notification, conflict-policy and mobile-schedule scenarios
+  passed. The full **26/26 production-browser scenarios passed** in serialized,
+  low-memory mode, and the temporary application server stopped.
 - An offline, network-disabled, redacted Gitleaks scan of the pending feature
   changes and new files found no leaks.
 - The historical local checkpoint-ref credential blocker described below remains
@@ -93,11 +94,17 @@
 - **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
   blockers prevent publication atomically, and concurrent conflicting edits
   return an explicit retry. Numbered versions, complete protected snapshots and
-  a scoped manager history are now verified. Employee notifications remain
-  unimplemented.
+  a scoped manager history are verified. In-app publication updates now reach
+  linked employees once per account/version; profiles without a linked account,
+  eligible membership or department link remain pending and managers are
+  warned. Email/push delivery and cross-venue conflict enforcement remain
+  unfinished.
+- **BB-COMMS-002 — In-app notification centre** is In Progress. Roster
+  publication updates have unread/read state, authorized schedule links and
+  deduplication; offers and approval events are not yet supported.
 - **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
-  it remains In Progress because required shift acknowledgements depend on the
-  unfinished publication/versioning workflow.
+  published updates are visible and linked from the new notification centre,
+  but required shift acknowledgements are not implemented.
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
@@ -206,7 +213,7 @@ remain blocked by existing rules.
 | --- | --- | --- | --- |
 | ROSTER-008.1 Draft changes stay private until publication | RLS restricts drafts to authorized managers and the personal schedule reads only published assignments. | Existing two-tenant/scoped SQL and production-browser schedule tests passed in the 708-assertion and 25-scenario regressions. | Pass |
 | ROSTER-008.2 Published version is recorded | Each successful publication atomically creates a per-department/week version and complete shift snapshot, with actor and venue-local context. Managers see their scoped history; no-op and blocked publications create no version. Pre-existing publications are not retroactively fabricated. | 47 focused pgTAP assertions pass for snapshots, immutability, permissions, no-op and blocked cases; simultaneous publication integration produces ordered complete snapshots; production Chromium verifies history and two versions. | Pass |
-| ROSTER-008.3 Impacted employees are notified once | Notification delivery is not implemented. | Not tested; not implemented. | In Progress |
+| ROSTER-008.3 Impacted employees are notified once | Each new publication creates one in-app update per affected account, deduplicating multiple shifts and profiles. Unlinked profiles retain a pending update; managers see inaccessible-profile counts. Email/push and staff invitation are not implemented. | 69 isolated SQL assertions cover deduplication, later linking, revoked access, tenant/role scope, no-op/blocked publication and read state. Concurrent publication and duplicate reads pass. Production Chromium verifies mobile notices, read state, pending linking and own-schedule deep links. | In Progress |
 | ROSTER-008.4 Unresolved blockers prevent publishing | Configured venue availability, overlap and duration blockers atomically reject publication; concurrent roster changes return a retry. | 53 focused SQL assertions, authenticated ordered races and production-browser resolution of each local blocker pass. Cross-venue conflicts remain unsupported. | In Progress |
 
 Files for the version slice: `supabase/migrations/20261101210000_roster_publication_versions.sql`,
@@ -214,6 +221,26 @@ Files for the version slice: `supabase/migrations/20261101210000_roster_publicat
 `tests/auto-assignment-concurrency.integration.test.mjs`,
 `src/app/roster/page.tsx`, `tests/e2e/auth.spec.mjs` and `README.md`.
 Migration applied only to the isolated test project.
+
+Notification slice files: `supabase/migrations/20261101220000_roster_publication_notifications.sql`,
+`supabase/tests/database/roster_publication_notifications.test.sql`,
+`src/app/notifications/page.tsx`, `src/app/actions.ts`,
+`src/app/roster/page.tsx`, `src/app/my-schedule/page.tsx`, `src/app/page.tsx`,
+`src/components/main-navigation.tsx`, `src/components/roster-notification-banner.tsx`,
+`src/lib/roster-notifications.ts`, `tests/roster-notifications.test.mjs`,
+`tests/auto-assignment-concurrency.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs` and `README.md`. Read state is scoped to the account
+and publication, so linking a second affected profile after a read does not
+re-send that publication. Pre-feature versions are explicitly identified rather
+than falsely claiming notification delivery.
+
+### BB-COMMS-002 — In-app notification centre (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| COMMS-002.1 Shift changes, offers and approvals show unread/read state | New roster publications generate unread notices and idempotent account-scoped reads. Other event types are not yet integrated. | 69 notification SQL assertions and production Chromium pass for publication updates, read state and delayed linking; no offer/approval implementation exists. | In Progress |
+| COMMS-002.2 Deep links open the correct authorised item | Publication notices open the linked employee's venue-local weekly schedule; server-side authorization is rechecked when reading and opening. | Production Chromium verifies the correct week and own shifts; SQL and authenticated API tests deny other employees and tenants. Other event types remain unimplemented. | In Progress |
+| COMMS-002.3 Repeated events deduplicate | One publication creates one notice per account even for multiple shifts or profiles; late profile links preserve read state. | SQL covers repeated publication, late links and separate accounts; a concurrent two-request read test creates one read record. Other event types remain unimplemented. | In Progress |
 
 ### BB-ROSTER-001 — Weekly people-by-day roster (Done)
 
@@ -249,7 +276,7 @@ Files: `src/components/shift-editor.tsx`, `src/app/roster/page.tsx`,
 `tests/tenant-isolation.integration.test.mjs`, `tests/e2e/auth.spec.mjs`
 and README. The migrations were applied only to the disposable test database.
 Manual assignment checks active linked employees, overlap and any enabled role
-restriction, but does not yet enforce availability.
+restriction; the venue can also opt into blocking unavailable assignments.
 
 ### BB-ROSTER-010 — Simple employee roster (In Progress)
 
@@ -257,7 +284,7 @@ restriction, but does not yet enforce availability.
 | --- | --- | --- | --- |
 | ROSTER-010.1 Only published assigned shifts appear | `/my-schedule` queries only scheduled, published shifts for employee profiles linked to the signed-in user and selected venue, with RLS still authoritative. | Production Chromium and authenticated Supabase requests verify own primary/secondary-department shifts, exclude drafts, unassigned shifts, other workers and another tenant; a manager with wider RLS still sees only their own personal shifts. Anonymous access and an unlinked account are also checked. Pass. | Pass |
 | ROSTER-010.2 Venue-local time and location display clearly | Next-shift card and seven-day mobile schedule show venue-local dates/times, venue name/address and timezone; overnight overlaps appear in the week. | Three unit tests cover grouping, week boundaries and DST. Production Chromium at 375px verifies next shift, overnight overlap, local time, address, navigation and no page-level horizontal overflow. Pass. | Pass |
-| ROSTER-010.3 Updates visible and acknowledged when required | Refresh fetches current published data; the UI explicitly states acknowledgements are not yet available. | Production Chromium publishes a draft through the scoped owner RPC and verifies it appears after refresh. Acknowledgement requirements and versioning are not implemented. | In Progress |
+| ROSTER-010.3 Updates visible and acknowledged when required | Refresh fetches current published data and in-app notices link to the affected week; the UI explicitly states acknowledgements are not yet available. | Production Chromium publishes drafts and verifies own updated shifts after refresh and through a notification link. Required acknowledgements are not implemented. | In Progress |
 
 Files: `src/app/my-schedule/page.tsx`, `src/app/my-schedule/loading.tsx`,
 `src/lib/employee-schedule.ts`, `tests/employee-schedule.test.mjs`,
@@ -447,7 +474,7 @@ not yet run remotely.
 - Supabase CLI 2.122.0 runs in a separate temporary project on ports
   55421/55422. The existing Butterbox stack was not modified. SQL fixtures are
   rolled back and HTTP fixtures are cleaned up. A clean local-only reset rebuilt
-  the isolated schema and migration history through `20261101210000`.
+  the isolated schema and migration history through `20261101220000`.
 - Serialized Node unit run: 45 passed, one HTTP integration explicitly
   skipped without disposable settings. The isolated database regression
   passed 655/655 pgTAP assertions and the separately configured two-tenant
@@ -492,18 +519,18 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Cross-venue identity/overlap, employee notification and acknowledgement
-  remain incomplete. The historical credential findings still require owner
-  assessment and any approved rotation/history handling.
+- Cross-venue identity/overlap, employee invitation, email/push notification
+  and shift acknowledgement remain incomplete. The historical credential
+  findings still require owner assessment and any approved rotation/history
+  handling.
 
 ## Next story
 
-- Continue **BB-ROSTER-008** with an exactly-once employee notification
-  workflow, preserving the verified version record, draft privacy,
-  tenant/department authorization and atomic blocker checks. Then implement
-  acknowledgements for BB-ROSTER-010 and explicit shared-worker identity and
-  cross-venue overlap detection for BB-ORG-005/BB-ROSTER-007.
-- Migrations through `20261101210000` are applied only to the isolated stack.
+- Continue with **BB-ROSTER-010** shift acknowledgements, preserving published
+  versions, draft privacy, scoped permissions and the new in-app notices. Then
+  implement explicit shared-worker identity and cross-venue overlap detection
+  for BB-ORG-005/BB-ROSTER-007, employee invitations and reliable email/push.
+- Migrations through `20261101220000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

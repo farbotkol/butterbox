@@ -2819,3 +2819,183 @@ test("personal mobile schedules show only the member's published shifts", async 
     }
   }
 });
+
+test("published roster updates reach the right employees once and retain pending profiles", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId] = [randomUUID(), randomUUID()];
+  const [venueId, outsideVenueId] = [randomUUID(), randomUUID()];
+  const [departmentId, outsideDepartmentId] = [randomUUID(), randomUUID()];
+  const [workerId, pendingId, coworkerId] = [randomUUID(), randomUUID(), randomUUID()];
+  const userIds = [];
+  const contexts = [];
+  try {
+    for (const name of ["owner", "worker", "pending", "coworker", "outside"]) {
+      const user = await admin.auth.admin.createUser({
+        email: `roster-notice-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(user.error).toBeNull();
+      userIds.push(user.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Notice business ${suffix}` },
+      { id: outsideBusinessId, name: `Outside notices ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Notice cafe", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside cafe", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: outsideDepartmentId, business_id: outsideBusinessId, venue_id: outsideVenueId, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: userIds[0], role: "owner" },
+      { business_id: businessId, user_id: userIds[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: userIds[2], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: userIds[3], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusinessId, user_id: userIds[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: userIds[1], name: "Notified worker", role_title: "Server" },
+      { id: pendingId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Pending worker", role_title: "Server" },
+      { id: coworkerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: userIds[3], name: "Other worker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: workerId,
+        role_title: "Worker morning", starts_at: "2032-03-15T09:00:00Z", ends_at: "2032-03-15T10:00:00Z", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: workerId,
+        role_title: "Worker midday", starts_at: "2032-03-15T11:00:00Z", ends_at: "2032-03-15T12:00:00Z", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: pendingId,
+        role_title: "Pending service", starts_at: "2032-03-15T13:00:00Z", ends_at: "2032-03-15T14:00:00Z", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: null,
+        role_title: "Open service", starts_at: "2032-03-15T15:00:00Z", ends_at: "2032-03-15T16:00:00Z", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: coworkerId,
+        role_title: "Private existing service", starts_at: "2032-03-15T17:00:00Z",
+        ends_at: "2032-03-15T18:00:00Z", is_published: true },
+    ])).error).toBeNull();
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `roster-notice-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/notifications?venue=${venueId}`);
+    await expect(workerPage.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
+    await expect(workerPage.getByText("Worker morning", { exact: true })).toHaveCount(0);
+
+    await signIn(page, `roster-notice-owner-${suffix}@example.test`, password);
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    await page.goto(roster);
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    const history = page.getByRole("region", { name: "Publication history" });
+    await expect(history).toContainText("1 affected employee profile cannot currently see this update");
+
+    const versions = await admin.from("roster_publications").select("id, version")
+      .eq("department_id", departmentId).eq("week_start", "2032-03-15");
+    expect(versions.error).toBeNull();
+    expect(versions.data).toHaveLength(1);
+    const firstPublication = versions.data[0].id;
+    await workerPage.goto("/");
+    const banner = workerPage.getByRole("region", { name: "Unread roster updates" });
+    await expect(banner).toContainText("1 unread roster update");
+    await banner.getByRole("link", { name: "View notifications" }).click();
+    const firstNotice = workerPage.getByRole("article", { name: "Roster update for week starting 2032-03-15" });
+    await expect(firstNotice).toHaveCount(1);
+    await expect(firstNotice.getByText("Unread", { exact: true })).toBeVisible();
+    await expect(workerPage.getByText("Private existing service", { exact: true })).toHaveCount(0);
+    expect(await workerPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await firstNotice.getByRole("button", { name: "Mark as read" }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Notification marked as read.");
+    await expect(firstNotice.getByText("Read", { exact: true })).toBeVisible();
+
+    const create = page.getByRole("form", { name: "Add draft shift" });
+    await create.getByLabel("Role").fill("Later worker shift");
+    await create.getByLabel("Team member").selectOption(workerId);
+    await create.getByLabel("Starts").fill("2032-03-16T11:00");
+    await create.getByLabel("Ends").fill("2032-03-16T12:00");
+    await create.getByLabel("Break").fill("0");
+    await create.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    await expect(history.getByRole("listitem")).toHaveCount(2);
+    await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
+    await expect(banner).toContainText("1 unread roster update");
+    await banner.getByRole("link", { name: "View notifications" }).click();
+    await expect(workerPage.getByRole("article")).toHaveCount(2);
+    const unread = workerPage.getByRole("article").filter({
+      has: workerPage.getByText("Unread", { exact: true }),
+    });
+    await expect(unread).toHaveCount(1);
+    await unread.getByRole("button", { name: "View schedule" }).click();
+    await expect(workerPage).toHaveURL(new RegExp(`/my-schedule\\?week=2032-03-15&venue=${venueId}`));
+    const weekly = workerPage.getByRole("region", { name: "Weekly schedule" });
+    await expect(weekly).toContainText("Worker morning");
+    await expect(weekly).toContainText("Worker midday");
+    await expect(weekly).toContainText("Later worker shift");
+    await expect(weekly).not.toContainText("Pending service");
+    await expect(weekly).not.toContainText("Private existing service");
+    await expect(banner).toHaveCount(0);
+
+    const pendingContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(pendingContext);
+    const pendingPage = await pendingContext.newPage();
+    await signIn(pendingPage, `roster-notice-pending-${suffix}@example.test`, password);
+    await pendingPage.goto(`/notifications?venue=${venueId}`);
+    await expect(pendingPage.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `roster-notice-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("set_employee_auth_user", {
+      p_business_id: businessId, p_employee_id: pendingId, p_user_id: userIds[2],
+    })).error).toBeNull();
+    await page.goto(roster);
+    await expect(history).not.toContainText("cannot currently see this update");
+    await pendingPage.reload();
+    const pendingNotice = pendingPage.getByRole("article");
+    await expect(pendingNotice).toHaveCount(1);
+    await expect(pendingNotice.getByText("Unread", { exact: true })).toBeVisible();
+    await pendingNotice.getByRole("button", { name: "View schedule" }).click();
+    await expect(pendingPage.getByRole("region", { name: "Weekly schedule" })).toContainText("Pending service");
+    await expect(pendingPage.getByRole("region", { name: "Weekly schedule" })).not.toContainText("Worker morning");
+
+    const coworkerApi = createClient(apiUrl, anonKey, options);
+    expect((await coworkerApi.auth.signInWithPassword({
+      email: `roster-notice-coworker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    const coworkerNotices = await coworkerApi.rpc("list_roster_notifications", {
+      p_business_id: businessId, p_venue_id: venueId,
+    });
+    expect(coworkerNotices.error).toBeNull();
+    expect(coworkerNotices.data).toEqual([]);
+    expect((await coworkerApi.rpc("mark_roster_notification_read", {
+      p_publication_id: firstPublication,
+    })).error?.message).toBe("Permission denied");
+    const outsideApi = createClient(apiUrl, anonKey, options);
+    expect((await outsideApi.auth.signInWithPassword({
+      email: `roster-notice-outside-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await outsideApi.rpc("list_roster_notifications", {
+      p_business_id: outsideBusinessId, p_venue_id: venueId,
+    })).error?.message).toBe("Permission denied");
+    expect((await outsideApi.rpc("mark_roster_notification_read", {
+      p_publication_id: firstPublication,
+    })).error?.message).toBe("Permission denied");
+  } finally {
+    try {
+      if (browser.isConnected()) {
+        for (const context of contexts) await context.close();
+      }
+    } finally {
+      expect((await admin.from("shifts").delete().in("business_id", [businessId, outsideBusinessId])).error).toBeNull();
+      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+    }
+  }
+});

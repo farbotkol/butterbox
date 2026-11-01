@@ -836,3 +836,41 @@ export async function publishRosterAction(formData: FormData) {
   }
   redirect(`${destination}&published=${data === 0 ? "none" : "1"}`);
 }
+
+export async function markRosterNotificationReadAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const publicationIds = uuidList(formData, "publication_id", 1);
+  const operation = text(formData, "operation", 10);
+  if (!venueIds || venueIds.length !== 1 || !publicationIds || publicationIds.length !== 1 ||
+    !["read", "open"].includes(operation)) {
+    console.error("Invalid notification read request.");
+    redirect("/notifications?error=read");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the notifications workspace for reading.", { message: workspace.message });
+    redirect("/notifications?error=read");
+  }
+  const destination = `/notifications?${new URLSearchParams({ venue: workspace.venue.id })}`;
+  const { data, error } = await workspace.supabase.rpc("mark_roster_notification_read", {
+    p_publication_id: publicationIds[0],
+  });
+  const result = Array.isArray(data) && data.length === 1 ? data[0] : null;
+  if (error || !result || result.venue_id !== workspace.venue.id ||
+    typeof result.week_start !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(result.week_start)) {
+    console.error("Could not mark roster notification read.", {
+      code: error?.code,
+      message: error?.message ?? "The server returned an invalid notification target.",
+    });
+    redirect(`${destination}&error=read`);
+  }
+  revalidatePath("/notifications");
+  revalidatePath("/my-schedule");
+  revalidatePath("/");
+  if (operation === "open") {
+    redirect(`/my-schedule?${new URLSearchParams({ week: result.week_start, venue: result.venue_id })}`);
+  }
+  redirect(`${destination}&saved=read`);
+}

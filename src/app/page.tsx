@@ -13,6 +13,8 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { BrandLockup } from "@/components/brand-lockup";
 import { CoastalIllustration } from "@/components/coastal-illustration";
+import { RosterNotificationBanner } from "@/components/roster-notification-banner";
+import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
@@ -112,7 +114,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
 
-  const [{ data: shifts }, { data: departments }] = await Promise.all([
+  const [{ data: shifts }, { data: departments }, unreadNotifications] = await Promise.all([
     workspace.supabase
       .from("shifts")
       .select("id, employee_id, department_id, starts_at, ends_at, is_published")
@@ -125,6 +127,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       .select("id, name")
       .eq("venue_id", workspace.venue.id)
       .order("name"),
+    unreadRosterNotificationCount(workspace.supabase, workspace.business.id, workspace.venue.id),
   ]);
 
   const roster = shifts ?? [];
@@ -185,6 +188,8 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           </Link>
         </div>
       </section>
+
+      <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} />
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

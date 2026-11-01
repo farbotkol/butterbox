@@ -54,6 +54,11 @@ type RosterPageProps = {
   }>;
 };
 
+type PublicationReachability = {
+  publication_id: string;
+  inaccessible_count: number;
+};
+
 const errorMessages: Record<string, string> = {
   invalid: "Check the shift details and try again.",
   overlap: "That employee already has a shift during this time.",
@@ -300,17 +305,41 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   };
   const canManageSelectedDepartment = selectedDepartment
     ? canManageDepartment(selectedDepartment) : false;
-  const publicationHistory = canManageSelectedDepartment && selectedDepartment
-    ? await readAllPages((from, to) => workspace.supabase.from("roster_publications")
-      .select("id, version, published_at, venue_timezone, new_shift_count, shift_count", { count: "exact" })
-      .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
-      .eq("department_id", selectedDepartment).eq("week_start", week)
-      .order("version", { ascending: false }).range(from, to), (publication) => publication.id)
-    : null;
+  const [publicationHistory, notificationReachability] = canManageSelectedDepartment && selectedDepartment
+    ? await Promise.all([
+        readAllPages((from, to) => workspace.supabase.from("roster_publications")
+          .select("id, version, published_at, venue_timezone, new_shift_count, shift_count, notifications_recorded", { count: "exact" })
+          .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
+          .eq("department_id", selectedDepartment).eq("week_start", week)
+          .order("version", { ascending: false }).range(from, to), (publication) => publication.id),
+        readAllPages<PublicationReachability>((from, to) => workspace.supabase.rpc(
+          "list_roster_notification_reachability",
+          {
+            p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+            p_department_id: selectedDepartment, p_week_start: week,
+          },
+          { count: "exact" },
+        ).order("publication_id").range(from, to), (result) => result.publication_id),
+      ])
+    : [null, null];
   if (publicationHistory?.error) {
     console.error("Could not load roster publication history.", {
       code: publicationHistory.error.code,
       message: publicationHistory.error.message,
+    });
+  }
+  const reachabilityByPublication = new Map(
+    (notificationReachability?.data ?? []).map((result) => [result.publication_id, result.inaccessible_count]),
+  );
+  const incompleteReachability = publicationHistory?.data?.some((publication) => {
+    const count = reachabilityByPublication.get(publication.id);
+    return count === undefined || !Number.isSafeInteger(count) || count < 0;
+  }) ?? false;
+  const reachabilityError = notificationReachability?.error || incompleteReachability;
+  if (reachabilityError) {
+    console.error("Could not load roster notification reachability.", {
+      code: notificationReachability?.error?.code,
+      message: notificationReachability?.error?.message ?? "The result did not cover every publication.",
     });
   }
   const selectedDepartmentActive =
@@ -533,19 +562,39 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             <p className="mt-2 text-sm text-muted">No recorded publications for this department and week.</p>
           ) : (
             <ol className="mt-3 space-y-2">
-              {publicationHistory.data?.map((publication) => (
-                <li key={publication.id} className="rounded-lg border border-line px-3 py-2 text-sm">
-                  <span className="font-semibold">Version {publication.version}</span>
-                  {" · "}
-                  {new Intl.DateTimeFormat("en-AU", {
-                    timeZone: publication.venue_timezone, day: "numeric", month: "short", year: "numeric",
-                    hour: "numeric", minute: "2-digit",
-                  }).format(new Date(publication.published_at))}
-                  {" · "}
-                  {publication.new_shift_count} newly published, {publication.shift_count} total shifts
-                </li>
-              ))}
+              {publicationHistory.data?.map((publication) => {
+                const inaccessible = reachabilityByPublication.get(publication.id);
+                return (
+                  <li key={publication.id} className="rounded-lg border border-line px-3 py-2 text-sm">
+                    <p>
+                      <span className="font-semibold">Version {publication.version}</span>
+                      {" · "}
+                      {new Intl.DateTimeFormat("en-AU", {
+                        timeZone: publication.venue_timezone, day: "numeric", month: "short", year: "numeric",
+                        hour: "numeric", minute: "2-digit",
+                      }).format(new Date(publication.published_at))}
+                      {" · "}
+                      {publication.new_shift_count} newly published, {publication.shift_count} total shifts
+                    </p>
+                    {!publication.notifications_recorded ? (
+                      <p className="mt-1 text-xs text-muted">
+                        In-app updates were not recorded for this earlier publication.
+                      </p>
+                    ) : !reachabilityError && inaccessible !== undefined && inaccessible > 0 ? (
+                      <p className="mt-1 text-xs font-medium text-amber-900">
+                        {inaccessible} affected employee {inaccessible === 1 ? "profile cannot" : "profiles cannot"}
+                        {" "}currently see this update. Link their account and check their venue and department access.
+                      </p>
+                    ) : null}
+                  </li>
+                );
+              })}
             </ol>
+          )}
+          {reachabilityError && (
+            <p role="alert" className="mt-3 text-sm text-red-800">
+              We couldn&apos;t verify who can access these updates. Reload the roster to try again.
+            </p>
           )}
           <p className="mt-3 text-xs text-muted">
             Versions are recorded when drafts are published. Rosters published before history was introduced
