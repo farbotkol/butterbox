@@ -4500,7 +4500,8 @@ test("employees request missed clocks and scoped managers decide without overwri
       await requestForm.getByLabel("Reason for the request").fill(reason);
       await Promise.all([
         workerPage.waitForResponse((response) =>
-          response.request().method() === "POST" && new URL(response.url()).pathname === "/attendance"),
+          response.request().method() === "POST" && new URL(response.url()).pathname === "/attendance",
+        { timeout: 15_000 }),
         requestForm.getByRole("button", { name: "Submit correction request" }).click(),
       ]);
     };
@@ -4514,6 +4515,8 @@ test("employees request missed clocks and scoped managers decide without overwri
     const submit = async (type, local, reason, occurrence = "", microseconds = "") => {
       await fillRequest(type, local, reason, occurrence, microseconds);
       await expect(workerPage.getByRole("status")).toContainText("submitted for manager review");
+      await expect(workerPage.getByRole("region", { name: "Employee correction requests" }))
+        .toContainText(`Employee's reason: ${reason}`);
       const result = await workerApi.rpc("list_attendance_offline_claims", {
         p_business_id: businessId, p_venue_id: venueId,
       });
