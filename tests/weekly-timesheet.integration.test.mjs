@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
+import { validateCanonicalPayrollRows } from "../src/lib/canonical-payroll.ts";
 import { disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
@@ -22,7 +23,8 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const [business, outsideBusiness, venue, otherVenue, outsideVenue, foh, boh, otherDepartment,
-    worker, cook, fohSession, bohSession, cookSession] = Array.from({ length: 13 }, () => randomUUID());
+    worker, cook, fohSession, bohSession, cookSession, otherWorker, otherSession] =
+    Array.from({ length: 15 }, () => randomUUID());
   try {
     for (const role of ["owner", "foh", "boh", "worker", "outside"]) {
       const email = `weekly-http-${role}-${suffix}@example.test`;
@@ -59,7 +61,12 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
         auth_user_id: users[3], name: "Weekly HTTP worker", role_title: "Server" },
       { id: cook, business_id: business, venue_id: venue, department_id: boh,
         name: "Weekly HTTP cook", role_title: "Cook" },
+      { id: otherWorker, business_id: business, venue_id: otherVenue, department_id: otherDepartment,
+        auth_user_id: users[3], name: "Weekly HTTP shared worker", role_title: "Server" },
     ])).error);
+    assert.ifError((await clients.get("owner").rpc("link_shared_worker_profiles", {
+      p_business_id: business, p_venue_id: venue, p_employee_id: worker, p_other_employee_id: otherWorker,
+    })).error);
     assert.ifError((await admin.from("employee_departments").insert({
       business_id: business, employee_id: worker, department_id: boh,
     })).error);
@@ -80,6 +87,8 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
         started_by: users[3] },
       { id: cookSession, business_id: business, venue_id: venue, department_id: boh, employee_id: cook,
         started_by: users[3] },
+      { id: otherSession, business_id: business, venue_id: otherVenue, department_id: otherDepartment,
+        employee_id: otherWorker, started_by: users[3] },
     ];
     assert.ifError((await admin.from("attendance_sessions").insert(sessions)).error);
     const event = (session, eventType, occurredAt, source = "server_clock") => ({
@@ -94,6 +103,8 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
       event(sessions[1], "clock_out", "2024-10-06T14:00:00Z", "offline_claim"),
       event(sessions[2], "clock_in", "2024-10-02T00:00:00Z"),
       event(sessions[2], "clock_out", "2024-10-02T02:00:00Z"),
+      event(sessions[3], "clock_in", "2024-10-01T08:00:00Z"),
+      event(sessions[3], "clock_out", "2024-10-01T10:00:00Z"),
     ])).error);
     const scope = { p_business_id: business, p_venue_id: venue, p_week_start: "2024-09-30" };
     const rpcNames = [
@@ -148,6 +159,57 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
     const ownerTime = await clients.get("owner").rpc("list_weekly_worked_time", scope);
     assert.ifError(ownerTime.error);
     assert.deepEqual(new Set(ownerTime.data.map((row) => row.session_id)), new Set([fohSession, bohSession, cookSession]));
+
+    for (const [actualVenue, timezone, sessionIds, paidSeconds] of [
+      [venue, "Australia/Sydney", [fohSession, bohSession, cookSession], "28800"],
+      [otherVenue, "Australia/Perth", [otherSession], "7200"],
+    ]) {
+      const actualScope = { ...scope, p_venue_id: actualVenue };
+      const editable = await clients.get("owner").rpc("list_weekly_worked_time_for_edit", actualScope);
+      assert.ifError(editable.error);
+      assert.deepEqual(new Set(editable.data.map((row) => row.session_id)), new Set(sessionIds));
+      for (const row of editable.data) {
+        assert.equal(row.venue_id, actualVenue, "review retains the venue worked, not the linked home profile");
+        assert.equal(row.venue_timezone, timezone);
+        assert.ifError((await clients.get("owner").rpc("decide_attendance_timesheet", {
+          p_business_id: business, p_venue_id: actualVenue, p_session_id: row.session_id,
+          p_request_id: randomUUID(), p_expected_revision: row.edit_revision, p_decision: "approved", p_reason: null,
+        })).error);
+      }
+      const finalised = await clients.get("owner").rpc("finalise_payroll_period", {
+        ...actualScope, p_request_id: randomUUID(), p_note: "Verify actual venue attribution",
+      });
+      assert.ifError(finalised.error);
+      const canonical = await clients.get("owner").rpc("list_canonical_payroll_records", {
+        ...actualScope, p_finalisation_id: finalised.data,
+      });
+      assert.ifError(canonical.error);
+      const records = validateCanonicalPayrollRows(canonical.data, {
+        businessId: business, venueId: actualVenue, weekStart: scope.p_week_start,
+        finalisationId: finalised.data, sessionCount: sessionIds.length,
+      });
+      assert.ok(records.every((record) => record.venue.id === actualVenue && record.venue.timezone === timezone));
+      assert.equal(String(records.reduce((sum, record) => sum + Number(record.hours.paid), 0)), paidSeconds);
+      if (actualVenue === otherVenue) {
+        assert.equal(records[0].worker.employeeId, otherWorker, "actual employment profile is preserved in payroll");
+      }
+      const batch = await clients.get("owner").rpc("create_generic_payroll_export", {
+        ...actualScope, p_finalisation_id: finalised.data, p_request_id: randomUUID(),
+      });
+      assert.ifError(batch.error);
+      const entries = await clients.get("owner").rpc("list_generic_payroll_batch_entries", {
+        p_business_id: business, p_venue_id: actualVenue, p_batch_id: batch.data,
+      });
+      assert.ifError(entries.error);
+      assert.deepEqual(new Set(entries.data.map((entry) => entry.session_id)), new Set(sessionIds));
+      assert.ok(entries.data.every((entry) =>
+        entry.record.venue.id === actualVenue && entry.record.venue.timezone === timezone));
+      const other = await clients.get("owner").rpc("get_generic_payroll_batch", {
+        p_business_id: business, p_venue_id: actualVenue === venue ? otherVenue : venue, p_batch_id: batch.data,
+      });
+      assert.equal(other.error?.message, "Payroll batch unavailable or permission denied",
+        "a batch cannot be relabelled as another venue");
+    }
 
     assert.ifError((await admin.from("business_memberships").delete().eq("business_id", business)
       .eq("user_id", users[1])).error);

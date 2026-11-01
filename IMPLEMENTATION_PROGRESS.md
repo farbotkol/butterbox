@@ -3,14 +3,29 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **34**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **67**.
+  BB-PAYRULES stories). Verified Done: **35**. In Progress: **5**.
+  Blocked: **3**. Not started (Backlog): **66**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
-  BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
+  BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
   BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002 and BB-PAY-003.
+- BB-ORG-005's remaining approval/export attribution criterion is now verified,
+  without recreating the existing venue workflow. The authenticated integration
+  finalises and exports Sydney and Perth separately for linked worker profiles;
+  the production browser downloads the Perth CSV and excludes the other
+  venue's sessions and profile. Final regressions passed **2,072/2,072**
+  pgTAP assertions across 44 files, **18/18** authenticated integrations,
+  **131** Node tests, ESLint, TypeScript, split production compile/generate
+  and **50/50** serialized production-browser scenarios. The 18 integrations
+  skipped in the Node-only invocation passed separately. Disposable fixtures
+  were removed and temporary app servers stopped; disk remained above 30 GiB.
+- BB-PAY-003 was committed and pushed as
+  `17d91e22d32df0ea989c58c2f413c4c5e2afc094`; the remote SHA matched.
+- BB-PAY-004 is Blocked by missing secure OAuth and explicitly authorised
+  isolated Australian payroll organisation access. No provider delivery or
+  sandbox acceptance is claimed. Next ready prerequisite: BB-FOUND-006.
 - BB-PAY-003's final clean 44-migration disposable replay passed
   **2,072/2,072** pgTAP assertions across 44 files, including 29 mapping
   assertions. All **18/18** authenticated integrations, **131** Node tests,
@@ -294,6 +309,19 @@
 
 ## Current story
 
+- **BB-ORG-005 — Multiple venues** is Done. All three criteria are verified:
+  scoped venue selection, shared-worker overlap detection and actual venue
+  attribution through timesheet approval, finalisation and CSV export.
+  Only tests and tracking changed in this checkpoint; the existing payroll
+  implementation already preserved attribution. Next implementation:
+  **BB-FOUND-006 — Switch between business memberships**.
+- **BB-PAY-004 — Xero Payroll adapter** is Blocked. Configuration-key presence
+  checks found no `XERO_` keys in runtime, repository environment files or
+  Codespace shared secrets; no values were printed. No explicitly authorised
+  isolated Australian payroll organisation is available. Official OpenAPI
+  confirms the Payroll AU v2 `/Timesheets` endpoint and POST
+  `payroll.timesheets` scope, not working OAuth refresh or sandbox delivery.
+  The provider-ready mapping gate remains closed to actual sending.
 - **BB-PAY-003 — Payroll employee mapping** is Done. Owner/admin
   setup creates business-wide mapping destinations, not authenticated provider
   connections. Explicit case-sensitive employee IDs are unique per destination;
@@ -301,10 +329,8 @@
   records use detached canonical records, refuse incomplete mappings and
   serialize with mapping edits. All criteria and final clean replay/regressions
   passed (evidence below). No provider is connected or enabled by this feature.
-  Next: **BB-PAY-004 — Xero Payroll adapter**, which requires current provider
-  access and an isolated Australian payroll test organisation for sandbox
-  acceptance. If that access is unavailable, preserve the provider gate and
-  continue independent foundation work rather than claiming delivery works.
+  BB-PAY-004 requires external access and is Blocked; continue independent
+  foundation work rather than claiming delivery works.
 - **BB-PAY-002 — Generic CSV export** and **BB-TIME-006 — Timesheet export
   traceability** are Done (criterion evidence below). Immutable scoped batches
   contain approved finalised records, protect spreadsheet cells and never
@@ -396,9 +422,9 @@
   hidden shifts; automatic assignment avoids cross-venue overlaps, and
   configurable publication blockers cover them. All three criteria and the
   complete regression checks passed.
-- **BB-ORG-005 — Multiple venues** remains In Progress: venue selection,
-  cross-venue overlap detection and attendance venue attribution are verified,
-  but the timesheet workflow is still needed.
+- **BB-ORG-005 — Multiple venues** is Done: scoped selection, cross-venue
+  conflicts and approval/export attribution are verified in the final
+  2,072-assertion, 18-integration and 50-browser-scenario regressions.
 - **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
   and cross-venue blockers prevent publication atomically, and concurrent conflicting edits
   return an explicit retry. Numbered versions, complete protected snapshots and
@@ -836,13 +862,21 @@ lint, TypeScript, split production build and the focused final-schema browser
 scenario passed. The full 33-scenario browser regression passed immediately
 before the final tenant/venue safeguard and review-error wording change.
 
-### BB-ORG-005 — Multiple venues (In Progress)
+### BB-ORG-005 — Multiple venues (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ORG-005.1 Venue selector scopes views | Roster and people views select only permitted venues; requests are checked server-side. | Scoped permission pgTAP and authenticated browser role/venue scenarios passed in the full 953-assertion and 29-scenario regressions. | Pass |
 | ORG-005.2 Detect shared-staff cross-venue overlap | Owners explicitly confirm profile links; generic overlap results contain only manageable shift IDs. Automatic assignment and configured publication blocking use the same linked-worker identity. | 44 shared-profile and 26 conflict pgTAP assertions, authenticated link/assignment/publication races, and the shared-worker and 1,001-shift browser scenarios passed. | Pass |
-| ORG-005.3 Timesheets retain actual venue attribution | Attendance and work-time calculations preserve the actual venue, but the complete timesheet workflow is not yet implemented. | Work-time attribution passed pgTAP and venue-switching browser tests; timesheet approval and export attribution remain unverified. | In Progress |
+| ORG-005.3 Timesheets retain actual venue attribution | Attendance, weekly review, approvals, venue-specific finalisations, canonical records and export ledger retain the actual venue, timezone, department and employment profile rather than a linked home profile. | Extended weekly HTTP integration finalises and exports Sydney (28,800 paid seconds) and Perth (7,200) separately, checks exact session sets and denies wrong-venue batch access. Production Chromium switches to Perth, approves/finalises and downloads a real CSV containing the actual venue/department/profile/session and excluding primary-venue records. All 18 integrations, 50 browser scenarios and 2,072 pgTAP assertions passed. | Pass |
+
+Files changed for final acceptance: `tests/weekly-timesheet.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `BACKLOG_INDEX.csv`, `IMPLEMENTATION_PROGRESS.md`.
+No schema or application changes were needed. The first focused browser run
+tried to click a download inside collapsed export history and timed out;
+opening the disclosure as a user would fixed the test without weakening any
+assertion. Rebuilt focused and full regressions passed. Final evidence in the
+session files: `multivenue-final-{pgtap,integrations,unit,eslint,typescript,browser}.log`.
 
 ### BB-ORG-002 — Configure venue and geofence (Done)
 
@@ -1231,6 +1265,23 @@ environment. HTTP test fixtures were removed and their absence verified.
 
 ## Blocked stories
 
+### BB-PAY-004 — Xero Payroll adapter (Blocked)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-004.1 Current AU endpoints/scopes confirmed | The official Xero OpenAPI source lists Payroll AU v2, `/Timesheets`, POST `payroll.timesheets` and the GET timesheet scopes. Complete OAuth consent/refresh requirements still need verification against the intended test organisation. | Retrieved the official YAML, not just generated search prose. No configured OAuth client or explicitly isolated AU payroll organisation is available, so no live API verification is claimed. | Blocked |
+| PAY-004.2 OAuth refresh and permission failure handled | No authenticated adapter or token storage/refresh workflow is implemented; generic mapping destinations deliberately do not connect providers. | No runtime acceptance executed. Secure OAuth client configuration and authorised test-organisation access are missing. | Blocked |
+| PAY-004.3 Sandbox end-to-end validates mapping, retries and duplicate prevention | Existing canonical records and explicit mapping gate are verified prerequisites, not proof of provider delivery. Future delivery must persist the exact mapping used in an immutable delivery record. | No Xero sandbox export executed. Do not send live payroll or assume the ordinary demo company supports AU payroll testing. | Blocked |
+
+Official contract consulted:
+https://raw.githubusercontent.com/XeroAPI/Xero-OpenAPI/master/xero-payroll-au-v2.yaml
+(reported version 19.1.0; server `https://api.xero.com/payroll.xro/2.0`).
+Configuration presence checks only found no `XERO_` keys in runtime,
+repository environment files or Codespace shared secrets. No values were
+printed. Resume after an owner securely provisions OAuth access and identifies
+an explicitly isolated AU payroll organisation authorised for testing.
+Continue BB-FOUND-006 independently while this access is missing.
+
 ### BB-FOUND-001 — Create production-ready application (Blocked)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
@@ -1307,16 +1358,20 @@ not yet run remotely.
 
 ## Next story
 
-- Next operational story: **BB-PAY-004 — Xero Payroll adapter**. Confirm
-  current Australian endpoints/scopes and obtain secure OAuth client/test
-  organisation access before claiming end-to-end acceptance. Generic CSV and
-  mapping destinations do not enable provider delivery. If external access
-  is absent, the independent foundation prerequisite is **BB-FOUND-006** safe
-  business switching, which also unblocks the remaining invitation work.
+- Next ready implementation: **BB-FOUND-006 — Switch between business
+  memberships**. Read its complete criteria and current `getWorkspace`,
+  membership guard, navigation and stale-form tests. Implement explicit
+  per-request business selection; never silently pick the first membership
+  or use shared browser state as an action's authorisation context. Verify
+  independent tabs, stale forms, revoked membership and cross-business
+  isolation before enabling existing-other-business invitations.
+  **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
+  client/test-organisation access. Generic CSV and mapping destinations do
+  not enable provider delivery.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.
-- The latest payroll export migration has been tested only on the isolated stack. The
+- The latest payroll migrations have been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

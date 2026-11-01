@@ -5660,6 +5660,37 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByRole("heading", { name: "Riverside Worker · Riverside service" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toHaveCount(0);
+    expect((await ownerApi.rpc("link_shared_worker_profiles", {
+      p_business_id: businessId, p_venue_id: venueId,
+      p_employee_id: workerId, p_other_employee_id: secondWorkerId,
+    })).error).toBeNull();
+    await page.reload();
+    const riversideRow = page.locator(`#timesheet-session-${secondSession}`);
+    await riversideRow.getByRole("button", { name: "Approve time" }).click();
+    await expect(riversideRow).toContainText("Approved by department manager");
+    const riversidePeriod = page.getByRole("region", { name: "Payroll period" });
+    await riversidePeriod.getByRole("button", { name: "Finalise payroll period" }).click();
+    await expect(riversidePeriod).toContainText("Finalised for payroll");
+    const riversideExport = riversidePeriod.getByRole("region", { name: "Generic payroll CSV" });
+    await riversideExport.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(riversideExport.getByRole("status")).toContainText("Batch");
+    const riversideHistory = riversideExport.getByText("Payroll export history (1)");
+    if (!(await riversideHistory.evaluate((summary) => summary.parentElement.open))) {
+      await riversideHistory.click();
+    }
+    const riversideDownload = riversideExport.getByRole("link", { name: "Download payroll CSV" });
+    const [download] = await Promise.all([page.waitForEvent("download"), riversideDownload.click()]);
+    const riversideCsv = await readFile(await download.path(), "utf8");
+    expect(riversideCsv).toContain(`"${secondVenue}"`);
+    expect(riversideCsv).toContain(`"${secondDepartment}"`);
+    expect(riversideCsv).toContain(`"${secondWorkerId}"`);
+    expect(riversideCsv).toContain('"Australia/Perth"');
+    expect(riversideCsv).toContain(secondSession);
+    for (const foreignSession of [completeSession, bohSession, cookSession, historicSession]) {
+      expect(riversideCsv).not.toContain(foreignSession);
+    }
+    expect(riversideCsv).not.toContain(`"${venueId}"`);
+    expect(riversideCsv).not.toContain(`"${workerId}"`);
     await page.goto(`/timesheets?venue=${venueId}&week=bad&employee=bad`);
     await expect(page.locator("main").getByRole("alert")).toContainText("Enter a valid date");
     await page.goto(`/timesheets?venue=${venueId}&week=2024-09-30&employee=${randomUUID()}`);
