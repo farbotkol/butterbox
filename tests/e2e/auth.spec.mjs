@@ -3554,6 +3554,263 @@ test("cross-venue roster conflicts remain visible beyond 1000 shifts", async ({ 
   }
 });
 
+test("managers correct finished attendance with audit history, scoped locks and DST safety", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, employeeId, colleagueId,
+    sessionId, adjacentSession, dstSession, breakId, clockInId, breakStartId, breakEndId, clockOutId,
+    adjacentInId, adjacentOutId, dstInId, dstOutId] = Array.from({ length: 20 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["owner", "foh", "boh", "worker", "colleague", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `correction-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Correction cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside correction cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[4], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[5], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[3], name: "Correction Worker", role_title: "Server" },
+      { id: colleagueId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[4], name: "Correction Colleague", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([sessionId, adjacentSession, dstSession].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: employeeId, started_by: users[3],
+    })))).error).toBeNull();
+    expect((await admin.from("attendance_breaks").insert({
+      id: breakId, session_id: sessionId, business_id: businessId, classification: "unpaid",
+    })).error).toBeNull();
+    const sourceEvents = [
+      [clockInId, sessionId, "clock_in", null, "2024-01-09T22:00:00Z"],
+      [breakStartId, sessionId, "break_start", breakId, "2024-01-10T01:00:00Z"],
+      [breakEndId, sessionId, "break_end", breakId, "2024-01-10T01:30:00Z"],
+      [clockOutId, sessionId, "clock_out", null, "2024-01-10T06:00:00Z"],
+      [adjacentInId, adjacentSession, "clock_in", null, "2024-01-10T07:00:00Z"],
+      [adjacentOutId, adjacentSession, "clock_out", null, "2024-01-10T08:00:00Z"],
+      [dstInId, dstSession, "clock_in", null, "2024-04-06T14:30:00Z"],
+      [dstOutId, dstSession, "clock_out", null, "2024-04-06T17:30:00Z"],
+    ].map(([id, session, eventType, breakValue, occurredAt]) => ({
+      id, session_id: session, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: employeeId, actor_id: users[3], request_id: randomUUID(), event_type: eventType,
+      break_id: breakValue, occurred_at: occurredAt,
+    }));
+    expect((await admin.from("attendance_events").insert(sourceEvents)).error).toBeNull();
+    expect((await workerApi.auth.signInWithPassword({
+      email: `correction-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+
+    await signIn(page, `correction-foh-${suffix}@example.test`, password);
+    await page.goto(`/work-time?venue=${venueId}`);
+    const card = page.locator(`#attendance-session-${sessionId}`);
+    const dstCard = page.locator(`#attendance-session-${dstSession}`);
+    const metric = (item, label) => item.getByText(label, { exact: true }).locator("..").locator("dd");
+    await expect(metric(card, "Worked")).toHaveText("7h 30m 0s");
+    await card.locator("summary").click();
+    let form = card.getByRole("form", { name: "Correct Clock in" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-01-10T08:30:00.123");
+    await form.getByLabel("Additional microseconds (optional, 0 to 999)").fill("456");
+    await form.getByLabel("Reason for correction").fill("Forgot to clock at the start");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(card, "Worked")).toHaveText("8h 0m 0s");
+    await card.locator("summary").click();
+    await expect(card).toContainText("Forgot to clock at the start");
+    await expect(card).toContainText(users[1]);
+    form = card.getByRole("form", { name: "Correct Break end" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-01-10T12:45");
+    await form.getByLabel("Reason for correction").fill("Break ended later");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(card, "Unpaid break")).toHaveText("0h 45m 0s");
+    await expect(metric(card, "Worked")).toHaveText("7h 45m 0s");
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `correction-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    const history = workerPage.getByRole("region", { name: "Attendance correction history" });
+    await expect(history).toContainText("Forgot to clock at the start");
+    await expect(history).toContainText("Break ended later");
+    await expect(history).toContainText(users[1]);
+    await expect(history).toContainText("Original:");
+    await expect(history).toContainText("Previous:");
+    await expect(history).toContainText("Corrected:");
+    expect(await workerPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    await dstCard.locator("summary").click();
+    form = dstCard.getByRole("form", { name: "Correct Clock in" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-10-06T02:30");
+    await form.getByLabel("Reason for correction").fill("Invalid gap");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="alert"]').filter({ hasText: "did not exist" })).toBeVisible();
+    await dstCard.locator("summary").click();
+    form = dstCard.getByRole("form", { name: "Correct Clock in" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-04-07T02:30");
+    await form.getByLabel("Reason for correction").fill("Repeated hour");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="alert"]').filter({ hasText: "occurred twice" })).toBeVisible();
+    await dstCard.locator("summary").click();
+    form = dstCard.getByRole("form", { name: "Correct Clock in" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-04-07T02:30");
+    await form.getByLabel("If this time occurred twice").selectOption("earlier");
+    await form.getByLabel("Reason for correction").fill("First occurrence");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(dstCard, "Worked")).toHaveText("2h 0m 0s");
+    await dstCard.locator("summary").click();
+    form = dstCard.getByRole("form", { name: "Correct Clock in" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-04-07T02:30");
+    await form.getByLabel("If this time occurred twice").selectOption("later");
+    await form.getByLabel("Reason for correction").fill("Second occurrence");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(dstCard, "Worked")).toHaveText("1h 0m 0s");
+
+    await card.locator("summary").click();
+    form = card.getByRole("form", { name: "Correct Clock out" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-01-10T18:30");
+    await form.getByLabel("Reason for correction").fill("Overlapping correction");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="alert"]').filter({ hasText: "overlaps another session" })).toBeVisible();
+    await card.locator("summary").click();
+    form = card.getByRole("form", { name: "Correct Break start" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-01-10T08:00");
+    await form.getByLabel("Reason for correction").fill("Requires review");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(card, "Worked")).toHaveText("Unavailable");
+    await expect(card).toContainText("Break times invalid");
+    await card.locator("summary").click();
+    await expect(card.getByRole("form", { name: "Lock attendance edits" })).toHaveCount(0);
+    form = card.getByRole("form", { name: "Correct Break start" });
+    await form.getByLabel("Corrected local time (Australia/Sydney)").fill("2024-01-10T12:00");
+    await form.getByLabel("Reason for correction").fill("Correct chronology");
+    await form.getByRole("button", { name: "Save correction" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("original event is unchanged");
+    await expect(metric(card, "Worked")).toHaveText("7h 45m 0s");
+    await card.locator("summary").click();
+    const lockForm = card.getByRole("form", { name: "Lock attendance edits" });
+    await lockForm.getByLabel("Reason to lock attendance edits").fill("Manager review complete");
+    await lockForm.getByRole("button", { name: "Lock attendance edits" }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("not a payroll approval");
+    if (!await card.locator("details").evaluate((details) => details.open)) {
+      await card.locator("summary").click();
+    }
+    await expect(card).toContainText("Attendance edits: Locked");
+    await expect(card.getByText("Locked: Manager review complete", { exact: true })).toBeVisible();
+    await expect(card.getByRole("heading", { name: "Edit lock history" }).locator("..")).toContainText(users[1]);
+    await expect(card).toContainText("Ask an owner or general manager");
+    await expect(card.getByRole("form", { name: "Correct Clock in" })).toHaveCount(0);
+    await expect(card.getByRole("form", { name: "Unlock attendance edits" })).toHaveCount(0);
+
+    const ownerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(ownerContext);
+    const ownerPage = await ownerContext.newPage();
+    await signIn(ownerPage, `correction-owner-${suffix}@example.test`, password);
+    await ownerPage.goto(`/work-time?venue=${venueId}`);
+    const ownerCard = ownerPage.locator(`#attendance-session-${sessionId}`);
+    await ownerCard.locator("summary").click();
+    const unlockForm = ownerCard.getByRole("form", { name: "Unlock attendance edits" });
+    await unlockForm.getByLabel("Reason to unlock attendance edits").fill("Reopen after discussion");
+    await unlockForm.getByRole("button", { name: "Unlock attendance edits" }).click();
+    await expect(ownerPage.locator('p[role="status"]')).toContainText("unlocked with a recorded reason");
+    await page.reload();
+    await card.locator("summary").click();
+    await expect(card).toContainText("Attendance edits: Unlocked");
+    const lockHistory = card.getByRole("heading", { name: "Edit lock history" }).locator("..");
+    await expect(lockHistory.locator("li").first()).toContainText("Unlocked: Reopen after discussion");
+    await expect(lockHistory.locator("li").first()).toContainText(users[0]);
+    await expect(lockHistory.locator("li").nth(1)).toContainText("Locked: Manager review complete");
+    await expect(card.getByRole("form", { name: "Correct Clock in" })).toBeVisible();
+
+    const mobileManagerContext = await browser.newContext({
+      baseURL: appUrl, viewport: { width: 375, height: 812 },
+    });
+    contexts.push(mobileManagerContext);
+    const mobileManagerPage = await mobileManagerContext.newPage();
+    await signIn(mobileManagerPage, `correction-foh-${suffix}@example.test`, password);
+    await mobileManagerPage.goto(`/work-time?venue=${venueId}`);
+    const mobileCard = mobileManagerPage.locator(`#attendance-session-${sessionId}`);
+    await mobileCard.locator("summary").click();
+    await expect(mobileCard.getByRole("form", { name: "Correct Clock in" })).toBeVisible();
+    await expect(mobileCard.getByText("Unlocked: Reopen after discussion", { exact: true })).toBeVisible();
+    expect(await mobileManagerPage.locator("body")
+      .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    await workerPage.reload();
+    await expect(history).toContainText("Second occurrence");
+    await expect(history).toContainText("Correct chronology");
+    const visibleHistory = await workerApi.rpc("list_attendance_corrections", {
+      p_business_id: businessId, p_venue_id: venueId,
+    });
+    expect(visibleHistory.error).toBeNull();
+    expect(visibleHistory.data).toHaveLength(6);
+    expect(visibleHistory.data.find((row) => row.event_id === clockInId).new_at)
+      .toMatch(/21:30:00\.123456/);
+    const dstRows = visibleHistory.data.filter((row) => row.event_id === dstInId);
+    expect(dstRows.map((row) => new Date(row.new_at).toISOString()).sort())
+      .toEqual(["2024-04-06T15:30:00.000Z", "2024-04-06T16:30:00.000Z"]);
+    const originals = await admin.from("attendance_events").select("id, occurred_at")
+      .in("id", [clockInId, breakStartId, breakEndId, clockOutId, dstInId]);
+    expect(originals.error).toBeNull();
+    for (const event of sourceEvents.filter((item) =>
+      [clockInId, breakStartId, breakEndId, clockOutId, dstInId].includes(item.id))) {
+      expect(new Date(originals.data.find((item) => item.id === event.id).occurred_at).toISOString())
+        .toBe(new Date(event.occurred_at).toISOString());
+    }
+
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(workerPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(workerPage, `correction-colleague-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(history).toContainText("No attendance corrections in your scope");
+    await expect(history).not.toContainText("Correction Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(workerPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(workerPage, `correction-boh-${suffix}@example.test`, password);
+    await workerPage.goto(`/work-time?venue=${venueId}`);
+    await expect(workerPage.getByRole("region", { name: "Recorded work time" }))
+      .not.toContainText("Correction Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(workerPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(workerPage, `correction-outside-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${outsideVenue}`);
+    await expect(history).toContainText("No attendance corrections in your scope");
+    await expect(history).not.toContainText("Correction Worker");
+  } finally {
+    for (const item of contexts) await item.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("employees clock in and out with scoped immutable cross-venue events", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

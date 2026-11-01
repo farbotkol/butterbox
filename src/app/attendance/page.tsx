@@ -9,9 +9,11 @@ import {
   startAttendanceBreakAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { AttendanceCorrectionHistory } from "@/components/attendance-correction-history";
 import { ClockLocationForm } from "@/components/clock-location-form";
 import { OfflineAttendance } from "@/components/offline-attendance";
 import { parseAttendanceState, parseClockOptions, type ClockOption } from "@/lib/attendance";
+import { parseAttendanceCorrections, type AttendanceCorrection } from "@/lib/attendance-corrections";
 import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
@@ -64,7 +66,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   }
 
   const canReview = managerRoles.includes(workspace.membership.role);
-  const [venueResult, optionResult, stateResult, exceptionResult, offlineResult] = await Promise.all([
+  const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, correctionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
       .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (venue) => venue.id),
@@ -87,11 +89,16 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
     }, { count: "exact" }).order("received_at", { ascending: false }).order("id").range(from, to),
     (row) => row && typeof row.id === "string" ? row.id : ""),
+    readAllPages<AttendanceCorrection>((from, to) => workspace.supabase.rpc("list_attendance_corrections", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("sequence", { ascending: false }).order("id").range(from, to),
+    (row) => row && typeof row.id === "string" ? row.id : ""),
   ]);
   const options = parseClockOptions(optionResult.data);
   const state = parseAttendanceState(stateResult.data);
   const exceptions = parseLocationExceptions(exceptionResult.data);
   const offlineClaims = parseSubmittedOfflineClaims(offlineResult.data);
+  const corrections = parseAttendanceCorrections(correctionResult.data);
   const clockVenueId = state?.state === "clocked_in" ? state.venue_id : workspace.venue.id;
   const clockVenue = venueResult.data?.find((venue) => venue.id === clockVenueId);
   const validClockPolicy = clockVenue && typeof clockVenue.clock_geofence_enabled === "boolean";
@@ -112,6 +119,12 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     console.error("Could not load offline attendance claims.", {
       code: offlineResult.error?.code,
       message: offlineResult.error?.message ?? "The server returned invalid offline attendance claims.",
+    });
+  }
+  if (correctionResult.error || !corrections) {
+    console.error("Could not load attendance corrections.", {
+      code: correctionResult.error?.code,
+      message: correctionResult.error?.message ?? "The server returned invalid attendance corrections.",
     });
   }
 
@@ -304,7 +317,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         <h2 className="text-lg font-semibold">Submitted offline attendance claims</h2>
         <p className="mt-2 text-sm text-muted">
           These device-reported times are unverified and require manager review. They do not automatically
-          change recorded attendance or calculated work time; corrections are not yet available in the app.
+          change recorded attendance or calculated work time; manager reconciliation of claims is not yet available.
           Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
         </p>
         {offlineResult.error || !offlineClaims ? (
@@ -326,12 +339,22 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           </li>)}
         </ul>}
       </section>
+      <section aria-label="Attendance correction history" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Attendance correction history</h2>
+        <p className="mt-2 text-sm text-muted">
+          Corrections retain the original event, the previous and corrected times, the reason and the person who changed it.
+        </p>
+        {correctionResult.error || !corrections ? <p role="alert" className="mt-3 text-sm text-red-800">
+          We couldn&apos;t load attendance corrections. Refresh and try again.
+        </p> : <AttendanceCorrectionHistory corrections={corrections} timezone={workspace.venue.timezone} />}
+      </section>
       <p className="mt-5 text-sm leading-6 text-muted">
         When enabled by the venue owner, location is requested only when clocking in or out.
         A failed location check is reviewed without removing the time recorded. Break events
         have no location check. Managers can see recorded breaks in work-time calculations;
-        corrections and timesheet approvals are not available yet, and no break is automatically
-        deducted unless it has a recorded start and end.
+        scoped managers can correct finished sessions without overwriting original events. Timesheet
+        approvals are not available yet, and no break is automatically deducted unless it has a
+        recorded start and end.
       </p>
       {canReview && (
         <section aria-label="Location exceptions" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">

@@ -4,6 +4,9 @@ import { createClient as createAuthClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
+import {
+  correctionInstant, correctionLocalWithMicroseconds, isCorrectionTimestamp,
+} from "@/lib/attendance-corrections";
 import { parseLocationCapture, parseLocationClockReceipt } from "@/lib/attendance-location";
 import { authCallbackUrl, invitationEmailUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
@@ -815,6 +818,104 @@ export async function reviewAttendanceLocationAction(formData: FormData) {
   }
   revalidatePath("/attendance");
   redirect(`${destination}&saved=location-reviewed`);
+}
+
+async function correctionActionContext(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const sessions = uuidList(formData, "session_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || sessions?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid attendance correction scope.");
+    redirect("/work-time?error=correction-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the correction workspace.", { message: workspace.message });
+    redirect("/work-time?error=correction-venue");
+  }
+  return {
+    workspace, sessionId: sessions[0], requestId: requests[0],
+    destination: `/work-time?venue=${encodeURIComponent(workspace.venue.id)}`,
+  };
+}
+
+function correctionFailureReason(message: string | undefined) {
+  switch (message) {
+    case "Attendance edits are locked": return "correction-locked";
+    case "Attendance changed; refresh before correcting": return "correction-stale";
+    case "Corrected attendance overlaps another session": return "correction-overlap";
+    case "Only finished sessions can be corrected": return "correction-unfinished";
+    case "Invalid attendance correction time": return "correction-time";
+    case "Only an owner or general manager can unlock attendance edits": return "unlock-permission";
+    case "Incomplete or invalid attendance cannot be locked": return "lock-invalid";
+    case "Attendance edit lock is already in that state": return "lock-stale";
+    default: return "correction-save";
+  }
+}
+
+export async function correctAttendanceEventAction(formData: FormData) {
+  const { workspace, sessionId, requestId, destination } = await correctionActionContext(formData);
+  const events = uuidList(formData, "event_id", 1);
+  const expected = formData.getAll("expected_at");
+  const local = formData.getAll("new_local_time");
+  const microseconds = formData.getAll("additional_microseconds");
+  const occurrences = formData.getAll("occurrence");
+  const reasons = formData.getAll("reason");
+  if (events?.length !== 1 || expected.length !== 1 || !isCorrectionTimestamp(expected[0]) ||
+    local.length !== 1 || microseconds.length !== 1 || occurrences.length !== 1 || reasons.length !== 1 ||
+    typeof reasons[0] !== "string" || !reasons[0].trim() || reasons[0].trim().length > 500) {
+    console.error("Invalid attendance correction.");
+    redirect(`${destination}&error=correction-invalid`);
+  }
+  const target = correctionInstant(
+    correctionLocalWithMicroseconds(local[0], microseconds[0]), workspace.venue.timezone, occurrences[0],
+  );
+  if (target.status !== "ok") {
+    redirect(`${destination}&error=correction-${target.status}`);
+  }
+  const { data, error } = await workspace.supabase.rpc("correct_attendance_event", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_session_id: sessionId,
+    p_event_id: events[0], p_request_id: requestId, p_expected_at: expected[0],
+    p_new_at: target.value, p_reason: reasons[0].trim(),
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Attendance correction failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid correction receipt.",
+    });
+    redirect(`${destination}&error=${correctionFailureReason(error?.message)}`);
+  }
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=correction`);
+}
+
+export async function setAttendanceEditLockAction(formData: FormData) {
+  const { workspace, sessionId, requestId, destination } = await correctionActionContext(formData);
+  const states = formData.getAll("locked");
+  const reasons = formData.getAll("reason");
+  if (states.length !== 1 || (states[0] !== "true" && states[0] !== "false") ||
+    reasons.length !== 1 || typeof reasons[0] !== "string" ||
+    !reasons[0].trim() || reasons[0].trim().length > 500) {
+    console.error("Invalid attendance lock request.");
+    redirect(`${destination}&error=correction-invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("set_attendance_edit_lock", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_session_id: sessionId,
+    p_request_id: requestId, p_locked: states[0] === "true", p_reason: reasons[0].trim(),
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Attendance edit lock failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid lock receipt.",
+    });
+    redirect(`${destination}&error=${correctionFailureReason(error?.message)}`);
+  }
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=${states[0] === "true" ? "locked" : "unlocked"}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

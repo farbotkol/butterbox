@@ -171,9 +171,11 @@ is untrusted; the claim is queued in browser storage and submitted when the
 same account reconnects, retaining both that claimed time and the server's
 receipt time. Claims are visible within the employee's or manager's scope, but
 they do not automatically change attendance or worked time. Manager
-reconciliation, time corrections and timesheet approvals are not yet available;
-contact a manager to arrange an accurate record. The page cannot be opened
-offline, and clearing browser data or losing the device can lose unsent claims.
+reconciliation of claims and timesheet approvals are not yet available;
+contact a manager to arrange an accurate record. Correcting an existing event
+does not reconcile an offline claim or create a missing clock event. The page
+cannot be opened offline, and clearing browser data or losing the device can
+lose unsent claims.
 Device storage is shared by accounts using the same browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the
@@ -187,8 +189,25 @@ and unpaid breaks; paid time includes the paid breaks. Original event
 precision is retained, and only the displayed duration is rounded to the
 nearest second; no payroll rounding or award rules are applied. Missing,
 invalid or overlapping events are flagged and have no calculated totals.
-Location exceptions remain visible even after review. This is not a payroll
-approval or export workflow.
+Location exceptions remain visible even after review.
+
+On a finished session, a manager with department access can open **Review and
+correct attendance** to correct an existing clock or break time with a reason.
+Corrections are attributed additions; the original event, previous effective
+time, replacement, actor and reason remain in the history. The employee can
+see corrections to their own linked attendance on **Clock in / out**. Times use
+the venue's current timezone: a local time skipped by a clock change is rejected,
+and a repeated local time requires choosing its first or second occurrence.
+For sub-millisecond precision, enter the final three microsecond digits in the
+optional field. An overlapping session for the same or linked worker is rejected.
+Invalid clock or break chronology remains flagged with no calculated total.
+
+Managers can lock valid sessions against further corrections; only an owner,
+admin or suitably scoped general manager can unlock them, with a reason.
+Managers can inspect the attributed lock and unlock history. These edit locks
+are not payroll approvals, and a future timesheet approval workflow must apply
+its own finalisation rules. Work time is not a payroll approval or export
+workflow.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
