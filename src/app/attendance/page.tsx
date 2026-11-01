@@ -56,6 +56,7 @@ const errors: Record<string, string> = {
   "claim-match": "The matching finished clock event is unavailable. Refresh and check its scope.",
   "claim-stale": "Attendance changed. Refresh and review the current event time.",
   "claim-locked": "Attendance edits are locked. Ask an owner or general manager to unlock them.",
+  "period-finalised": "This week's payroll period is finalised. An owner, admin or general manager must reopen it with a reason before attendance can change.",
   "claim-overlap": "The claimed time would overlap another attendance session.",
   "claim-time": "The claimed time must be in the past and different from the event. If it is already correct, match without changing it.",
   "claim-save": "We could not save the claim decision. Your access may have changed; refresh and try again.",

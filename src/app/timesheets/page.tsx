@@ -1,11 +1,15 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { bulkLockWeeklyAttendanceAction, decideTimesheetAction } from "@/app/actions";
+import { bulkLockWeeklyAttendanceAction, decidePayrollPeriodAction, decideTimesheetAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
 import { addDays, formatDay } from "@/lib/dates";
 import { readAllPages } from "@/lib/paginated-rows";
+import {
+  parsePayrollPeriod, parsePayrollPeriodEvents, parsePayrollPeriodExceptions, payrollActorLabel,
+  payrollExceptionLabels, payrollPeriodStatusLabels,
+} from "@/lib/payroll-periods";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   parseTimesheetApprovals, timesheetApprovalLabels, timesheetApprovalsWithinSessions,
@@ -38,6 +42,19 @@ const errors: Record<string, string> = {
   "decision-incomplete": "Incomplete or invalid attendance cannot be approved. Return it for correction instead.",
   "decision-locked": "Locked attendance must be unlocked by an owner or general manager before it can be returned.",
   "decision-save": "We couldn't confirm the timesheet decision. Check the entry before retrying.",
+  "period-invalid": "The payroll period request was invalid. Notes must be 500 characters or fewer.",
+  "period-reason": "Enter a reason of up to 500 characters before reopening the payroll period.",
+  "period-permission": "Only an owner, admin or general manager with access to every department in this venue can finalise or reopen payroll.",
+  "period-not-ended": "This payroll period has not ended yet. Finalise it after the week closes.",
+  "period-exceptions": "Resolve every outstanding exception before finalising this payroll period.",
+  "period-stale": "The payroll period changed. Review its refreshed status and history before trying again.",
+  "period-retry": "This request was already used for a different payroll period action. Review the refreshed period and try again.",
+  "period-finalised": "This payroll period is finalised. Reopen it with a reason before changing, approving or locking attendance.",
+  "period-save": "We couldn't confirm the payroll period change. Check its history before retrying.",
+};
+const periodMessages: Record<string, string> = {
+  finalised: "Payroll period finalised. Attendance in this week cannot change until it is reopened.",
+  reopened: "Payroll period reopened. The previous finalisation and your reason remain in its history.",
 };
 const decidedMessages: Record<string, string> = {
   approved: "Timesheet entry approved for your department and locked against corrections.",
@@ -65,6 +82,7 @@ function totalDuration(values: number[]): string {
 export default async function TimesheetsPage({ searchParams }: {
   searchParams: Promise<{
     venue?: string; week?: string; employee?: string; error?: string; receipt?: string; decided?: string;
+    period?: string;
   }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
@@ -91,8 +109,10 @@ export default async function TimesheetsPage({ searchParams }: {
   const validFilters = week !== null && employee !== undefined;
   const receiptRequested = params.receipt !== undefined;
   const receiptId = receiptRequested ? parseTimesheetEmployeeFilter(params.receipt) : null;
-  const [venuesResult, employeesResult, plannedResult, actualResult, eventsResult, receiptResult, approvalsResult] =
-    await Promise.all([
+  const [
+    venuesResult, employeesResult, plannedResult, actualResult, eventsResult, receiptResult, approvalsResult,
+    periodResult, periodExceptionsResult, periodEventsResult,
+  ] = await Promise.all([
     readAllPages<TimesheetEmployee>((from, to) => workspace.supabase.from("venues")
       .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (row) => row && typeof row.id === "string" ? row.id : ""),
@@ -129,7 +149,40 @@ export default async function TimesheetsPage({ searchParams }: {
       }, { count: "exact" }).order("session_id").range(from, to),
       (row) => row && typeof row.session_id === "string" ? row.session_id : "")
       : Promise.resolve({ data: [], error: null }),
+    week
+      ? workspace.supabase.rpc("get_payroll_period", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      })
+      : Promise.resolve({ data: null, error: null }),
+    week
+      ? readAllPages<Record<string, unknown>>((from, to) => workspace.supabase.rpc("list_payroll_period_exceptions", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      }, { count: "exact" }).order("occurred_at", { nullsFirst: true }).order("exception_code")
+        .order("session_id").order("claim_id").range(from, to),
+      (row) => `${String(row.session_id ?? row.claim_id)}:${String(row.exception_code)}`)
+      : Promise.resolve({ data: [], error: null }),
+    week
+      ? readAllPages<Record<string, unknown>>((from, to) => workspace.supabase.rpc("list_payroll_period_events", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      }, { count: "exact" }).order("created_at", { ascending: false }).order("event_id").range(from, to),
+      (row) => String(row.event_id))
+      : Promise.resolve({ data: [], error: null }),
   ]);
+  const period = parsePayrollPeriod(periodResult.data);
+  const periodExceptions = parsePayrollPeriodExceptions(periodExceptionsResult.data);
+  const periodEvents = parsePayrollPeriodEvents(periodEventsResult.data);
+  const periodError = week !== null && Boolean(periodResult.error || periodExceptionsResult.error ||
+    periodEventsResult.error || !period || !periodExceptions || !periodEvents ||
+    (period.eventId !== null && periodEvents[0]?.eventId.toLowerCase() !== period.eventId.toLowerCase()));
+  if (periodError) {
+    console.error("Could not load the payroll period.", {
+      code: periodResult.error?.code ?? periodExceptionsResult.error?.code ?? periodEventsResult.error?.code,
+      message: periodResult.error?.message ?? periodExceptionsResult.error?.message ??
+        periodEventsResult.error?.message ?? "The server returned an inconsistent payroll period.",
+    });
+  }
+  // Fail closed: if the period cannot be read, attendance controls stay unavailable.
+  const periodFinalised = week !== null && (periodError || period?.status === "finalised");
   const venues = parseTimesheetEmployees(venuesResult.data);
   const currentEmployees = parseTimesheetEmployees(employeesResult.data);
   const planned = parseTimesheetPlannedShifts(plannedResult.data);
@@ -170,6 +223,15 @@ export default async function TimesheetsPage({ searchParams }: {
     : null;
   const decidedMessage = typeof params.decided === "string" && Object.hasOwn(decidedMessages, params.decided)
     ? decidedMessages[params.decided] : null;
+  const periodMessage = typeof params.period === "string" && Object.hasOwn(periodMessages, params.period)
+    ? periodMessages[params.period] : null;
+  const periodHidden = (action: "finalised" | "reopened") => <>
+    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+    <input type="hidden" name="week" value={week ?? ""} />
+    <input type="hidden" name="employee_id" value={employee ?? ""} />
+    <input type="hidden" name="request_id" value={randomUUID()} />
+    <input type="hidden" name="period_action" value={action} />
+  </>;
   const decisionHidden = (sessionId: string, revision: string, decision: "approved" | "rejected") => <>
     <input type="hidden" name="venue_id" value={workspace.venue.id} />
     <input type="hidden" name="week" value={week ?? ""} />
@@ -221,7 +283,9 @@ export default async function TimesheetsPage({ searchParams }: {
       with recorded elapsed time, not paid time. Matching totals do not pair shifts with sessions or approve payroll.
       Each session is approved by a manager of its own department. Approval locks it against corrections; if an owner
       or general manager later unlocks or changes it, it must be approved again. Returned entries stay correctable and
-      are shown to the employee with your reason. Approval is not payroll finalisation.
+      are shown to the employee with your reason. Approval is not payroll finalisation: an owner, admin or general
+      manager with access to every department finalises the whole venue week separately, after it ends and every
+      exception is resolved. Butterbox does not verify award or payroll compliance.
     </p>
     {!validFilters && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
       Enter a valid date and choose an available employee before reviewing this week.
@@ -236,6 +300,9 @@ export default async function TimesheetsPage({ searchParams }: {
     {decidedMessage && !actionError && <p role="status" className="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-900">
       {decidedMessage}
     </p>}
+    {periodMessage && !actionError && <p role="status" className="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-900">
+      {periodMessage}
+    </p>}
     {receiptError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
       We couldn&apos;t verify the edit-lock result. Check the attendance history before retrying.
     </p>}
@@ -246,6 +313,82 @@ export default async function TimesheetsPage({ searchParams }: {
     {week && <h2 className="mt-6 text-lg font-semibold">
       {formatDay(week)} to {formatDay(addDays(week, 6))} · {workspace.venue.timezone}
     </h2>}
+    {week && <section id="payroll-period" aria-labelledby="payroll-period-heading"
+      className="mt-4 rounded-xl border border-line bg-white p-4 text-sm">
+      <h2 id="payroll-period-heading" className="text-base font-semibold">Payroll period</h2>
+      {periodError || !period || !periodExceptions || !periodEvents
+        ? <p role="alert" className="mt-2 rounded-lg bg-red-50 p-3 text-red-800">
+          We couldn&apos;t load this payroll period. Attendance changes are unavailable until it loads; refresh and
+          check your access.
+        </p>
+        : <>
+          <p className="mt-2 font-semibold">{payrollPeriodStatusLabels[period.status]}</p>
+          <p className="mt-1 text-muted">
+            Venue week <time dateTime={period.periodStartsAt}>{formatClockTime(period.periodStartsAt, workspace.venue.timezone)}</time>
+            {" "}to <time dateTime={period.periodEndsAt}>{formatClockTime(period.periodEndsAt, workspace.venue.timezone)}</time>
+            {" "}(all employees and departments in this venue).
+          </p>
+          {period.status === "finalised" && period.decidedAt && period.actorRole && <p className="mt-1">
+            Finalised by {payrollActorLabel(period.actorRole, Boolean(period.actorIsSelf))} on{" "}
+            <time dateTime={period.decidedAt}>{formatClockTime(period.decidedAt, workspace.venue.timezone)}</time>:{" "}
+            {period.sessionCount} sessions, worked {formatWorkedDuration(period.workedSeconds ?? 0)}, paid{" "}
+            {formatWorkedDuration(period.paidSeconds ?? 0)}. Attendance in this week cannot change until it is reopened.
+          </p>}
+          <h3 className="mt-3 font-semibold">Outstanding exceptions ({periodExceptions.length})</h3>
+          {!period.canFinalise && <p className="mt-1 text-muted">
+            Shown for the departments you manage. Only an owner, admin or general manager with access to every
+            department can finalise or reopen this period.
+          </p>}
+          {periodExceptions.length === 0 ? <p className="mt-1 text-muted">No outstanding exceptions in your scope.</p>
+            : <ul aria-label="Outstanding payroll exceptions" className="mt-2 space-y-1 text-amber-900">
+              {periodExceptions.map((item) => <li key={`${item.sessionId ?? item.claimId}:${item.code}`}>
+                {item.employeeName} · {item.departmentName} · {payrollExceptionLabels[item.code]}
+                {item.occurredAt && <> · <time dateTime={item.occurredAt}>
+                  {formatClockTime(item.occurredAt, workspace.venue.timezone)}</time></>}
+              </li>)}
+            </ul>}
+          {period.canFinalise && period.status !== "finalised" && <form action={decidePayrollPeriodAction} className="mt-3">
+            {periodHidden("finalised")}
+            <label htmlFor="payroll-finalise-note" className="block font-medium">Finalisation note (optional)</label>
+            <input id="payroll-finalise-note" name="reason" maxLength={500}
+              className="mt-1 block w-full rounded-lg border border-line p-2" />
+            {!period.periodEnded && <p className="mt-2 text-muted">This week has not ended yet.</p>}
+            <button type="submit" disabled={!period.periodEnded || periodExceptions.length > 0}
+              className="mt-2 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+              Finalise payroll period
+            </button>
+          </form>}
+          {period.canFinalise && period.status === "finalised" && <form action={decidePayrollPeriodAction} className="mt-3">
+            {periodHidden("reopened")}
+            <label htmlFor="payroll-reopen-reason" className="block font-medium">Reason for reopening</label>
+            <input id="payroll-reopen-reason" name="reason" required maxLength={500}
+              className="mt-1 block w-full rounded-lg border border-line p-2" />
+            <button type="submit"
+              className="mt-2 min-h-11 rounded-lg border border-line bg-white px-4 py-2 font-semibold">
+              Reopen payroll period
+            </button>
+          </form>}
+          {periodEvents.length > 0 && <details className="mt-3">
+            <summary className="cursor-pointer font-semibold">Payroll period history ({periodEvents.length})</summary>
+            <ol aria-label="Payroll period history" className="mt-2 space-y-2">
+              {periodEvents.map((event) => <li key={event.eventId} className="rounded-lg border border-line p-2">
+                <p className="font-semibold">
+                  {event.action === "finalised" ? "Finalised" : "Reopened"} by{" "}
+                  {payrollActorLabel(event.actorRole, event.actorIsSelf)} on{" "}
+                  <time dateTime={event.createdAt}>{formatClockTime(event.createdAt, workspace.venue.timezone)}</time>
+                </p>
+                {event.action === "finalised" && <p className="mt-1">
+                  {event.sessionCount} sessions · worked {formatWorkedDuration(event.workedSeconds)} · paid{" "}
+                  {formatWorkedDuration(event.paidSeconds)}
+                </p>}
+                {event.reason && <p className="mt-1">
+                  {event.action === "reopened" ? "Reason" : "Note"}: {event.reason}
+                </p>}
+              </li>)}
+            </ol>
+          </details>}
+        </>}
+    </section>}
     {validFilters && employeeAvailable && !dataError && groups && (
       <form action={bulkLockWeeklyAttendanceAction} className="mt-4">
         <input type="hidden" name="venue_id" value={workspace.venue.id} />
@@ -260,9 +403,13 @@ export default async function TimesheetsPage({ searchParams }: {
             before locking. This action is not payroll approval.
           </p>
           <label htmlFor="bulk-lock-reason" className="mt-3 block font-medium">Reason for edit lock</label>
-          <input id="bulk-lock-reason" name="reason" required maxLength={500}
+          {periodFinalised && <p className="mt-2 text-amber-900">
+            Unavailable while the payroll period is finalised or cannot be confirmed.
+          </p>}
+          <input id="bulk-lock-reason" name="reason" required maxLength={500} disabled={periodFinalised}
             className="mt-1 block w-full rounded-lg border border-line p-2" />
-          <button type="submit" disabled={!actual?.some((row) => row.worked_seconds !== null && !row.edit_locked)}
+          <button type="submit" disabled={periodFinalised ||
+            !actual?.some((row) => row.worked_seconds !== null && !row.edit_locked)}
             className="mt-3 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
             Lock selected sessions
           </button>
@@ -310,7 +457,7 @@ export default async function TimesheetsPage({ searchParams }: {
                           className="rounded-lg border border-line p-3">
                           <label className="mb-3 flex items-start gap-2 font-semibold">
                             <input type="checkbox" name="selection" value={`${row.session_id}:${row.edit_revision}`}
-                              disabled={row.worked_seconds === null || row.edit_locked} className="mt-1" />
+                              disabled={periodFinalised || row.worked_seconds === null || row.edit_locked} className="mt-1" />
                             <span>{row.worked_seconds === null ? "Incomplete or invalid; cannot be locked"
                               : row.edit_locked ? "Already locked against corrections" : "Select session for edit lock"}</span>
                           </label>
@@ -326,9 +473,10 @@ export default async function TimesheetsPage({ searchParams }: {
                           {(() => {
                             const approval = approvalsBySession.get(row.session_id.toLowerCase());
                             if (!approval) return <p className="mt-2 text-muted">Outside your department approval scope.</p>;
-                            const canApprove = !approval.self_owned && approval.status !== "approved" &&
+                            const canApprove = !periodFinalised && !approval.self_owned && approval.status !== "approved" &&
                               row.worked_seconds !== null;
-                            const canReturn = !approval.self_owned && approval.status !== "returned" && !row.edit_locked;
+                            const canReturn = !periodFinalised && !approval.self_owned && approval.status !== "returned" &&
+                              !row.edit_locked;
                             return <div role="group" aria-label="Department approval"
                               className="mt-3 rounded-lg border border-line bg-slate-50 p-3">
                               <p className="font-semibold">{timesheetApprovalLabels[approval.status]}</p>
@@ -347,7 +495,11 @@ export default async function TimesheetsPage({ searchParams }: {
                                   Approve time
                                 </button>
                               </div>}
-                              {!approval.self_owned && approval.status !== "approved" && row.worked_seconds === null &&
+                              {periodFinalised && <p className="mt-2 text-muted">
+                                Decisions are unavailable while the payroll period is finalised or cannot be confirmed.
+                              </p>}
+                              {!periodFinalised && !approval.self_owned && approval.status !== "approved" &&
+                                row.worked_seconds === null &&
                                 <p className="mt-2 text-amber-900">Incomplete or invalid; return it for correction.</p>}
                               {canReturn && <div className="mt-3">
                                 <label htmlFor={`return-reason-${row.session_id}`} className="block">Reason for returning</label>
@@ -358,7 +510,8 @@ export default async function TimesheetsPage({ searchParams }: {
                                   Return for correction
                                 </button>
                               </div>}
-                              {!approval.self_owned && approval.status !== "returned" && row.edit_locked && <p className="mt-2 text-muted">
+                              {!periodFinalised && !approval.self_owned && approval.status !== "returned" &&
+                                row.edit_locked && <p className="mt-2 text-muted">
                                 Locked; an owner or general manager must unlock it before it can be returned.
                               </p>}
                             </div>;

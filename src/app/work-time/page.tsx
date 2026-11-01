@@ -21,6 +21,7 @@ const errors: Record<string, string> = {
   "correction-time": "The corrected time must differ from the current time and cannot be in the future.",
   "correction-stale": "Attendance changed. Review the refreshed values before correcting again.",
   "correction-locked": "Attendance edits are locked. Ask an owner or general manager to unlock them.",
+  "period-finalised": "This week's payroll period is finalised. An owner, admin or general manager must reopen it with a reason before attendance can change.",
   "correction-overlap": "The corrected attendance overlaps another session for this worker.",
   "correction-unfinished": "Only finished attendance sessions can be corrected.",
   "correction-venue": "The selected venue is unavailable. Check your access and try again.",

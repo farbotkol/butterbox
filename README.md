@@ -291,6 +291,22 @@ is kept as an immutable, attributed record. Approval does not finalise payroll
 or verify award compliance. Apply the current migrations before using this
 screen.
 
+A **payroll period** is the venue's Monday-to-Sunday week in its current
+timezone. The **Payroll period** panel on **Timesheets** lists outstanding
+exceptions: entries awaiting approval, returned or changed since approval,
+incomplete attendance, unreviewed location exceptions, and offline claims or
+employee time requests awaiting review. Department managers see the exceptions
+for their departments. Only an owner, admin or general manager with access to
+every department in the venue can finalise a week. It must have ended and have
+no exceptions; an optional note can be added. Finalising snapshots each
+session's worked and paid time and approval. Until the week is reopened, the
+server refuses corrections, edit-lock changes, approvals, breaks, clock events
+and location reviews in it. Employees can still submit time requests, which
+appear as exceptions. Reopening requires a reason. Each finalisation and
+reopening is kept as an immutable, attributed history entry with its totals, and
+earlier snapshots are retained. Finalising does not export payroll or verify
+award compliance.
+
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
 updates and leave decisions on **Availability**. These preferences are not

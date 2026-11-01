@@ -18,6 +18,7 @@ import { parseOfflineClaimReceipt, parseOfflineMatchOption } from "@/lib/offline
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
+import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage } from "@/lib/payroll-periods";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
 import {
@@ -732,6 +733,7 @@ function attendanceFailureReason(message: string | undefined) {
     case "End the open break before clocking out": return "break-open";
     case "Invalid break request":
     case "Invalid clock request": return "invalid";
+    case payrollFinalisedMessage: return "period-finalised";
     default: return "save";
   }
 }
@@ -926,6 +928,7 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
       "Attendance changed; refresh before reconciling": "claim-stale",
       "Attendance changed; refresh before correcting": "claim-stale",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Corrected attendance overlaps another session": "claim-overlap",
       "Invalid attendance correction time": "claim-time",
       "The event does not match the requested time": "request-mismatch",
@@ -978,6 +981,7 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
       "A claim has already been reviewed": "claim-pair-used",
       "A claim was already linked to attendance": "claim-pair-used",
       "Claimed attendance overlaps another session": "claim-overlap",
+      [payrollFinalisedMessage]: "period-finalised",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1025,6 +1029,7 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
       "End the open break before clocking out": "claim-open-break",
       "Server clock is earlier than the previous attendance event": "claim-open-order",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
@@ -1087,6 +1092,7 @@ export async function completeAttendanceWithOfflineBreakAction(formData: FormDat
       "Claimed clock-out time is invalid": "claim-pair-time",
       "Server clock is earlier than the previous attendance event": "claim-open-order",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
@@ -1130,6 +1136,7 @@ function correctionFailureReason(message: string | undefined) {
     case "Only an owner or general manager can unlock attendance edits": return "unlock-permission";
     case "Incomplete or invalid attendance cannot be locked": return "lock-invalid";
     case "Attendance edit lock is already in that state": return "lock-stale";
+    case payrollFinalisedMessage: return "period-finalised";
     default: return "correction-save";
   }
 }
@@ -1246,6 +1253,7 @@ export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
       "Selected attendance not found or permission denied": "bulk-scope",
       "Permission denied": "bulk-scope",
       "Request identifier already used": "bulk-retry",
+      [payrollFinalisedMessage]: "period-finalised",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "bulk-save"}`);
@@ -1311,6 +1319,7 @@ export async function decideTimesheetAction(formData: FormData) {
       "Timesheet entry is already returned for correction": "decision-stale",
       "Incomplete or invalid attendance cannot be approved": "decision-incomplete",
       "Unlock attendance before returning it for correction": "decision-locked",
+      [payrollFinalisedMessage]: "period-finalised",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "decision-save"}#timesheet-session-${sessions[0]}`);
@@ -1319,6 +1328,60 @@ export async function decideTimesheetAction(formData: FormData) {
   revalidatePath("/work-time");
   revalidatePath("/attendance");
   redirect(`${destination}&decided=${input.decision}#timesheet-session-${sessions[0]}`);
+}
+
+export async function decidePayrollPeriodAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid payroll period scope.");
+    redirect("/timesheets?error=period-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the payroll period workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const actions = formData.getAll("period_action");
+  const reasons = formData.getAll("reason");
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  const input = actions.length === 1 && reasons.length <= 1
+    ? parsePayrollPeriodInput(actions[0], reasons.length === 1 ? reasons[0] : null) : null;
+  if (!week || weeks[0] !== week || employee === undefined || !input) {
+    console.error("Invalid payroll period request.");
+    redirect(`${destination}&error=${actions[0] === "reopened" ? "period-reason" : "period-invalid"}#payroll-period`);
+  }
+
+  const { data, error } = input.action === "finalised"
+    ? await workspace.supabase.rpc("finalise_payroll_period", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      p_request_id: requests[0], p_note: input.reason,
+    })
+    : await workspace.supabase.rpc("reopen_payroll_period", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      p_request_id: requests[0], p_reason: input.reason,
+    });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Payroll period decision failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid payroll period receipt.",
+    });
+    redirect(`${destination}&error=${payrollFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&period=${input.action}#payroll-period`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

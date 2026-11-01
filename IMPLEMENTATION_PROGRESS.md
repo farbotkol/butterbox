@@ -2,13 +2,15 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **29**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **50**.
+- Total stories: **109** (the owner's merged PR #2 added 22 Award Central
+  BB-PAYRULES stories). Verified Done: **30**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **71**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
-  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003 and BB-TIME-004.
+  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
+  BB-TIME-005.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -265,9 +267,12 @@
 
 ## Current story
 
-- **BB-TIME-004 — Department approval** is Done (verification below).
-  Next: **BB-TIME-005 — Finalise payroll period**, then BB-TIME-006 and
-  BB-PAY-001/002/003 (payroll-ready export) before Xero (BB-PAY-004).
+- **BB-TIME-005 — Finalise payroll period** is Done (verification below).
+  Next: **BB-PAY-001 — Canonical payroll record**, then BB-PAY-002 (generic
+  CSV), BB-TIME-006 (export traceability) and BB-PAY-003 (employee mapping)
+  before Xero (BB-PAY-004). The new BB-PAYRULES award stories depend on
+  BB-RULES-001/003 and should follow reliable export.
+- **BB-TIME-004 — Department approval** is Done.
 - **BB-TIME-003 — Employee correction request** is Done. It was recovered
   from pushed checkpoint commits after the Codespace upgrade (8 CPU, 31 GiB
   RAM, 63 GB disk) and verified on a clean isolated replay.
@@ -464,6 +469,42 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-TIME-005 — Finalise payroll period (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-005.1 Only authorised roles can finalise | `finalise_payroll_period` and `reopen_payroll_period` validate the venue week, lock the caller's membership and require an owner, admin or general manager who can view the venue and manages every department in it. An exclusive per-period advisory lock and idempotent request IDs serialize decisions. The event and entry tables are append-only, readable only under RLS, and have no direct grants for writes. | 57-assertion pgTAP suite passed anonymous, employee, cross-tenant, department-manager and other-venue GM refusals, invalid input, non-Monday and not-yet-ended weeks, idempotent and conflicting retries, double finalisation and immutability. The authenticated integration passed FOH/employee/outsider HTTP refusals and 8 competing owner/GM finalisations with exactly one winner. Production Chromium verified the FOH manager's read-only panel (no buttons, mobile width), FOH API refusal and the outside owner's unavailable page. | Pass |
+| TIME-005.2 Outstanding exceptions are surfaced | `list_payroll_period_exceptions` reports pending, returned, resubmitted and outdated approvals, incomplete attendance, unreviewed location exceptions, and offline claims or employee time requests awaiting review. Department managers see only their departments. Finalising recomputes the list under the period lock and refuses while any remain. The **Payroll period** panel lists them and disables finalising. | pgTAP verified each exception code (including a geofence `review` check), resolution by approval, clock-out, location review and claim rejection, and that a request submitted after finalisation is surfaced. The integration verified that a finalisation waiting behind an in-flight unlock sees the outdated approval and is refused. Production Chromium verified three listed exceptions, the disabled button and the server error when the disabled control was forced. | Pass |
+| TIME-005.3 Reopening requires a reason and logs an event | Reopening requires a trimmed reason of 1–500 characters and a currently finalised period, and appends an attributed `reopened` event. Earlier snapshots are retained. While finalised, BEFORE INSERT guards on attendance events, breaks, corrections, edit-lock events, location checks and reviews, and timesheet decisions refuse changes to any session or target time in the week, including privileged writes. Writers take shared period locks so they serialize with finalisation. | pgTAP verified the reason requirement, trimming, idempotency, the not-finalised refusal, history order, preserved snapshots, unlock after reopen and refusal of corrections that move time into a finalised week. The integration verified that an unlock waiting on a committed finalisation is refused, a rolled-back finalisation does not block it, and six idempotent reopen retries return one event. Production Chromium verified a stale **Work time** unlock refused with the payroll message, the missing-reason error, reopening with a reason, and history showing both events to the owner and FOH manager. | Pass |
+
+Files: `supabase/migrations/20261102180000_payroll_period_finalisation.sql`,
+`supabase/tests/database/payroll_period_finalisation.test.sql`,
+`src/lib/payroll-periods.ts`, `src/app/actions.ts`,
+`src/app/timesheets/page.tsx`, `src/app/work-time/page.tsx`,
+`src/app/attendance/page.tsx`, `tests/payroll-periods.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs`, `README.md`
+and the backlog/progress files. A clean isolated replay of 41 migrations passed
+**1,934/1,934** pgTAP assertions across 41 files. **18/18** authenticated
+integrations passed, as did 114 Node tests (18 integrations skipped in that
+run and run separately), full ESLint, TypeScript and the production build. The
+focused browser scenarios passed 4/4 and the complete serialized low-memory
+regression passed **48/48**. Disk stayed at 32 GB free. One validation command
+mistakenly ran `supabase test db` against the main development stack because a
+guard had a wrong container name. pgTAP files run inside `begin`/`rollback`, and
+afterwards there were no open transactions and its migration history was
+unchanged.
+
+Assumptions:
+
+- A payroll period is a venue-local Monday-to-Sunday week, using the same
+  session-week rule as weekly review.
+- An empty week can be finalised.
+- Requests received after finalisation are recorded and surfaced; applying them
+  requires reopening.
+- Finalising snapshots worked and paid seconds; it does not export payroll or
+  interpret awards.
 
 ### BB-TIME-004 — Department approval (Done)
 
@@ -1097,20 +1138,23 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Timesheet approval, cross-business employee invitation and email/push
+- Payroll export, cross-business employee invitation and email/push
   notification remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
-- Attendance edit locks are not timesheet approvals; future payroll
-  finalisation must explicitly integrate the relevant period and lock rules.
+- Attendance edit locks are not timesheet approvals. Payroll period
+  finalisation (BB-TIME-005) is the gate for export, and exports should read the
+  immutable `payroll_period_entries` snapshot rather than live attendance.
   Original and correction timestamps retain microseconds, while displayed
   durations round only for presentation.
 
 ## Next story
 
-- Implement **BB-TIME-004 — Department approval**: scoped FOH/BOH approval of
-  valid weekly timesheets with explicit exceptions, immutable approval
-  records, and reopening rules, building on weekly review and edit locks.
+- Implement **BB-PAY-001 — Canonical payroll record**: a versioned, validated
+  record built from finalised `payroll_period_entries` (worker mapping, venue,
+  date, hours, breaks, codes, approval/version) that adapters cannot mutate.
+  Then BB-PAY-002 generic CSV, BB-TIME-006 export traceability and BB-PAY-003
+  employee mapping, before BB-PAY-004 Xero.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.

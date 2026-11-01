@@ -5936,6 +5936,190 @@ test("department managers approve or return scoped timesheet entries for correct
   }
 });
 
+test("authorised managers finalise payroll periods after exceptions and reopen them with a recorded reason", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, fohId, workerId, completeSession, openSession] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "gm", "foh", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `payroll-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Payroll cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside payroll cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: fohId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[3], name: "Payroll Worker", role_title: "Server",
+    })).error).toBeNull();
+    const sessions = [completeSession, openSession].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId, started_by: users[3],
+    }));
+    expect((await admin.from("attendance_sessions").insert(sessions)).error).toBeNull();
+    const event = (session, eventType, occurredAt) => ({
+      session_id: session.id, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: workerId, actor_id: users[3], request_id: randomUUID(), event_type: eventType,
+      occurred_at: occurredAt, source: "server_clock",
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[0], "clock_in", "2024-09-30T22:00:00Z"),
+      event(sessions[0], "clock_out", "2024-10-01T02:00:00Z"),
+      event(sessions[1], "clock_in", "2024-10-02T22:00:00Z"),
+    ])).error).toBeNull();
+    const signedIn = async (role) => {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `payroll-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      return client;
+    };
+    const fohApi = await signedIn("foh");
+    const gmApi = await signedIn("gm");
+    const outsideApi = await signedIn("outside");
+    const scope = { p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30" };
+    const permissionMessage =
+      "Only an owner, admin or general manager with full venue access can finalise or reopen payroll";
+    expect((await fohApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error?.message)
+      .toBe(permissionMessage);
+    expect((await outsideApi.rpc("get_payroll_period", scope)).error?.message).toBe("Permission denied");
+
+    const ownerPage = page;
+    await signIn(ownerPage, `payroll-owner-${suffix}@example.test`, password);
+    const timesheetUrl = `/timesheets?venue=${venueId}&week=2024-09-30`;
+    await ownerPage.goto(timesheetUrl);
+    const period = ownerPage.getByRole("region", { name: "Payroll period" });
+    await expect(period).toContainText("Open — not finalised");
+    const exceptions = period.getByRole("list", { name: "Outstanding payroll exceptions" });
+    await expect(exceptions.getByRole("listitem")).toHaveCount(3);
+    await expect(exceptions).toContainText("Payroll Worker · FOH · Awaiting department approval");
+    await expect(exceptions).toContainText("Payroll Worker · FOH · Incomplete or invalid attendance");
+    const finaliseButton = period.getByRole("button", { name: "Finalise payroll period" });
+    await expect(finaliseButton).toBeDisabled();
+    await finaliseButton.evaluate((button) => { button.disabled = false; });
+    await finaliseButton.click();
+    await expect(ownerPage.locator("main").getByRole("alert"))
+      .toContainText("Resolve every outstanding exception before finalising");
+
+    expect((await admin.from("attendance_events").insert(event(sessions[1], "clock_out", "2024-10-03T03:00:00Z")))
+      .error).toBeNull();
+    const rows = await fohApi.rpc("list_weekly_worked_time_for_edit", scope);
+    expect(rows.error).toBeNull();
+    for (const row of rows.data) {
+      expect((await fohApi.rpc("decide_attendance_timesheet", {
+        p_business_id: businessId, p_venue_id: venueId, p_session_id: row.session_id, p_request_id: randomUUID(),
+        p_expected_revision: row.edit_revision, p_decision: "approved", p_reason: null,
+      })).error).toBeNull();
+    }
+
+    const staleContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(staleContext);
+    const stalePage = await staleContext.newPage();
+    stalePage.setDefaultTimeout(20_000);
+    await signIn(stalePage, `payroll-owner-${suffix}@example.test`, password);
+    await stalePage.goto(`/work-time?venue=${venueId}`);
+    const staleCard = stalePage.locator(`#attendance-session-${completeSession}`);
+    await staleCard.locator("summary").click();
+    const staleUnlock = staleCard.getByRole("form", { name: "Unlock attendance edits" });
+    await staleUnlock.getByLabel("Reason to unlock attendance edits").fill("Change after payroll");
+
+    await ownerPage.goto(timesheetUrl);
+    await expect(period.getByText("No outstanding exceptions in your scope.")).toBeVisible();
+    await period.getByLabel("Finalisation note (optional)").fill("Week checked against roster");
+    await finaliseButton.click();
+    await expect(ownerPage.locator("main").getByRole("status"))
+      .toContainText("Payroll period finalised. Attendance in this week cannot change until it is reopened.");
+    await expect(period).toContainText("Finalised for payroll");
+    await expect(period).toContainText("Finalised by you (owner)");
+    await expect(period).toContainText("2 sessions, worked 9h");
+    await expect(finaliseButton).toHaveCount(0);
+    await expect(ownerPage.getByRole("button", { name: "Lock selected sessions" })).toBeDisabled();
+    await expect(ownerPage.locator(`#timesheet-session-${completeSession}`))
+      .toContainText("Decisions are unavailable while the payroll period is finalised");
+
+    await staleUnlock.getByRole("button", { name: "Unlock attendance edits" }).click();
+    await expect(stalePage.locator("main").getByRole("alert"))
+      .toContainText("This week's payroll period is finalised. An owner, admin or general manager must reopen it");
+    expect((await gmApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error?.message)
+      .toBe("Payroll period is already finalised");
+
+    const fohContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    fohPage.setDefaultTimeout(20_000);
+    await signIn(fohPage, `payroll-foh-${suffix}@example.test`, password);
+    await fohPage.goto(timesheetUrl);
+    const fohPeriod = fohPage.getByRole("region", { name: "Payroll period" });
+    await expect(fohPeriod).toContainText("Finalised for payroll");
+    await expect(fohPeriod).toContainText("Only an owner, admin or general manager with access to every department");
+    await expect(fohPeriod.getByRole("button")).toHaveCount(0);
+    expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+    expect((await fohApi.rpc("reopen_payroll_period", {
+      ...scope, p_request_id: randomUUID(), p_reason: "Not allowed",
+    })).error?.message).toBe(permissionMessage);
+
+    const reopenReason = period.getByLabel("Reason for reopening");
+    await reopenReason.evaluate((input) => { input.required = false; });
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(ownerPage.locator("main").getByRole("alert"))
+      .toContainText("Enter a reason of up to 500 characters before reopening");
+    await expect(period).toContainText("Finalised for payroll");
+    await period.getByLabel("Reason for reopening").fill("Late tip adjustment approved by owner");
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(ownerPage.locator("main").getByRole("status"))
+      .toContainText("Payroll period reopened. The previous finalisation and your reason remain in its history.");
+    await expect(period).toContainText("Reopened — not finalised");
+    await expect(finaliseButton).toBeEnabled();
+    await period.getByText("Payroll period history (2)").click();
+    const history = period.getByRole("list", { name: "Payroll period history" }).getByRole("listitem");
+    await expect(history.nth(0)).toContainText("Reopened by you (owner)");
+    await expect(history.nth(0)).toContainText("Reason: Late tip adjustment approved by owner");
+    await expect(history.nth(1)).toContainText("Finalised by you (owner)");
+    await expect(history.nth(1)).toContainText("Note: Week checked against roster");
+
+    await fohPage.reload();
+    await expect(fohPeriod).toContainText("Reopened — not finalised");
+    await fohPeriod.getByText("Payroll period history (2)").click();
+    await expect(fohPeriod.getByRole("list", { name: "Payroll period history" }).getByRole("listitem").nth(0))
+      .toContainText("Reopened by an owner");
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `payroll-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(timesheetUrl);
+    await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Payroll Worker", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("managers copy scoped draft rosters with conflict checks and publication-only notifications", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
