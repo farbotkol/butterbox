@@ -1053,6 +1053,301 @@
 3. Access expires automatically.
 
 
+
+## Epic PAYRULES — Butterbox Award Central: Australian Award Intelligence and Gross Pay Interpretation (P0/P1)
+
+**Architecture:** Butterbox centrally owns, validates, versions and publishes one shared library of approved Australian Modern Award interpretations. All customers reference the same immutable, effective-dated approved award versions; customers cannot edit or override central award logic. Customer-specific employee arrangements, classifications, contracts, over-award rates and Xero mappings remain tenant-scoped. Separately reviewed enterprise agreements and exceptions may use isolated tenant-specific rulesets. AI may ingest and propose but never activate award rules. Deterministic execution, expert verification and governed publication are mandatory. Employers confirm applicable employment arrangements and remain responsible for correct employee pay; Xero initially owns official payroll rates and processes payments.
+
+### BB-PAYRULES-001 — Award and employment agreement assignment [P0]
+
+**User story:** As a business owner, I want to assign the correct award or agreement and employment conditions to each worker so their pay is interpreted against the right rules.
+
+**Acceptance criteria**
+
+1. Select an approved central award version or supported separately reviewed agreement; capture classification, employment basis, location and effective dates.
+2. Store customer-specific assignments under tenant RLS; clients cannot edit centrally published award logic.
+3. Preserve history and flag missing or unresolved instrument, classification or agreement details; block unsupported payroll interpretation.
+4. Show the customer's confirmation and source of each employee arrangement.
+
+**Dependencies:** BB-RULES-001;BB-PEOPLE-001
+
+### BB-PAYRULES-002 — Central versioned award rule and rate library [P0]
+
+**User story:** As a Butterbox compliance administrator, I want one shared centrally managed library so every customer uses the same validated interpretation for the applicable award version.
+
+**Acceptance criteria**
+
+1. Butterbox owns shared award definitions; approved versions are immutable, effective-dated and available read-only to authorised tenants without duplicating rules per tenant.
+2. Rules include authoritative sources, clause citations, rate provenance, validation evidence and lifecycle states: draft, review, approved, active and superseded.
+3. Customer administrators cannot edit, replace, activate or override shared award interpretations; cross-tenant configuration and data remain isolated.
+4. An approved central award version is referenced by identifier in each calculation, enabling reproducible historical results.
+5. Support separately scoped and independently validated client-specific agreements without changing the central modern-award library.
+
+**Dependencies:** BB-PAYRULES-017;BB-RULES-003
+
+### BB-PAYRULES-003 — Employee classification and official pay-rate mapping [P0]
+
+**User story:** As a payroll administrator, I want employee classifications and reference rates mapped to Xero so award calculations and payroll can be reconciled.
+
+**Acceptance criteria**
+
+1. Maintain tenant-specific employee classifications, employment type, agreed conditions, over-award rates and effective dates.
+2. Map classifications to approved shared award rates without copying or editing shared rule definitions.
+3. Keep Xero the initial source of official configured payroll rates; flag missing and below-minimum or discrepant configurations for review.
+4. Restrict mappings and sensitive rate data to authorised personnel and retain change history.
+
+**Dependencies:** BB-PAYRULES-001;BB-PAYRULES-002;BB-PAY-003
+
+### BB-PAYRULES-004 — Approved timesheet segmentation and ordinary hours [P0]
+
+**User story:** As a payroll approver, I want approved worked time split deterministically into pay intervals so hours map to appropriate award categories.
+
+**Acceptance criteria**
+
+1. Use approved immutable timekeeping inputs and applicable worker/venue timezone.
+2. Segment across midnight, weekday and entitlement boundaries including DST and paid/unpaid breaks.
+3. Reconcile segment totals against worked time with no overlapping or duplicated time.
+4. Record source event and approved central rule-version identifiers; flag missing information.
+
+**Dependencies:** BB-TIME-001;BB-TIME-004;BB-PAYRULES-002
+
+### BB-PAYRULES-005 — Weekend and public-holiday penalties [P0]
+
+**User story:** As a payroll approver, I want the correct approved penalty category assigned to each worked interval.
+
+**Acceptance criteria**
+
+1. Apply reviewed instrument-specific weekend, public-holiday and casual-loading rules with effective dates.
+2. Determine relevant state or local public holidays and segment cross-midnight shifts correctly.
+3. Evaluate interactions and precedence without blindly stacking multipliers.
+4. Maintain independent golden tests and explain the exact clause and rule version used.
+
+**Dependencies:** BB-PAYRULES-004;BB-PAYRULES-013
+
+### BB-PAYRULES-006 — Overtime and cumulative-hours interpretation [P0]
+
+**User story:** As a payroll approver, I want relevant cumulative hours and overtime thresholds evaluated across shifts.
+
+**Acceptance criteria**
+
+1. Apply validated daily, weekly, consecutive-day and agreement-related thresholds only where supported.
+2. Account for linked workers and multiple venues without disclosing other tenants' confidential schedules.
+3. Distinguish penalty and overtime categories without double counting.
+4. Test threshold boundaries, changed contracts, cross-midnight shifts and concurrency.
+
+**Dependencies:** BB-PAYRULES-004;BB-PAYRULES-005
+
+### BB-PAYRULES-007 — Breaks, minimum engagements and split-shift rules [P0]
+
+**User story:** As a manager, I want validated break and minimum-engagement conditions reflected in interpreted pay and warnings.
+
+**Acceptance criteria**
+
+1. Evaluate approved minimum paid engagements, paid/unpaid breaks and split-shift conditions.
+2. Use actual recorded break facts; never invent a break or imply a warning is proof of compliance.
+3. Show payment components, warnings and award clause citations independently.
+4. Block payroll approval on unresolved critical conditions under the approved policy.
+
+**Dependencies:** BB-ATTEND-002;BB-RULES-002;BB-PAYRULES-004
+
+### BB-PAYRULES-008 — Allowances and higher-duty entitlements [P1]
+
+**User story:** As a payroll approver, I want supported allowances and higher-duty assignments included with evidence.
+
+**Acceptance criteria**
+
+1. Support validated automatic conditions and authorised evidence-backed manual allowance records.
+2. Resolve effective-dated higher-duty and classification conditions without altering ordinary employee records.
+3. Map each allowance to a supported Xero pay item or a review exception.
+4. Audit fact entry, approval, calculation and corrections.
+
+**Dependencies:** BB-PAYRULES-002;BB-PAYRULES-003
+
+### BB-PAYRULES-009 — Explainable gross pay interpretation [P0]
+
+**User story:** As a business owner, I want an itemised gross-pay estimate with reasons so I can inspect how hours were interpreted.
+
+**Acceptance criteria**
+
+1. Calculate deterministically with centrally approved rule versions and tenant-specific employment configurations.
+2. Explain category, hours, multiplier, reference rate, amount, rule clause and effective date for each component.
+3. Retain immutable input snapshots and version identifiers for reproduction and audit.
+4. Label estimates separately from Xero's official gross pay and block unsupported or unapproved interpretations.
+
+**Dependencies:** BB-PAYRULES-004;BB-PAYRULES-005;BB-PAYRULES-006;BB-PAYRULES-007
+
+### BB-PAYRULES-010 — Xero earnings-rate mapping and reconciliation [P0]
+
+**User story:** As a payroll administrator, I want interpreted components mapped to the correct Xero earnings rates.
+
+**Acceptance criteria**
+
+1. Map pay categories to supported Xero EarningsRateID values per tenant payroll connection.
+2. Verify configured Xero rates and pay categories against expected award references and employee arrangements.
+3. Prevent unmapped or mismatched components from silently exporting.
+4. Require explicit permission to create or change Xero rates; do not silently replace its official configuration.
+
+**Dependencies:** BB-PAY-003;BB-PAY-004;BB-PAYRULES-009
+
+### BB-PAYRULES-011 — Interpretation exceptions and payroll approval gate [P0]
+
+**User story:** As a payroll approver, I want critical award or mapping exceptions resolved before payroll export.
+
+**Acceptance criteria**
+
+1. Flag unsupported instruments, stale/unapproved central rules, missing classification, rate mismatches and ambiguous conditions.
+2. Enforce server-side export blocks and approval scope for unresolved critical exceptions.
+3. Record reviewer decision, rationale, input versions and payroll-period lock state.
+4. Expose employee-level details only to authorised tenant users.
+
+**Dependencies:** BB-TIME-005;BB-PAYRULES-009;BB-PAYRULES-010
+
+### BB-PAYRULES-012 — Historical recalculations and auditable adjustments [P0]
+
+**User story:** As an auditor, I want earlier entitlements reproduced and corrected without mutating original results.
+
+**Acceptance criteria**
+
+1. Reproduce historical output from exact original source facts, tenant configuration and central award versions.
+2. Propose adjustments when source facts or rules are corrected, displaying old/new differences.
+3. Preserve immutable exports and approval audit; avoid duplicate adjustment payments.
+4. Require authorised review before generating new export versions.
+
+**Dependencies:** BB-TIME-006;BB-PAYRULES-009;BB-PAYRULES-011
+
+### BB-PAYRULES-013 — Independent award calculation regression evidence [P0]
+
+**User story:** As a product owner, I want independently validated reference scenarios before any award is enabled for payroll.
+
+**Acceptance criteria**
+
+1. Maintain expert-reviewed golden cases for penalties, overtime, allowances, breaks, holidays, classifications and interactions.
+2. Test DST, midnight, minimum engagement, cumulative hours and effective-date boundaries.
+3. Fail publication on missing mandatory coverage, contradictory evidence or unresolved critical cases.
+4. Record reviewer, test provenance, coverage limitations and signoff; never claim government certification without one.
+
+**Dependencies:** BB-PAYRULES-019;BB-PAYRULES-020
+
+### BB-PAYRULES-014 — Pre-publication roster labour cost estimates [P1]
+
+**User story:** As a venue manager, I want estimated award-aware labour costs before I publish a roster.
+
+**Acceptance criteria**
+
+1. Estimate using planned shifts, shared approved award rules and tenant employment settings.
+2. Break down cost by venue, department, day, role and worker within permissions.
+3. Show missing-data assumptions and differentiate forecast from earned/paid amounts.
+4. Recalculate on roster edits without changing official timesheets or pay.
+
+**Dependencies:** BB-ROSTER-008;BB-PAYRULES-009
+
+### BB-PAYRULES-015 — Actual-versus-rostered labour cost analytics [P1]
+
+**User story:** As an owner, I want to understand labour-cost differences between roster estimates and worked time.
+
+**Acceptance criteria**
+
+1. Compare versions of planned cost and interpreted approved worked-time cost.
+2. Explain variances from hours, penalties, allowances and classification changes.
+3. Reconcile to auditable source events and calculation versions.
+4. Scope employee financial drill-down by tenant and role.
+
+**Dependencies:** BB-PAYRULES-014;BB-PAYRULES-009;BB-REPORT-001
+
+### BB-PAYRULES-016 — Central award regulatory maintenance and client impact [P0]
+
+**User story:** As a Butterbox compliance administrator, I want one governed update process for supported awards.
+
+**Acceptance criteria**
+
+1. Detect authoritative rule or rate changes centrally and retain publication/effective dates.
+2. Compute impact previews across affected tenant configurations without exposing one tenant's data to another.
+3. Run regression and specialist approval before controlled activation of shared versions.
+4. Notify affected customers of changed rates, mappings, classifications or actions required; prevent silent unapproved changes.
+5. Maintain safe rollback, historical versions, review deadlines and unsupported/stale coverage alerts.
+
+**Dependencies:** BB-PAYRULES-017;BB-PAYRULES-021
+
+### BB-PAYRULES-017 — Official Fair Work award and rate data ingestion [P0]
+
+**User story:** As a compliance administrator, I want official award rates and instruments acquired into a central staging library.
+
+**Acceptance criteria**
+
+1. Integrate supported Fair Work Commission Modern Awards Pay Database API information and authoritative consolidated award documents.
+2. Retain source URL, retrieval timestamp, content hash, effective date, variation history and data provenance.
+3. Identify fields not supplied by the rate API and gaps requiring reading full clauses.
+4. Reject ambiguous or unavailable source data without activating payroll interpretations.
+
+**Dependencies:** Official source and access assessment.
+
+### BB-PAYRULES-018 — AI award clause interpretation with evidence [P0]
+
+**User story:** As a compliance analyst, I want AI to propose the meaning and applicability of award clauses from official material.
+
+**Acceptance criteria**
+
+1. Extract conditions, rates, classifications, exclusions, precedence and dependencies with exact source references.
+2. Store model/prompt version and confidence or uncertainty; highlight ambiguities and competing interpretations.
+3. Keep all AI output central and draft-only, never direct client-specific executable overrides.
+4. Protect against source-document prompt injection and provide traceable review evidence.
+
+**Dependencies:** BB-PAYRULES-017
+
+### BB-PAYRULES-019 — AI typed pay-rule proposal generation [P0]
+
+**User story:** As a compliance analyst, I want AI findings expressed in a constrained deterministic rules format.
+
+**Acceptance criteria**
+
+1. Generate schema-validated central draft rule proposals referencing source clauses and effective periods.
+2. Reject unsupported syntax, unverifiable assumptions and circular/conflicting rule dependencies.
+3. Do not execute draft AI rules in live calculations, update tenant payroll settings or publish automatically.
+4. Retain diffs and provenance between source interpretation and proposed structured rule.
+
+**Dependencies:** BB-PAYRULES-018;BB-PAYRULES-002
+
+### BB-PAYRULES-020 — Automated validation and rule-conflict detection [P0]
+
+**User story:** As a compliance analyst, I want proposed award interpretations tested and contradictions surfaced.
+
+**Acceptance criteria**
+
+1. Validate proposed structured rules against official rate data and source document clauses.
+2. Identify missing conditions, overlaps, precedence errors and conflicting rates.
+3. Generate candidate tests, but evaluate them against independently reviewed expected results rather than self-validating AI output.
+4. Block publication until required evidence, approval and golden cases pass.
+
+**Dependencies:** BB-PAYRULES-019;BB-PAYRULES-013
+
+### BB-PAYRULES-021 — Independent specialist approval and shared rule publication [P0]
+
+**User story:** As a Butterbox compliance owner, I want controlled central publication of independently validated award interpretations.
+
+**Acceptance criteria**
+
+1. Require qualified specialist approval separate from AI proposal creation and record segregation-of-duties evidence.
+2. Store immutable reviewer identity, decision, scope, supporting test outputs, sources and approved version.
+3. Publish to one shared centrally managed, tenant-read-only award library, not copied editable tenant rulebooks.
+4. Support scheduled effective dates, rollback through new versions and customer impact notices.
+5. Restrict enterprise agreement and client-specific exception approvals to their own tenant-scoped reviewed rulesets.
+
+**Dependencies:** BB-PAYRULES-020;BB-PAYRULES-013
+
+### BB-PAYRULES-022 — Award change monitoring and AI impact analysis [P1]
+
+**User story:** As a Butterbox compliance administrator, I want AI-assisted monitoring and impact previews for updated awards.
+
+**Acceptance criteria**
+
+1. Monitor authoritative award amendments and rates for content changes and effective dates.
+2. Propose source-cited clause and structured-rule diffs, including affected approved versions and tenant configurations.
+3. Generate customer-impact summaries with strict tenant isolation and prioritised action lists.
+4. Require specialist approval and completed regression tests before any new shared version becomes active.
+5. Alert when monitoring or sources fail so stale rules are not silently represented as current.
+
+**Dependencies:** BB-PAYRULES-016;BB-PAYRULES-021
+
 ## Recommended first 12 feature builds
 
 1. **BB-FOUND-001** project and environment skeleton.
