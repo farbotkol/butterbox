@@ -4,6 +4,7 @@ import {
   saveJobRoleAction,
   saveVenueConflictPolicyAction,
   saveVenueGeofenceAction,
+  setVenueClockGeofenceAction,
   setJobRoleAutoRestrictionAction,
   setJobRoleManualRestrictionAction,
 } from "@/app/actions";
@@ -30,6 +31,14 @@ type GeofenceEvent = {
   new_values: GeofenceValues;
   created_at: string;
 };
+type ClockLocationPolicyEvent = {
+  id: string;
+  actor_id: string | null;
+  actor_type: string;
+  old_enabled: boolean;
+  new_enabled: boolean;
+  created_at: string;
+};
 type ConflictPolicyEvent = {
   id: string;
   actor_id: string | null;
@@ -48,6 +57,8 @@ const errorMessages: Record<string, string> = {
   inactive: "Reactivate the department before adding or reactivating its roles.",
   filter: "That venue is not available to you.",
   geofence: "Enter latitude from -90 to 90, longitude from -180 to 180 (up to six decimal places), and a whole-number radius from 1 to 10,000 metres; or clear all three.",
+  "location-required": "Configure a venue location before enabling verification, and disable verification before removing it.",
+  "location-policy": "Select whether clock location verification is enabled.",
   "conflict-policy": "Select a valid option for each roster conflict rule and try again.",
   save: "We couldn't save that change. Check the name and try again.",
 };
@@ -100,14 +111,14 @@ export default async function OrganisationPage({
 
   const params = await searchParams;
   const venues = await workspace.supabase.from("venues")
-    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
+    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
     .eq("business_id", workspace.business.id).order("name");
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) redirect("/settings/organisation?error=filter");
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
   const canManageGeofence = workspace.membership.role === "owner";
-  const [departments, roles, geofenceHistory, conflictHistory] = await Promise.all([
+  const [departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
     workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
@@ -115,6 +126,12 @@ export default async function OrganisationPage({
     canManageGeofence
       ? workspace.supabase.from("venue_geofence_events")
         .select("id, actor_id, actor_type, old_values, new_values, created_at")
+        .eq("business_id", workspace.business.id).eq("venue_id", venueId)
+        .order("created_at", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [], error: null }),
+    canManageGeofence
+      ? workspace.supabase.from("venue_clock_location_events")
+        .select("id, actor_id, actor_type, old_enabled, new_enabled, created_at")
         .eq("business_id", workspace.business.id).eq("venue_id", venueId)
         .order("created_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [], error: null }),
@@ -137,9 +154,15 @@ export default async function OrganisationPage({
       code: conflictHistory.error.code, message: conflictHistory.error.message,
     });
   }
+  if (locationPolicyHistory.error) {
+    console.error("Could not load clock location policy history.", {
+      code: locationPolicyHistory.error.code, message: locationPolicyHistory.error.message,
+    });
+  }
   const departmentRows: Department[] = departments.data ?? [];
   const roleRows: JobRole[] = roles.data ?? [];
   const geofenceEvents: GeofenceEvent[] = geofenceHistory.data ?? [];
+  const locationPolicyEvents: ClockLocationPolicyEvent[] = locationPolicyHistory.data ?? [];
   const conflictEvents: ConflictPolicyEvent[] = conflictHistory.data ?? [];
   const canManageDepartments = departmentManagerRoles.includes(workspace.membership.role);
 
@@ -177,6 +200,7 @@ export default async function OrganisationPage({
             : params.saved === "restriction" ? "Automatic assignment setting saved."
               : params.saved === "manual-restriction" ? "Manual assignment setting saved."
                 : params.saved === "geofence" ? "Venue location saved."
+                : params.saved === "location-policy" ? "Clock location setting saved."
                 : params.saved === "conflict-policy" ? "Roster conflict rules saved."
                 : "Department saved."}
         </p>
@@ -237,10 +261,12 @@ export default async function OrganisationPage({
               <h2 className="font-semibold">Venue location and geofence</h2>
               <p id="geofence-help" className="mt-3 text-sm leading-6 text-muted">
                 Enter coordinates to six decimal places and a radius from 1 to 10,000 metres.
-                Clear all three fields to remove the location. When location-based clocking becomes
-                available, staff may need to allow location access in their device or browser;
-                denial or inaccurate GPS can prevent verification. Clock events are currently
-                unverified; location verification and geofence enforcement are not implemented yet.
+                Clear all three fields to remove the location after disabling verification.
+                Location verification is optional and is off until an owner enables it.
+                Staff may need to allow location access at clock-in and clock-out. A denied,
+                unavailable, inaccurate or outside location is flagged for review without stopping
+                the clock event. Verification requires the reported accuracy area to fit within the
+                radius. Device-reported location can be spoofed, and raw coordinates are not retained.
               </p>
               <form action={saveVenueGeofenceAction} aria-label="Configure venue geofence"
                 aria-describedby="geofence-help" className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -261,6 +287,36 @@ export default async function OrganisationPage({
                   Save venue location
                 </button>
               </form>
+              <form action={setVenueClockGeofenceAction} aria-label="Configure clock location verification"
+                aria-describedby="geofence-help" className="mt-5">
+                <input type="hidden" name="venue_id" value={venueId} />
+                <label className="block max-w-md text-sm">Clock location verification
+                  <select name="enabled" defaultValue={String(selectedVenue.clock_geofence_enabled)} className={fieldClass}>
+                    <option value="false">Off</option>
+                    <option value="true">On</option>
+                  </select>
+                </label>
+                <button type="submit" className="mt-4 rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
+                  Save clock location setting
+                </button>
+              </form>
+              <h3 className="mt-5 text-sm font-semibold">Recent clock location setting changes</h3>
+              {locationPolicyHistory.error ? (
+                <p role="alert" className="mt-2 text-sm text-red-800">We could not load clock location history. Try again.</p>
+              ) : locationPolicyEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">No clock location setting changes yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-2 text-sm">
+                  {locationPolicyEvents.map((event) => (
+                    <li key={event.id} className="break-words">
+                      <time dateTime={event.created_at}>{new Date(event.created_at).toISOString()}</time>
+                      {" | "}{event.actor_id ? `User ${event.actor_id}` : event.actor_type}
+                      {" | "}{event.old_enabled ? "On" : "Off"} to {event.new_enabled ? "On" : "Off"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {locationPolicyEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
               <h3 className="mt-5 text-sm font-semibold">Recent location changes</h3>
               {geofenceHistory.error ? (
                 <p role="alert" className="mt-2 text-sm text-red-800">We could not load location history. Try again.</p>

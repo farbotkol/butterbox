@@ -2,12 +2,12 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **21**. In Progress: **5**.
-  Blocked: **1**. Not started (Backlog): **60**.
+- Total stories: **87**. Verified Done: **22**. In Progress: **5**.
+  Blocked: **1**. Not started (Backlog): **59**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006,
-  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001 and BB-ATTEND-002.
+  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002 and BB-ATTEND-003.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -21,6 +21,16 @@
   real 1,001-shift roster; the temporary application server stopped.
 - Each exact staged checkpoint is checked with a network-disabled, redacted
   Gitleaks scan before committing.
+- BB-ATTEND-003's final isolated migration replay and complete repository
+  database regression passed **1,175/1,175 assertions across 26 files**,
+  including 71 location assertions and the final tenant/venue guard. The
+  serialized Node suite passed **66 tests**, including three early worked-time
+  unit tests; its six skipped integrations were run separately and all passed.
+  Full ESLint, TypeScript and split production compile/generate passed. The
+  complete **33/33** production-browser regression passed before the last
+  guard and review-error wording change; a rebuilt focused location scenario
+  then passed against the final schema, including the review failure path.
+  The disposable fixtures and temporary app server were removed.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -83,6 +93,9 @@
 
 ## Current story
 
+- **BB-ATTEND-003 — Location verification** is Done. Optional per-venue
+  verification, event-time capture and scoped exception review passed all
+  three criteria and the final regression checks below.
 - **BB-ATTEND-002 — Clock breaks** is Done. Immutable paid/unpaid break events,
   scoped transitions, safe retries and mobile controls are verified. The
   first break browser scenario timed out because a nested test locator was
@@ -139,8 +152,9 @@ Files: `supabase/migrations/20261102010000_attendance_clock_events.sql`,
 `tests/shared-worker-concurrency.integration.test.mjs`,
 `tests/helpers/disposable-database.mjs`, `tests/e2e/auth.spec.mjs`,
 `scripts/test-tenant-isolation.mjs` and `README.md`. The migration was applied
-only to the isolated project. Location verification, corrections and timesheets
-are not yet implemented; no break is silently deducted.
+only to the isolated project. At this checkpoint location verification,
+corrections and timesheets were not yet implemented; no break is silently
+deducted. See BB-ATTEND-003 for the subsequent location work.
 
 ### BB-ATTEND-002 — Clock breaks (Done)
 
@@ -159,7 +173,33 @@ Files: `supabase/migrations/20261102020000_attendance_break_events.sql`,
 from all migrations; the complete 1,104-assertion database regression, 60 Node
 tests, five authenticated integration tests, 32 browser scenarios, full lint,
 TypeScript and split production build passed. Payroll calculations, corrections
-and location verification remain unfinished.
+and timesheets remain unfinished.
+
+### BB-ATTEND-003 — Location verification (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ATTEND-003.1 Browser requests location only at a clock event | The owner-only per-venue policy defaults off; the clock form requests location on submission only, using the active session's actual venue for clock-out. Breaks and page loads never request it. | Focused production Chromium passed with native geolocation permission: no request on load, disabled clocks or breaks; one per enabled clock; correct policy after switching venues. JavaScript-disabled clocks also recorded explicit exceptions. | Pass |
+| ATTEND-003.2 Server verifies distance and accuracy | An atomic event trigger records a separate immutable check. The server requires distance plus reported accuracy to fit the radius; it retains derived distance, accuracy and policy radius, not raw coordinates. Browser-reported coordinates can be spoofed. | 71 focused pgTAP assertions passed inside, outside, accuracy boundaries, invalid positions and policy/tenant permissions, including the final cross-tenant venue guard. Authenticated concurrent policy-change and retry tests passed; Chromium verified inside, outside and inaccurate results. | Pass |
+| ATTEND-003.3 Failure creates a reviewable exception without deleting time worked | Denied, unavailable, timed-out, unsupported, missing and invalid positions create scoped, attributable review records without altering original clock events. Legacy RPCs cannot bypass verification; retries reuse the original outcome. | pgTAP, authenticated race tests and production Chromium passed denial, legacy/no-JavaScript, scoped manager review, review failure, FOH/BOH and cross-tenant cases. A disposable upgrade test verified historical events are not backfilled or reverified. | Pass |
+
+Files: `supabase/migrations/20261102030000_attendance_location_verification.sql`,
+`supabase/tests/database/attendance_location_verification.test.sql`,
+`src/components/clock-location-form.tsx`, `src/lib/attendance-location.ts`,
+`src/app/attendance/page.tsx`, `src/app/settings/organisation/page.tsx`,
+`src/app/actions.ts`, `tests/attendance-location.test.mjs`,
+`tests/attendance-location-concurrency.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `scripts/test-tenant-isolation.mjs` and `README.md`.
+Focused Node tests, 71 database assertions, authenticated concurrency and the
+production-browser scenario passed. The first two browser attempts exposed
+ambiguous test locators for Next.js's route announcer and a temporary locating
+status; both locators were corrected without removing assertions. The isolated
+upgrade test passed before rebuilding the database from the complete migration
+chain. The final repository database suite passed 1,175 assertions across 26
+files; six authenticated integration tests, 66 serialized Node tests, full
+lint, TypeScript, split production build and the focused final-schema browser
+scenario passed. The full 33-scenario browser regression passed immediately
+before the final tenant/venue safeguard and review-error wording change.
 
 ### BB-ORG-005 — Multiple venues (In Progress)
 
@@ -174,7 +214,7 @@ and location verification remain unfinished.
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ORG-002.1 Latitude, longitude and radius save with validation | Owners can configure or clear all three values per venue; coordinates are limited to six meaningful decimal places and radius to 1–10,000 metres. SQL constraints and an owner-only RPC enforce the same bounds. | Two parsing unit tests, 60 isolated pgTAP assertions and production Chromium verify valid saves, clear, no-op, boundaries, invalid/partial input, two venues and tenant/role isolation. | Pass |
-| ORG-002.2 Location permission implications are explained | The form explains that future location verification may require device/browser permission and that denial or inaccurate GPS can prevent verification; current clock events are explicitly unverified. | Production Chromium verifies both the permission guidance and the implementation limitation on the owner screen, including a 375px layout. | Pass |
+| ORG-002.2 Location permission implications are explained | The form explains optional verification, event-time permission, failure review, accuracy and the limitations of device-reported location. | The original production Chromium scenario verified permission guidance and mobile layout; the updated location scenario verifies the current opt-in and review behaviour. | Pass |
 | ORG-002.3 All changes are audited | A protected trigger records actor or maintenance role, actual time, tenant, venue and old/new values for configured inserts, updates and clearing; unchanged values do not create events. Owners can see recent history. | pgTAP verifies actor/time/values, direct-write denial, privileged update/insert capture and tenant/role restrictions. Production Chromium verifies visible history and a serialized old/new chain under concurrent authenticated updates. | Pass |
 
 Files: `supabase/migrations/20261101180000_venue_geofence.sql`,
@@ -186,8 +226,8 @@ complete isolated database regression passed 617/617 assertions, the
 authenticated two-tenant/concurrency regression passed, all 45 serialized
 Node tests passed (one separately run integration skipped in that invocation),
 full lint and split production compile/typecheck/generate passed, and the
-geofence plus two organisation browser scenarios passed. Clock-in has since
-been implemented; location enforcement remains a separate unfinished story.
+geofence plus two organisation browser scenarios passed. Clock-in and optional
+location verification have since been implemented; see BB-ATTEND-003.
 
 ### BB-PEOPLE-004 — Submit availability exceptions (Done)
 
@@ -605,12 +645,12 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-ATTEND-003 — Location verification** with optional geofencing,
-  event-time-only browser location requests, server-side distance/accuracy
-  checks and reviewable exceptions without discarding attendance. Employee
-  invitations and reliable email/push also remain outstanding.
-- Migrations through `20261102020000` are applied only to the isolated stack.
-  The pre-existing Butterbox development stack and production were not changed.
+- Implement **BB-TIME-001 — Compute worked time** as a prerequisite for
+  reliable timesheets, corrections and payroll. Preserve exact original
+  events, account for actual paid and unpaid breaks, and flag incomplete or
+  otherwise exceptional records.
+- The new location migration has been tested only on the isolated stack. The
+  pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.
   Next invocation can start its Supabase project again with the pinned CLI.

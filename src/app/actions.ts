@@ -3,6 +3,7 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
+import { parseLocationCapture, parseLocationClockReceipt } from "@/lib/attendance-location";
 import { authCallbackUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
@@ -235,11 +236,45 @@ export async function saveVenueGeofenceAction(formData: FormData) {
   if (error) {
     console.error("Venue geofence save failed.", { code: error.code, message: error.message });
     const code = error.message === "Permission denied" ? "permission"
-      : error.message === "Invalid venue geofence" ? "geofence" : "save";
+      : error.message === "Invalid venue geofence" ? "geofence"
+        : error.message === "Configure a venue geofence before enabling location verification" ? "location-required" : "save";
     redirect(`${destination}&error=${code}`);
   }
   revalidatePath("/settings/organisation");
   redirect(`${destination}&saved=geofence`);
+}
+
+export async function setVenueClockGeofenceAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const enabled = formData.getAll("enabled");
+  if (!venueIds || venueIds.length !== 1 || enabled.length !== 1 ||
+    (enabled[0] !== "true" && enabled[0] !== "false")) {
+    console.error("Invalid clock location policy submitted.");
+    redirect("/settings/organisation?error=location-policy");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the clock location workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  const destination = `/settings/organisation?venue=${encodeURIComponent(workspace.venue.id)}`;
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+  const { error } = await workspace.supabase.rpc("set_venue_clock_geofence", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    p_enabled: enabled[0] === "true",
+  });
+  if (error) {
+    console.error("Clock location policy save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Configure a venue geofence before enabling location verification" ? "location-required"
+        : error.message === "Invalid clock location policy" ? "location-policy" : "save";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/settings/organisation");
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=location-policy`);
 }
 
 export async function saveVenueConflictPolicyAction(formData: FormData) {
@@ -580,31 +615,46 @@ export async function clockInAction(formData: FormData) {
     console.error("Invalid attendance employee or department.");
     redirect(`${destination}&error=invalid`);
   }
-  const { data, error } = await workspace.supabase.rpc("clock_in_attendance", {
+  const location = parseLocationCapture(formData);
+  if (location.status === "invalid") console.warn("Invalid clock location data will be flagged for review.");
+  const { data, error } = await workspace.supabase.rpc("clock_in_attendance_with_location", {
     p_business_id: workspace.business.id,
     p_venue_id: workspace.venue.id,
     p_department_id: selection.departmentId,
     p_employee_id: selection.employeeId,
     p_request_id: requestId,
+    p_location_status: location.status,
+    p_latitude: location.latitude,
+    p_longitude: location.longitude,
+    p_accuracy_meters: location.accuracyMeters,
   });
-  if (error || !parseClockReceipt(data)) {
+  const receipt = parseLocationClockReceipt(data);
+  if (error || !receipt) {
     console.error("Clock-in failed.", {
       code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
     });
     redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
   }
   revalidatePath("/attendance");
-  redirect(`${destination}&saved=recorded`);
+  const saved = receipt.locationStatus === "review" ? "location-review"
+    : receipt.locationStatus === "historical_unverified" ? "location-historical" : "recorded";
+  redirect(`${destination}&saved=${saved}`);
 }
 
 export async function clockOutAction(formData: FormData) {
   const { workspace, requestId, destination, sessionId } = await attendanceSessionActionContext(formData);
-  const { data, error } = await workspace.supabase.rpc("clock_out_attendance", {
+  const location = parseLocationCapture(formData);
+  if (location.status === "invalid") console.warn("Invalid clock location data will be flagged for review.");
+  const { data, error } = await workspace.supabase.rpc("clock_out_attendance_with_location", {
     p_business_id: workspace.business.id,
     p_session_id: sessionId,
     p_request_id: requestId,
+    p_location_status: location.status,
+    p_latitude: location.latitude,
+    p_longitude: location.longitude,
+    p_accuracy_meters: location.accuracyMeters,
   });
-  const receipt = parseClockReceipt(data);
+  const receipt = parseLocationClockReceipt(data);
   if (error || !receipt || receipt.sessionId.toLowerCase() !== sessionId.toLowerCase()) {
     console.error("Clock-out failed.", {
       code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
@@ -612,7 +662,38 @@ export async function clockOutAction(formData: FormData) {
     redirect(`${destination}&error=${attendanceFailureReason(error?.message)}`);
   }
   revalidatePath("/attendance");
-  redirect(`${destination}&saved=recorded`);
+  const saved = receipt.locationStatus === "review" ? "location-review"
+    : receipt.locationStatus === "historical_unverified" ? "location-historical" : "recorded";
+  redirect(`${destination}&saved=${saved}`);
+}
+
+export async function reviewAttendanceLocationAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const checkIds = uuidList(formData, "check_id", 1);
+  if (!venueIds || venueIds.length !== 1 || !checkIds || checkIds.length !== 1) {
+    console.error("Invalid attendance location review.");
+    redirect("/attendance?error=review-invalid");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the attendance review workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const { data, error } = await workspace.supabase.rpc("review_attendance_location_exception", {
+    p_business_id: workspace.business.id, p_check_id: checkIds[0],
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Attendance location review failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid review receipt.",
+    });
+    redirect(`${destination}&error=review-save`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=location-reviewed`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

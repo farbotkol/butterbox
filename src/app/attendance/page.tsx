@@ -5,10 +5,15 @@ import {
   clockInAction,
   clockOutAction,
   endAttendanceBreakAction,
+  reviewAttendanceLocationAction,
   startAttendanceBreakAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { ClockLocationForm } from "@/components/clock-location-form";
 import { parseAttendanceState, parseClockOptions, type ClockOption } from "@/lib/attendance";
+import {
+  locationReasonLabels, parseLocationExceptions, type LocationException,
+} from "@/lib/attendance-location";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
@@ -29,7 +34,10 @@ const errors: Record<string, string> = {
   unavailable: "This profile or department is no longer available for a new session.",
   venue: "The selected venue is unavailable. Choose a venue you can access.",
   save: "We could not record the clock request. Check your connection and try again.",
+  "review-invalid": "That location review request was invalid. Refresh the page and try again.",
+  "review-save": "We could not save the location review. Your access may have changed; refresh the page and try again.",
 };
+const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
 export default async function AttendancePage({ searchParams }: AttendancePageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
@@ -52,9 +60,10 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     );
   }
 
-  const [venueResult, optionResult, stateResult] = await Promise.all([
+  const canReview = managerRoles.includes(workspace.membership.role);
+  const [venueResult, optionResult, stateResult, exceptionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
-      .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
+      .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (venue) => venue.id),
     readAllPages<ClockOption>((from, to) => workspace.supabase.rpc("list_my_clock_options", {
       p_business_id: workspace.business.id,
@@ -65,14 +74,30 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     workspace.supabase.rpc("get_my_attendance_state_with_break", {
       p_business_id: workspace.business.id,
     }).single(),
+    canReview
+      ? readAllPages<LocationException>((from, to) => workspace.supabase.rpc("list_attendance_location_exceptions", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+      }, { count: "exact" }).order("occurred_at", { ascending: false }).order("check_id").range(from, to),
+      (row) => row && typeof row.check_id === "string" ? row.check_id : "")
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const options = parseClockOptions(optionResult.data);
   const state = parseAttendanceState(stateResult.data);
+  const exceptions = parseLocationExceptions(exceptionResult.data);
+  const clockVenueId = state?.state === "clocked_in" ? state.venue_id : workspace.venue.id;
+  const clockVenue = venueResult.data?.find((venue) => venue.id === clockVenueId);
+  const validClockPolicy = clockVenue && typeof clockVenue.clock_geofence_enabled === "boolean";
   const loadError = venueResult.error || optionResult.error || stateResult.error;
-  if (loadError || !venueResult.data || !options || !state) {
+  if (loadError || !venueResult.data || !options || !state || !validClockPolicy) {
     console.error("Could not load attendance.", {
       code: loadError?.code,
       message: loadError?.message ?? "The server returned incomplete or invalid attendance data.",
+    });
+  }
+  if (exceptionResult.error || !exceptions) {
+    console.error("Could not load attendance location exceptions.", {
+      code: exceptionResult.error?.code,
+      message: exceptionResult.error?.message ?? "The server returned invalid location exceptions.",
     });
   }
 
@@ -125,7 +150,22 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           Break request recorded. Your current state is shown below.
         </p>
       )}
-      {loadError || !venueResult.data || !options || !state ? (
+      {params.saved === "location-review" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          Clock request recorded. Your location could not be verified and is queued for manager review.
+        </p>
+      )}
+      {params.saved === "location-historical" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          This earlier clock request was already recorded without a location check.
+        </p>
+      )}
+      {params.saved === "location-reviewed" && (
+        <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
+          Location exception marked as reviewed. The original clock event is unchanged.
+        </p>
+      )}
+      {loadError || !venueResult.data || !options || !state || !validClockPolicy ? (
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your attendance. Try again before making changes.
         </p>
@@ -191,14 +231,14 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
                       </div>
                     </fieldset>
                   </form>
-                  <form action={clockOutAction} className="mt-5">
+                  <ClockLocationForm action={clockOutAction} enabled={clockVenue.clock_geofence_enabled} className="mt-5">
                     <input type="hidden" name="venue_id" value={workspace.venue.id} />
                     <input type="hidden" name="session_id" value={state.session_id} />
                     <input type="hidden" name="request_id" value={requestId} />
                     <button type="submit" className="min-h-11 rounded-lg bg-ocean px-5 py-3 font-semibold text-white hover:bg-ocean/90">
                       Clock out
                     </button>
-                  </form>
+                  </ClockLocationForm>
                 </>
               )}
             </>
@@ -210,7 +250,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
                   No active employee profile is linked to your account at this venue. Ask an owner to check your access.
                 </p>
               ) : (
-                <form action={clockInAction} className="mt-4">
+                <ClockLocationForm action={clockInAction} enabled={clockVenue.clock_geofence_enabled} className="mt-4">
                   <input type="hidden" name="venue_id" value={workspace.venue.id} />
                   <input type="hidden" name="request_id" value={requestId} />
                   {options.length === 1 ? (
@@ -233,16 +273,64 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
                   <button type="submit" className="mt-4 min-h-11 rounded-lg bg-ocean px-5 py-3 font-semibold text-white hover:bg-ocean/90">
                     Clock in
                   </button>
-                </form>
+                </ClockLocationForm>
               )}
             </>
           )}
         </section>
       )}
       <p className="mt-5 text-sm leading-6 text-muted">
-        Clock events are unverified, including break events. Location checks, corrections and
-        timesheets are not available yet; no break is automatically deducted.
+        When enabled by the venue owner, location is requested only when clocking in or out.
+        A failed location check is reviewed without removing the time recorded. Break events
+        have no location check; corrections and timesheets are not available yet, and no break
+        is automatically deducted.
       </p>
+      {canReview && (
+        <section aria-label="Location exceptions" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+          <h2 className="text-lg font-semibold">Location exceptions</h2>
+          <p className="mt-2 text-sm text-muted">
+            Only exceptions within your management scope are shown. Reviewing an exception does not alter recorded time.
+          </p>
+          {exceptionResult.error || !exceptions ? (
+            <p role="alert" className="mt-3 text-sm text-red-800">We couldn&apos;t load location exceptions. Try again.</p>
+          ) : exceptions.length === 0 ? (
+            <p className="mt-3 text-sm text-muted">No location exceptions for this venue.</p>
+          ) : (
+            <ul className="mt-4 space-y-4">
+              {exceptions.map((exception) => (
+                <li key={exception.check_id} className="rounded-lg border border-line p-4 text-sm">
+                  <p className="font-semibold">{exception.employee_name} · {exception.department_name}</p>
+                  <p className="mt-1 text-muted">
+                    {exception.event_type === "clock_in" ? "Clock in" : "Clock out"} ·{" "}
+                    <time dateTime={exception.occurred_at}>{formatClockTime(exception.occurred_at, workspace.venue.timezone)}</time>
+                  </p>
+                  <p className="mt-2">{locationReasonLabels[exception.reason]}</p>
+                  {exception.distance_meters !== null && exception.accuracy_meters !== null && (
+                    <p className="mt-1 text-muted">
+                      Distance {exception.distance_meters.toFixed(1)} m; accuracy ±{exception.accuracy_meters.toFixed(1)} m;
+                      venue radius {exception.radius_meters} m.
+                    </p>
+                  )}
+                  {exception.reviewed_at ? (
+                    <p className="mt-2 text-muted">
+                      Reviewed by user {exception.reviewed_by} at{" "}
+                      <time dateTime={exception.reviewed_at}>{formatClockTime(exception.reviewed_at, workspace.venue.timezone)}</time>
+                    </p>
+                  ) : (
+                    <form action={reviewAttendanceLocationAction} className="mt-3">
+                      <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                      <input type="hidden" name="check_id" value={exception.check_id} />
+                      <button type="submit" className="min-h-11 rounded-lg border border-line px-4 py-2 font-semibold">
+                        Mark as reviewed
+                      </button>
+                    </form>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
     </AppShell>
   );
 }

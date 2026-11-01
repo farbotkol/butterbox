@@ -547,9 +547,9 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await page.goto(`/settings/organisation?venue=${venueId}`);
     const region = page.getByRole("region", { name: "Venue location and geofence" });
     const form = page.getByRole("form", { name: "Configure venue geofence" });
-    await expect(region).toContainText("staff may need to allow location access");
-    await expect(region).toContainText("Clock events are currently unverified");
-    await expect(region).toContainText("location verification and geofence enforcement are not implemented yet");
+    await expect(region).toContainText("Staff may need to allow location access at clock-in and clock-out");
+    await expect(region).toContainText("Location verification is optional and is off until an owner enables it");
+    await expect(region).toContainText("flagged for review without stopping the clock event");
     await expect(form.getByLabel("Latitude")).toHaveValue("");
     await expect(form.getByLabel("Longitude")).toHaveValue("");
     await expect(form.getByLabel("Radius in metres")).toHaveValue("");
@@ -3424,7 +3424,7 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
     await workerPage.goto(`/attendance?venue=${firstVenue}`);
     const region = workerPage.getByRole("region", { name: "Current attendance" });
     await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
-    await expect(workerPage.getByText("Clock events are unverified", { exact: false })).toBeVisible();
+    await expect(workerPage.getByText("location is requested only when clocking in or out", { exact: false })).toBeVisible();
     const requestId = await region.locator('input[name="request_id"]').inputValue();
     const before = Date.now();
     await region.getByRole("button", { name: "Clock in", exact: true }).click();
@@ -3755,6 +3755,230 @@ test("employees record multiple explicitly classified breaks without assumed ded
     expect(noBreakEvents.data.map((event) => event.event_type)).toEqual(["clock_in", "clock_out"]);
   } finally {
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("optional clock location is requested only at clock events and exceptions are scoped and reviewable", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, firstVenue, secondVenue, outsideVenue, fohId, bohId, employeeId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "worker", "foh", "boh", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `clock-location-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Location cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside location cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: firstVenue, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+        geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 100 },
+      { id: secondVenue, business_id: businessId, name: "Riverside", timezone: "Australia/Perth" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: firstVenue, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: firstVenue, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee" },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: firstVenue, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "boh_manager", venue_id: firstVenue, department_id: bohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: firstVenue, department_id: fohId,
+      auth_user_id: users[1], name: "Location Worker", role_title: "Server",
+    })).error).toBeNull();
+
+    await signIn(page, `clock-location-owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/organisation?venue=${secondVenue}`);
+    const policy = page.getByRole("form", { name: "Configure clock location verification" });
+    await expect(policy.getByLabel("Clock location verification")).toHaveValue("false");
+    await policy.getByLabel("Clock location verification").selectOption("true");
+    await policy.getByRole("button", { name: "Save clock location setting" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("Configure a venue location before enabling verification");
+    await page.goto(`/settings/organisation?venue=${firstVenue}`);
+    await expect(policy.getByLabel("Clock location verification")).toHaveValue("false");
+
+    const workerContext = await browser.newContext({
+      baseURL: appUrl, viewport: { width: 375, height: 812 },
+      geolocation: { latitude: -33.8688, longitude: 151.2093, accuracy: 10 },
+      permissions: ["geolocation"],
+    });
+    contexts.push(workerContext);
+    await workerContext.addInitScript(() => {
+      if (location.protocol !== "http:") return;
+      const original = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+      navigator.geolocation.getCurrentPosition = (success, failure, options) => {
+        sessionStorage.setItem("geolocation-calls", String(Number(sessionStorage.getItem("geolocation-calls") || 0) + 1));
+        sessionStorage.setItem("geolocation-options", JSON.stringify(options));
+        return original(success, failure, options);
+      };
+    });
+    const workerPage = await workerContext.newPage();
+    const calls = () => workerPage.evaluate(() => Number(sessionStorage.getItem("geolocation-calls") || 0));
+    await signIn(workerPage, `clock-location-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${firstVenue}`);
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    expect(await calls()).toBe(0);
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    expect(await calls()).toBe(0);
+    const disabledChecks = await admin.from("attendance_location_checks")
+      .select("verification_status, reason, distance_meters").eq("business_id", businessId);
+    expect(disabledChecks.error).toBeNull();
+    expect(disabledChecks.data).toHaveLength(2);
+    expect(disabledChecks.data.every((row) =>
+      row.verification_status === "not_required" && row.reason === "disabled" && row.distance_meters === null)).toBe(true);
+
+    await policy.getByLabel("Clock location verification").selectOption("true");
+    await policy.getByRole("button", { name: "Save clock location setting" }).click();
+    await expect(page.getByRole("status")).toHaveText("Clock location setting saved.");
+    await expect(page.getByRole("region", { name: "Venue location and geofence" }))
+      .toContainText(`User ${users[0]}`);
+    const audit = await admin.from("venue_clock_location_events").select("actor_id, old_enabled, new_enabled")
+      .eq("venue_id", firstVenue);
+    expect(audit.error).toBeNull();
+    expect(audit.data).toEqual([{ actor_id: users[0], old_enabled: false, new_enabled: true }]);
+    const geofence = page.getByRole("form", { name: "Configure venue geofence" });
+    await geofence.getByLabel("Latitude").fill("");
+    await geofence.getByLabel("Longitude").fill("");
+    await geofence.getByLabel("Radius in metres").fill("");
+    await geofence.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("disable verification before removing it");
+
+    await workerPage.reload();
+    expect(await calls()).toBe(0);
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    expect(await calls()).toBe(1);
+    expect(await workerPage.evaluate(() => JSON.parse(sessionStorage.getItem("geolocation-options"))))
+      .toMatchObject({ enableHighAccuracy: true, maximumAge: 0, timeout: 8000 });
+    const activeSession = await workerPage.locator('input[name="session_id"]').first().inputValue();
+    const verified = await admin.from("attendance_location_checks")
+      .select("*").eq("session_id", activeSession).single();
+    expect(verified.error).toBeNull();
+    expect(verified.data).toMatchObject({
+      verification_status: "verified", reason: "inside", distance_meters: 0,
+      accuracy_meters: 10, radius_meters: 100,
+    });
+    expect(Object.hasOwn(verified.data, "latitude")).toBe(false);
+    expect(Object.hasOwn(verified.data, "longitude")).toBe(false);
+
+    await workerPage.getByLabel("Venue", { exact: true }).selectOption(secondVenue);
+    await workerPage.getByRole("button", { name: "Switch venue" }).click();
+    await expect(workerPage.getByRole("region", { name: "Current attendance" })).toContainText("Harbour · FOH");
+    expect(await calls()).toBe(1);
+    await workerContext.grantPermissions([], { origin: appUrl });
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    expect(await calls()).toBe(2);
+    const denied = await admin.from("attendance_location_checks")
+      .select("id, verification_status, reason, event_id").eq("session_id", activeSession).eq("reason", "permission_denied").single();
+    expect(denied.error).toBeNull();
+    expect(denied.data.verification_status).toBe("review");
+    const deniedEvent = await admin.from("attendance_events")
+      .select("venue_id, event_type, verification_status").eq("id", denied.data.event_id).single();
+    expect(deniedEvent.error).toBeNull();
+    expect(deniedEvent.data).toEqual({ venue_id: firstVenue, event_type: "clock_out", verification_status: "unverified" });
+
+    await workerContext.grantPermissions(["geolocation"], { origin: appUrl });
+    await workerContext.setGeolocation({ latitude: -33.8700, longitude: 151.2093, accuracy: 10 });
+    await workerPage.goto(`/attendance?venue=${firstVenue}`);
+    expect(await calls()).toBe(2);
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
+    await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    expect(await calls()).toBe(3);
+    const secondSession = await workerPage.locator('input[name="session_id"]').first().inputValue();
+    await workerPage.getByRole("button", { name: "Start paid break" }).click();
+    await expect(workerPage.getByText("On a paid break since", { exact: false })).toBeVisible();
+    await workerPage.getByRole("button", { name: "End break" }).click();
+    await expect(workerPage.getByRole("button", { name: "Clock out", exact: true })).toBeVisible();
+    expect(await calls()).toBe(3);
+    await workerContext.setGeolocation({ latitude: -33.8688, longitude: 151.2093, accuracy: 101 });
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
+    expect(await calls()).toBe(4);
+    const outcomes = await admin.from("attendance_location_checks").select("reason").eq("session_id", secondSession);
+    expect(outcomes.error).toBeNull();
+    expect(outcomes.data.map((row) => row.reason).sort()).toEqual(["inaccurate", "outside"]);
+    expect(await workerPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const noJsContext = await browser.newContext({
+      baseURL: appUrl, javaScriptEnabled: false, storageState: await workerContext.storageState(),
+    });
+    contexts.push(noJsContext);
+    const noJsPage = await noJsContext.newPage();
+    await noJsPage.goto(`/attendance?venue=${firstVenue}`);
+    await noJsPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(noJsPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
+    await expect(noJsPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    const noJsSession = await noJsPage.locator('input[name="session_id"]').first().inputValue();
+    await noJsPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(noJsPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
+    await expect(noJsPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    const noJsChecks = await admin.from("attendance_location_checks").select("reason").eq("session_id", noJsSession);
+    expect(noJsChecks.error).toBeNull();
+    expect(noJsChecks.data.map((row) => row.reason)).toEqual(["not_provided", "not_provided"]);
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `clock-location-foh-${suffix}@example.test`, password);
+    await managerPage.goto(`/attendance?venue=${firstVenue}`);
+    const exceptions = managerPage.getByRole("region", { name: "Location exceptions" });
+    const denial = exceptions.locator("li").filter({ hasText: "Location permission denied" });
+    await expect(denial).toContainText("Location Worker · FOH");
+    await expect(exceptions).toContainText("Outside the venue radius");
+    await expect(exceptions).toContainText("Location accuracy is insufficient");
+    const outsideForm = exceptions.locator("li").filter({ hasText: "Outside the venue radius" }).locator("form");
+    const outsideCheckId = await outsideForm.locator('input[name="check_id"]').inputValue();
+    await outsideForm.locator('input[name="check_id"]').evaluate((input, id) => { input.value = id; }, randomUUID());
+    await outsideForm.getByRole("button", { name: "Mark as reviewed" }).click();
+    await expect(managerPage.locator('p[role="alert"]')).toContainText("could not save the location review");
+    const outsideReview = await admin.from("attendance_location_reviews").select("id").eq("check_id", outsideCheckId);
+    expect(outsideReview.error).toBeNull();
+    expect(outsideReview.data).toEqual([]);
+    await denial.getByRole("button", { name: "Mark as reviewed" }).click();
+    await expect(managerPage.getByRole("status")).toContainText("original clock event is unchanged");
+    await expect(denial).toContainText(`Reviewed by user ${users[2]}`);
+    const review = await admin.from("attendance_location_reviews").select("check_id, actor_id").eq("check_id", denied.data.id).single();
+    expect(review.error).toBeNull();
+    expect(review.data).toEqual({ check_id: denied.data.id, actor_id: users[2] });
+
+    const otherContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(otherContext);
+    const otherPage = await otherContext.newPage();
+    await signIn(otherPage, `clock-location-boh-${suffix}@example.test`, password);
+    await otherPage.goto(`/attendance?venue=${firstVenue}`);
+    await expect(otherPage.getByRole("region", { name: "Location exceptions" }))
+      .toContainText("No location exceptions for this venue.");
+    await expect(otherPage.getByText("Location Worker", { exact: false })).toHaveCount(0);
+    const outsideApi = createClient(apiUrl, anonKey, options);
+    expect((await outsideApi.auth.signInWithPassword({
+      email: `clock-location-outside-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await outsideApi.from("attendance_location_checks").select("id").eq("business_id", businessId)).data).toEqual([]);
+    expect((await outsideApi.from("attendance_location_reviews").select("id").eq("business_id", businessId)).data).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });

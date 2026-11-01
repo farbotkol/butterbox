@@ -31,11 +31,11 @@ timezone; completing setup creates the owner membership atomically.
 Owners can configure each venue's latitude, longitude and clocking radius on
 **Departments**. Coordinates accept up to six meaningful decimal places and
 the radius is 1–10,000 metres; clearing all three fields removes the
-configuration. Each change records the actor, time and previous/new values,
-and owners can see recent history. Staff may need to permit device or browser
-location access when location-based clocking is introduced. Clock events are
-currently unverified; location verification and geofence enforcement are not
-implemented yet. Apply the current migrations before configuring venue locations.
+configuration after verification is disabled. Clock location verification is
+off by default, even for an existing geofence; an owner may enable it separately
+for each configured venue. Coordinate and setting changes record the actor,
+time and previous/new values, and owners can see recent history. Apply the
+current migrations before configuring venue locations.
 
 Owners can open **Permissions** to assign roles to existing business members.
 Owners are business-wide; general managers have a venue; FOH/BOH managers and
@@ -102,10 +102,20 @@ While clocked in, start and end each break explicitly as paid or unpaid; ask
 your manager which classification applies if unsure. End an open break before
 clocking out. The original classification and server-recorded times are
 retained; no break is assumed or automatically deducted. This does not
-calculate payroll or establish award compliance. Events are currently
-unverified: location checks, corrections and timesheets are not yet implemented.
-If account access is removed during a session, contact an owner for review.
-Apply the current migrations before using the clock.
+calculate payroll or establish award compliance. If location verification is
+enabled, the browser requests location only at clock-in or clock-out; breaks
+do not request it. A check passes only when the server-calculated distance plus
+the device-reported accuracy fits within the venue radius. Permission denial,
+unsupported or inaccurate location, a timeout, or a position outside the radius
+still records the clock event and flags it for a manager in the relevant
+department. Managers can mark exceptions reviewed without changing the original
+time. Checks retain derived distance, accuracy and the radius, not raw device
+coordinates. Device-reported location can be spoofed and is not proof of
+physical presence. Verification results are separate records: original events
+retain their original unverified status, and older events are not retroactively
+checked. Network-offline clock capture, time corrections and timesheets are not
+yet implemented. If account access is removed during a session, contact an
+owner for review. Apply the current migrations before using the clock.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
@@ -227,10 +237,10 @@ another database: use an isolated test project, never a shared or production
 one. Without test settings, the normal `npm test` run explicitly skips this
 integration test. CI runs both the database suite and the HTTP test on a fresh
 local Supabase project.
-To also verify the ordering of concurrent leave approval and automatic
-assignment, set `BUTTERBOX_TEST_DB_CONTAINER` to that disposable project's
-`supabase_db_<project-id>` Docker container. The test verifies the container's
-project label and API port before using a temporary row lock.
+To also verify concurrent leave, attendance and location-policy transitions,
+set `BUTTERBOX_TEST_DB_CONTAINER` to that disposable project's
+`supabase_db_<project-id>` Docker container. These tests verify the container's
+project label and API port before using temporary row locks.
 If the pinned CLI is already installed locally, set `BUTTERBOX_TEST_SUPABASE_CLI`
 to its executable path to avoid launching `npx` for the test status check.
 
