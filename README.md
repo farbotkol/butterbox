@@ -55,7 +55,14 @@ qualified workers. On the roster, **Automatically choose an eligible worker**
 selects an active linked worker without an overlapping shift, respecting that
 restriction; if none qualifies, no shift is created. This opt-in selection
 does not yet check recurring availability, leave, preferred hours or fairness.
-Existing open-shift and explicit manual assignment behaviour is unchanged.
+Unless a manual restriction is enabled, existing open-shift and explicit
+manual assignment behaviour is unchanged.
+Managers can separately require qualified workers for manual assignment of a
+configured role, including when filling an open shift. This restriction also
+applies to automatic selection, while the automatic-only restriction does not
+change manual assignment. The check matches the configured role's current name
+case-insensitively; unrelated free-text shift titles do not inherit its policy.
+Enabling the setting does not retroactively invalidate existing assignments.
 
 Owners can link an existing business member to an employee profile on
 **People**; the member's venue and department scope must permit that profile.
@@ -68,6 +75,17 @@ complement of saved ranges as unavailable periods, including overnight ranges.
 Managers can view availability within their permitted departments but cannot
 edit a worker's self-reported pattern. These indicators do not yet block
 manual or automatic shift assignment.
+
+On **Availability**, a linked employee can block a date range immediately or
+request leave for manager review. Dates are inclusive venue-local days, with
+a maximum of 366 days per entry. Date blocks and approved leave override
+recurring availability for the entire day; pending leave is shown separately
+and does not change the pattern until approved. Employees can cancel their
+own date blocks and pending requests and see pending, approved, rejected and
+cancelled statuses. A permitted manager can approve or reject pending leave,
+or explicitly cancel an approval. Leave and date blocks are displayed on the
+roster, but do **not** yet prevent a manager from assigning or publishing a
+conflicting shift. No leave or schedule notifications are sent yet.
 
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its

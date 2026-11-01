@@ -7,17 +7,23 @@
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-003,
   BB-ORG-004, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-006,
   BB-ROSTER-001, BB-ROSTER-002 and BB-ROSTER-006.
-- The latest serialized Node unit run passed 27 tests; the HTTP integration
-  was explicitly skipped without disposable-project settings. The isolated SQL
-  regression passed 388/388 pgTAP assertions through `psql`, including 78 draft-editing
-  assertions and 28 linked-roster authorization assertions. The authenticated
-  two-tenant HTTP regression and concurrent edit/edit, edit/create and
-  edit/automatic-assignment checks passed against the disposable stack.
+- The latest serialized Node unit run passed 30 tests; the HTTP integration
+  was explicitly skipped without disposable-project settings. The isolated
+  Supabase pgTAP regression passed **476/476 assertions** across 13 files,
+  including 51 availability-exception, 78 draft-editing, 37 manual
+  assignment and 28 linked-roster authorization assertions. The authenticated
+  two-tenant HTTP regression and concurrent edit/edit, edit/create,
+  edit/automatic-assignment and qualification-removal checks passed with the
+  new manual role restriction enabled.
 - Production compile, explicit TypeScript, generate and `npm run lint` passed.
-  The complete production Chromium regression passed all 16 isolated scenarios,
+  The previous complete production Chromium regression passed all 16 isolated scenarios,
   including signup/recovery, cross-tab expiry, five live permission transitions,
   both people stories, department/delegated management, weekly mobile roster,
   draft editing, historical timestamp preservation and the personal schedule.
+  The new date-exception acceptance scenario also passes, including alternate
+  venue isolation and an approval/cancellation race. The current 17-scenario
+  regression passed 16 scenarios but failed when the browser context closed
+  during the date-exception scenario; its runner exited nonzero.
 - Redacted Gitleaks scan: current branch and pending tracked diff have no
   findings. The older local checkpoint-ref blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
@@ -26,6 +32,12 @@
   shell were tried. The successful isolated-scenario run preserves each live
   permission transition and recovery-before-expiry coverage. Temporary app
   servers are stopped by the runner.
+- The new exception scenario was split into two shorter isolated scenarios
+  without removing assertions after its context closed in the full run. A
+  subsequent focused runner was terminated by SIGTERM before finishing, and
+  a later lint process also exited 143. The isolated gateway remains healthy
+  and those fixtures were cleaned up. Host pressure was elevated; no cgroup
+  OOM or PID-limit events were recorded, so the cause is not established.
 
 ## Current story
 
@@ -35,9 +47,45 @@
 - **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
   it remains In Progress because required shift acknowledgements depend on the
   unfinished publication/versioning workflow.
-- **BB-ROSTER-003 — Unassigned open shift** follows its availability/conflict
-  prerequisites: assignment eligibility needs to be completed without
-  changing the existing automatic-assignment-only role restriction.
+- **BB-ROSTER-003 — Unassigned open shift** now has opt-in manual role
+  qualification controls without changing the existing automatic-only policy.
+  Database and concurrency checks pass; production-browser verification is
+  running. Availability and leave eligibility remain incomplete.
+
+### BB-PEOPLE-004 — Submit availability exceptions (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PEOPLE-004.1 Date exceptions override recurring patterns | An employee can block inclusive local dates; approved leave also replaces recurring intervals for the whole day. Pending, rejected and cancelled leave does not override the pattern. | Unit tests cover overrides, unsubmitted patterns and inclusive boundaries; production Chromium verifies date blocks and approved multi-day leave replace otherwise available hours. | Pass |
+| PEOPLE-004.2 Pending and approved leave are visually distinguished | The roster displays separately labelled, differently styled pending and approved leave alongside unavailable periods. | Production Chromium verifies pending leave retains recurring gaps, approved leave becomes unavailable all day, and cancellation restores the recurring display. | Pass |
+| PEOPLE-004.3 Employees can see request status | The availability page lists pending, approved, rejected and cancelled requests; scoped managers review pending requests and can explicitly cancel approved leave. | Production Chromium exercises submit, approval, rejection and cancellation. The 51-assertion pgTAP suite verifies tenant/department scope, direct-write denial, shared staff, unlinking and transitions; concurrent approval/cancellation leaves exactly one winner. | Pass |
+
+Files: `supabase/migrations/20261101140000_availability_exceptions.sql`,
+`supabase/tests/database/availability_exceptions.test.sql`,
+`src/lib/availability.ts`, `tests/availability.test.mjs`,
+`src/app/availability/page.tsx`, `src/components/availability-editor.tsx`,
+`src/app/actions.ts`, `src/app/roster/page.tsx`, `tests/e2e/auth.spec.mjs`
+and README. The migration is applied only to the disposable test database.
+The current full browser regression must finish before this story is Done.
+Blocks and approved leave are still indicators, not assignment/publication
+blockers; conflict enforcement belongs to the unfinished roster stories.
+
+### BB-ROSTER-003 — Unassigned open shift (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-003.1 Employee is optional | Draft creation and editing support an unassigned worker. | Existing production-browser draft-editing scenario creates and edits open shifts; focused manual-policy SQL also creates open shifts. Pass. | Pass |
+| ROSTER-003.2 Open shifts are clearly styled | The roster has a separate amber open-shifts section and needs-cover labels. | Existing production-browser roster scenario checks the open-shifts section and label. Pass. | Pass |
+| ROSTER-003.3 Count updates | The roster counts assigned and open shifts and shows an open-to-fill total. | Existing production-browser roster/draft-editing scenarios and manual-policy SQL verify the count changes. Pass. | Pass |
+| ROSTER-003.4 Eligibility rules apply when assigning | Active, linked staff and non-overlap are enforced; managers may separately enable manual role-qualification restrictions. Existing automatic-only restrictions retain their prior meaning, and enabling a manual restriction does not invalidate existing assignments. | 37/37 isolated pgTAP assertions and authenticated qualification/concurrency checks pass; new browser validation is running. Recurring availability, date blocks and approved leave are not enforced. | In Progress |
+
+Files: `supabase/migrations/20261101150000_manual_assignment_eligibility.sql`,
+`supabase/tests/database/manual_assignment_eligibility.test.sql`,
+`src/app/settings/organisation/page.tsx`, `src/app/actions.ts`,
+`src/components/shift-editor.tsx`, `tests/tenant-isolation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs` and README. The new migration is applied only to the
+disposable test database. Matching uses the configured role's current name;
+unrelated free-text shift titles do not inherit its restriction.
 
 ### BB-ROSTER-001 — Weekly people-by-day roster (Done)
 
@@ -273,13 +321,16 @@ not yet run remotely.
   migration attempts under host pressure, the disposable schema was restored
   transactionally with `psql`; later migration-history rows have empty
   `statements` arrays. A future normal reset should rebuild standard CLI history.
-- Serialized Node unit run: 27 passed, one HTTP integration explicitly
+- Serialized Node unit run: 30 passed, one HTTP integration explicitly
   skipped without disposable settings. The isolated database regression
-  passed 388/388 pgTAP assertions and the separately configured two-tenant
-  HTTP integration passed with race cases.
+  passed 476/476 pgTAP assertions and the separately configured two-tenant
+  HTTP integration passed with restricted-assignment race cases.
 - Production split compile, explicit TypeScript, generate and lint passed.
-  All 16 production-browser scenarios passed in isolated processes, including
-  signup/recovery and recovered-session expiry.
+  The previous 16-scenario production-browser regression and the original
+  focused date-exception scenario passed. The 17-scenario
+  17-scenario regression failed because that browser context closed; the other
+  16 passed. Host memory pressure was elevated, but cgroup OOM and PID-limit
+  counters were zero and the exact cause is not established.
 - The test helper rejects missing disposable confirmation and non-local URLs.
 - `npm audit --omit=dev` reported no production dependency vulnerabilities;
   `npm ci` reported 16 moderate development-dependency advisories.
@@ -290,12 +341,19 @@ not yet run remotely.
 - Build separate images per environment: Next.js embeds `NEXT_PUBLIC_` values
   at build time. Never use a secret/service-role key in those values.
 - Stories are marked Done only after every acceptance criterion is verified.
+- A concurrent manual commit (`6191789`) captured the then-current work. The
+  local feature branch is ahead of and behind its remote: the remote also has
+  an `AGENTS.md` commit (`563e026`). Neither history nor the other change was
+  rewritten; review and reconcile the divergence before any push.
 
 ## Next story
 
-- Continue BB-ROSTER-003/007/008 and add the publication version and
-  acknowledgement mechanism needed to complete BB-ROSTER-010.
-- Migrations through `20261101130000` are applied only to the isolated stack.
+- Finish the focused browser run, then rerun the full regression when host
+  resources permit. Mark BB-PEOPLE-004 Done only after a clean regression.
+  Continue BB-ROSTER-003/007/008 independently and add the
+  publication version and acknowledgement mechanism needed to complete
+  BB-ROSTER-010.
+- Migrations through `20261101150000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

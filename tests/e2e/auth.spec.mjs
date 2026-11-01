@@ -857,6 +857,138 @@ test("qualified roles and primary role control restricted automatic assignment",
   }
 });
 
+test("manual role restrictions protect open shifts without changing automatic-only policy", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const businessId = randomUUID();
+  const venueId = randomUUID();
+  const departmentId = randomUUID();
+  const roleId = randomUUID();
+  const unqualifiedId = randomUUID();
+  const qualifiedId = randomUUID();
+  let ownerId;
+  try {
+    const owner = await admin.auth.admin.createUser({
+      email: `manual-owner-${suffix}@example.test`, password, email_confirm: true,
+    });
+    expect(owner.error).toBeNull();
+    ownerId = owner.data.user.id;
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Manual ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: ownerId, role: "owner",
+    })).error).toBeNull();
+    expect((await admin.from("job_roles").insert({
+      id: roleId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "Barista",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: unqualifiedId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "A Unqualified", role_title: "Barista" },
+      { id: qualifiedId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "B Qualified", role_title: "Barista" },
+    ])).error).toBeNull();
+
+    await signIn(page, `manual-owner-${suffix}@example.test`, password);
+    await page.goto("/settings/organisation");
+    const barista = page.getByRole("listitem", { name: "Job role Barista" });
+    await expect(barista.getByRole("combobox", { name: "Manual assignment" })).toHaveValue("false");
+    await barista.getByRole("combobox", { name: "Automatic assignment" }).selectOption("true");
+    await barista.getByRole("button", { name: "Save restriction" }).click();
+    await expect(page.getByRole("status")).toHaveText("Automatic assignment setting saved.");
+
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    await page.goto(roster);
+    const add = page.getByRole("form", { name: "Add draft shift" });
+    await add.getByLabel("Role").fill("Barista");
+    await add.getByLabel("Team member").selectOption(unqualifiedId);
+    await add.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await expect(page.getByText(/1 assigned\s*·\s*0 open/)).toBeVisible();
+
+    await page.goto("/settings/organisation");
+    await barista.getByRole("combobox", { name: "Manual assignment" }).selectOption("true");
+    await barista.getByRole("button", { name: "Save manual restriction" }).click();
+    await expect(page.getByRole("status")).toHaveText("Manual assignment setting saved.");
+    await barista.getByRole("combobox", { name: "Automatic assignment" }).selectOption("false");
+    await barista.getByRole("button", { name: "Save restriction" }).click();
+    await expect(page.getByRole("status")).toHaveText("Automatic assignment setting saved.");
+    await expect(barista.getByRole("combobox", { name: "Automatic assignment" }).locator('option[value="false"]'))
+      .toHaveText("Follow manual restriction (qualified only)");
+    const restriction = await admin.from("job_roles")
+      .select("restrict_auto_assignment, restrict_manual_assignment").eq("id", roleId).single();
+    expect(restriction.error).toBeNull();
+    expect(restriction.data).toEqual({ restrict_auto_assignment: false, restrict_manual_assignment: true });
+
+    await page.goto(roster);
+    await add.getByLabel("Role").fill("barista");
+    await add.getByLabel("Team member").selectOption(unqualifiedId);
+    await add.getByLabel("Starts").fill("2032-03-16T08:00");
+    await add.getByLabel("Ends").fill("2032-03-16T16:00");
+    await add.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(add.getByText("Choose a worker qualified for this role, or leave the shift open.")).toBeVisible();
+    await expect(add.getByLabel("Team member")).toHaveValue(unqualifiedId);
+    await expect(add.getByLabel("Starts")).toHaveValue("2032-03-16T08:00");
+
+    await add.getByLabel("Team member").selectOption("");
+    await add.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await expect(page.getByText(/1 assigned\s*·\s*1 open/)).toBeVisible();
+    await expect(page.locator("#open-shifts")).toContainText("1 to fill");
+    const open = await admin.from("shifts").select("id, employee_id").eq("business_id", businessId)
+      .is("employee_id", null).single();
+    expect(open.error).toBeNull();
+
+    await page.getByRole("link", { name: "Edit open shift" }).click();
+    const edit = page.getByRole("form", { name: "Edit draft shift" });
+    await edit.getByLabel("Team member").selectOption(unqualifiedId);
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(edit.getByText("Choose a worker qualified for this role, or leave the shift open.")).toBeVisible();
+    await expect(edit.getByLabel("Team member")).toHaveValue(unqualifiedId);
+    await expect(page.locator("#open-shifts")).toContainText("1 to fill");
+    const unchanged = await admin.from("shifts").select("employee_id").eq("id", open.data.id).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data.employee_id).toBeNull();
+
+    await page.goto("/people");
+    const eligible = page.getByRole("form", { name: "Eligible roles for B Qualified in Front of House" });
+    await eligible.getByRole("checkbox", { name: "Barista" }).check();
+    await eligible.getByRole("button", { name: "Save eligible roles" }).click();
+    await expect(page.getByRole("status")).toHaveText("Eligible roles saved.");
+    await page.goto(roster);
+    await page.getByRole("link", { name: "Edit open shift" }).click();
+    await edit.getByLabel("Team member").selectOption(qualifiedId);
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    await expect(page.getByText(/2 assigned\s*·\s*0 open/)).toBeVisible();
+    const filled = await admin.from("shifts").select("employee_id").eq("id", open.data.id).single();
+    expect(filled.error).toBeNull();
+    expect(filled.data.employee_id).toBe(qualifiedId);
+
+    await page.getByRole("link", { name: "Edit A Unqualified shift" }).click();
+    await edit.getByLabel("Ends").fill("2032-03-15T17:00");
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+
+    await add.getByLabel("Role").fill("Barista");
+    await add.getByLabel("Team member").selectOption("auto");
+    await add.getByLabel("Starts").fill("2032-03-17T08:00");
+    await add.getByLabel("Ends").fill("2032-03-17T16:00");
+    await add.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    const automatic = await admin.from("shifts").select("employee_id").eq("business_id", businessId)
+      .gte("starts_at", "2032-03-16T21:00:00Z").single();
+    expect(automatic.error).toBeNull();
+    expect(automatic.data.employee_id).toBe(qualifiedId);
+  } finally {
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
+  }
+});
+
 test("employees save recurring availability and the roster displays overnight gaps", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
@@ -1001,12 +1133,14 @@ test("employees save recurring availability and the roster displays overnight ga
   if (failures.length) throw new AggregateError(failures, "Availability scenario or fixture cleanup failed");
 });
 
-test("date exceptions override recurring availability and leave requests show their review status", async ({ page, browser }) => {
+async function withAvailabilityExceptionFixtures(page, browser, run) {
+  page.setDefaultTimeout(20_000);
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const businessId = randomUUID();
   const otherBusinessId = randomUUID();
   const venueId = randomUUID();
+  const secondVenueId = randomUUID();
   const otherVenueId = randomUUID();
   const fohId = randomUUID();
   const bohId = randomUUID();
@@ -1029,6 +1163,7 @@ test("date exceptions override recurring availability and leave requests show th
     ])).error).toBeNull();
     expect((await admin.from("venues").insert([
       { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: secondVenueId, business_id: businessId, name: "Second venue", timezone: "Australia/Perth" },
       { id: otherVenueId, business_id: otherBusinessId, name: "Other", timezone: "UTC" },
     ])).error).toBeNull();
     expect((await admin.from("departments").insert([
@@ -1048,7 +1183,33 @@ test("date exceptions override recurring availability and leave requests show th
 
     workerContext = await browser.newContext({ baseURL: appUrl });
     const workerPage = await workerContext.newPage();
+    workerPage.setDefaultTimeout(20_000);
+    await run({ workerPage, suffix, password, businessId, venueId, secondVenueId, fohId, workerId });
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    if (workerContext && browser.isConnected()) await workerContext.close();
+  } catch (error) {
+    failures.push(error);
+  }
+  try {
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().in("id", [businessId, otherBusinessId])).error).toBeNull();
+    for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  } catch (error) {
+    failures.push(error);
+  }
+  if (failures.length) throw new AggregateError(failures, "Availability exception scenario or cleanup failed");
+}
+
+test("date blocks and approved leave override recurring availability", async ({ page, browser }) => {
+  await withAvailabilityExceptionFixtures(page, browser, async ({
+    workerPage, suffix, password, businessId, venueId, secondVenueId, fohId, workerId,
+  }) => {
     await signIn(workerPage, `exceptions-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/availability?venue=${secondVenueId}`);
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("couldn't load the selected venue");
     await workerPage.goto("/availability");
     const recurring = workerPage.getByRole("form", { name: "Recurring availability for Exception worker" });
     for (const [index, day] of ["1", "2", "3"].entries()) {
@@ -1082,7 +1243,7 @@ test("date exceptions override recurring availability and leave requests show th
     await form.getByLabel("From").fill("2032-01-01");
     await form.getByLabel("Through").fill("2033-01-01");
     await form.getByRole("button", { name: "Save date exception" }).click();
-    await expect(workerPage.getByRole("alert")).toContainText("at most 366 days");
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("at most 366 days");
 
     const otherManager = createClient(apiUrl, anonKey, options);
     expect((await otherManager.auth.signInWithPassword({
@@ -1104,7 +1265,13 @@ test("date exceptions override recurring availability and leave requests show th
     expect(outsideVisible.data).toEqual([]);
 
     await signIn(page, `exceptions-owner-${suffix}@example.test`, password);
-    await page.goto(`/roster?week=2032-03-15&department=${fohId}`);
+    await page.goto(`/availability?venue=${venueId}`);
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
+    await page.getByRole("button", { name: "Show venue" }).click();
+    expect(new URL(page.url()).searchParams.get("venue")).toBe(secondVenueId);
+    await expect(page.getByRole("region", { name: "Leave requests to review" }))
+      .toContainText("No pending or approved leave at this venue.");
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`);
     await expect(page.getByLabel("Date blocked Exception worker 2032-03-15")).toBeVisible();
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-15")).toHaveText("Unavailable all day");
     await expect(page.getByLabel("Pending leave Exception worker 2032-03-16")).toBeVisible();
@@ -1112,26 +1279,68 @@ test("date exceptions override recurring availability and leave requests show th
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 00:00–09:00");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 17:00–24:00");
 
-    await page.goto("/availability");
+    await page.goto(`/availability?venue=${venueId}`);
     const review = page.getByRole("listitem", { name: "Leave request for Exception worker 2032-03-16" });
     await expect(review).toContainText("Pending");
     await review.getByRole("button", { name: "Approve" }).click();
     await expect(page.getByRole("status")).toHaveText("Leave approved.");
     await workerPage.reload();
     await expect(list.getByRole("listitem").filter({ hasText: "Leave: 2032-03-16" })).toContainText("Approved");
-    await page.goto(`/roster?week=2032-03-15&department=${fohId}`);
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`);
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-16")).toBeVisible();
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-17")).toBeVisible();
     await expect(page.getByLabel("Pending leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toHaveText("Unavailable all day");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-17")).toHaveText("Unavailable all day");
+  });
+});
+
+test("leave rejection and cancellations restore availability and serialize decisions", async ({ page, browser }) => {
+  await withAvailabilityExceptionFixtures(page, browser, async ({
+    workerPage, suffix, password, businessId, venueId, fohId, workerId,
+  }) => {
+    const workerApi = createClient(apiUrl, anonKey, options);
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await workerApi.auth.signInWithPassword({
+      email: `exceptions-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `exceptions-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await workerApi.rpc("set_employee_recurring_availability", {
+      p_business_id: businessId, p_employee_id: workerId,
+      p_intervals: [
+        { weekday: 1, start: "09:00", end: "17:00" },
+        { weekday: 2, start: "09:00", end: "17:00" },
+        { weekday: 3, start: "09:00", end: "17:00" },
+      ],
+    })).error).toBeNull();
+    expect((await workerApi.rpc("request_availability_exception", {
+      p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+      p_starts_on: "2032-03-15", p_ends_on: "2032-03-15", p_exception_type: "unavailable",
+    })).error).toBeNull();
+    const leave = await workerApi.rpc("request_availability_exception", {
+      p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+      p_starts_on: "2032-03-16", p_ends_on: "2032-03-17", p_exception_type: "leave",
+    });
+    expect(leave.error).toBeNull();
+    expect(typeof leave.data).toBe("string");
+    expect((await ownerApi.rpc("review_leave_request", {
+      p_business_id: businessId, p_venue_id: venueId, p_exception_id: leave.data, p_status: "approved",
+    })).error).toBeNull();
+    await signIn(workerPage, `exceptions-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/availability?venue=${venueId}`);
+    await signIn(page, `exceptions-owner-${suffix}@example.test`, password);
+    const form = workerPage.getByRole("form", { name: "Date exception for Exception worker" });
+    const list = workerPage.getByRole("list", { name: "Exceptions for Exception worker" });
+    const review = page.getByRole("listitem", { name: "Leave request for Exception worker 2032-03-16" });
 
     await form.getByLabel("Type").selectOption("leave");
     await form.getByLabel("From").fill("2032-03-18");
     await form.getByLabel("Through").fill("2032-03-18");
     await form.getByRole("button", { name: "Save date exception" }).click();
     await expect(workerPage.getByRole("status")).toHaveText("Leave request submitted.");
-    await page.goto("/availability");
+    await page.goto(`/availability?venue=${venueId}`);
     await page.getByRole("listitem", { name: "Leave request for Exception worker 2032-03-18" })
       .getByRole("button", { name: "Reject" }).click();
     await expect(page.getByRole("status")).toHaveText("Leave rejected.");
@@ -1150,33 +1359,41 @@ test("date exceptions override recurring availability and leave requests show th
       .getByRole("button", { name: "Cancel" }).click();
     await expect(list.getByRole("listitem").filter({ hasText: "Date block: 2032-03-15" })).toContainText("Cancelled");
 
-    await page.goto("/availability");
+    await page.goto(`/availability?venue=${venueId}`);
     await review.getByText("Change approval").click();
     await review.getByRole("button", { name: "Confirm cancellation" }).click();
     await expect(page.getByRole("status")).toHaveText("Availability exception cancelled.");
     await workerPage.reload();
     await expect(list.getByRole("listitem").filter({ hasText: "Leave: 2032-03-16" })).toContainText("Cancelled");
-    await page.goto(`/roster?week=2032-03-15&department=${fohId}`);
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`);
     await expect(page.getByLabel("Date blocked Exception worker 2032-03-15")).toHaveCount(0);
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-15")).toContainText("Unavailable 00:00–09:00");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 17:00–24:00");
-  } catch (error) {
-    failures.push(error);
-  }
-  try {
-    if (workerContext && browser.isConnected()) await workerContext.close();
-  } catch (error) {
-    failures.push(error);
-  }
-  try {
-    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().in("id", [businessId, otherBusinessId])).error).toBeNull();
-    for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
-  } catch (error) {
-    failures.push(error);
-  }
-  if (failures.length) throw new AggregateError(failures, "Availability exception scenario or cleanup failed");
+
+    const racingRequest = await workerApi.rpc("request_availability_exception", {
+      p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+      p_starts_on: "2032-03-20", p_ends_on: "2032-03-20", p_exception_type: "leave",
+    });
+    expect(racingRequest.error).toBeNull();
+    expect(typeof racingRequest.data).toBe("string");
+    const racingDecision = await Promise.all([
+      ownerApi.rpc("review_leave_request", {
+        p_business_id: businessId, p_venue_id: venueId, p_exception_id: racingRequest.data, p_status: "approved",
+      }),
+      workerApi.rpc("cancel_availability_exception", {
+        p_business_id: businessId, p_venue_id: venueId, p_exception_id: racingRequest.data,
+      }),
+    ]);
+    expect(racingDecision.filter((result) => !result.error)).toHaveLength(1);
+    expect(racingDecision.filter((result) =>
+      result.error?.message === "Leave request can no longer be changed" ||
+      result.error?.message === "Availability exception can no longer be cancelled")).toHaveLength(1);
+    const racingState = await admin.from("employee_availability_exceptions").select("status")
+      .eq("id", racingRequest.data).single();
+    expect(racingState.error).toBeNull();
+    expect(["approved", "cancelled"]).toContain(racingState.data.status);
+  });
 });
 
 test("weekly roster groups staff by department and preserves local dates on mobile", async ({ page, browser }) => {

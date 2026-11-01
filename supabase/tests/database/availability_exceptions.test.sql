@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon;
 grant execute on all functions in schema extensions to authenticated, anon;
-select extensions.plan(44);
+select extensions.plan(51);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('af000000-0000-4000-8000-000000000001', 'exceptions-owner@example.test', '{}'::jsonb),
@@ -188,7 +188,41 @@ select extensions.throws_ok(
   $$select public.cancel_availability_exception('bf000000-0000-4000-8000-000000000001', 'cf000000-0000-4000-8000-000000000001',
     current_setting('test.leave_request')::uuid)$$,
   'P0001', 'Permission denied', 'another business cannot cancel the actual request');
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000001', true);
+select extensions.lives_ok(
+  $$select public.set_employee_departments('bf000000-0000-4000-8000-000000000001', 'ef000000-0000-4000-8000-000000000001',
+    array['df000000-0000-4000-8000-000000000001'::uuid, 'df000000-0000-4000-8000-000000000002'::uuid])$$,
+  'owner links the worker to a second department');
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000004', true);
+select extensions.lives_ok(
+  $$select public.request_availability_exception('bf000000-0000-4000-8000-000000000001', 'cf000000-0000-4000-8000-000000000001',
+    'ef000000-0000-4000-8000-000000000001', '2032-03-24', '2032-03-24', 'leave')$$,
+  'shared worker submits leave');
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000003', true);
+select extensions.ok(
+  exists(select 1 from public.employee_availability_exceptions where starts_on = '2032-03-24'),
+  'secondary-department manager can see shared worker leave');
+select extensions.lives_ok(
+  $$select public.review_leave_request('bf000000-0000-4000-8000-000000000001', 'cf000000-0000-4000-8000-000000000001',
+    (select id from public.employee_availability_exceptions where starts_on = '2032-03-24'), 'approved')$$,
+  'secondary-department manager can review shared worker leave');
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000001', true);
+select extensions.lives_ok(
+  $$select public.set_employee_departments('bf000000-0000-4000-8000-000000000001', 'ef000000-0000-4000-8000-000000000001',
+    array['df000000-0000-4000-8000-000000000001'::uuid])$$,
+  'owner removes the secondary department link');
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000003', true);
+select extensions.is((select count(*)::integer from public.employee_availability_exceptions), 0,
+  'secondary manager loses access immediately after unlinking');
 reset role;
+update public.employees set auth_user_id = null where id = 'ef000000-0000-4000-8000-000000000001';
+select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.is((select count(*)::integer from public.employee_availability_exceptions), 0,
+  'employee loses exception access immediately when unlinked');
+reset role;
+update public.employees set auth_user_id = 'af000000-0000-4000-8000-000000000004'
+where id = 'ef000000-0000-4000-8000-000000000001';
 update public.employees set active = false where id = 'ef000000-0000-4000-8000-000000000001';
 select set_config('request.jwt.claim.sub', 'af000000-0000-4000-8000-000000000004', true);
 set local role authenticated;

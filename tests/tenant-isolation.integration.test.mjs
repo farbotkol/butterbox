@@ -158,6 +158,28 @@ test(
         role_title: "Server",
       });
       assert.ifError(employee.error);
+      const role = await tenant.client.rpc("save_job_role", {
+        p_business_id: tenant.business,
+        p_department_id: tenant.department,
+        p_job_role_id: null,
+        p_name: "Server",
+        p_active: true,
+      });
+      assert.ifError(role.error);
+      assert.ok(role.data);
+      const restriction = await tenant.client.rpc("set_job_role_manual_restriction", {
+        p_business_id: tenant.business,
+        p_job_role_id: role.data,
+        p_restricted: true,
+      });
+      assert.ifError(restriction.error);
+      const qualification = await tenant.client.rpc("set_employee_eligible_roles", {
+        p_business_id: tenant.business,
+        p_employee_id: employeeId,
+        p_department_id: tenant.department,
+        p_job_role_ids: [role.data],
+      });
+      assert.ifError(qualification.error);
       const details = {
         p_business_id: tenant.business,
         p_venue_id: tenant.venue,
@@ -214,6 +236,33 @@ test(
           p_start_local: "2033-06-03 15:00", p_end_local: "2033-06-03 17:00",
         }),
       ]), ["Employee has an overlapping shift", "No eligible employee available for automatic assignment"]);
+
+      const fifth = await openShift("2033-06-04");
+      const [assignment, removal] = await Promise.all([
+        edit(fifth, "2033-06-04"),
+        tenant.client.rpc("set_employee_eligible_roles", {
+          p_business_id: tenant.business,
+          p_employee_id: employeeId,
+          p_department_id: tenant.department,
+          p_job_role_ids: [],
+        }),
+      ]);
+      assert.ifError(removal.error);
+      assert.ok(!assignment.error || assignment.error.message === "Employee is not qualified for this role");
+      const racedShift = await admin.from("shifts").select("employee_id").eq("id", fifth).single();
+      assert.ifError(racedShift.error);
+      assert.equal(racedShift.data.employee_id, assignment.error ? null : employeeId);
+      const remainingQualification = await admin.from("employee_job_roles").select("job_role_id")
+        .eq("employee_id", employeeId).eq("job_role_id", role.data);
+      assert.ifError(remainingQualification.error);
+      assert.deepEqual(remainingQualification.data, []);
+
+      const sixth = await openShift("2033-06-05");
+      const afterRemoval = await edit(sixth, "2033-06-05");
+      assert.equal(afterRemoval.error?.message, "Employee is not qualified for this role");
+      const stillOpen = await admin.from("shifts").select("employee_id").eq("id", sixth).single();
+      assert.ifError(stillOpen.error);
+      assert.equal(stillOpen.data.employee_id, null);
     }
 
     try {

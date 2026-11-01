@@ -235,27 +235,36 @@ export async function saveJobRoleAction(formData: FormData) {
   redirect(`${destination}&saved=role`);
 }
 
-export async function setJobRoleAutoRestrictionAction(formData: FormData) {
+async function setJobRoleRestriction(formData: FormData, mode: "automatic" | "manual") {
   const workspace = await getWorkspace();
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
   const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
-  const restricted = text(formData, "restricted", 5);
+  const restricted = formData.get("restricted");
   if (restricted !== "true" && restricted !== "false") {
     console.error("Invalid role restriction submitted.");
     redirect(`${destination}&error=save`);
   }
-  const { error } = await workspace.supabase.rpc("set_job_role_auto_restriction", {
-    p_business_id: workspace.business.id,
-    p_job_role_id: text(formData, "job_role_id", 36),
-    p_restricted: restricted === "true",
-  });
+  const { error } = await workspace.supabase.rpc(
+    mode === "automatic" ? "set_job_role_auto_restriction" : "set_job_role_manual_restriction", {
+      p_business_id: workspace.business.id,
+      p_job_role_id: text(formData, "job_role_id", 36),
+      p_restricted: restricted === "true",
+    });
   if (error) {
     console.error("Role restriction save failed.", { code: error.code, message: error.message });
     redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "save"}`);
   }
-  redirect(`${destination}&saved=restriction`);
+  redirect(`${destination}&saved=${mode === "automatic" ? "restriction" : "manual-restriction"}`);
+}
+
+export async function setJobRoleAutoRestrictionAction(formData: FormData) {
+  await setJobRoleRestriction(formData, "automatic");
+}
+
+export async function setJobRoleManualRestrictionAction(formData: FormData) {
+  await setJobRoleRestriction(formData, "manual");
 }
 
 export async function setEmployeeDepartmentsAction(formData: FormData) {
@@ -603,6 +612,8 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
       state.errors.employee = "That employee already has a shift during this time.";
     } else if (message.includes("employee is not eligible")) {
       state.errors.employee = "Choose an active team member linked to this department, or an open shift.";
+    } else if (message.includes("employee is not qualified")) {
+      state.errors.employee = "Choose a worker qualified for this role, or leave the shift open.";
     } else if (message.includes("start time does not exist")) {
       state.errors.start = "This local time does not exist because the clocks change. Choose another start time.";
     } else if (message.includes("end time does not exist")) {

@@ -90,6 +90,7 @@ export function ShiftEditor({
           {shiftId
             ? "Choose an active linked team member or leave this shift open."
             : "Automatic selection checks role qualifications and overlaps, not employee availability."}
+          {" "}Manual assignment may require qualifications for the selected role.
         </p>
         {state.errors.employee && <p id="shift-employee-error" role="alert" className="mt-1 text-red-800">{state.errors.employee}</p>}
       </div>

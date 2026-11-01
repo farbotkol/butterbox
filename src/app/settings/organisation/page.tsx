@@ -1,5 +1,10 @@
 import { redirect } from "next/navigation";
-import { saveDepartmentAction, saveJobRoleAction, setJobRoleAutoRestrictionAction } from "@/app/actions";
+import {
+  saveDepartmentAction,
+  saveJobRoleAction,
+  setJobRoleAutoRestrictionAction,
+  setJobRoleManualRestrictionAction,
+} from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
@@ -11,6 +16,7 @@ type JobRole = {
   active: boolean;
   department_id: string;
   restrict_auto_assignment: boolean;
+  restrict_manual_assignment: boolean;
 };
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
@@ -57,7 +63,7 @@ export default async function OrganisationPage({
   const [departments, roles] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
-    workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment")
+    workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
       .eq("venue_id", venueId).order("name"),
   ]);
   const loadError = venues.error || departments.error || roles.error;
@@ -73,8 +79,9 @@ export default async function OrganisationPage({
       <p className="mt-3 text-sm leading-6 text-muted">
         Front of House and Back of House are created with every venue. Add custom departments and job roles,
         or mark them inactive to stop new staff and shifts using them. Deactivating never deletes anything:
-        existing shifts and staff keep their original department and role. Restricting automatic assignment
-        requires an explicitly qualified worker; manual assignment remains available.
+        existing shifts and staff keep their original department and role. Automatic and manual
+        qualification restrictions are configured separately. Restricting manual assignment also
+        restricts automatic selection for that role.
       </p>
 
       {(venues.data?.length ?? 0) > 1 && (
@@ -97,7 +104,8 @@ export default async function OrganisationPage({
         <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-ocean">
           {params.saved === "role" ? "Job role saved."
             : params.saved === "restriction" ? "Automatic assignment setting saved."
-              : "Department saved."}
+              : params.saved === "manual-restriction" ? "Manual assignment setting saved."
+                : "Department saved."}
         </p>
       )}
 
@@ -158,11 +166,24 @@ export default async function OrganisationPage({
                         <input type="hidden" name="job_role_id" value={role.id} />
                         <label className="text-sm">Automatic assignment
                           <select name="restricted" defaultValue={String(role.restrict_auto_assignment)} className={fieldClass}>
-                            <option value="false">Any linked worker</option>
+                            <option value="false">
+                              {role.restrict_manual_assignment ? "Follow manual restriction (qualified only)" : "Any linked worker"}
+                            </option>
                             <option value="true">Qualified workers only</option>
                           </select>
                         </label>
                         <button type="submit" className="rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save restriction</button>
+                      </form>
+                      <form action={setJobRoleManualRestrictionAction} className="mt-3 flex flex-wrap items-end gap-3">
+                        <input type="hidden" name="venue_id" value={venueId} />
+                        <input type="hidden" name="job_role_id" value={role.id} />
+                        <label className="text-sm">Manual assignment
+                          <select name="restricted" defaultValue={String(role.restrict_manual_assignment)} className={fieldClass}>
+                            <option value="false">Any linked worker</option>
+                            <option value="true">Qualified workers only</option>
+                          </select>
+                        </label>
+                        <button type="submit" className="rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save manual restriction</button>
                       </form>
                     </li>
                   ))}
