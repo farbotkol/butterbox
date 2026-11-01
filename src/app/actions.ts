@@ -918,6 +918,7 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
       "Claimed clock times are invalid": "claim-pair-time",
       "A claim already created attendance": "claim-pair-used",
       "A claim has already been reviewed": "claim-pair-used",
+      "A claim was already linked to attendance": "claim-pair-used",
       "Claimed attendance overlaps another session": "claim-overlap",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
@@ -926,6 +927,56 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
   revalidatePath("/attendance");
   revalidatePath("/work-time");
   redirect(`${destination}&saved=claim-created`);
+}
+
+export async function completeAttendanceFromOfflineClaimAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const claims = uuidList(formData, "claim_id", 1);
+  const sessions = uuidList(formData, "session_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const reasons = formData.getAll("reason");
+  const confirmations = formData.getAll("acknowledge_unverified");
+  if (venues?.length !== 1 || claims?.length !== 1 || sessions?.length !== 1 || requests?.length !== 1 ||
+    reasons.length !== 1 || typeof reasons[0] !== "string" || !reasons[0].trim() ||
+    reasons[0].trim().length > 500 || confirmations.length !== 1 || confirmations[0] !== "yes") {
+    console.error("Invalid offline clock-out completion request.");
+    redirect("/attendance?error=claim-open-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the offline clock-out workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const { data, error } = await workspace.supabase.rpc("complete_attendance_from_offline_claim", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_claim_id: claims[0],
+    p_session_id: sessions[0], p_request_id: requests[0], p_reason: reasons[0].trim(),
+    p_acknowledge_unverified: true,
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Completing attendance from an offline claim failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid review receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Invalid offline clock-out review": "claim-open-invalid",
+      "Matching open attendance session not found": "claim-open-stale",
+      "Claimed clock-out time is invalid": "claim-pair-time",
+      "End the open break before clocking out": "claim-open-break",
+      "Server clock is earlier than the previous attendance event": "claim-open-order",
+      "Attendance edits are locked": "claim-locked",
+      "Claimed attendance overlaps another session": "claim-overlap",
+      "Claim has already been reviewed": "claim-reviewed",
+      "A claim was already linked to attendance": "claim-pair-used",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "claim-save"}`);
+  }
+  revalidatePath("/attendance");
+  revalidatePath("/work-time");
+  redirect(`${destination}&saved=claim-completed`);
 }
 
 async function correctionActionContext(formData: FormData) {

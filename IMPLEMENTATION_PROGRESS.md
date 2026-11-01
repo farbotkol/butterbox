@@ -125,8 +125,23 @@
   passed. The Node-only run skipped those 13 integrations, which passed
   separately. Full ESLint, TypeScript, split production build and five focused
   production-browser scenarios passed, including mobile pair creation and
-  employee visibility. Mixed online/offline sessions and offline page reopening
-  remain incomplete.
+  employee visibility. At that checkpoint, mixed online/offline sessions and
+  offline page reopening remained incomplete.
+- The paired-claim checkpoint was committed as `961b280` and pushed to the
+  requested branch; the remote SHA matched.
+- BB-ATTEND-005 now also lets a scoped manager complete an open server-clocked
+  session with an unverified offline clock-out, preserving existing breaks and
+  event history. Open breaks, invalid chronology, locks, linked-worker overlap,
+  previously linked claims and unauthorized requests are rejected. The complete
+  isolated replay passed **1,614/1,614 pgTAP assertions across 35 files**,
+  including 40 mixed-session assertions. All 13 authenticated integrations,
+  87 serialized Node tests, full ESLint, TypeScript, split production build and
+  five focused production-browser scenarios passed. The Node-only run skipped
+  those 13 integrations, which passed separately. Offline page reopening and
+  resolving historical open breaks remain incomplete. An initial browser run
+  exposed an ambiguous alert locator caused by Next.js's route announcer; the
+  locator was scoped to the expected error and the rebuilt scenario passed
+  without removing assertions.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -195,8 +210,10 @@
   reconnecting as the same account. A scoped manager can match or correct a
   finished event, reject a claim, or confirm a matching pair as an explicitly
   offline-sourced finished session. Decisions and reopenings are immutable and
-  employee-visible; no break is assumed. Mixed online/offline sessions and
-  reopening the attendance page while offline remain incomplete.
+  employee-visible; no break is assumed. A manager can also complete a matching
+  open server session with an offline clock-out while preserving recorded
+  breaks. Historical open-break resolution and reopening the attendance page
+  while offline remain incomplete.
 - **BB-ATTEND-007 — Attendance corrections** is Done. Scoped corrections and
   edit-lock transitions are immutable, attributed and visible to permitted
   users; corrected work time, daylight-saving handling, precision, linked-worker
@@ -402,7 +419,7 @@ events; offline claims use the separate reconciliation workflow below.
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ATTEND-005.1 Pending or exception status | Location failures produce a recorded server event and visible review status. A page already open offline shows each queued claim and its pending state; submitted claims are labelled unverified and awaiting review. Storage and upload failures are explicit. | BB-ATTEND-003 location and no-JavaScript checks passed. Production Chromium verified two offline claims, a failed upload, storage denial, reconnect, scoped visibility and clear pending/review labels. | Pass |
-| ATTEND-005.2 Safe reconciliation | Claims upload only for the verified original account and permitted scope. Managers can match/correct finished events, reject claims, or explicitly create an unverified finished session from matching clock-in/out claims. Decisions and senior-role reopenings are attributed; work time flags the offline source and missing breaks. | The 48 original claim, 44 review and 47 pair pgTAP assertions passed, including linked-worker overlap and correction provenance. Authenticated integrations passed duplicate and competing operations, clock/review races, edit-lock and permission changes. Production Chromium verified both reconciliation paths, employee visibility, cross-tenant scope and mobile layout. A single offline claim cannot yet complete an existing open server session, and the page cannot be opened or reloaded offline. | Fail |
+| ATTEND-005.2 Safe reconciliation | Claims upload only for the verified original account and permitted scope. Managers can match/correct finished events, reject claims, create an unverified session from a claim pair, or complete a matching open server session with an offline clock-out. Decisions and senior-role reopenings are attributed; work time flags the offline source. | The 48 original claim, 44 review, 47 pair and 40 mixed-session pgTAP assertions passed, including linked-worker overlap, existing breaks and correction provenance. Authenticated integrations passed duplicate and competing operations, live-clock races, edit-lock and permission changes. Production Chromium verified all three reconciliation paths, rejected an open break, and checked employee visibility, cross-tenant scope and mobile layout. Historical open breaks cannot yet be corrected through this flow, and the page cannot be opened or reloaded offline. | Fail |
 | ATTEND-005.3 Claimed and confirmed times | The immutable claim retains the untrusted device time and a separate server-generated receipt time. The latter confirms receipt, not that the claimed attendance was true. | pgTAP verified original time, server time and immutable records. Production Chromium captured clock-in/out offline, compared both received rows to device storage, and checked both timestamps in the employee and scoped manager views. | Pass |
 
 Files: `supabase/migrations/20261102080000_attendance_offline_claims.sql`,
@@ -418,6 +435,8 @@ Files: `supabase/migrations/20261102080000_attendance_offline_claims.sql`,
 `supabase/migrations/20261102110000_offline_claim_sessions.sql`,
 `supabase/tests/database/offline_claim_sessions.test.sql`,
 `tests/offline-claim-sessions-concurrency.integration.test.mjs`,
+`supabase/migrations/20261102120000_offline_claim_clock_out.sql`,
+`supabase/tests/database/offline_claim_clock_out.test.sql`,
 `src/lib/worked-time.ts`, `tests/worked-time.test.mjs`,
 `tests/e2e/auth.spec.mjs`, `scripts/test-tenant-isolation.mjs` and `README.md`.
 After a clean migration replay, an initial default pgTAP invocation failed
@@ -922,12 +941,10 @@ not yet run remotely.
 
 ## Next story
 
-- Continue **BB-ATTEND-005 — Time capture fallback** for mixed sessions such as
-  a server clock-in followed by an offline clock-out. Reuse the attributed
-  source and review model; preserve open-break, overlap, lock, role and
-  concurrency safeguards. Design and test safe offline page reopening without
-  caching private authenticated responses or exposing another browser account's
-  claims.
+- Continue **BB-ATTEND-005 — Time capture fallback**. Design a safe, attributed
+  way to resolve historical open breaks without inventing break times or
+  weakening chronology, and design/test offline page reopening without caching
+  private authenticated responses or exposing another browser account's claims.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Continue toward corrections,
   timesheet review and approval. Revisit BB-SAAS-003 only after production

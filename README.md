@@ -184,10 +184,15 @@ The original claims, receipt times and attributed decision remain available.
 The resulting events are marked as offline-sourced, cannot overlap other
 attendance for the worker or a linked profile, and are flagged in **Work time**.
 No breaks are fabricated or deducted; check missing breaks with the employee.
-Mixed cases such as a server clock-in with only an offline clock-out claim
-cannot yet be completed by this workflow. Timesheet approvals are not yet
-available. The page cannot be opened offline, and clearing browser data or
-losing the device can lose unsent claims.
+A scoped manager can also complete a matching open server-clocked session
+with an offline clock-out claim after reviewing the recorded breaks. Open
+breaks, out-of-order events, edit locks and overlapping sessions prevent
+completion; the offline clock-out is marked unverified and the existing
+events remain unchanged. Resolving a historical open break is not yet
+supported; contact a manager and keep the claim pending. Reopening a previously
+linked claim does not allow it to create another attendance session or clock
+event. Timesheet approvals are not yet available. The page cannot be opened
+offline, and clearing browser data or losing the device can lose unsent claims.
 Device storage is shared by accounts using the same browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the

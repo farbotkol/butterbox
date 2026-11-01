@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  offlineMatchKey, parseOfflineAttendanceClaim, parseOfflineClaimReceipt, parseOfflineClaimReviews,
-  parseOfflineMatchEvents, parseOfflineMatchOption, parseSubmittedOfflineClaims,
+  hasPriorAttendanceLink, offlineMatchKey, parseOfflineAttendanceClaim, parseOfflineClaimReceipt,
+  parseOfflineClaimReviews, parseOfflineMatchEvents, parseOfflineMatchOption, parseOfflineOpenSessions,
+  parseSubmittedOfflineClaims,
 } from "../src/lib/offline-attendance.ts";
 
 const id = "af000000-0000-4000-8000-000000000001";
@@ -54,11 +55,29 @@ test("offline review history validates decision-specific audit details and seque
   };
   assert.deepEqual(parseOfflineClaimReviews([reviewed, reopened]), [reopened, reviewed]);
   assert.deepEqual(parseOfflineClaimReviews([created]), [created]);
+  assert.deepEqual(parseOfflineClaimReviews([{ ...created, decision: "completed" }]),
+    [{ ...created, decision: "completed" }]);
+  assert.equal(hasPriorAttendanceLink([reopened]), false);
+  assert.equal(hasPriorAttendanceLink([reopened, reviewed]), true);
+  assert.equal(hasPriorAttendanceLink([created]), true);
   for (const invalid of [null, [reviewed, reviewed], [{ ...reviewed, correction_id: null }],
     [{ ...reviewed, decision: "matched" }], [{ ...reopened, event_id: id }],
     [{ ...created, old_at: reviewed.old_at }], [{ ...created, event_id: null }],
     [reviewed, { ...reopened, sequence: 1 }], [{ ...reviewed, reason: " " }]]) {
     assert.equal(parseOfflineClaimReviews(invalid), null);
+  }
+});
+
+test("open offline clock-out candidates require scoped identifiers, event times and state", () => {
+  const row = {
+    session_id: id, employee_id: id, department_id: id, actor_id: id,
+    clocked_in_at: "2026-11-01T10:00:00Z", latest_event_at: "2026-11-01T12:00:00Z",
+    open_break: false, locked: false,
+  };
+  assert.deepEqual(parseOfflineOpenSessions([row]), [row]);
+  for (const invalid of [null, [row, row], [{ ...row, session_id: "" }],
+    [{ ...row, latest_event_at: null }], [{ ...row, open_break: "false" }]]) {
+    assert.equal(parseOfflineOpenSessions(invalid), null);
   }
 });
 

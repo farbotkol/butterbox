@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
-import { createAttendanceFromOfflineClaimsAction, reviewOfflineAttendanceClaimAction } from "@/app/actions";
-import type {
-  OfflineClaimReview, OfflineMatchEvent, SubmittedOfflineClaim,
+import {
+  completeAttendanceFromOfflineClaimAction, createAttendanceFromOfflineClaimsAction,
+  reviewOfflineAttendanceClaimAction,
+} from "@/app/actions";
+import {
+  hasPriorAttendanceLink, type OfflineClaimReview, type OfflineMatchEvent, type OfflineOpenSession,
+  type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 
 const decisionLabels: Record<OfflineClaimReview["decision"], string> = {
@@ -10,6 +14,7 @@ const decisionLabels: Record<OfflineClaimReview["decision"], string> = {
   rejected: "Rejected",
   reopened: "Reopened for review",
   created: "Attendance created from unverified offline claims",
+  completed: "Open attendance completed with an unverified offline clock-out",
 };
 
 function formatTime(timestamp: string, timezone: string): string {
@@ -19,15 +24,17 @@ function formatTime(timestamp: string, timezone: string): string {
   }).format(new Date(timestamp));
 }
 
-export function OfflineClaimReview({ claim, reviews, events, endClaims, venueId, timezone, canReview, canReopen }: {
+export function OfflineClaimReview({
+  claim, reviews, events, endClaims, openSessions, venueId, timezone, canReview, canReopen,
+}: {
   claim: SubmittedOfflineClaim; reviews: OfflineClaimReview[]; events: OfflineMatchEvent[];
-  endClaims: SubmittedOfflineClaim[];
+  endClaims: SubmittedOfflineClaim[]; openSessions: OfflineOpenSession[];
   venueId: string; timezone: string; canReview: boolean; canReopen: boolean;
 }) {
   const history = reviews;
   const latest = history[0];
   const pending = !latest || latest.decision === "reopened";
-  const alreadyCreated = history.some((review) => review.decision === "created");
+  const alreadyLinked = hasPriorAttendanceLink(history);
   const candidates = events;
 
   return <li id={`offline-claim-${claim.id}`} className="rounded-lg border border-line p-4 text-sm">
@@ -90,9 +97,9 @@ export function OfflineClaimReview({ claim, reviews, events, endClaims, venueId,
           overlap checks and correction audit rules still apply.
         </p>
       </form> : <p className="mt-3 text-muted">No matching finished clock event is available.</p>}
-      {claim.event_type === "clock_in" && (alreadyCreated
+      {claim.event_type === "clock_in" && (alreadyLinked
         ? <p className="mt-3 text-muted">
-          This claim already created attendance and cannot be used to create another session.
+          This claim was already linked to attendance and cannot create another session.
         </p>
         : endClaims.length > 0
         ? <form action={createAttendanceFromOfflineClaimsAction}
@@ -130,6 +137,44 @@ export function OfflineClaimReview({ claim, reviews, events, endClaims, venueId,
         : <p className="mt-3 text-muted">
           A pending clock-out claim from the same worker is needed to create a finished session.
         </p>)}
+      {claim.event_type === "clock_out" && !alreadyLinked && openSessions.length > 0 &&
+        <form action={completeAttendanceFromOfflineClaimAction}
+          aria-label="Complete attendance with offline clock-out" className="mt-4 space-y-3 rounded-lg border border-line p-3">
+          <input type="hidden" name="venue_id" value={venueId} />
+          <input type="hidden" name="claim_id" value={claim.id} />
+          <input type="hidden" name="request_id" value={randomUUID()} />
+          <label className="block">
+            Matching open attendance session
+            <select name="session_id" required defaultValue=""
+              className="mt-1 block w-full max-w-md rounded-lg border border-line bg-white p-2">
+              <option value="" disabled>Choose an open session</option>
+              {openSessions.map((session) => <option key={session.session_id} value={session.session_id}>
+                Started {formatTime(session.clocked_in_at, timezone)} ({session.clocked_in_at}) ·{" "}
+                last event {session.latest_event_at}{session.open_break ? " · open break" : ""}
+                {session.locked ? " · editing locked" : ""}
+              </option>)}
+            </select>
+          </label>
+          <label className="block">
+            Reason for completing attendance
+            <textarea name="reason" required maxLength={500}
+              className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="acknowledge_unverified" value="yes" required className="mt-1" />
+            <span>I checked the unverified clock-out time and reviewed recorded breaks.</span>
+          </label>
+          <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+            Complete attendance from claim
+          </button>
+          <p className="text-muted">
+            Open breaks must be resolved first. The clock-out remains unverified, and existing break events
+            are preserved.
+          </p>
+        </form>}
+      {claim.event_type === "clock_out" && alreadyLinked && <p className="mt-3 text-muted">
+        This claim was already linked to attendance and cannot create another clock event.
+      </p>}
       <form action={reviewOfflineAttendanceClaimAction} aria-label="Reject offline claim" className="mt-4 space-y-3">
         <input type="hidden" name="venue_id" value={venueId} />
         <input type="hidden" name="claim_id" value={claim.id} />

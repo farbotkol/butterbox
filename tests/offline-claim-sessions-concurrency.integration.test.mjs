@@ -9,7 +9,7 @@ const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
 const anonKey = process.env.BUTTERBOX_TEST_SUPABASE_ANON_KEY;
 const serviceKey = process.env.BUTTERBOX_TEST_SUPABASE_SERVICE_KEY;
 
-test("offline session creation serializes retries, decisions, permissions and clocking", {
+test("offline attendance reconciliation serializes retries, decisions, permissions and clocking", {
   skip: container ? false : "requires an explicitly configured disposable database container",
   timeout: 90_000,
 }, async () => {
@@ -67,6 +67,30 @@ test("offline session creation serializes retries, decisions, permissions and cl
         p_clock_out_claim_id: end, p_request_id: randomUUID(), p_reason: "Confirmed with worker",
         p_acknowledge_unverified: true,
       };
+    }
+    async function clockOutFixture() {
+      const id = randomUUID();
+      await sql(
+        `insert into public.attendance_offline_claims ` +
+          `(id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, claimed_at) ` +
+          `values ('${id}', '${businessId}', '${venueId}', '${fohId}', '${employeeId}', '${users[1]}', ` +
+          `'${randomUUID()}', 'clock_out', clock_timestamp())`,
+      );
+      return id;
+    }
+    function complete(claimId, sessionId) {
+      return {
+        p_business_id: businessId, p_venue_id: venueId, p_claim_id: claimId, p_session_id: sessionId,
+        p_request_id: randomUUID(), p_reason: "Confirmed with worker", p_acknowledge_unverified: true,
+      };
+    }
+    async function clockIn() {
+      const result = await worker.rpc("clock_in_attendance", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
+        p_employee_id: employeeId, p_request_id: randomUUID(),
+      });
+      assert.ifError(result.error);
+      return result.data[0].session_id;
     }
     const first = pair(await claim("clock_in", "2024-01-10T09:00:00Z"),
       await claim("clock_out", "2024-01-10T17:00:00Z"));
@@ -134,15 +158,9 @@ test("offline session creation serializes retries, decisions, permissions and cl
         `'${businessId}'::uuid, '${venueId}'::uuid, '${fohId}'::uuid, '${employeeId}'::uuid, '${randomUUID()}'::uuid)`,
     );
     let pendingClock;
+    let clockRace;
     try {
-      const endId = randomUUID();
-      await sql(
-        `insert into public.attendance_offline_claims ` +
-          `(id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, claimed_at) ` +
-          `values ('${endId}', '${businessId}', '${venueId}', '${fohId}', '${employeeId}', '${users[1]}', ` +
-          `'${randomUUID()}', 'clock_out', clock_timestamp())`,
-      );
-      const clockRace = pair(clockRaceStart, endId);
+      clockRace = pair(clockRaceStart, await clockOutFixture());
       pendingClock = Promise.resolve(manager.rpc("create_attendance_from_offline_claims", clockRace));
       await waitForLock("create_attendance_from_offline_claims");
       await clocking.release(true);
@@ -150,6 +168,57 @@ test("offline session creation serializes retries, decisions, permissions and cl
     } finally {
       await clocking.release(false);
       await Promise.allSettled([pendingClock].filter(Boolean));
+    }
+    const current = await worker.rpc("get_my_attendance_state_with_break", {
+      p_business_id: businessId,
+    }).single();
+    assert.ifError(current.error);
+    assert.equal(current.data.state, "clocked_in");
+    const completion = complete(clockRace.p_clock_out_claim_id, current.data.session_id);
+    const completionRetries = await Promise.all(Array.from({ length: 8 }, () =>
+      manager.rpc("complete_attendance_from_offline_claim", completion)));
+    for (const result of completionRetries) {
+      assert.ifError(result.error);
+      assert.equal(result.data, completionRetries[0].data);
+    }
+    const completedEvents = await manager.from("attendance_events").select("event_type, source")
+      .eq("session_id", current.data.session_id).eq("event_type", "clock_out");
+    assert.ifError(completedEvents.error);
+    assert.deepEqual(completedEvents.data, [{ event_type: "clock_out", source: "offline_claim" }]);
+
+    const liveSession = await clockIn();
+    const competingClaim = await clockOutFixture();
+    const liveRace = await Promise.all([
+      manager.rpc("complete_attendance_from_offline_claim", complete(competingClaim, liveSession)),
+      worker.rpc("clock_out_attendance", {
+        p_business_id: businessId, p_session_id: liveSession, p_request_id: randomUUID(),
+      }),
+    ]);
+    assert.equal(liveRace.filter((result) => !result.error).length, 1);
+    assert.ok(["Matching open attendance session not found", "Already clocked out"]
+      .includes(liveRace.find((result) => result.error).error.message));
+    const liveEvents = await worker.from("attendance_events").select("id")
+      .eq("session_id", liveSession).eq("event_type", "clock_out");
+    assert.ifError(liveEvents.error);
+    assert.equal(liveEvents.data.length, 1);
+
+    const protectedSession = await clockIn();
+    const protectedClaim = await clockOutFixture();
+    const accessChange = await holdLock(
+      `update public.business_memberships set department_id = '${bohId}'::uuid ` +
+        `where business_id = '${businessId}'::uuid and user_id = '${users[0]}'::uuid returning user_id`,
+      users[0],
+    );
+    let pendingAccess;
+    try {
+      pendingAccess = Promise.resolve(manager.rpc("complete_attendance_from_offline_claim",
+        complete(protectedClaim, protectedSession)));
+      await waitForLock("complete_attendance_from_offline_claim");
+      await accessChange.release(true);
+      assert.equal((await pendingAccess).error?.message, "Claim not found or permission denied");
+    } finally {
+      await accessChange.release(false);
+      await Promise.allSettled([pendingAccess].filter(Boolean));
     }
   } finally {
     assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);

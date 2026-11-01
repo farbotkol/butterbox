@@ -27,7 +27,7 @@ export type OfflineClaimReview = {
   sequence: number;
   claim_id: string;
   actor_id: string;
-  decision: "matched" | "corrected" | "rejected" | "reopened" | "created";
+  decision: "matched" | "corrected" | "rejected" | "reopened" | "created" | "completed";
   session_id: string | null;
   event_id: string | null;
   old_at: string | null;
@@ -43,6 +43,16 @@ export type OfflineMatchEvent = {
   actor_id: string;
   event_type: OfflineEventType;
   effective_at: string;
+  locked: boolean;
+};
+export type OfflineOpenSession = {
+  session_id: string;
+  employee_id: string;
+  department_id: string;
+  actor_id: string;
+  clocked_in_at: string;
+  latest_event_at: string;
+  open_break: boolean;
   locked: boolean;
 };
 
@@ -112,13 +122,14 @@ export function parseOfflineClaimReviews(value: unknown): OfflineClaimReview[] |
     if (!isRecord(row) || !isUuid(row.id) || !isUuid(row.claim_id) || !isUuid(row.actor_id) ||
       typeof row.sequence !== "number" || !Number.isSafeInteger(row.sequence) || row.sequence < 1 ||
       (row.decision !== "matched" && row.decision !== "corrected" &&
-        row.decision !== "rejected" && row.decision !== "reopened" && row.decision !== "created") ||
+        row.decision !== "rejected" && row.decision !== "reopened" &&
+        row.decision !== "created" && row.decision !== "completed") ||
       typeof row.reason !== "string" || !row.reason.trim() || !isTimestamp(row.created_at)) return null;
     if (row.correction_id !== null && !isUuid(row.correction_id)) return null;
     if (row.decision === "matched" || row.decision === "corrected") {
       if (!isUuid(row.session_id) || !isUuid(row.event_id) || !isTimestamp(row.old_at) ||
         (row.decision === "matched" ? row.correction_id !== null : row.correction_id === null)) return null;
-    } else if (row.decision === "created") {
+    } else if (row.decision === "created" || row.decision === "completed") {
       if (!isUuid(row.session_id) || !isUuid(row.event_id) || row.old_at !== null ||
         row.correction_id !== null) return null;
     } else if (row.session_id !== null || row.event_id !== null || row.old_at !== null ||
@@ -134,6 +145,33 @@ export function parseOfflineClaimReviews(value: unknown): OfflineClaimReview[] |
     });
   }
   return rows.sort((a, b) => b.sequence - a.sequence);
+}
+
+export function parseOfflineOpenSessions(value: unknown): OfflineOpenSession[] | null {
+  if (!Array.isArray(value)) return null;
+  const rows: OfflineOpenSession[] = [];
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!isRecord(row) || !isUuid(row.session_id) || !isUuid(row.employee_id) ||
+      !isUuid(row.department_id) || !isUuid(row.actor_id) || !isTimestamp(row.clocked_in_at) ||
+      !isTimestamp(row.latest_event_at) || typeof row.open_break !== "boolean" ||
+      typeof row.locked !== "boolean") return null;
+    const key = row.session_id.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    rows.push({
+      session_id: row.session_id, employee_id: row.employee_id, department_id: row.department_id,
+      actor_id: row.actor_id, clocked_in_at: row.clocked_in_at, latest_event_at: row.latest_event_at,
+      open_break: row.open_break, locked: row.locked,
+    });
+  }
+  return rows;
+}
+
+export function hasPriorAttendanceLink(reviews: OfflineClaimReview[]): boolean {
+  return reviews.some((review) =>
+    review.decision === "matched" || review.decision === "corrected" ||
+    review.decision === "created" || review.decision === "completed");
 }
 
 export function parseOfflineMatchEvents(value: unknown): OfflineMatchEvent[] | null {

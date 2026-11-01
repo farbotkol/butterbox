@@ -19,8 +19,9 @@ import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
 import {
-  offlineMatchKey, offlineWorkerKey, parseOfflineClaimReviews, parseOfflineMatchEvents, parseSubmittedOfflineClaims,
-  type OfflineClaimReview as OfflineClaimReviewRow, type OfflineMatchEvent, type SubmittedOfflineClaim,
+  hasPriorAttendanceLink, offlineMatchKey, offlineWorkerKey, parseOfflineClaimReviews, parseOfflineMatchEvents,
+  parseOfflineOpenSessions, parseSubmittedOfflineClaims, type OfflineClaimReview as OfflineClaimReviewRow,
+  type OfflineMatchEvent, type OfflineOpenSession, type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 import { readAllPages } from "@/lib/paginated-rows";
 import { getWorkspace } from "@/lib/workspace";
@@ -54,8 +55,12 @@ const errors: Record<string, string> = {
   "claim-time": "The claimed time must be in the past and different from the event. If it is already correct, match without changing it.",
   "claim-save": "We could not save the claim decision. Your access may have changed; refresh and try again.",
   "claim-pair-invalid": "Choose matching clock-in and clock-out claims, confirm the warning, and enter a reason.",
-  "claim-pair-time": "The clock-out claim must be after the clock-in claim and in the past.",
+  "claim-pair-time": "The clock-out time must be after clock-in and in the past.",
   "claim-pair-used": "A claim was already reviewed or used to create attendance. Refresh and check its history.",
+  "claim-open-invalid": "Choose an open session, confirm the warning, and enter a reason.",
+  "claim-open-stale": "The matching open session is unavailable or has already ended. Refresh and review it.",
+  "claim-open-break": "Resolve the recorded open break before completing this session.",
+  "claim-open-order": "The claimed clock-out precedes another recorded event. Investigate before completing it.",
 };
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
@@ -83,7 +88,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   }
 
   const canReview = managerRoles.includes(workspace.membership.role);
-  const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, reviewResult, matchResult,
+  const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, reviewResult, matchResult, openResult,
     correctionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
       .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
@@ -117,6 +122,12 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       }, { count: "exact" }).order("effective_at", { ascending: false }).order("event_id").range(from, to),
       (row) => row && typeof row.event_id === "string" ? row.event_id : "")
       : Promise.resolve({ data: [], error: null }),
+    canReview
+      ? readAllPages<OfflineOpenSession>((from, to) => workspace.supabase.rpc("list_attendance_offline_open_sessions", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+      }, { count: "exact" }).order("clocked_in_at", { ascending: false }).order("session_id").range(from, to),
+      (row) => row && typeof row.session_id === "string" ? row.session_id : "")
+      : Promise.resolve({ data: [], error: null }),
     readAllPages<AttendanceCorrection>((from, to) => workspace.supabase.rpc("list_attendance_corrections", {
       p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
     }, { count: "exact" }).order("sequence", { ascending: false }).order("id").range(from, to),
@@ -128,9 +139,11 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const offlineClaims = parseSubmittedOfflineClaims(offlineResult.data);
   const claimReviews = parseOfflineClaimReviews(reviewResult.data);
   const matchEvents = parseOfflineMatchEvents(matchResult.data);
+  const openSessions = parseOfflineOpenSessions(openResult.data);
   const reviewsByClaim = new Map<string, OfflineClaimReviewRow[]>();
   const eventsByWorker = new Map<string, OfflineMatchEvent[]>();
   const pendingEndsByWorker = new Map<string, SubmittedOfflineClaim[]>();
+  const openSessionsByWorker = new Map<string, OfflineOpenSession[]>();
   for (const review of claimReviews ?? []) {
     const history = reviewsByClaim.get(review.claim_id) ?? [];
     history.push(review);
@@ -142,10 +155,16 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     matches.push(event);
     eventsByWorker.set(key, matches);
   }
+  for (const session of openSessions ?? []) {
+    const key = offlineWorkerKey(session);
+    const sessions = openSessionsByWorker.get(key) ?? [];
+    sessions.push(session);
+    openSessionsByWorker.set(key, sessions);
+  }
   for (const claim of offlineClaims ?? []) {
     const history = reviewsByClaim.get(claim.id) ?? [];
     const latest = history[0];
-    if (claim.event_type !== "clock_out" || history.some((review) => review.decision === "created") ||
+    if (claim.event_type !== "clock_out" || hasPriorAttendanceLink(history) ||
       (latest && latest.decision !== "reopened")) continue;
     const key = offlineWorkerKey(claim);
     const ends = pendingEndsByWorker.get(key) ?? [];
@@ -175,10 +194,10 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       message: offlineResult.error?.message ?? "The server returned invalid offline attendance claims.",
     });
   }
-  if (reviewResult.error || !claimReviews || matchResult.error || !matchEvents) {
+  if (reviewResult.error || !claimReviews || matchResult.error || !matchEvents || openResult.error || !openSessions) {
     console.error("Could not load offline claim review details.", {
-      code: reviewResult.error?.code ?? matchResult.error?.code,
-      message: reviewResult.error?.message ?? matchResult.error?.message ??
+      code: reviewResult.error?.code ?? matchResult.error?.code ?? openResult.error?.code,
+      message: reviewResult.error?.message ?? matchResult.error?.message ?? openResult.error?.message ??
         "The server returned invalid offline review details.",
     });
   }
@@ -261,6 +280,11 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       {params.saved === "claim-created" && (
         <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
           Attendance created from unverified offline claims. Check any missing breaks before approval.
+        </p>
+      )}
+      {params.saved === "claim-completed" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          Attendance completed with an unverified offline clock-out. Review recorded breaks before approval.
         </p>
       )}
       {loadError || !venueResult.data || !options || !state || !validClockPolicy ? (
@@ -389,11 +413,13 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         <p className="mt-2 text-sm text-muted">
           These device-reported times are unverified and require manager review. They do not automatically
           change recorded attendance or calculated work time. Managers may match or correct a finished clock
-          event, reject a claim, or explicitly create a finished session from a matching pair of claims.
+          event, reject a claim, create a finished session from a matching pair, or complete an open session
+          with a matching offline clock-out.
           Device times remain unverified and no breaks are assumed.
           Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
         </p>
-        {offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews || matchResult.error || !matchEvents ? (
+        {offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews ||
+          matchResult.error || !matchEvents || openResult.error || !openSessions ? (
           <p role="alert" className="mt-3 text-sm text-red-800">
             We couldn&apos;t load offline attendance claims and review details. Refresh and try again.
           </p>
@@ -403,6 +429,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           {offlineClaims.map((claim) => <OfflineClaimReview key={claim.id} claim={claim}
             reviews={reviewsByClaim.get(claim.id) ?? []} events={eventsByWorker.get(offlineMatchKey(claim)) ?? []}
             endClaims={pendingEndsByWorker.get(offlineWorkerKey(claim)) ?? []}
+            openSessions={openSessionsByWorker.get(offlineWorkerKey(claim)) ?? []}
             venueId={workspace.venue.id}
             timezone={workspace.venue.timezone} canReview={canReview}
             canReopen={["owner", "admin", "general_manager"].includes(workspace.membership.role)} />)}

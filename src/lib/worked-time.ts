@@ -124,5 +124,5 @@ export const workTimeExceptionLabels: Record<WorkTimeException, string> = {
   location_unverified: "Location check unavailable",
   location_review_required: "Location review required",
   location_reviewed: "Location exception reviewed",
-  offline_claim_unverified: "Unverified offline times; breaks were not captured",
+  offline_claim_unverified: "Unverified offline times; review recorded breaks",
 };

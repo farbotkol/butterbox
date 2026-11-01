@@ -3815,11 +3815,13 @@ test("managers reconcile offline claims with existing attendance and an auditabl
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, employeeId, sessionId,
-    clockInId, clockOutId] = Array.from({ length: 10 }, () => randomUUID());
+    clockInId, clockOutId, openSessionId, openBreakId, colleagueEmployeeId, colleagueSessionId,
+    colleagueBreakId] = Array.from({ length: 15 }, () => randomUUID());
   const users = [];
   const contexts = [];
   const workerApi = createClient(apiUrl, anonKey, options);
   const ownerApi = createClient(apiUrl, anonKey, options);
+  const colleagueApi = createClient(apiUrl, anonKey, options);
   try {
     for (const role of ["owner", "foh", "boh", "worker", "colleague", "outside"]) {
       const result = await admin.auth.admin.createUser({
@@ -3848,14 +3850,24 @@ test("managers reconcile offline claims with existing attendance and an auditabl
       { business_id: businessId, user_id: users[4], role: "employee", venue_id: venueId, department_id: fohId },
       { business_id: outsideBusiness, user_id: users[5], role: "owner" },
     ])).error).toBeNull();
-    expect((await admin.from("employees").insert({
-      id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
-      auth_user_id: users[3], name: "Claim Worker", role_title: "Server",
-    })).error).toBeNull();
-    expect((await admin.from("attendance_sessions").insert({
-      id: sessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
-      employee_id: employeeId, started_by: users[3],
-    })).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[3], name: "Claim Worker", role_title: "Server" },
+      { id: colleagueEmployeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[4], name: "Claim Colleague", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([
+      { id: sessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: employeeId, started_by: users[3] },
+      { id: openSessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: employeeId, started_by: users[3] },
+      { id: colleagueSessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: colleagueEmployeeId, started_by: users[4] },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_breaks").insert([
+      { id: openBreakId, session_id: openSessionId, business_id: businessId, classification: "unpaid" },
+      { id: colleagueBreakId, session_id: colleagueSessionId, business_id: businessId, classification: "paid" },
+    ])).error).toBeNull();
     expect((await admin.from("attendance_events").insert([
       { id: clockInId, session_id: sessionId, business_id: businessId, venue_id: venueId,
         department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
@@ -3863,12 +3875,30 @@ test("managers reconcile offline claims with existing attendance and an auditabl
       { id: clockOutId, session_id: sessionId, business_id: businessId, venue_id: venueId,
         department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
         event_type: "clock_out", occurred_at: "2024-01-10T17:00:00Z" },
+      { id: randomUUID(), session_id: openSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
+        event_type: "clock_in", occurred_at: "2024-01-13T09:00:00Z" },
+      { id: randomUUID(), session_id: openSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
+        event_type: "break_start", break_id: openBreakId, occurred_at: "2024-01-13T12:00:00Z" },
+      { id: randomUUID(), session_id: openSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
+        event_type: "break_end", break_id: openBreakId, occurred_at: "2024-01-13T12:30:00Z" },
+      { id: randomUUID(), session_id: colleagueSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: colleagueEmployeeId, actor_id: users[4], request_id: randomUUID(),
+        event_type: "clock_in", occurred_at: "2024-01-13T09:00:00Z" },
+      { id: randomUUID(), session_id: colleagueSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: colleagueEmployeeId, actor_id: users[4], request_id: randomUUID(),
+        event_type: "break_start", break_id: colleagueBreakId, occurred_at: "2024-01-13T12:00:00Z" },
     ])).error).toBeNull();
     expect((await workerApi.auth.signInWithPassword({
       email: `claim-review-worker-${suffix}@example.test`, password,
     })).error).toBeNull();
     expect((await ownerApi.auth.signInWithPassword({
       email: `claim-review-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await colleagueApi.auth.signInWithPassword({
+      email: `claim-review-colleague-${suffix}@example.test`, password,
     })).error).toBeNull();
 
     const claims = [];
@@ -3879,6 +3909,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
       ["clock_out", "2024-01-10T17:20:00Z"],
       ["clock_in", "2024-01-11T09:00:00.123456Z"],
       ["clock_out", "2024-01-11T17:00:00.654321Z"],
+      ["clock_out", "2024-01-13T17:00:00.234567Z"],
     ]) {
       const result = await workerApi.rpc("submit_attendance_offline_claim", {
         p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
@@ -3888,6 +3919,13 @@ test("managers reconcile offline claims with existing attendance and an auditabl
       expect(result.error).toBeNull();
       claims.push({ ...result.data[0], claimedAt });
     }
+    const colleagueClaim = await colleagueApi.rpc("submit_attendance_offline_claim", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
+      p_employee_id: colleagueEmployeeId, p_actor_id: users[4], p_request_id: randomUUID(),
+      p_event_type: "clock_out", p_claimed_at: "2024-01-13T17:00:00Z",
+    });
+    expect(colleagueClaim.error).toBeNull();
+    claims.push({ ...colleagueClaim.data[0], claimedAt: "2024-01-13T17:00:00Z", colleague: true });
     await signIn(page, `claim-review-foh-${suffix}@example.test`, password);
     await page.goto(`/attendance?venue=${venueId}`);
     const claimCard = (index) => page.locator(`#offline-claim-${claims[index].claim_id}`);
@@ -3964,10 +4002,31 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     const reopenCreated = createdClaim.getByRole("form", { name: "Reopen offline claim" });
     await reopenCreated.getByLabel("Reason for reopening this claim").fill("Recheck this history");
     await reopenCreated.getByRole("button", { name: "Reopen claim" }).click();
-    await expect(createdClaim).toContainText("This claim already created attendance");
+    await expect(createdClaim).toContainText("This claim was already linked to attendance");
     await expect(createdClaim.getByRole("form", { name: "Create attendance from offline claims" })).toHaveCount(0);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const blockedCompletion = claimCard(7).getByRole("form", { name: "Complete attendance with offline clock-out" });
+    await expect(blockedCompletion.locator(`option[value="${openSessionId}"]`)).toHaveCount(0);
+    await expect(blockedCompletion.locator(`option[value="${colleagueSessionId}"]`)).toContainText("open break");
+    await blockedCompletion.getByLabel("Matching open attendance session").selectOption(colleagueSessionId);
+    await blockedCompletion.getByLabel("Reason for completing attendance").fill("Attempt with open break");
+    await blockedCompletion.getByLabel("I checked the unverified clock-out time and reviewed recorded breaks.").check();
+    await blockedCompletion.getByRole("button", { name: "Complete attendance from claim" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Resolve the recorded open break" })).toBeVisible();
+    await expect(claimCard(7)).toContainText("Manager review required");
+    const completion = claimCard(6).getByRole("form", { name: "Complete attendance with offline clock-out" });
+    await completion.getByLabel("Matching open attendance session").selectOption(openSessionId);
+    await completion.getByLabel("Reason for completing attendance").fill("Confirmed clock-out and recorded break");
+    await completion.getByLabel("I checked the unverified clock-out time and reviewed recorded breaks.").check();
+    await completion.getByRole("button", { name: "Complete attendance from claim" }).click();
+    await expect(page.getByRole("status")).toContainText("Attendance completed with an unverified offline clock-out");
+    await expect(claimCard(6)).toContainText("Confirmed clock-out and recorded break");
     await page.goto(`/work-time?venue=${venueId}`);
-    await expect(page.getByText("Unverified offline times; breaks were not captured")).toBeVisible();
+    await expect(page.locator(`#attendance-session-${createdPair.data.session_id}`))
+      .toContainText("Unverified offline times; review recorded breaks");
+    await expect(page.locator(`#attendance-session-${openSessionId}`))
+      .toContainText("Unverified offline times; review recorded breaks");
+    await expect(page.locator(`#attendance-session-${openSessionId}`)).toContainText("0h 30m 0s");
     expect(await page.locator("body")
       .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
@@ -3981,6 +4040,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await expect(workerClaims).toContainText("Reopened for review");
     await expect(workerClaims).toContainText("Duplicate device claim");
     await expect(workerClaims).toContainText("Attendance created from unverified offline claims");
+    await expect(workerClaims).toContainText("Open attendance completed with an unverified offline clock-out");
     await expect(workerPage.getByRole("region", { name: "Attendance correction history" }))
       .toContainText("Confirmed start from the claim");
     expect(await workerPage.locator("body")
@@ -3988,7 +4048,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
 
     const received = await workerApi.from("attendance_offline_claims").select("id, claimed_at, received_at");
     expect(received.error).toBeNull();
-    for (const claim of claims) {
+    for (const claim of claims.filter((item) => !item.colleague)) {
       const saved = received.data.find((row) => row.id === claim.claim_id);
       expect(saved.received_at).toBe(claim.received_at);
       expect(Date.parse(saved.claimed_at)).toBe(Date.parse(claim.claimedAt));
