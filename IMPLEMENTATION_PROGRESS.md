@@ -2,13 +2,13 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **7**. In Progress: **12**.
+- Total stories: **87**. Verified Done: **8**. In Progress: **11**.
   Blocked: **1**. Not started (Backlog): **67**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-003,
-  BB-PEOPLE-001 and BB-PEOPLE-006.
+  BB-ORG-004, BB-PEOPLE-001 and BB-PEOPLE-006.
 - Production build, TypeScript, lint and 8 unit tests pass.
-  Isolated SQL suite: 159/159; authenticated HTTP regression: 1/1;
-  production browser scenarios: 3/3 (latest run 34.6s).
+  Isolated SQL suite: 184/184; authenticated HTTP regression: 1/1;
+  production browser scenarios: 4/4 (latest run 35.6s).
 - Redacted Gitleaks scan: current branch and pending tracked diff have no
   findings. The older local checkpoint-ref blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
@@ -16,8 +16,8 @@
 
 ## Current story
 
-- No story is mid-edit. BB-ORG-003 was completed and verified.
-- Next ready slice: **BB-ORG-004 — Delegate departmental management**.
+- No story is mid-edit. BB-ORG-004 was completed and verified.
+- Next ready slice: **BB-PEOPLE-002 — multiple roles and qualifications**.
 
 ## Completed authentication and setup
 
@@ -43,6 +43,22 @@ existing development and deployed databases still need the normal reviewed
 migration process.
 
 ## Completed and verified
+
+### BB-ORG-004 — Delegate departmental management (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ORG-004.1 Managers edit only assigned departments | Existing `can_manage_department` scoping on save/delete/publish; department-scoped roster filter; People shows linked staff from other departments as read-only. | pgTAP: FOH manager cannot add BOH shifts or publish BOH, and sees only FOH shifts; BOH manager likewise. Browser: each manager's filter lists only their department, a forced BOH URL falls back to FOH, BOH shift hidden from FOH manager, BOH manager cannot edit a FOH-primary profile. Pass. | Pass |
+| ORG-004.2 Owner has consolidated view | All-departments roster labels each shift card with its department. | pgTAP: owner and venue GM see shifts in both departments. Browser: owner's all-departments view shows the BOH shift labelled "Back of House" plus the FOH open shift and combined counts. Pass. | Pass |
+| ORG-004.3 Staff can belong to multiple departments | `20261101080000_multi_department_staff.sql`: `employee_departments` (backfilled; primary synced by trigger), owner/admin/GM `set_employee_departments` RPC, link-based `save_shift`, RLS for linked managers and own published shifts; shift FK relaxed to employee/business/venue. People membership form and roster linked staff. | pgTAP (25): primary auto-link, retained primary, venue/inactive/permission/cross-tenant denial, cross-department rostering and overlap detection, unlink keeps history. Browser: owner adds BOH, link stored, BOH manager rosters shared worker. Pass. | Pass |
+
+Files: migration, `multi_department.test.sql`, `src/app/actions.ts`, People,
+roster and `tests/e2e/auth.spec.mjs`. The shift-to-employee foreign key no
+longer requires the shift department to equal the primary department;
+`save_shift` enforces eligibility through the link table instead. Defects
+fixed during testing: the old composite FK blocked secondary-department shifts,
+and link-table RLS hid an employee's own secondary-department shifts. A
+security-definer helper now handles that visibility check.
 
 ### BB-ORG-003 — Create departments and job roles (Done)
 
@@ -134,7 +150,7 @@ not yet run remotely.
 - `npm test`: 8 passing unit tests; the HTTP test is explicitly skipped without
   disposable-project settings and passes when run against the isolated stack.
 - `npm run lint` passed after the current changes. The isolated database suite
-  passes 159/159 assertions and the two-tenant HTTP integration passes.
+  passes 184/184 assertions and the two-tenant HTTP integration passes.
 - The previous clean-checkout build and container liveness test passed. A
   concurrent build was terminated under resource pressure. Sequential compile,
   TypeScript and generate phases now pass, as do both production browser tests.
@@ -151,13 +167,12 @@ not yet run remotely.
 
 ## Next story
 
-- BB-ORG-004: managers edit only assigned departments, the owner has a
-  consolidated view, and staff can belong to multiple departments. The last
-  criterion needs an employee-department link table. It must keep
-  `employees.department_id` as the primary department, and `save_shift` must
-  accept any linked department. Then do BB-PEOPLE-002 (multiple roles and
-  qualifications) and BB-PEOPLE-003 (recurring availability).
-- Migrations through `20261101070000` are applied only to the isolated stack.
+- BB-PEOPLE-002 (multiple roles and qualifications): read its criteria in the
+  product backlog. Build on `job_roles`: add employee-to-role links, plus
+  qualification expiry if required. Enforce them in `save_shift`, where shift
+  roles are free text matched by name. Then do BB-PEOPLE-003 (recurring
+  availability), BB-ROSTER-001/002/007/008.
+- Migrations through `20261101080000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

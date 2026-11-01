@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { saveEmployeeAction } from "@/app/actions";
+import { saveEmployeeAction, setEmployeeDepartmentsAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
@@ -56,6 +56,32 @@ function EmployeeForm({ employee, departments, venueId }: { employee?: Employee;
   );
 }
 
+function DepartmentMembershipForm({ employee, departments, linkedIds, venueId }: {
+  employee: Employee; departments: Department[]; linkedIds: string[]; venueId: string;
+}) {
+  const choices = departments.filter((department) => department.active || linkedIds.includes(department.id));
+  return (
+    <form action={setEmployeeDepartmentsAction} aria-label={`Departments for ${employee.name}`} className="mt-4 rounded-lg border border-line p-4">
+      <input type="hidden" name="venue_id" value={venueId} />
+      <input type="hidden" name="employee_id" value={employee.id} />
+      <input type="hidden" name="department_ids" value={employee.department_id} />
+      <fieldset>
+        <legend className="text-sm font-semibold">Works in departments</legend>
+        <div className="mt-2 flex flex-wrap gap-4">
+          {choices.map((department) => (
+            <label key={department.id} className="flex items-center gap-2 text-sm">
+              <input type="checkbox" name="department_ids" value={department.id}
+                defaultChecked={linkedIds.includes(department.id)} disabled={department.id === employee.department_id} />
+              {department.name}{department.id === employee.department_id ? " (primary)" : ""}
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      <button type="submit" className="mt-3 rounded-lg border border-line px-4 py-2 text-sm font-semibold">Save departments</button>
+    </form>
+  );
+}
+
 export default async function PeoplePage({
   searchParams,
 }: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; department?: string; role?: string; q?: string; status?: string }> }) {
@@ -91,12 +117,22 @@ export default async function PeoplePage({
   let employeesQuery = workspace.supabase.from("employees")
     .select("id, name, email, department_id, role_title, employment_type, active")
     .eq("venue_id", venueId).order("name");
-  if (params.department) employeesQuery = employeesQuery.eq("department_id", params.department);
+  if (params.department) {
+    const members = await workspace.supabase.from("employee_departments").select("employee_id")
+      .eq("department_id", params.department);
+    employeesQuery = employeesQuery.in("id", members.data?.map((member) => member.employee_id) ?? []);
+  }
   if (params.role) employeesQuery = employeesQuery.eq("role_title", params.role);
   if (params.status && params.status !== "all") employeesQuery = employeesQuery.eq("active", params.status === "active");
   if (query) employeesQuery = employeesQuery.ilike("name", `%${query.replace(/[\\%_]/g, "\\$&")}%`);
   const employees = await employeesQuery;
-  const loadError = venues.error || departments.error || roles.error || employees.error;
+  const links = await workspace.supabase.from("employee_departments").select("employee_id, department_id")
+    .in("employee_id", employees.data?.map((employee) => employee.id) ?? []);
+  const linkedDepartments = (employeeId: string) =>
+    links.data?.filter((link) => link.employee_id === employeeId).map((link) => link.department_id) ?? [];
+  const departmentName = (id: string) => departments.data?.find((department) => department.id === id)?.name;
+  const canAssignDepartments = ["owner", "admin", "general_manager"].includes(workspace.membership.role);
+  const loadError = venues.error || departments.error || roles.error || employees.error || links.error;
   if (loadError) console.error("Could not load employee profiles.", loadError);
   return (
     <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -108,11 +144,14 @@ export default async function PeoplePage({
         Existing department associations are retained to preserve historical references.
       </p>
       {params.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-800">
-        {params.error === "permission" ? "You cannot manage that department." : params.error === "filter"
+        {params.error === "permission" ? "You cannot manage that department." : params.error === "inactive"
+          ? "Inactive departments cannot be newly assigned." : params.error === "filter"
           ? "That directory filter is unavailable. Choose a permitted venue, department and role."
           : "Could not save employee. Check the details and try again."}
       </p>}
-      {params.saved && <p role="status" className="mt-4 rounded-lg bg-soft-sea p-4 text-ocean">Employee profile saved.</p>}
+      {params.saved && <p role="status" className="mt-4 rounded-lg bg-soft-sea p-4 text-ocean">
+        {params.saved === "departments" ? "Department membership saved." : "Employee profile saved."}
+      </p>}
       {loadError ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-800">Could not load employee profiles. Try again.</p> : <>
         <form action="/people" aria-label="Directory filters" className="mt-6 grid gap-4 rounded-xl border border-line bg-white p-5 sm:grid-cols-2 xl:grid-cols-3">
           <label className="text-sm">Search team
@@ -154,7 +193,14 @@ export default async function PeoplePage({
           {employees.data?.map((employee) => <section key={employee.id}
             aria-label={`Employee ${employee.name}`} className="rounded-xl border border-line bg-white p-5">
             <h2 className="font-semibold">{employee.name} {employee.active ? "" : "(Archived)"}</h2>
-            <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
+            <p className="mt-1 text-sm text-muted">
+              Departments: {linkedDepartments(employee.id).map(departmentName).filter(Boolean).join(", ")}
+            </p>
+            {departments.data?.some((department) => department.id === employee.department_id) ? <>
+              <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
+              {canAssignDepartments && <DepartmentMembershipForm employee={employee} departments={departments.data ?? []}
+                linkedIds={linkedDepartments(employee.id)} venueId={venueId} />}
+            </> : <p className="mt-3 text-sm text-muted">Profile details are managed by this worker&apos;s primary department.</p>}
           </section>)}
           {employees.data?.length === 0 && <p>No employees match these filters.</p>}
         </div>

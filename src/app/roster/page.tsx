@@ -67,7 +67,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
-  const [{ data: departmentRows }, { data: employeeRows }, { data: jobRoleRows }] = await Promise.all([
+  const [{ data: departmentRows }, { data: employeeRows }, { data: jobRoleRows }, { data: linkRows }] = await Promise.all([
     workspace.supabase
       .from("departments")
       .select("id, name, active")
@@ -85,6 +85,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .eq("venue_id", workspace.venue.id)
       .eq("active", true)
       .order("name"),
+    workspace.supabase.from("employee_departments").select("employee_id, department_id"),
   ]);
   let departments = departmentRows ?? [];
   if (workspace.membership.department_id) {
@@ -113,7 +114,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     (shift) => !selectedDepartment || shift.department_id === selectedDepartment,
   );
   const employees = (employeeRows ?? []).filter(
-    (employee) => !selectedDepartment || employee.department_id === selectedDepartment,
+    (employee) =>
+      !selectedDepartment ||
+      (linkRows ?? []).some(
+        (link) => link.employee_id === employee.id && link.department_id === selectedDepartment,
+      ),
   );
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const canManage = isManager(workspace.membership.role);
@@ -407,6 +412,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                               <p className="mt-1 truncate text-[10px] text-muted">
                                 {shift.role_title}
                               </p>
+                              {!selectedDepartment && (
+                                <p className="truncate text-[10px] font-medium text-ocean">
+                                  {departments.find((department) => department.id === shift.department_id)?.name}
+                                </p>
+                              )}
                               <div className="mt-1 flex items-center justify-between gap-1">
                                 <span className={`text-[9px] font-semibold ${shift.is_published ? "text-teal-800" : "text-sky-800"}`}>
                                   {shift.is_published ? "Published" : "Draft"}

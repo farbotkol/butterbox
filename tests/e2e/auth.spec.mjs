@@ -544,3 +544,97 @@ test("departments and job roles can be created, deactivated and keep shift histo
         for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
       }
 });
+
+test("departmental managers keep separate rosters for shared staff with an owner overview", async ({ page, browser }) => {
+      const suffix = randomUUID();
+      const password = `${randomBytes(18).toString("base64url")}aA1!`;
+      const userIds = [];
+      const businessId = randomUUID();
+      const venueId = randomUUID();
+      const [fohId, bohId] = [randomUUID(), randomUUID()];
+      const contexts = [];
+      try {
+        for (const name of ["owner", "foh", "boh"]) {
+          const result = await admin.auth.admin.createUser({
+            email: `${name}-${suffix}@example.test`, password, email_confirm: true,
+          });
+          expect(result.error).toBeNull();
+          userIds.push(result.data.user.id);
+        }
+        expect((await admin.from("businesses").insert({ id: businessId, name: `Delegation ${suffix}` })).error).toBeNull();
+        expect((await admin.from("venues").insert({ id: venueId, business_id: businessId, name: "Harbour" })).error).toBeNull();
+        expect((await admin.from("departments").insert([
+          { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+          { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+        ])).error).toBeNull();
+        expect((await admin.from("business_memberships").insert([
+          { business_id: businessId, user_id: userIds[0], role: "owner" },
+          { business_id: businessId, user_id: userIds[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+          { business_id: businessId, user_id: userIds[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+        ])).error).toBeNull();
+        expect((await admin.from("employees").insert({
+          business_id: businessId, venue_id: venueId, department_id: fohId, name: "Shared worker", role_title: "Server",
+        })).error).toBeNull();
+
+        await signIn(page, `owner-${suffix}@example.test`, password);
+        await page.goto("/people");
+        const membership = page.getByRole("form", { name: "Departments for Shared worker" });
+        await expect(membership.getByRole("checkbox", { name: "Front of House (primary)" })).toBeChecked();
+        await expect(membership.getByRole("checkbox", { name: "Front of House (primary)" })).toBeDisabled();
+        await membership.getByRole("checkbox", { name: "Back of House" }).check();
+        await membership.getByRole("button", { name: "Save departments" }).click();
+        await expect(page.getByRole("status")).toHaveText("Department membership saved.");
+        const links = await admin.from("employee_departments").select("department_id").eq("business_id", businessId);
+        expect(links.error).toBeNull();
+        expect(links.data.map((link) => link.department_id).sort()).toEqual([fohId, bohId].sort());
+        await expect(page.getByRole("region", { name: "Employee Shared worker" }))
+          .toContainText(/Departments: (Back of House, Front of House|Front of House, Back of House)/);
+
+        const managerPage = async (name) => {
+          const context = await browser.newContext({ baseURL: appUrl });
+          contexts.push(context);
+          const managerTab = await context.newPage();
+          await signIn(managerTab, `${name}-${suffix}@example.test`, password);
+          await expect(managerTab.getByRole("heading", { name: "Butterbox AI Rostering" })).toBeVisible();
+          return managerTab;
+        };
+
+        const boh = await managerPage("boh");
+        await boh.goto("/roster");
+        expect(await boh.locator("#department-filter option").allTextContents()).toEqual(["Back of House"]);
+        await boh.locator('input[name="role_title"]').fill("Prep");
+        await boh.locator('select[name="employee_id"]').selectOption({ label: "Shared worker · Server" });
+        await boh.getByRole("button", { name: "Save draft shift" }).click();
+        await expect(boh.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+        await boh.goto("/people");
+        const sharedForBoh = boh.getByRole("region", { name: "Employee Shared worker" });
+        await expect(sharedForBoh).toContainText("managed by this worker's primary department");
+        await expect(sharedForBoh.getByRole("button", { name: "Save employee" })).toHaveCount(0);
+        await expect(boh.getByRole("form", { name: "Departments for Shared worker" })).toHaveCount(0);
+
+        const foh = await managerPage("foh");
+        await foh.goto(`/roster?department=${bohId}`);
+        expect(await foh.locator("#department-filter option").allTextContents()).toEqual(["Front of House"]);
+        await foh.locator('input[name="role_title"]').fill("Host");
+        await foh.getByRole("button", { name: "Save draft shift" }).click();
+        await expect(foh.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+        await expect(foh.locator("article", { hasText: "Prep" })).toHaveCount(0);
+        await expect(foh.getByText("Host", { exact: true })).toBeVisible();
+
+        const stored = await admin.from("shifts").select("department_id, role_title, employee_id").eq("business_id", businessId);
+        expect(stored.error).toBeNull();
+        expect(stored.data.map((shift) => `${shift.department_id === bohId ? "BOH" : "FOH"}:${shift.role_title}`).sort())
+          .toEqual(["BOH:Prep", "FOH:Host"]);
+
+        await page.goto("/roster?department=all");
+        await expect(page.locator("#department-filter")).toHaveValue("all");
+        await expect(page.locator("article", { hasText: "Prep" })).toContainText("Back of House");
+        await expect(page.getByText("Host", { exact: true })).toBeVisible();
+        await expect(page.getByText(/1 assigned\s*·\s*1 open/)).toBeVisible();
+      } finally {
+        for (const context of contexts) if (browser.isConnected()) await context.close();
+        expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+        expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+        for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+      }
+});

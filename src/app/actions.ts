@@ -205,6 +205,30 @@ export async function saveJobRoleAction(formData: FormData) {
   redirect(`${destination}&saved=role`);
 }
 
+export async function setEmployeeDepartmentsAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
+  const destination = `/people?venue=${encodeURIComponent(venueId)}`;
+  const departmentIds = formData.getAll("department_ids")
+    .filter((value): value is string => typeof value === "string" && /^[0-9a-f-]{36}$/i.test(value))
+    .slice(0, 50);
+
+  const { error } = await workspace.supabase.rpc("set_employee_departments", {
+    p_business_id: workspace.business.id,
+    p_employee_id: text(formData, "employee_id", 36),
+    p_department_ids: departmentIds,
+  });
+  if (error) {
+    console.error("Department membership save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Department is inactive" ? "inactive" : "save";
+    redirect(`${destination}&error=${code}`);
+  }
+  redirect(`${destination}&saved=departments`);
+}
+
 export async function saveBusinessDraftAction(formData: FormData) {
   const workspace = await getWorkspace();
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
