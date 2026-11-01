@@ -1,38 +1,90 @@
 # Implementation progress
 
+## Execution summary
+
+- Total stories: **87**. Verified Done: **6**. In Progress: **13**.
+  Blocked: **1**. Not started (Backlog): **67**.
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001,
+  BB-PEOPLE-001 and BB-PEOPLE-006.
+- Final standard production build, TypeScript, lint and 8 unit tests pass.
+  Isolated SQL suite: 128/128; authenticated HTTP regression: 1/1;
+  production browser scenarios: 2/2 (latest run 20.8s).
+- Redacted Gitleaks scan: current branch and pending tracked diff have no
+  findings. The older local checkpoint-ref blocker described below remains
+  unresolved; no credential values or checkpoint refs were modified.
+- No failed test remains. Temporary app servers are stopped by the runner.
+
 ## Current story
 
-- **BB-FOUND-002 — Register and sign in:** authentication and recovery fixes
-  are implemented; a fresh production build and live browser acceptance run
-  are in progress against the isolated project.
-- **BB-ORG-001 — Create business and first venue:** resumable setup and venue
-  address collection are implemented; database tests pass and browser
-  acceptance is in progress.
+- No story is mid-edit. This execution completed authentication, resumable
+  setup, permission assignment, employee profiles and the filtered directory.
+- Next ready slice: **BB-ORG-003 — Create departments and job roles**.
+  Implement custom create/deactivate workflows and preserve historical shift
+  references before attempting multiple employee roles.
 
-## Stories in progress
+## Completed authentication and setup
 
-### BB-FOUND-002 — Register and sign in (In Progress)
-
-| Criterion | Implementation evidence | Test and actual result | Status |
-| --- | --- | --- | --- |
-| 002.1 Verified accounts can authenticate | Signup verification uses the configured callback; the callback exchanges the confirmation code. | A live browser run exposed the original wrong redirect and a second run exposed an internal-host redirect; both defects have been fixed and a fresh run is pending. | In Progress |
-| 002.2 Wrong credentials have non-enumerating errors | Sign-in uses one generic error; password-reset requests also use a generic confirmation. | The browser test compares unknown, unverified and wrong-password responses; the complete run is pending. | In Progress |
-| 002.3 Session expiry and logout work across tabs | Session-end notification and visibility refresh; sign-out errors are shown rather than reported as success. | The browser scenario covers logout in another tab and a revoked, expired session on refocus; the complete run is pending. | In Progress |
-| 002.4 Password reset completes | Recovery uses the callback, changes the password and signs out before showing completion. | A real Mailpit recovery-link and password-change scenario is implemented; the complete run is pending. | In Progress |
-
-### BB-ORG-001 — Create business and first venue (In Progress)
+### BB-FOUND-002 — Register and sign in (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| ORG-001.1 Setup collects business name, venue name, address and timezone | `src/app/setup/page.tsx`, `src/app/actions.ts` and `supabase/migrations/20261101040000_resumable_business_setup.sql`. | Isolated pgTAP verifies stored name, address and timezone, and rejects missing addresses and invalid timezones; browser verification is pending. | In Progress |
-| ORG-001.2 Ownership is established securely | The setup RPC checks the authenticated user, serializes initial setup and creates the owner membership atomically. | Isolated pgTAP verifies ownership, anonymous denial and repeat-setup denial; authenticated browser verification is pending. | In Progress |
-| ORG-001.3 Incomplete setup can be resumed | A user-scoped, RLS-protected setup draft persists partial form values and is removed when setup succeeds. | Isolated pgTAP verifies save, update, user isolation, failed-setup retention and completed-setup cleanup. A separate-browser-context resume test is pending. | In Progress |
+| 002.1 Verified accounts can authenticate | Signup uses the configured callback and exchanges confirmation codes. | Live Chromium with isolated Supabase/Mailpit verifies signup, emailed confirmation, login and redirect to setup. Pass. | Pass |
+| 002.2 Wrong credentials have non-enumerating errors | Sign-in uses one generic error; reset uses generic confirmation. | Live browser compares unknown, unverified and wrong-password errors; unknown and registered reset responses match. Pass. | Pass |
+| 002.3 Session expiry and logout work across tabs | Session-end notification and visibility refresh; sign-out failures are explicit. | Live browser checks cross-tab logout and a revoked expired session in two tabs. Pass. Expected invalid-refresh-token logs occur during expiry. | Pass |
+| 002.4 Password reset completes | Recovery exchanges callback code, updates password, then signs out. | Real Mailpit link, password update, old-password denial and new-password login all pass. | Pass |
+
+### BB-ORG-001 — Create business and first venue (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ORG-001.1 Setup collects business name, venue name, address and timezone | Setup UI/actions and `20261101040000_resumable_business_setup.sql`. | Isolated pgTAP verifies storage/validation; live browser submits all four fields and verifies stored address/timezone. Pass. | Pass |
+| ORG-001.2 Ownership is established securely | Authenticated, serialized, atomic setup RPC. | pgTAP checks ownership, anonymous/repeated setup denial; live browser verifies owner membership. Pass. | Pass |
+| ORG-001.3 Incomplete setup can be resumed | User-scoped RLS-protected persistent setup draft. | pgTAP checks isolation and cleanup; browser resumes partial setup in a separate context, including sample-data preference. Pass. | Pass |
 
 The setup migration has been applied only to the disposable test database;
 existing development and deployed databases still need the normal reviewed
 migration process.
 
 ## Completed and verified
+
+### BB-PEOPLE-006 — View team directory (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PEOPLE-006.1 Search and filters work | People GET form, name search, venue/department/role/status filters; selections checked against accessible records. | Production browser searches case-insensitively and combines role/department/archive filters; active no-match and venue switching pass. | Pass |
+| PEOPLE-006.2 Personal data restricted by role | Scoped database reads and manager-only page/action/navigation; no client-only authorization. | Browser verifies GM/FOH/BOH see only permitted worker profiles/venue options, rejects forbidden venue, and denies employee page access. Existing 50 permission pgTAP assertions and two-tenant HTTP regression pass. | Pass |
+| PEOPLE-006.3 Inactive staff cannot be newly rostered by default | Archive flag, roster active filter and save_shift eligibility check. | SQL archive/new-shift denial and live browser archived-worker exclusion pass. Historical shift remains. | Pass |
+
+Files: `src/app/people/page.tsx`, save action, extended browser test and README.
+Latest standard `npm run build` passes, including TypeScript. All 8 unit tests,
+lint, 128 SQL assertions, authenticated two-tenant HTTP regression and both
+production browser scenarios pass (21.9s).
+
+### BB-PEOPLE-001 — Maintain employee profiles (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PEOPLE-001.1 Name, preferred contact, employment type and status maintained | `20261101060000_employee_profiles.sql`, `src/app/people/page.tsx`, save action. | 18 new pgTAP assertions verify create/edit/archive/reactivate and normalized contact; live browser creates/edits/archives and verifies stored fields. Pass. | Pass |
+| PEOPLE-001.2 Validation and tenant access enforced | Scoped RPC, existing RLS and immutable tenant association. | pgTAP rejects blank names, malformed email, invalid employment type, other tenant/department, employee and anonymous writes. Browser denies employee page/navigation. Pass. | Pass |
+| PEOPLE-001.3 Archived staff history persists | Archive updates active flag only; no delete RPC, historical department preserved. | pgTAP and live browser retain original shift after archive; new assignment is denied in SQL and archived worker absent from roster dropdown. Pass. | Pass |
+
+Profile migration applied only to disposable database. Added employee SQL test,
+People page/navigation and server action; extended browser scenario. Latest
+checks: lint and 8 unit tests pass; 128 SQL assertions pass; production
+compile/typecheck/generate pass; both live browser scenarios pass (21.1s).
+
+### BB-FOUND-004 — Business and venue permissions (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| 004.1 Permissions scoped to business, venue and department | `20261101050000_scoped_membership_permissions.sql`, permission assignment RPC and `src/app/settings/permissions/page.tsx`. | 50 permission pgTAP assertions pass across two businesses/three venues; live browser assigns owner, GM, FOH, BOH and employee and verifies stored scopes and visible departments. | Pass |
+| 004.2 Server denies unauthorized actions | Scoped RLS/RPCs, last-owner safeguard, owner-only assignment action/page. | pgTAP covers direct writes, self-promotion, wrong venue/department, outside business and anonymous denial. Browser denies nonowner page access. Pass. | Pass |
+| 004.3 UI hides forbidden controls without relying on hiding for security | Role-gated navigation and roster controls; explicit filter submit. | Live browser verifies permission link only for owners and no employee save/publish controls; manager departments remain scoped. Server denial independently tested. Pass. | Pass |
+
+Files changed for this slice: scoped migration and SQL test, workspace membership
+selection, permissions page, actions, navigation/app shell, roster filter and
+`tests/e2e/auth.spec.mjs`. Production compile, explicit TypeScript check and
+generate phases pass. Both browser scenarios pass (23.3s).
 
 ### BB-FOUND-003 — Tenant isolation (Done)
 
@@ -67,13 +119,13 @@ not yet run remotely.
 - Supabase CLI 2.122.0 runs through `npx` in a separate temporary project on
   ports 55421/55422, using copied migrations. The existing Butterbox stack was
   not modified. SQL fixtures are rolled back; HTTP fixtures are cleaned up.
-- `npm test`: 7 passing unit tests; the HTTP test is explicitly skipped without
+- `npm test`: 8 passing unit tests; the HTTP test is explicitly skipped without
   disposable-project settings and passes when run against the isolated stack.
 - `npm run lint` passed after the current changes. The isolated database suite
-  passes 60/60 assertions and the two-tenant HTTP integration passes.
+  passes 128/128 assertions and the two-tenant HTTP integration passes.
 - The previous clean-checkout build and container liveness test passed. A
-  concurrent build was terminated under resource pressure; a fresh sequential
-  build and browser run are in progress, so they are not yet claimed as passing.
+  concurrent build was terminated under resource pressure. Sequential compile,
+  TypeScript and generate phases now pass, as do both production browser tests.
 - The test helper rejects missing disposable confirmation and non-local URLs.
 - `npm audit --omit=dev` reported no production dependency vulnerabilities;
   `npm ci` reported 16 moderate development-dependency advisories.
@@ -87,6 +139,18 @@ not yet run remotely.
 
 ## Next story
 
-- Finish the combined authentication and resumable-setup browser acceptance
-  test, rerun affected checks, and update the backlog only if every criterion
-  is verified. Next, implement BB-FOUND-004 business and venue permissions.
+- BB-ORG-003: read its three detailed acceptance criteria in the product backlog.
+  Existing FOH/BOH setup seeding passes, but custom CRUD/deactivation is absent.
+  Add active flags and safe owner/manager management RPCs; retain department
+  IDs/job-role historical references. Add SQL denial/history tests and a live
+  browser management scenario. Do not mark Done before runtime validation.
+- Migrations through `20261101060000` are applied only to the isolated stack.
+  The pre-existing Butterbox development stack and production were not changed.
+- Isolated workdir:
+  `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.
+  Next invocation can start its Supabase project again with the pinned CLI.
+  Browser helpers create/remove fixtures and stop their app server automatically.
+- Known environment workaround: sequential `--split-build` with
+  `BUTTERBOX_TEST_LOW_MEMORY=yes`; use the existing session browser library
+  directory in `LD_LIBRARY_PATH` if Chromium reports missing system libraries.
+- No background execution or scheduling is promised after this session ends.

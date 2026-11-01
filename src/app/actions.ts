@@ -97,6 +97,56 @@ export async function signOutAction() {
   redirect("/login?message=signed-out");
 }
 
+export async function assignMemberRoleAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  if (workspace.membership.role !== "owner") redirect("/?error=permission");
+
+  const { error } = await workspace.supabase.rpc("assign_business_member_role", {
+    p_business_id: workspace.business.id,
+    p_user_id: text(formData, "user_id", 36),
+    p_role: text(formData, "role", 32),
+    p_venue_id: text(formData, "venue_id", 36) || null,
+    p_department_id: text(formData, "department_id", 36) || null,
+  });
+  if (error) {
+    console.error("Role assignment failed.", { code: error.code, message: error.message });
+    const code = error.message === "A business must retain an owner" ? "last-owner" : "scope";
+    redirect(`/settings/permissions?error=${code}`);
+  }
+  redirect("/settings/permissions?saved=1");
+}
+
+export async function saveEmployeeAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const venueId = text(formData, "venue_id", 36);
+  const destination = `/people?venue=${encodeURIComponent(venueId || workspace.venue.id)}`;
+
+  const active = formData.get("active");
+  if (active !== "true" && active !== "false") {
+    console.error("Invalid employee status submitted.");
+    redirect(`${destination}&error=save`);
+  }
+  const { error } = await workspace.supabase.rpc("save_employee_profile", {
+    p_business_id: workspace.business.id,
+    p_department_id: text(formData, "department_id", 36),
+    p_employee_id: text(formData, "employee_id", 36) || null,
+    p_name: text(formData, "name", 100),
+    p_email: text(formData, "email", 254),
+    p_role_title: text(formData, "role_title", 80),
+    p_employment_type: text(formData, "employment_type", 16),
+    p_active: active === "true",
+  });
+  if (error) {
+    console.error("Employee profile save failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "save"}`);
+  }
+  redirect(`${destination}&saved=1`);
+}
+
 export async function saveBusinessDraftAction(formData: FormData) {
   const workspace = await getWorkspace();
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");

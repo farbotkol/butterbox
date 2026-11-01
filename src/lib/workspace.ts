@@ -12,6 +12,7 @@ export {
 export type Membership = {
   business_id: string;
   role: string;
+  venue_id: string | null;
   department_id: string | null;
 };
 
@@ -32,7 +33,7 @@ export async function getWorkspace() {
 
   const { data: memberships, error: membershipError } = await supabase
     .from("business_memberships")
-    .select("business_id, role, department_id")
+    .select("business_id, role, venue_id, department_id")
     .eq("user_id", user.id)
     .limit(1);
 

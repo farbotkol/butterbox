@@ -172,6 +172,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               </option>
             ))}
           </select>
+          <button type="submit" className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
+            Apply filter
+          </button>
         </form>
         <div className="flex items-center gap-2 text-sm text-muted">
           <UsersRound size={17} aria-hidden="true" />

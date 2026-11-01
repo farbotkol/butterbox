@@ -29,7 +29,7 @@ export function AppShell({
           <p className="truncate text-sm font-semibold text-ink">{businessName}</p>
           <p className="mt-1 truncate text-xs text-muted">{venueName}</p>
         </div>
-        <MainNavigation />
+        <MainNavigation role={role} />
         <div className="mt-auto hidden space-y-1 px-3 pb-5 md:block">
           <a
             href="mailto:support@butterbox.app"

@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, LayoutDashboard } from "lucide-react";
+import { CalendarDays, LayoutDashboard, ShieldCheck, UsersRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -9,12 +9,15 @@ const links = [
   { href: "/roster", label: "Rostering", icon: CalendarDays },
 ];
 
-export function MainNavigation() {
+export function MainNavigation({ role }: { role: string }) {
   const pathname = usePathname();
 
   return (
     <nav aria-label="Main navigation" className="flex gap-2 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:px-3 md:pb-0">
-      {links.map(({ href, label, icon: Icon }) => {
+      {[...links,
+        ...(["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"].includes(role)
+          ? [{ href: "/people", label: "People", icon: UsersRound }] : []),
+        ...(role === "owner" ? [{ href: "/settings/permissions", label: "Permissions", icon: ShieldCheck }] : [])].map(({ href, label, icon: Icon }) => {
         const active = href === "/" ? pathname === href : pathname.startsWith(href);
         return (
           <Link

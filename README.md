@@ -28,6 +28,21 @@ After confirming an account, first-time owners can save partial business and
 venue details and resume setup later. The first venue requires an address and
 timezone; completing setup creates the owner membership atomically.
 
+Owners can open **Permissions** to assign roles to existing business members.
+Owners are business-wide; general managers have a venue; FOH/BOH managers and
+employees have a venue and department. A business must retain at least one
+owner. Joining new members by invitation is a separate, not-yet-delivered
+workflow. Apply the scoped-membership migration before using this screen.
+
+Managers can open **People** to add and edit employee names, preferred contact
+emails, job titles and employment types. Archive rather than delete former
+staff: the profile and existing shifts remain, while new assignment is blocked.
+Profile department associations cannot be moved through this form because
+existing shifts retain their original department references.
+The directory searches names and filters by permitted venue, department,
+job title and active/archive status. Select **All roles** and **All departments**
+when switching venues if the previous filters are not available there.
+
 ```sh
 npm run dev
 npm test
@@ -57,8 +72,8 @@ one. Without test settings, the normal `npm test` run explicitly skips this
 integration test. CI runs both the database suite and the HTTP test on a fresh
 local Supabase project.
 
-To exercise verification, sign-in, session expiry, cross-tab logout and
-password recovery in a real browser, install Playwright's Chromium and its
+To exercise authentication/recovery, resumable setup, permission assignment,
+employee profiles and directory filters in a real browser, install Chromium and its
 platform dependencies, then run against a **disposable** local project:
 
 ```sh
