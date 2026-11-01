@@ -57,7 +57,7 @@ function weekInput(date: string, hour: number) {
 export default async function RosterPage({ searchParams }: RosterPageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
 

@@ -35,7 +35,7 @@ export default async function SignupPage({ searchParams }: SignupPageProps) {
       {params.error && (
         <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {params.error === "setup"
-            ? "Add the Supabase settings in .env.local before creating an account."
+          ? "Add the Supabase settings and application site URL in .env.local before creating an account."
             : "We couldn't create your account. Use a valid email and a password of at least 10 characters."}
         </p>
       )}

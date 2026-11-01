@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { signInAction } from "@/app/actions";
 import { AuthLayout } from "@/components/auth-layout";
 import { PasswordInput } from "@/components/password-input";
+import { AnnounceSessionEnd } from "@/components/session-sync";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
@@ -13,22 +14,27 @@ type LoginPageProps = {
 const errors: Record<string, string> = {
   credentials: "We couldn't sign you in. Check your email and password.",
   setup: "Add the Supabase settings in .env.local before signing in.",
+  signout: "We couldn't sign you out. Your session may still be active; return to your workspace and try again.",
 };
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const configured = isSupabaseConfigured();
+  const params = await searchParams;
   if (configured) {
     const supabase = await createClient();
     const {
       data: { user },
     } = await supabase.auth.getUser();
-    if (user) redirect("/");
+    if (user && params.error !== "signout") redirect("/");
   }
-
-  const params = await searchParams;
 
   return (
     <AuthLayout>
+      {(params.message === "signed-out" ||
+        params.message === "password-updated" ||
+        params.message === "session-ended") && (
+        <AnnounceSessionEnd />
+      )}
       <div className="mb-7 flex h-11 w-11 items-center justify-center rounded-xl bg-soft-sea text-ocean">
         <LockKeyhole size={20} aria-hidden="true" />
       </div>
@@ -41,6 +47,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {errors[params.error] ?? "Something went wrong. Please try again."}
         </p>
+      )}
+      {params.error === "signout" && (
+        <Link href="/" className="mt-3 inline-block text-sm font-semibold text-ocean underline-offset-4 hover:underline">
+          Return to workspace
+        </Link>
       )}
       {params.message === "confirm" && (
         <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
@@ -55,6 +66,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       {params.message === "password-updated" && (
         <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
           Your password has been updated. Sign in with your new password.
+        </p>
+      )}
+      {params.message === "signed-out" && (
+        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+          You&apos;ve signed out.
         </p>
       )}
       {!configured && (

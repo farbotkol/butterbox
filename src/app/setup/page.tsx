@@ -1,20 +1,29 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { createBusinessAction } from "@/app/actions";
+import { createBusinessAction, saveBusinessDraftAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
 type SetupPageProps = {
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string }>;
 };
 
 export default async function SetupPage({ searchParams }: SetupPageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "ready") redirect("/");
   const params = await searchParams;
+  const draftResult =
+    workspace.status === "needs_setup"
+      ? await workspace.supabase
+          .from("business_setup_drafts")
+          .select("business_name, venue_name, venue_address, timezone, include_sample_data")
+          .eq("user_id", workspace.user.id)
+          .maybeSingle()
+      : null;
+  const draft = draftResult?.data;
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-cloud px-5 py-12">
@@ -36,7 +45,14 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
             {params.error === "create"
               ? "We couldn't create your workspace. Check the venue details and try again."
-              : "Business name, venue name and timezone are required."}
+              : params.error === "draft"
+                ? "We couldn't save your setup progress. Please try again."
+                : "Business name, venue name, address and timezone are required."}
+          </p>
+        )}
+        {params.saved && (
+          <p role="status" className="mt-5 rounded-xl bg-soft-sea px-4 py-3 text-sm text-ocean">
+            Setup progress saved. You can return to it later.
           </p>
         )}
         {workspace.status === "error" && (
@@ -45,11 +61,17 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
             try again.
           </p>
         )}
+        {draftResult?.error && (
+          <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
+            We couldn&apos;t load your saved setup progress. Please try again.
+          </p>
+        )}
         <form action={createBusinessAction} className="mt-7 space-y-5">
           <label className="block text-sm font-medium">
             Business name
             <input
               className="mt-2 block w-full rounded-xl border border-line px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
+              defaultValue={draft?.business_name ?? ""}
               maxLength={100}
               name="business_name"
               placeholder="The Corner Café"
@@ -60,6 +82,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
             First venue
             <input
               className="mt-2 block w-full rounded-xl border border-line px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
+              defaultValue={draft?.venue_name ?? ""}
               maxLength={100}
               name="venue_name"
               placeholder="Surry Hills"
@@ -67,10 +90,22 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
             />
           </label>
           <label className="block text-sm font-medium">
+            Venue address
+            <input
+              autoComplete="street-address"
+              className="mt-2 block w-full rounded-xl border border-line px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
+              defaultValue={draft?.venue_address ?? ""}
+              maxLength={200}
+              name="venue_address"
+              placeholder="10 Example Street, Sydney NSW"
+              required
+            />
+          </label>
+          <label className="block text-sm font-medium">
             Venue timezone
             <select
               className="mt-2 block w-full rounded-xl border border-line bg-white px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
-              defaultValue="Australia/Sydney"
+              defaultValue={draft?.timezone ?? "Australia/Sydney"}
               name="timezone"
               required
             >
@@ -87,7 +122,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-cloud p-4">
             <input
               className="mt-1 accent-ocean"
-              defaultChecked
+              defaultChecked={draft?.include_sample_data ?? true}
               name="sample_data"
               type="checkbox"
             />
@@ -99,12 +134,22 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
               </span>
             </span>
           </label>
-          <button
-            className="w-full rounded-xl bg-ocean px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-ocean/90"
-            type="submit"
-          >
-            Create workspace
-          </button>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <button
+              className="w-full rounded-xl bg-ocean px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-ocean/90"
+              type="submit"
+            >
+              Create workspace
+            </button>
+            <button
+              className="w-full rounded-xl border border-line px-5 py-3.5 text-sm font-semibold text-ocean transition hover:bg-cloud"
+              formAction={saveBusinessDraftAction}
+              formNoValidate
+              type="submit"
+            >
+              Save progress
+            </button>
+          </div>
         </form>
       </section>
     </main>

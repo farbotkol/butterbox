@@ -1,7 +1,7 @@
 "use server";
 
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
+import { authCallbackUrl } from "@/lib/auth-urls";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
@@ -35,8 +35,15 @@ export async function signUpAction(formData: FormData) {
   const password = secret(formData, "password", 128);
   if (!email || password.length < 10) redirect("/signup?error=signup");
 
+  const emailRedirectTo = authCallbackUrl(process.env.NEXT_PUBLIC_SITE_URL, "/setup");
+  if (!emailRedirectTo) redirect("/signup?error=setup");
+
   const supabase = await createClient();
-  const { data, error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo },
+  });
   if (error) redirect("/signup?error=signup");
   if (!data.session) redirect("/login?message=confirm");
   redirect("/setup");
@@ -48,15 +55,13 @@ export async function resetPasswordAction(formData: FormData) {
   const email = text(formData, "email", 254).toLowerCase();
   if (!email) redirect("/forgot-password?error=reset");
 
-  const origin =
-    process.env.NEXT_PUBLIC_SITE_URL || (await headers()).get("origin");
-  if (!origin) redirect("/forgot-password?error=setup");
+  const redirectTo = authCallbackUrl(
+    process.env.NEXT_PUBLIC_SITE_URL,
+    "/reset-password",
+  );
+  if (!redirectTo) redirect("/forgot-password?error=setup");
 
   const supabase = await createClient();
-  const redirectTo = new URL(
-    "/auth/callback?next=/reset-password",
-    origin,
-  ).toString();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo,
   });
@@ -78,35 +83,59 @@ export async function updatePasswordAction(formData: FormData) {
 
   const { error } = await supabase.auth.updateUser({ password });
   if (error) redirect("/reset-password?error=update");
+
+  const { error: signOutError } = await supabase.auth.signOut();
+  if (signOutError) redirect("/reset-password?error=signout");
   redirect("/login?message=password-updated");
 }
 
 export async function signOutAction() {
-  if (isSupabaseConfigured()) {
-    const supabase = await createClient();
-    await supabase.auth.signOut();
-  }
-  redirect("/login");
+  if (!isSupabaseConfigured()) redirect("/login?error=setup");
+  const supabase = await createClient();
+  const { error } = await supabase.auth.signOut();
+  if (error) redirect("/login?error=signout");
+  redirect("/login?message=signed-out");
+}
+
+export async function saveBusinessDraftAction(formData: FormData) {
+  const workspace = await getWorkspace();
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "needs_setup") redirect("/");
+
+  const timezone = text(formData, "timezone", 64);
+  if (!timezone) redirect("/setup?error=draft");
+
+  const { error } = await workspace.supabase.from("business_setup_drafts").upsert({
+    user_id: workspace.user.id,
+    business_name: text(formData, "business_name", 100),
+    venue_name: text(formData, "venue_name", 100),
+    venue_address: text(formData, "venue_address", 200),
+    timezone,
+    include_sample_data: formData.get("sample_data") === "on",
+  });
+  if (error) redirect("/setup?error=draft");
+  redirect("/setup?saved=1");
 }
 
 export async function createBusinessAction(formData: FormData) {
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
 
   const businessName = text(formData, "business_name", 100);
   const venueName = text(formData, "venue_name", 100);
+  const venueAddress = text(formData, "venue_address", 200);
   const timezone = text(formData, "timezone", 64);
   const includeSampleData = formData.get("sample_data") === "on";
 
-  if (!businessName || !venueName || !timezone) {
+  if (!businessName || !venueName || !venueAddress || !timezone) {
     redirect("/setup?error=required");
   }
 
-  const supabase = await createClient();
-  const { error } = await supabase.rpc("create_business", {
+  const { error } = await workspace.supabase.rpc("complete_initial_setup", {
     p_business_name: businessName,
     p_venue_name: venueName,
+    p_venue_address: venueAddress,
     p_timezone: timezone,
     p_include_sample_data: includeSampleData,
   });
@@ -116,7 +145,7 @@ export async function createBusinessAction(formData: FormData) {
 
 export async function saveShiftAction(formData: FormData) {
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
 
   const week = text(formData, "week", 10);
@@ -164,7 +193,7 @@ export async function saveShiftAction(formData: FormData) {
 
 export async function deleteShiftAction(formData: FormData) {
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
 
   const shiftId = text(formData, "shift_id", 36);
@@ -181,7 +210,7 @@ export async function deleteShiftAction(formData: FormData) {
 
 export async function publishRosterAction(formData: FormData) {
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
 
   const departmentId = text(formData, "department_id", 36);

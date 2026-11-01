@@ -92,15 +92,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (!isSupabaseConfigured()) return <SetupNotice />;
 
   const workspace = await getWorkspace();
-  if (workspace.status === "anonymous") redirect("/login");
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
     return (
       <main className="mx-auto mt-20 max-w-lg rounded-2xl bg-white p-8">
         <h1 className="text-xl font-semibold">Workspace unavailable</h1>
         <p className="mt-3 text-sm leading-6 text-muted">
-          Check that the database migration has been applied and that your
-          account has a business membership.
+          We couldn&apos;t verify your session or load your workspace. Check
+          your connection and account settings, then try again.
         </p>
       </main>
     );
@@ -184,7 +184,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             Open weekly roster <ArrowUpRight size={17} aria-hidden="true" />
           </Link>
         </div>
-      </div>
+      </section>
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

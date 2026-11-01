@@ -25,6 +25,8 @@ export default async function ResetPasswordPage({ searchParams }: ResetPasswordP
         <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {params.error === "password"
             ? "Your password must be at least 10 characters."
+            : params.error === "signout"
+              ? "Your password changed, but we couldn't sign you out. Please sign out before continuing."
             : "We couldn't update your password. Please try again."}
         </p>
       )}

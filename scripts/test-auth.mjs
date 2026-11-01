@@ -1,0 +1,167 @@
+import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { cp } from "node:fs/promises";
+import { createServer } from "node:net";
+import { resolve } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+
+if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
+  throw new Error(
+    "Set BUTTERBOX_TEST_DISPOSABLE=yes only for a disposable local Supabase project.",
+  );
+}
+
+const workdir = resolve(process.argv[2] ?? ".");
+const useDevServer = process.argv[3] === "--dev";
+const useSplitBuild = process.argv[3] === "--split-build";
+if (process.argv.length > 4 || (process.argv[3] && !useDevServer && !useSplitBuild)) {
+  throw new Error("Usage: node scripts/test-auth.mjs <disposable-workdir> [--dev|--split-build]");
+}
+
+const status = spawnSync(
+  "npx",
+  ["--yes", "supabase@2.122.0", "status", "--workdir", workdir, "-o", "json"],
+  { encoding: "utf8" },
+);
+if (status.error) throw status.error;
+if (status.status !== 0) {
+  throw new Error(
+    `Could not read local Supabase status (exit ${status.status}); check Docker and the local project.`,
+  );
+}
+
+const settings = JSON.parse(status.stdout);
+if (!settings.API_URL || !settings.MAILPIT_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
+  throw new Error("Local Supabase status is missing API, Mailpit or test authentication settings.");
+}
+
+function localOrigin(value) {
+  const parsed = new URL(value);
+  if (
+    parsed.protocol !== "http:" ||
+    !["127.0.0.1", "localhost", "[::1]"].includes(parsed.hostname) ||
+    parsed.username || parsed.password || parsed.pathname !== "/" ||
+    parsed.search || parsed.hash
+  ) {
+    throw new Error("Authentication tests only permit local HTTP origins.");
+  }
+  return parsed;
+}
+
+const appUrl = localOrigin(process.env.BUTTERBOX_TEST_APP_URL ?? "http://127.0.0.1:3117");
+localOrigin(settings.API_URL);
+localOrigin(settings.MAILPIT_URL);
+const host = appUrl.hostname === "[::1]" ? "::1" : appUrl.hostname;
+const port = Number(appUrl.port || 80);
+const testEnv = {
+  ...process.env,
+  BUTTERBOX_TEST_APP_URL: appUrl.origin,
+  BUTTERBOX_TEST_SUPABASE_URL: settings.API_URL,
+  BUTTERBOX_TEST_MAIL_URL: settings.MAILPIT_URL,
+  BUTTERBOX_TEST_SUPABASE_ANON_KEY: settings.ANON_KEY,
+  BUTTERBOX_TEST_SUPABASE_SERVICE_KEY: settings.SERVICE_ROLE_KEY,
+};
+
+async function checkPortAvailable() {
+  await new Promise((resolvePort, reject) => {
+    const probe = createServer();
+    probe.once("error", reject);
+    probe.listen(port, host, () => {
+      probe.close((error) => (error ? reject(error) : resolvePort()));
+    });
+  });
+}
+
+async function waitForApp(server) {
+  let lastError;
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    if (server.exitCode !== null || server.signalCode !== null) {
+      throw new Error("The disposable authentication test server exited before becoming ready.");
+    }
+    try {
+      const response = await fetch(new URL("/api/health", appUrl), {
+        signal: AbortSignal.timeout(2_000),
+      });
+      if (response.ok) return;
+      lastError = new Error(`Health check returned ${response.status}`);
+    } catch (error) {
+      lastError = error;
+    }
+    await delay(500);
+  }
+  throw new Error("The disposable authentication test server did not become ready.", {
+    cause: lastError,
+  });
+}
+
+let server;
+try {
+  await checkPortAvailable();
+  const appEnv = {
+    ...process.env,
+    NEXT_PUBLIC_SUPABASE_URL: settings.API_URL,
+    NEXT_PUBLIC_SUPABASE_ANON_KEY: settings.ANON_KEY,
+    NEXT_PUBLIC_SITE_URL: appUrl.origin,
+  };
+  if (useDevServer) {
+    server = spawn(
+      process.execPath,
+      ["node_modules/next/dist/bin/next", "dev", "--hostname", host, "--port", String(port)],
+      { stdio: "inherit", env: { ...appEnv, NODE_ENV: "development" } },
+    );
+  } else {
+    const commands = useSplitBuild
+      ? [
+          ["npm", ["run", "build", "--", "--experimental-build-mode", "compile"]],
+          [process.execPath, ["node_modules/typescript/bin/tsc", "--noEmit"]],
+          ["npm", ["run", "build", "--", "--experimental-build-mode", "generate"]],
+        ]
+      : [["npm", ["run", "build"]]];
+    for (const [command, args] of commands) {
+      const build = spawnSync(command, args, { stdio: "inherit", env: appEnv });
+      if (build.error) throw build.error;
+      if (build.status !== 0) {
+        throw new Error(`Test application build or type check failed (exit ${build.status}).`);
+      }
+    }
+
+    await cp("public", ".next/standalone/public", { recursive: true });
+    await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
+    server = spawn(process.execPath, [".next/standalone/server.js"], {
+      stdio: "inherit",
+      env: { ...appEnv, NODE_ENV: "production", HOSTNAME: host, PORT: String(port) },
+    });
+  }
+  await waitForApp(server);
+
+  const browser = spawn(
+    process.execPath,
+    ["node_modules/@playwright/test/cli.js", "test", "tests/e2e/auth.spec.mjs"],
+    { stdio: "inherit", env: testEnv },
+  );
+  const browserExit = once(browser, "exit");
+  const serverExit = once(server, "exit");
+  const outcome = await Promise.race([
+    browserExit.then(([code, signal]) => ({ source: "browser", code, signal })),
+    serverExit.then(([code, signal]) => ({ source: "server", code, signal })),
+  ]);
+  if (outcome.source === "server") {
+    if (browser.exitCode === null && browser.signalCode === null) {
+      browser.kill("SIGTERM");
+      await browserExit;
+    }
+    throw new Error(
+      `The disposable test server exited during browser tests (code ${outcome.code}, signal ${outcome.signal}).`,
+    );
+  }
+  process.exitCode = outcome.code ?? 1;
+} finally {
+  if (server && server.exitCode === null && server.signalCode === null) {
+    const exited = once(server, "exit");
+    server.kill("SIGTERM");
+    if (!(await Promise.race([exited.then(() => true), delay(5_000, false)]))) {
+      server.kill("SIGKILL");
+      await exited;
+    }
+  }
+}

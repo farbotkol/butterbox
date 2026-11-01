@@ -1,3 +1,4 @@
+import { isEndedSession } from "@/lib/auth-errors";
 import { createClient } from "@/lib/supabase/server";
 export {
   addDays,
@@ -18,7 +19,12 @@ export async function getWorkspace() {
   const supabase = await createClient();
   const {
     data: { user },
+    error: authError,
   } = await supabase.auth.getUser();
+
+  if (authError && !isEndedSession(authError)) {
+    return { status: "error" as const, message: authError.message };
+  }
 
   if (!user) {
     return { status: "anonymous" as const };
@@ -36,7 +42,7 @@ export async function getWorkspace() {
 
   const membership = memberships?.[0] as Membership | undefined;
   if (!membership) {
-    return { status: "needs_setup" as const, user };
+    return { status: "needs_setup" as const, user, supabase };
   }
 
   const [{ data: business, error: businessError }, { data: venues }] =

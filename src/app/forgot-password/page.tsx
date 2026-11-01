@@ -20,7 +20,7 @@ export default async function ForgotPasswordPage({ searchParams }: ForgotPasswor
       {params.error && (
         <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {params.error === "setup"
-            ? "Add the Supabase settings in .env.local before requesting a reset."
+          ? "Add the Supabase settings and application site URL in .env.local before requesting a reset."
             : params.error === "link"
               ? "That reset link has expired. Request a new one to continue."
               : "We couldn't send the reset email. Please try again."}
