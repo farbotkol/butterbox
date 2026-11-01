@@ -2,11 +2,11 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **23**. In Progress: **6**.
-  Blocked: **1**. Not started (Backlog): **57**.
+- Total stories: **87**. Verified Done: **24**. In Progress: **6**.
+  Blocked: **1**. Not started (Backlog): **56**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
-  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006,
+  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003
   and BB-TIME-001.
 - The latest serialized Node run passed **60 tests**, with five integration
@@ -41,6 +41,18 @@
   separately. Full ESLint, TypeScript, split production compile/generate and
   the complete **34/34** production-browser scenarios passed. Disposable
   fixtures were removed and the temporary application server stopped.
+- BB-TIME-001 was committed as `e9f8325` and pushed to the requested
+  development branch; the remote SHA matched the local checkpoint.
+- BB-ROSTER-004 passed a clean isolated replay of all 28 migrations and
+  **1,257/1,257 pgTAP assertions across 28 files**, including 47 copy
+  assertions. All seven authenticated tenant/concurrency tests and 68
+  serialized Node unit tests passed; the seven integrations skipped by the
+  Node-only invocation passed separately. Full ESLint, TypeScript, split
+  production compile/generate and the rebuilt focused copy browser scenario
+  passed. The complete **35/35** production-browser regression passed before
+  the final clock-change guard and explanatory wording; the rebuilt focused
+  scenario exercised the final guard. Disposable users and businesses were
+  removed and the temporary application server stopped.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -103,6 +115,17 @@
 
 ## Current story
 
+- **Next: BB-FOUND-005 — Invite and onboard users.** Investigate and implement
+  scoped email invitations as a prerequisite to onboarding unlinked staff and
+  completing roster notifications. The app currently chooses its first
+  membership; safe handling of existing multi-business users must be resolved
+  rather than silently selecting the wrong business. Supabase PKCE links
+  initiated in a manager's browser cannot be assumed to work in a recipient's
+  separate browser. Do not mark the story Done without end-to-end email,
+  expiration, reuse, revocation, audit and isolation tests.
+- **BB-ROSTER-004 — Copy week and roster template** is Done. A scoped manager
+  copies an entire department atomically into private, editable drafts, with
+  eligibility rechecks, idempotent retries and safe clock-change handling.
 - **BB-TIME-001 — Compute worked time** is Done. Scoped calculations and the
   manager work-time page passed all four criteria and the regression checks.
 - **BB-ATTEND-005 — Time capture fallback** is In Progress: location failures
@@ -330,6 +353,28 @@ Files: `supabase/migrations/20261101150000_manual_assignment_eligibility.sql`,
 `tests/e2e/auth.spec.mjs` and README. The new migration is applied only to the
 disposable test database. Matching uses the configured role's current name;
 unrelated free-text shift titles do not inherit its restriction.
+
+### BB-ROSTER-004 — Copy week and roster template (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-004.1 Copy creates editable drafts for new dates | A manager selects a source Monday and copies scheduled shifts from one permitted department into the displayed week. The atomic operation preserves assignments, breaks, acknowledgement requirements and local wall times without overwriting existing shifts. | 47 focused pgTAP assertions and production Chromium verified assigned/open drafts, editing, exact historical timestamp precision, a DST offset change, empty source, retries, role and tenant scope, mobile layout and no-JavaScript submission. | Pass |
+| ROSTER-004.2 Leave, overlaps and availability are revalidated | Every assigned copy checks target-date approved leave, recurring availability and same/linked-worker overlaps, plus applicable manual role qualifications. Conflicts reject the entire transaction even when manual policy normally warns. Nonexistent times and source or target shifts spanning clock changes are rejected rather than silently changing duration. | pgTAP and Chromium verified leave, availability, overlap and atomic rollback. New database tests covered forward and backward clock changes in both source and target; Chromium verified the explanatory error. Authenticated ordered races verified source edits, leave and availability changes, overlapping shifts, role-policy changes, shared-worker locks, duplicate requests and membership revocation. | Pass |
+| ROSTER-004.3 No notifications until publishing | Copies are unpublished and do not create publications or recipients; the existing explicit publication action creates notifications. | pgTAP and production Chromium verified drafts are invisible to the employee, no notification exists before publication, and publication creates the employee's notification and visible schedule. | Pass |
+
+Files: `supabase/migrations/20261102050000_copy_roster_week.sql`,
+`supabase/tests/database/copy_roster_week.test.sql`, `src/app/actions.ts`,
+`src/app/roster/page.tsx`, `src/components/copy-roster-form.tsx`,
+`src/lib/roster-copy.ts`, `tests/roster-copy.test.mjs`,
+`tests/roster-copy-concurrency.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`.
+The first browser fixture failed because a bulk insert omitted explicit
+non-null fields; the next attempt's employee-wide locator also matched an
+already-published source shift in the next-shift preview. The fixture and
+target-week locator were corrected without removing assertions; the focused
+scenario then passed. Additional clock-change tests first exposed unintended
+duration changes on the previous schema; after fixing the guard, all 47
+assertions and the final focused browser scenario passed.
 
 ### BB-ROSTER-007 — Conflict detection (Done)
 

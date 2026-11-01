@@ -23,6 +23,7 @@ const result = spawnSync(
       ? [
           "tests/auto-assignment-concurrency.integration.test.mjs",
           "tests/shared-worker-concurrency.integration.test.mjs",
+          "tests/roster-copy-concurrency.integration.test.mjs",
           "tests/attendance-concurrency.integration.test.mjs",
           "tests/attendance-location-concurrency.integration.test.mjs",
         ] : []),

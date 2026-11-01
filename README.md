@@ -78,6 +78,20 @@ change manual assignment. The check matches the configured role's current name
 case-insensitively; unrelated free-text shift titles do not inherit its policy.
 Enabling the setting does not retroactively invalidate existing assignments.
 
+On the weekly roster, a manager can select one active department and copy a
+previous Monday-to-Sunday week into the displayed week. The copy adds editable
+private drafts without replacing existing shifts or notifying employees; use
+the separate publish action to share them. Venue-local dates and times, roles,
+breaks, assignments and acknowledgement requirements are retained. The whole
+copy is rejected if a worker is unavailable, has approved leave, overlaps an
+existing shift (including a linked profile at another venue), or no longer
+meets the applicable manual role restriction. These checks block copying even
+when manual scheduling is configured to warn. Times that do not exist at a
+clock change, and source or copied shifts spanning a clock change, must be
+created manually instead. Retrying the same request does not create duplicates.
+Publication records in-app updates; unlinked employees cannot see them until
+their accounts are linked. Email and push delivery are not yet implemented.
+
 Owners can link an existing business member to an employee profile on
 **People**; the member's venue and department scope must permit that profile.
 Invitations for new members are not yet implemented. Linked active employees

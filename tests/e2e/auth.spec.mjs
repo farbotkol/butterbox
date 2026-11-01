@@ -4151,3 +4151,235 @@ test("work time uses actual events and breaks with venue, role and exception sco
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
+
+test("managers copy scoped draft rosters with conflict checks and publication-only notifications", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, outsideDepartment,
+    workerId] = Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const roster = (week) => `/roster?week=${week}&venue=${venueId}&department=${fohId}`;
+  const source = "2032-03-29";
+  async function shiftsInWeek(week) {
+    const start = new Date(`${week}T00:00:00+10:00`);
+    const end = new Date(start.valueOf() + 7 * 24 * 60 * 60 * 1000);
+    const result = await admin.from("shifts")
+      .select("id, role_title, employee_id, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement")
+      .eq("business_id", businessId).eq("department_id", fohId)
+      .gte("starts_at", start.toISOString()).lt("starts_at", end.toISOString()).order("starts_at");
+    expect(result.error).toBeNull();
+    return result.data;
+  }
+  try {
+    for (const role of ["foh", "boh", "worker", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `copy-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Copy cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside copy cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Sydney cafe", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[1], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[3], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[2], name: "Copy worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        role_title: "Copy server", starts_at: "2032-03-28T22:00:00Z", ends_at: "2032-03-29T00:00:00Z",
+        break_minutes: 15, is_published: true, requires_acknowledgement: true },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: null,
+        role_title: "Copy open", starts_at: "2032-03-30T01:00:00Z", ends_at: "2032-03-30T03:00:00Z",
+        break_minutes: 0, is_published: false, requires_acknowledgement: false },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: null,
+        role_title: "BOH only", starts_at: "2032-03-28T22:00:00Z", ends_at: "2032-03-29T00:00:00Z",
+        break_minutes: 0, is_published: false, requires_acknowledgement: false },
+    ])).error).toBeNull();
+
+    await signIn(page, `copy-browser-foh-${suffix}@example.test`, password);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(roster("2032-04-05"));
+    const form = page.getByRole("form", { name: "Copy a previous roster week" });
+    const sourceInput = form.getByLabel("Source week commencing Monday");
+    await expect(sourceInput).toHaveValue(source);
+    expect((await form.boundingBox()).width).toBeLessThanOrEqual(390);
+    const initialRequest = await form.locator('input[name="request_id"]').inputValue();
+    await sourceInput.fill("2032-03-30");
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("valid Monday");
+    await expect(sourceInput).toHaveValue("2032-03-30");
+    expect(await form.locator('input[name="request_id"]').inputValue()).toBe(initialRequest);
+    await sourceInput.fill("2032-04-05");
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("different source week");
+    await sourceInput.fill(source);
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(page.getByRole("status")).toContainText("2 shifts were copied");
+    const drafts = await shiftsInWeek("2032-04-05");
+    expect(drafts).toHaveLength(2);
+    expect(drafts.every((shift) => !shift.is_published)).toBe(true);
+    expect(drafts[0]).toMatchObject({
+      role_title: "Copy server", employee_id: workerId, break_minutes: 15, requires_acknowledgement: true,
+    });
+    expect(new Date(drafts[0].starts_at).toISOString()).toBe("2032-04-04T23:00:00.000Z");
+    expect(new Date(drafts[0].ends_at).toISOString()).toBe("2032-04-05T01:00:00.000Z");
+    expect(drafts[1]).toMatchObject({ role_title: "Copy open", employee_id: null });
+    const beforePublication = await admin.from("roster_publications").select("id").eq("business_id", businessId);
+    expect(beforePublication.error).toBeNull();
+    expect(beforePublication.data).toHaveLength(0);
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const worker = await workerContext.newPage();
+    await signIn(worker, `copy-browser-worker-${suffix}@example.test`, password);
+    await worker.goto(`/notifications?venue=${venueId}`);
+    await expect(worker.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    await worker.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
+    await expect(worker.getByRole("region", { name: "Weekly schedule" })
+      .getByText("Copy server", { exact: true })).toHaveCount(0);
+    await worker.goto(roster("2032-04-05"));
+    await expect(worker.getByRole("form", { name: "Copy a previous roster week" })).toHaveCount(0);
+
+    await page.locator("#open-shifts").getByRole("link", { name: "Edit open shift" }).click();
+    const edit = page.getByRole("form", { name: "Edit draft shift" });
+    await edit.getByLabel("Role").fill("Edited copied open");
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    expect((await shiftsInWeek("2032-04-05")).find((shift) => shift.employee_id === null).role_title)
+      .toBe("Edited copied open");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    const publications = await admin.from("roster_publications").select("id")
+      .eq("department_id", fohId).eq("week_start", "2032-04-05");
+    expect(publications.error).toBeNull();
+    expect(publications.data).toHaveLength(1);
+    const recipients = await admin.from("roster_publication_recipients").select("employee_id")
+      .eq("publication_id", publications.data[0].id);
+    expect(recipients.error).toBeNull();
+    expect(recipients.data).toEqual([{ employee_id: workerId }]);
+    await worker.goto(`/notifications?venue=${venueId}`);
+    await expect(worker.getByRole("article", { name: "Roster update for week starting 2032-04-05" })).toBeVisible();
+    await worker.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
+    await expect(worker.getByRole("region", { name: "Weekly schedule" })
+      .getByText("Copy server", { exact: true })).toBeVisible();
+    await workerContext.close();
+
+    expect((await admin.from("employee_availability_exceptions").insert({
+      business_id: businessId, venue_id: venueId, employee_id: workerId,
+      starts_on: "2032-04-12", ends_on: "2032-04-12", exception_type: "leave", status: "approved",
+    })).error).toBeNull();
+    await page.goto(roster("2032-04-12"));
+    await form.getByLabel("Source week commencing Monday").fill(source);
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("unavailable or has approved leave");
+    expect(await shiftsInWeek("2032-04-12")).toHaveLength(0);
+
+    expect((await admin.from("shifts").insert({
+      business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+      role_title: "Existing target", starts_at: "2032-04-18T23:30:00Z", ends_at: "2032-04-19T01:30:00Z",
+    })).error).toBeNull();
+    await page.goto(roster("2032-04-19"));
+    await form.getByLabel("Source week commencing Monday").fill(source);
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("overlaps an existing shift");
+    expect(await shiftsInWeek("2032-04-19")).toHaveLength(1);
+
+    expect((await admin.from("employee_availability_patterns").insert({
+      business_id: businessId, venue_id: venueId, employee_id: workerId,
+    })).error).toBeNull();
+    await page.goto(roster("2032-04-26"));
+    await form.getByLabel("Source week commencing Monday").fill(source);
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("unavailable or has approved leave");
+    expect(await shiftsInWeek("2032-04-26")).toHaveLength(0);
+    expect((await admin.from("employee_availability_patterns").delete().eq("employee_id", workerId)).error).toBeNull();
+
+    await page.goto(roster("2032-05-03"));
+    await form.getByLabel("Source week commencing Monday").fill("2032-02-02");
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(page.getByRole("status")).toContainText("No shifts were found");
+    expect(await shiftsInWeek("2032-05-03")).toHaveLength(0);
+
+    const noJsContext = await browser.newContext({ baseURL: appUrl, javaScriptEnabled: false });
+    contexts.push(noJsContext);
+    const noJs = await noJsContext.newPage();
+    await signIn(noJs, `copy-browser-foh-${suffix}@example.test`, password);
+    await noJs.goto(roster("2032-05-10"));
+    const noJsForm = noJs.getByRole("form", { name: "Copy a previous roster week" });
+    const noJsRequest = await noJsForm.locator('input[name="request_id"]').inputValue();
+    await noJsForm.getByLabel("Source week commencing Monday").fill("2032-03-30");
+    await noJsForm.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(noJsForm.getByRole("alert")).toContainText("valid Monday");
+    await expect(noJsForm.getByLabel("Source week commencing Monday")).toHaveValue("2032-03-30");
+    expect(await noJsForm.locator('input[name="request_id"]').inputValue()).toBe(noJsRequest);
+    await noJsForm.getByLabel("Source week commencing Monday").fill(source);
+    await noJsForm.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(noJs.getByRole("status")).toContainText("2 shifts were copied");
+    expect(await shiftsInWeek("2032-05-10")).toHaveLength(2);
+    await noJsContext.close();
+
+    expect((await admin.from("shifts").insert({
+      business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: null,
+      role_title: "Clock-change source", starts_at: "2032-03-20T14:30:00Z",
+      ends_at: "2032-03-20T16:30:00Z",
+    })).error).toBeNull();
+    await page.goto(roster("2032-03-29"));
+    await form.getByLabel("Source week commencing Monday").fill("2032-03-15");
+    await form.getByRole("button", { name: "Copy into this week" }).click();
+    await expect(form.getByRole("alert")).toContainText("crosses a clock change");
+    const unsafeCopies = await admin.from("shifts").select("id")
+      .eq("business_id", businessId).eq("role_title", "Clock-change source")
+      .gte("starts_at", "2032-03-29T00:00:00Z").lt("starts_at", "2032-04-05T00:00:00Z");
+    expect(unsafeCopies.error).toBeNull();
+    expect(unsafeCopies.data).toHaveLength(0);
+
+    const bohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(bohContext);
+    const boh = await bohContext.newPage();
+    await signIn(boh, `copy-browser-boh-${suffix}@example.test`, password);
+    await boh.goto(roster("2032-04-05"));
+    await expect(boh.getByRole("form", { name: "Copy a previous roster week" })
+      .locator('input[name="department_id"]')).toHaveValue(bohId);
+    const bohClient = createClient(apiUrl, anonKey, options);
+    expect((await bohClient.auth.signInWithPassword({
+      email: `copy-browser-boh-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await bohClient.rpc("copy_roster_week", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
+      p_source_week: source, p_target_week: "2032-05-17", p_request_id: randomUUID(),
+    })).error?.message).toBe("Permission denied");
+    await bohContext.close();
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outside = await outsideContext.newPage();
+    await signIn(outside, `copy-browser-outside-${suffix}@example.test`, password);
+    await outside.goto(roster("2032-04-05"));
+    await expect(outside.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
+    await outsideContext.close();
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});

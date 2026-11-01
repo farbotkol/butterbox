@@ -9,6 +9,7 @@ import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
@@ -1062,6 +1063,56 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
   const created = !editing && typeof result.data === "string"
     ? `&created=${encodeURIComponent(result.data)}` : "";
   redirect(`/roster?week=${encodeURIComponent(savedWeek)}&venue=${encodeURIComponent(workspace.venue.id)}&department=${encodeURIComponent(departmentId)}${collapsedRosterQuery(formData)}&saved=${editing ? "edited" : "1"}${created}`);
+}
+
+export async function copyRosterWeekAction(_previous: RosterCopyState, formData: FormData): Promise<RosterCopyState> {
+  const week = text(formData, "week", 11);
+  const sourceWeek = text(formData, "source_week", 11);
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const requestIds = uuidList(formData, "request_id", 1);
+  const state: RosterCopyState = {
+    errors: {},
+    values: { sourceWeek, requestId: requestIds?.[0] ?? "" },
+  };
+  if (!venueIds || venueIds.length !== 1 || !departmentIds || departmentIds.length !== 1 ||
+    !requestIds || requestIds.length !== 1 || !isRosterWeek(week)) {
+    console.error("Invalid roster copy context.");
+    state.errors.form = "The roster context is invalid. Reload the page and try again.";
+    return state;
+  }
+  if (!isRosterWeek(sourceWeek)) {
+    state.errors.sourceWeek = "Choose a valid Monday for the source week.";
+    return state;
+  }
+  if (sourceWeek === week) {
+    state.errors.sourceWeek = "Choose a different source week.";
+    return state;
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster workspace for copying.", { message: workspace.message });
+    state.errors.form = "The selected venue is unavailable. Reload the roster and try again.";
+    return state;
+  }
+  const { data, error } = await workspace.supabase.rpc("copy_roster_week", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    p_department_id: departmentIds[0], p_source_week: sourceWeek,
+    p_target_week: week, p_request_id: requestIds[0],
+  });
+  if (error) {
+    console.error("Roster copy failed.", { code: error.code, message: error.message });
+    state.errors.form = rosterCopyError(error.code, error.message);
+    return state;
+  }
+  if (typeof data !== "number" || !Number.isSafeInteger(data) || data < 0) {
+    console.error("Roster copy returned an invalid result.");
+    state.errors.form = rosterCopyError("", "");
+    return state;
+  }
+  redirect(`/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}&department=${encodeURIComponent(departmentIds[0])}${collapsedRosterQuery(formData)}&copied=${data}`);
 }
 
 export async function deleteShiftAction(formData: FormData) {

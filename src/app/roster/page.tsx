@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   ArrowLeft,
   ArrowRight,
@@ -17,6 +18,7 @@ import {
   setShiftAcknowledgementRequirementAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { CopyRosterForm } from "@/components/copy-roster-form";
 import { ShiftEditor } from "@/components/shift-editor";
 import {
   availabilityForDate,
@@ -52,6 +54,7 @@ type RosterPageProps = {
     saved?: string;
     deleted?: string;
     published?: string;
+    copied?: string;
     ack_requirement?: string;
     edit?: string;
     created?: string;
@@ -397,6 +400,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const filterDepartment = selectedDepartment ?? (params.department === "all" ? "all" : undefined);
   const collapsed = collapsedRosterDepartments(params.collapsed, departments.map((department) => department.id));
   const weekLabel = `${formatDay(week)} – ${formatDay(addDays(week, 6))}`;
+  const copiedCount = params.copied && /^\d+$/.test(params.copied) &&
+    Number.isSafeInteger(Number(params.copied)) ? Number(params.copied) : undefined;
 
   return (
     <AppShell
@@ -484,7 +489,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
       </div>
 
-      {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement) && (
+      {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement || copiedCount !== undefined) && (
         <p
           role={errorMessage ? "alert" : "status"}
           className={`mt-4 rounded-xl px-4 py-3 text-sm ${
@@ -494,7 +499,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           }`}
         >
           {errorMessage ??
-            (params.ack_requirement
+            (copiedCount !== undefined
+              ? copiedCount === 0 ? "No shifts were found in the selected source week."
+                : `${copiedCount} ${copiedCount === 1 ? "shift was" : "shifts were"} copied into this week's draft roster.`
+              : params.ack_requirement
               ? "Acknowledgement requirement updated."
               : params.saved
               ? params.saved === "edited" ? "Draft shift updated." : "Shift saved to the draft roster."
@@ -575,6 +583,22 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               end: editingShift ? formatLocalDateTime(editingShift.ends_at, workspace.venue.timezone) : weekInput(week, 16),
               break: String(editingShift?.break_minutes ?? 30),
             }} />
+        </section>
+      )}
+
+      {canManageSelectedDepartment && selectedDepartment && selectedDepartmentActive && (
+        <section aria-labelledby="copy-roster-heading" className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6">
+          <h2 id="copy-roster-heading" className="font-semibold">Copy a previous week</h2>
+          <p className="mt-2 text-sm text-muted">
+            Copy this department&apos;s scheduled shifts into {weekLabel} as editable private drafts.
+            Existing shifts are not replaced. Availability, approved leave, qualifications and overlaps
+            are rechecked and block the whole copy if any assigned shift conflicts, even when manual
+            assignments normally warn. In-app updates are recorded only when you publish; unlinked
+            employees cannot see them until their accounts are linked.
+          </p>
+          <CopyRosterForm key={`${workspace.venue.id}:${selectedDepartment}:${week}`}
+            week={week} previousWeek={previousWeek} venueId={workspace.venue.id}
+            departmentId={selectedDepartment} collapsed={collapsed} requestId={randomUUID()} />
         </section>
       )}
 
