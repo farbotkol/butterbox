@@ -10,15 +10,15 @@
 - The latest serialized Node run passed **47 tests**, with two integration
   tests skipped in that invocation and subsequently passed against the isolated
   project. After a clean isolated database reset, the full pgTAP regression
-  passed **708/708 assertions across 18 files**, including 53 conflict-policy,
-  51 availability-exception, 57 employee-preference, 78 draft-editing,
-  37 manual-assignment and 28 linked-roster authorization assertions. The
-  authenticated two-tenant integration and ordered leave, assignment,
-  publication and policy-change races passed.
+  passed **755/755 assertions across 19 files**, including 47 publication-version,
+  53 conflict-policy, 51 availability-exception, 57 employee-preference,
+  78 draft-editing, 37 manual-assignment and 28 linked-roster authorization
+  assertions. Authenticated two-tenant tests and ordered leave, assignment,
+  policy-change and simultaneous-publication races passed.
 - Production compile, explicit TypeScript, generate and full ESLint passed.
-  The **complete production Chromium regression passed 25/25 scenarios**
-  (one process per scenario, low-memory mode). Its temporary app servers stopped,
-  and the new disposable browser fixtures were removed.
+  The expanded publication-history production Chromium scenario and the
+  **complete 25/25 scenario browser regression** passed in serialized,
+  low-memory mode. The test runner stopped its temporary app servers.
 - An offline, network-disabled, redacted Gitleaks scan of the pending feature
   changes and new files found no leaks.
 - The historical local checkpoint-ref credential blocker described below remains
@@ -92,8 +92,9 @@
   Explicit shared-worker identity and cross-venue overlap detection remain.
 - **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
   blockers prevent publication atomically, and concurrent conflicting edits
-  return an explicit retry. Published version history and employee
-  notifications remain unimplemented.
+  return an explicit retry. Numbered versions, complete protected snapshots and
+  a scoped manager history are now verified. Employee notifications remain
+  unimplemented.
 - **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
   it remains In Progress because required shift acknowledgements depend on the
   unfinished publication/versioning workflow.
@@ -204,9 +205,15 @@ remain blocked by existing rules.
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ROSTER-008.1 Draft changes stay private until publication | RLS restricts drafts to authorized managers and the personal schedule reads only published assignments. | Existing two-tenant/scoped SQL and production-browser schedule tests passed in the 708-assertion and 25-scenario regressions. | Pass |
-| ROSTER-008.2 Published version is recorded | Publication currently updates shift state and timestamp only. | No version history has been implemented or verified. | In Progress |
+| ROSTER-008.2 Published version is recorded | Each successful publication atomically creates a per-department/week version and complete shift snapshot, with actor and venue-local context. Managers see their scoped history; no-op and blocked publications create no version. Pre-existing publications are not retroactively fabricated. | 47 focused pgTAP assertions pass for snapshots, immutability, permissions, no-op and blocked cases; simultaneous publication integration produces ordered complete snapshots; production Chromium verifies history and two versions. | Pass |
 | ROSTER-008.3 Impacted employees are notified once | Notification delivery is not implemented. | Not tested; not implemented. | In Progress |
 | ROSTER-008.4 Unresolved blockers prevent publishing | Configured venue availability, overlap and duration blockers atomically reject publication; concurrent roster changes return a retry. | 53 focused SQL assertions, authenticated ordered races and production-browser resolution of each local blocker pass. Cross-venue conflicts remain unsupported. | In Progress |
+
+Files for the version slice: `supabase/migrations/20261101210000_roster_publication_versions.sql`,
+`supabase/tests/database/roster_publication_versions.test.sql`,
+`tests/auto-assignment-concurrency.integration.test.mjs`,
+`src/app/roster/page.tsx`, `tests/e2e/auth.spec.mjs` and `README.md`.
+Migration applied only to the isolated test project.
 
 ### BB-ROSTER-001 — Weekly people-by-day roster (Done)
 
@@ -439,13 +446,8 @@ not yet run remotely.
 
 - Supabase CLI 2.122.0 runs in a separate temporary project on ports
   55421/55422. The existing Butterbox stack was not modified. SQL fixtures are
-  rolled back and HTTP fixtures are cleaned up. Following interrupted reset and
-  migration attempts under host pressure, the disposable schema was restored
-  transactionally with `psql`; later migration-history rows have empty
-  `statements` arrays. The locally applied preference migration was subsequently
-  amended transactionally for actual change timestamps, so its stored CLI
-  statement text also predates that amendment. A future normal reset should
-  rebuild standard CLI history from the current migration files.
+  rolled back and HTTP fixtures are cleaned up. A clean local-only reset rebuilt
+  the isolated schema and migration history through `20261101210000`.
 - Serialized Node unit run: 45 passed, one HTTP integration explicitly
   skipped without disposable settings. The isolated database regression
   passed 655/655 pgTAP assertions and the separately configured two-tenant
@@ -490,18 +492,18 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Cross-venue identity/overlap, publication versioning, employee notification
-  and acknowledgement remain incomplete. The historical credential findings
-  still require owner assessment and any approved rotation/history handling.
+- Cross-venue identity/overlap, employee notification and acknowledgement
+  remain incomplete. The historical credential findings still require owner
+  assessment and any approved rotation/history handling.
 
 ## Next story
 
-- Continue **BB-ROSTER-008** with an immutable published-version record and
-  exactly-once employee notification workflow, preserving draft privacy,
+- Continue **BB-ROSTER-008** with an exactly-once employee notification
+  workflow, preserving the verified version record, draft privacy,
   tenant/department authorization and atomic blocker checks. Then implement
   acknowledgements for BB-ROSTER-010 and explicit shared-worker identity and
   cross-venue overlap detection for BB-ORG-005/BB-ROSTER-007.
-- Migrations through `20261101200000` are applied only to the isolated stack.
+- Migrations through `20261101210000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

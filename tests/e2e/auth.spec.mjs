@@ -859,6 +859,8 @@ test("configured conflict rules block assignments and publication until warnings
 
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`;
     await page.goto(roster);
+    const history = page.getByRole("region", { name: "Publication history" });
+    await expect(history).toContainText("No recorded publications for this department and week.");
     await expect(page.getByText("Manual assignment blocks unavailable workers", { exact: false })).toBeVisible();
     await expect(page.locator("article", { hasText: "Unavailable legacy" }).getByRole("note"))
       .toContainText("Outside submitted availability");
@@ -881,6 +883,7 @@ test("configured conflict rules block assignments and publication until warnings
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page).toHaveURL(/error=publish-duration/);
     await expect(page.locator('p[role="alert"]')).toContainText("shifts longer than 24 hours");
+    await expect(history).toContainText("No recorded publications for this department and week.");
     await page.getByRole("link", { name: "Edit open shift" }).click();
     const edit = page.getByRole("form", { name: "Edit draft shift" });
     await edit.getByLabel("Ends").fill("2032-03-16T12:00");
@@ -920,6 +923,9 @@ test("configured conflict rules block assignments and publication until warnings
     await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    await expect(history.getByRole("listitem")).toHaveCount(1);
+    await expect(history.getByRole("listitem").first()).toContainText("Version 1");
+    await expect(history.getByRole("listitem").first()).toContainText("3 newly published, 3 total shifts");
     const published = await admin.from("shifts").select("id, is_published")
       .in("id", [unavailableId, openId, overlapId]);
     expect(published.error).toBeNull();
@@ -927,6 +933,24 @@ test("configured conflict rules block assignments and publication until warnings
     expect(published.data.every((shift) => shift.is_published)).toBe(true);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toHaveText("There are no draft shifts to publish.");
+    await expect(history.getByRole("listitem")).toHaveCount(1);
+
+    await create.getByLabel("Role").fill("Later open shift");
+    await create.getByLabel("Team member").selectOption("");
+    await create.getByLabel("Starts").fill("2032-03-19T09:00");
+    await create.getByLabel("Ends").fill("2032-03-19T10:00");
+    await create.getByLabel("Break").fill("0");
+    await create.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    await expect(history.getByRole("listitem")).toHaveCount(2);
+    await expect(history.getByRole("listitem").nth(0)).toContainText("Version 2");
+    await expect(history.getByRole("listitem").nth(0)).toContainText("1 newly published, 4 total shifts");
+    await expect(history.getByRole("listitem").nth(1)).toContainText("Version 1");
+    await managerPage.goto(roster);
+    await expect(managerPage.getByRole("region", { name: "Publication history" }).getByRole("listitem"))
+      .toHaveCount(2);
   } finally {
     try {
       if (browser.isConnected()) {

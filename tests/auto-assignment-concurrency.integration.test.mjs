@@ -416,6 +416,57 @@ test(
       }
     }
 
+    async function runConcurrentVersionRace(day) {
+      await savePolicy(false, false);
+      const first = await createShift(day, `First version ${day}`);
+      assert.ifError(first.error);
+      const second = await owner.rpc("save_shift", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: departmentId,
+        p_employee_id: employeeId, p_role_title: `Second version ${day}`,
+        p_start_local: `${day} 11:00`, p_end_local: `${day} 12:00`, p_break_minutes: 0,
+      });
+      assert.ifError(second.error);
+      const lock = await holdLock(
+        `update public.shifts set is_published = true, published_at = now() where id = '${first.data}'::uuid returning id`,
+        first.data,
+      );
+      let publication;
+      try {
+        publication = Promise.resolve(admin.from("shifts")
+          .update({ is_published: true, published_at: new Date().toISOString() })
+          .eq("id", second.data));
+        await waitForLock("shifts");
+        const uncommitted = await admin.from("roster_publications").select("id")
+          .eq("business_id", businessId).eq("department_id", departmentId).eq("week_start", day);
+        assert.ifError(uncommitted.error);
+        assert.deepEqual(uncommitted.data, []);
+        await lock.release(true);
+        const result = await publication;
+        assert.ifError(result.error);
+        const versions = await admin.from("roster_publications")
+          .select("id, version, shift_count, new_shift_count")
+          .eq("business_id", businessId).eq("department_id", departmentId)
+          .eq("week_start", day).order("version");
+        assert.ifError(versions.error);
+        assert.deepEqual(versions.data.map(({ version, shift_count, new_shift_count }) => ({
+          version, shift_count, new_shift_count,
+        })), [
+          { version: 1, shift_count: 1, new_shift_count: 1 },
+          { version: 2, shift_count: 2, new_shift_count: 1 },
+        ]);
+        const snapshot = await admin.from("roster_publication_shifts")
+          .select("shift_id").eq("publication_id", versions.data[1].id);
+        assert.ifError(snapshot.error);
+        assert.deepEqual(snapshot.data.map(({ shift_id }) => shift_id).sort(), [first.data, second.data].sort());
+      } finally {
+        try {
+          await lock.release(false);
+        } finally {
+          await Promise.allSettled([publication].filter(Boolean));
+        }
+      }
+    }
+
     try {
       for (const name of ["owner", "worker"]) {
         const result = await admin.auth.admin.createUser({
@@ -457,6 +508,7 @@ test(
       await runBusyPublication("2032-05-17", true);
       await runPolicyManualRace("2032-05-24", true);
       await runPolicyManualRace("2032-05-31", false);
+      await runConcurrentVersionRace("2032-06-07");
     } finally {
       assert.ifError((await admin.from("shifts").delete().eq("business_id", businessId)).error);
       assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);

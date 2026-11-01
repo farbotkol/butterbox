@@ -300,6 +300,19 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   };
   const canManageSelectedDepartment = selectedDepartment
     ? canManageDepartment(selectedDepartment) : false;
+  const publicationHistory = canManageSelectedDepartment && selectedDepartment
+    ? await readAllPages((from, to) => workspace.supabase.from("roster_publications")
+      .select("id, version, published_at, venue_timezone, new_shift_count, shift_count", { count: "exact" })
+      .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
+      .eq("department_id", selectedDepartment).eq("week_start", week)
+      .order("version", { ascending: false }).range(from, to), (publication) => publication.id)
+    : null;
+  if (publicationHistory?.error) {
+    console.error("Could not load roster publication history.", {
+      code: publicationHistory.error.code,
+      message: publicationHistory.error.message,
+    });
+  }
   const selectedDepartmentActive =
     departments.find((department) => department.id === selectedDepartment)?.active ?? false;
   const editingShift = params.edit && selectedDepartment && canManageSelectedDepartment && selectedDepartmentActive
@@ -506,6 +519,39 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         <p className="mt-5 rounded-xl border border-line bg-white p-4 text-sm text-muted">
           This roster is view-only. Contact your manager if you need a change.
         </p>
+      )}
+
+      {canManageSelectedDepartment && publicationHistory && (
+        <section aria-labelledby="publication-history-heading"
+          className="mt-5 rounded-2xl border border-line bg-white p-5 sm:p-6">
+          <h2 id="publication-history-heading" className="font-semibold">Publication history</h2>
+          {publicationHistory.error ? (
+            <p role="alert" className="mt-2 text-sm text-red-800">
+              We couldn&apos;t load publication history. Reload the roster to try again.
+            </p>
+          ) : publicationHistory.data?.length === 0 ? (
+            <p className="mt-2 text-sm text-muted">No recorded publications for this department and week.</p>
+          ) : (
+            <ol className="mt-3 space-y-2">
+              {publicationHistory.data?.map((publication) => (
+                <li key={publication.id} className="rounded-lg border border-line px-3 py-2 text-sm">
+                  <span className="font-semibold">Version {publication.version}</span>
+                  {" · "}
+                  {new Intl.DateTimeFormat("en-AU", {
+                    timeZone: publication.venue_timezone, day: "numeric", month: "short", year: "numeric",
+                    hour: "numeric", minute: "2-digit",
+                  }).format(new Date(publication.published_at))}
+                  {" · "}
+                  {publication.new_shift_count} newly published, {publication.shift_count} total shifts
+                </li>
+              ))}
+            </ol>
+          )}
+          <p className="mt-3 text-xs text-muted">
+            Versions are recorded when drafts are published. Rosters published before history was introduced
+            may not appear.
+          </p>
+        </section>
       )}
 
       <section className="mt-6 overflow-hidden rounded-lg border border-line bg-white shadow-[0_4px_18px_rgba(18,63,74,0.04)]">

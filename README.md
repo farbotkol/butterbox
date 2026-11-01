@@ -127,6 +127,13 @@ worker publication rule also blocks them. If a simultaneous edit is in progress,
 publication asks the manager to retry instead of publishing unchecked data.
 These warnings and rules do not yet cover cross-venue worker overlaps.
 
+When a department roster is published, a numbered version and a snapshot of its
+published shifts are recorded for that venue-local week. Authorised managers
+can see publication history on the roster. Publishing with no drafts, or a
+publication blocked by a conflict rule, does not create a version. Shifts
+published before version history was introduced are not retroactively logged;
+employee publication notifications are not yet available.
+
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its
 row. Archived or no-longer-linked workers remain visible when they have shifts
