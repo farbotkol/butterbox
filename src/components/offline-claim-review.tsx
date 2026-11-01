@@ -1,11 +1,11 @@
 import { randomUUID } from "node:crypto";
 import {
-  completeAttendanceFromOfflineClaimAction, createAttendanceFromOfflineClaimsAction,
-  reviewOfflineAttendanceClaimAction,
+  completeAttendanceFromOfflineClaimAction, completeAttendanceWithOfflineBreakAction,
+  createAttendanceFromOfflineClaimsAction, reviewOfflineAttendanceClaimAction,
 } from "@/app/actions";
 import {
-  hasPriorAttendanceLink, type OfflineClaimReview, type OfflineMatchEvent, type OfflineOpenSession,
-  type SubmittedOfflineClaim,
+  hasPriorAttendanceLink, type OfflineBreakResolution, type OfflineClaimReview, type OfflineMatchEvent,
+  type OfflineOpenBreak, type OfflineOpenSession, type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 
 const decisionLabels: Record<OfflineClaimReview["decision"], string> = {
@@ -25,10 +25,12 @@ function formatTime(timestamp: string, timezone: string): string {
 }
 
 export function OfflineClaimReview({
-  claim, reviews, events, endClaims, openSessions, venueId, timezone, canReview, canReopen,
+  claim, reviews, events, endClaims, openSessions, openBreaks, breakResolutions,
+  venueId, timezone, canReview, canReopen,
 }: {
   claim: SubmittedOfflineClaim; reviews: OfflineClaimReview[]; events: OfflineMatchEvent[];
-  endClaims: SubmittedOfflineClaim[]; openSessions: OfflineOpenSession[];
+  endClaims: SubmittedOfflineClaim[]; openSessions: OfflineOpenSession[]; openBreaks: OfflineOpenBreak[];
+  breakResolutions: OfflineBreakResolution[];
   venueId: string; timezone: string; canReview: boolean; canReopen: boolean;
 }) {
   const history = reviews;
@@ -59,6 +61,17 @@ export function OfflineClaimReview({
         </p>
       </div>)}
     </div>}
+    {breakResolutions.map((resolution) => <div key={resolution.id}
+      className="mt-3 rounded-lg border border-line p-3">
+      <p className="font-semibold">Manager-reported {resolution.classification} break end</p>
+      <p className="mt-1">Started: {formatTime(resolution.started_at, timezone)} ({resolution.started_at})</p>
+      <p className="mt-1">Reported end: {formatTime(resolution.reported_end_at, timezone)}{" "}
+        ({resolution.reported_end_at})</p>
+      <p className="mt-1">Reason: {resolution.reason}</p>
+      <p className="mt-1 text-muted">By user {resolution.actor_id} at{" "}
+        <time dateTime={resolution.created_at}>{formatTime(resolution.created_at, timezone)}</time>
+      </p>
+    </div>)}
     {canReview && pending && <>
       {candidates.length > 0 ? <form action={reviewOfflineAttendanceClaimAction}
         aria-label="Reconcile offline claim" className="mt-4 space-y-3">
@@ -172,6 +185,56 @@ export function OfflineClaimReview({
             are preserved.
           </p>
         </form>}
+      {claim.event_type === "clock_out" && !alreadyLinked && openBreaks.map((item) =>
+        <form key={item.break_id} action={completeAttendanceWithOfflineBreakAction}
+          aria-label="Resolve open break and complete attendance"
+          className="mt-4 space-y-3 rounded-lg border border-line p-3">
+          <input type="hidden" name="venue_id" value={venueId} />
+          <input type="hidden" name="claim_id" value={claim.id} />
+          <input type="hidden" name="session_id" value={item.session_id} />
+          <input type="hidden" name="break_id" value={item.break_id} />
+          <input type="hidden" name="request_id" value={randomUUID()} />
+          <p>
+            {item.classification === "paid" ? "Paid" : "Unpaid"} break started{" "}
+            {formatTime(item.started_at, timezone)} ({item.started_at}).
+          </p>
+          <label className="block">
+            Reported break end ({timezone})
+            <input type="datetime-local" name="break_end_local" step="0.001" required
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2" />
+          </label>
+          <label className="block">
+            Additional microseconds (optional, 0 to 999)
+            <input type="number" name="additional_microseconds" min="0" max="999" step="1"
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2" />
+            <span className="mt-1 block text-muted">The final three digits after milliseconds.</span>
+          </label>
+          <label className="block">
+            If this time occurred twice
+            <select name="occurrence" defaultValue=""
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2">
+              <option value="">Not a repeated time / choose if needed</option>
+              <option value="earlier">First occurrence</option>
+              <option value="later">Second occurrence</option>
+            </select>
+          </label>
+          <label className="block">
+            Reason for resolving the break
+            <textarea name="reason" required maxLength={500}
+              className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
+          </label>
+          <label className="flex items-start gap-2">
+            <input type="checkbox" name="acknowledge_unverified" value="yes" required className="mt-1" />
+            <span>I confirmed the reported break end and unverified clock-out with the employee.</span>
+          </label>
+          <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+            Record break end and complete attendance
+          </button>
+          <p className="text-muted">
+            The break end is recorded as manager-reported, not a server clock event. The existing
+            classification and start remain unchanged.
+          </p>
+        </form>)}
       {claim.event_type === "clock_out" && alreadyLinked && <p className="mt-3 text-muted">
         This claim was already linked to attendance and cannot create another clock event.
       </p>}

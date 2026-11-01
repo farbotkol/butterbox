@@ -4014,6 +4014,47 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await blockedCompletion.getByRole("button", { name: "Complete attendance from claim" }).click();
     await expect(page.getByRole("alert").filter({ hasText: "Resolve the recorded open break" })).toBeVisible();
     await expect(claimCard(7)).toContainText("Manager review required");
+    const resolveBreak = () => claimCard(7).getByRole("form", { name: "Resolve open break and complete attendance" });
+    for (const [time, error] of [
+      ["2024-04-07T02:30", "That local time occurred twice"],
+      ["2024-10-06T02:30", "That local time did not exist"],
+      ["2024-01-13T23:00", "The reported break end must follow the start"],
+    ]) {
+      await resolveBreak().getByLabel("Reported break end (Australia/Sydney)", { exact: true }).fill(time);
+      await resolveBreak().getByLabel("Reason for resolving the break").fill("Confirmed with colleague");
+      await resolveBreak().getByLabel("I confirmed the reported break end and unverified clock-out with the employee.").check();
+      await resolveBreak().getByRole("button", { name: "Record break end and complete attendance" }).click();
+      await expect(page.getByRole("alert").filter({ hasText: error })).toBeVisible();
+      await expect(claimCard(7)).toContainText("Manager review required");
+    }
+    await resolveBreak().getByLabel("Reported break end (Australia/Sydney)", { exact: true })
+      .fill("2024-01-13T23:30:00.123");
+    await resolveBreak().getByLabel("Additional microseconds").fill("456");
+    await resolveBreak().getByLabel("Reason for resolving the break").fill("Confirmed with colleague");
+    await resolveBreak().getByLabel("I confirmed the reported break end and unverified clock-out with the employee.").check();
+    await resolveBreak().getByRole("button", { name: "Record break end and complete attendance" }).click();
+    await expect(page.getByRole("status")).toContainText("Manager-reported break end and unverified offline clock-out");
+    await expect(claimCard(7)).toContainText("Manager-reported paid break end");
+    await expect(claimCard(7)).toContainText("Confirmed with colleague");
+    await expect(claimCard(7)).toContainText("2024-01-13T12:30:00.123456");
+    await expect(claimCard(7)).toContainText(users[1]);
+    const resolvedEvents = await ownerApi.from("attendance_events").select("event_type, occurred_at, source")
+      .eq("session_id", colleagueSessionId).in("event_type", ["break_end", "clock_out"]).order("event_type");
+    expect(resolvedEvents.error).toBeNull();
+    expect(resolvedEvents.data).toHaveLength(2);
+    expect(resolvedEvents.data[0].source).toBe("manager_reported");
+    expect(resolvedEvents.data[0].occurred_at).toContain("2024-01-13T12:30:00.123456");
+    expect(resolvedEvents.data[1].source).toBe("offline_claim");
+    const afterBreakResolution = await ownerApi.rpc("list_worked_time", {
+      p_business_id: businessId, p_venue_id: venueId,
+    });
+    expect(afterBreakResolution.error).toBeNull();
+    const colleagueWork = afterBreakResolution.data.find((row) => row.session_id === colleagueSessionId);
+    expect(colleagueWork.paid_break_seconds).toBe(1800.123456);
+    expect(colleagueWork.paid_seconds).toBe(28800);
+    expect(colleagueWork.exceptions).toEqual(expect.arrayContaining([
+      "offline_claim_unverified", "manager_reported_break",
+    ]));
     const completion = claimCard(6).getByRole("form", { name: "Complete attendance with offline clock-out" });
     await completion.getByLabel("Matching open attendance session").selectOption(openSessionId);
     await completion.getByLabel("Reason for completing attendance").fill("Confirmed clock-out and recorded break");
@@ -4027,6 +4068,8 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await expect(page.locator(`#attendance-session-${openSessionId}`))
       .toContainText("Unverified offline times; review recorded breaks");
     await expect(page.locator(`#attendance-session-${openSessionId}`)).toContainText("0h 30m 0s");
+    await expect(page.locator(`#attendance-session-${colleagueSessionId}`))
+      .toContainText("Manager-reported break end; review its history");
     expect(await page.locator("body")
       .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
@@ -4060,6 +4103,8 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await signIn(workerPage, `claim-review-colleague-${suffix}@example.test`, password);
     await workerPage.goto(`/attendance?venue=${venueId}`);
     await expect(workerClaims).not.toContainText("Claim Worker");
+    await expect(workerClaims).toContainText("Manager-reported paid break end");
+    await expect(workerClaims).toContainText("Confirmed with colleague");
     await workerPage.getByRole("button", { name: "Sign out" }).click();
     await signIn(workerPage, `claim-review-boh-${suffix}@example.test`, password);
     await workerPage.goto(`/attendance?venue=${venueId}`);

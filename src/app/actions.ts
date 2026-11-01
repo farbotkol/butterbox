@@ -979,6 +979,68 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
   redirect(`${destination}&saved=claim-completed`);
 }
 
+export async function completeAttendanceWithOfflineBreakAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const claims = uuidList(formData, "claim_id", 1);
+  const sessions = uuidList(formData, "session_id", 1);
+  const breaks = uuidList(formData, "break_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const local = formData.getAll("break_end_local");
+  const microseconds = formData.getAll("additional_microseconds");
+  const occurrences = formData.getAll("occurrence");
+  const reasons = formData.getAll("reason");
+  const confirmations = formData.getAll("acknowledge_unverified");
+  if (venues?.length !== 1 || claims?.length !== 1 || sessions?.length !== 1 ||
+    breaks?.length !== 1 || requests?.length !== 1 || local.length !== 1 || microseconds.length !== 1 ||
+    occurrences.length !== 1 || reasons.length !== 1 || typeof reasons[0] !== "string" ||
+    !reasons[0].trim() || reasons[0].trim().length > 500 ||
+    confirmations.length !== 1 || confirmations[0] !== "yes") {
+    console.error("Invalid offline break resolution request.");
+    redirect("/attendance?error=claim-break-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the offline break workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const target = correctionInstant(
+    correctionLocalWithMicroseconds(local[0], microseconds[0]), workspace.venue.timezone, occurrences[0],
+  );
+  if (target.status !== "ok") redirect(`${destination}&error=claim-break-${target.status}`);
+  const { data, error } = await workspace.supabase.rpc("complete_attendance_with_offline_break", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_claim_id: claims[0],
+    p_session_id: sessions[0], p_break_id: breaks[0], p_request_id: requests[0],
+    p_break_ended_at: target.value, p_reason: reasons[0].trim(), p_acknowledge_unverified: true,
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Resolving an offline attendance break failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid review receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Invalid offline break resolution": "claim-break-invalid",
+      "Matching open attendance session not found": "claim-open-stale",
+      "Matching open break not found": "claim-break-stale",
+      "Reported break time is invalid": "claim-break-time",
+      "Another break is open or overlaps": "claim-break-overlap",
+      "Claimed clock-out time is invalid": "claim-pair-time",
+      "Server clock is earlier than the previous attendance event": "claim-open-order",
+      "Attendance edits are locked": "claim-locked",
+      "Claimed attendance overlaps another session": "claim-overlap",
+      "Claim has already been reviewed": "claim-reviewed",
+      "A claim was already linked to attendance": "claim-pair-used",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "claim-save"}`);
+  }
+  revalidatePath("/attendance");
+  revalidatePath("/work-time");
+  redirect(`${destination}&saved=claim-break-resolved`);
+}
+
 async function correctionActionContext(formData: FormData) {
   const venues = uuidList(formData, "venue_id", 1);
   const sessions = uuidList(formData, "session_id", 1);

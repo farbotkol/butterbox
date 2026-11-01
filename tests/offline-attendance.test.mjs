@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
   hasPriorAttendanceLink, offlineMatchKey, parseOfflineAttendanceClaim, parseOfflineClaimReceipt,
-  parseOfflineClaimReviews, parseOfflineMatchEvents, parseOfflineMatchOption, parseOfflineOpenSessions,
-  parseSubmittedOfflineClaims,
+  parseOfflineBreakResolutions, parseOfflineClaimReviews, parseOfflineMatchEvents, parseOfflineMatchOption,
+  parseOfflineOpenBreaks, parseOfflineOpenSessions, parseSubmittedOfflineClaims,
 } from "../src/lib/offline-attendance.ts";
 
 const id = "af000000-0000-4000-8000-000000000001";
@@ -79,6 +79,24 @@ test("open offline clock-out candidates require scoped identifiers, event times 
     [{ ...row, latest_event_at: null }], [{ ...row, open_break: "false" }]]) {
     assert.equal(parseOfflineOpenSessions(invalid), null);
   }
+});
+
+test("offline break candidates and history retain classification, time and attribution", () => {
+  const open = {
+    break_id: id, session_id: id, employee_id: id, department_id: id, actor_id: id,
+    classification: "unpaid", started_at: "2026-11-01T10:00:00Z",
+  };
+  const resolution = {
+    id, claim_id: id, session_id: id, actor_id: id, classification: "unpaid",
+    started_at: open.started_at, reported_end_at: "2026-11-01T10:30:00Z",
+    reason: "Confirmed with employee", created_at: "2026-11-01T12:00:00Z",
+  };
+  assert.deepEqual(parseOfflineOpenBreaks([open]), [open]);
+  assert.deepEqual(parseOfflineBreakResolutions([resolution]), [resolution]);
+  for (const invalid of [null, [open, open], [{ ...open, classification: "unknown" }],
+    [{ ...open, break_id: "" }]]) assert.equal(parseOfflineOpenBreaks(invalid), null);
+  for (const invalid of [null, [resolution, resolution], [{ ...resolution, reason: " " }],
+    [{ ...resolution, reported_end_at: "" }]]) assert.equal(parseOfflineBreakResolutions(invalid), null);
 });
 
 test("offline matching options validate scoped event identifiers and exact timestamps", () => {

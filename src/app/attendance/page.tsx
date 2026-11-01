@@ -19,9 +19,10 @@ import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
 import {
-  hasPriorAttendanceLink, offlineMatchKey, offlineWorkerKey, parseOfflineClaimReviews, parseOfflineMatchEvents,
-  parseOfflineOpenSessions, parseSubmittedOfflineClaims, type OfflineClaimReview as OfflineClaimReviewRow,
-  type OfflineMatchEvent, type OfflineOpenSession, type SubmittedOfflineClaim,
+  hasPriorAttendanceLink, offlineMatchKey, offlineWorkerKey, parseOfflineBreakResolutions, parseOfflineClaimReviews,
+  parseOfflineMatchEvents, parseOfflineOpenBreaks, parseOfflineOpenSessions, parseSubmittedOfflineClaims,
+  type OfflineBreakResolution, type OfflineClaimReview as OfflineClaimReviewRow, type OfflineMatchEvent,
+  type OfflineOpenBreak, type OfflineOpenSession, type SubmittedOfflineClaim,
 } from "@/lib/offline-attendance";
 import { readAllPages } from "@/lib/paginated-rows";
 import { getWorkspace } from "@/lib/workspace";
@@ -61,6 +62,12 @@ const errors: Record<string, string> = {
   "claim-open-stale": "The matching open session is unavailable or has already ended. Refresh and review it.",
   "claim-open-break": "Resolve the recorded open break before completing this session.",
   "claim-open-order": "The claimed clock-out precedes another recorded event. Investigate before completing it.",
+  "claim-break-invalid": "Enter a valid break end time, confirm the warning, and provide a reason.",
+  "claim-break-nonexistent": "That local time did not exist when the clocks changed. Choose an actual time.",
+  "claim-break-ambiguous": "That local time occurred twice. Choose its first or second occurrence.",
+  "claim-break-stale": "The matching open break is unavailable. Refresh and review the current attendance.",
+  "claim-break-time": "The reported break end must follow the start and not exceed the claimed clock-out.",
+  "claim-break-overlap": "Another break is open or overlaps the reported break. Investigate before completing it.",
 };
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
@@ -89,7 +96,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
 
   const canReview = managerRoles.includes(workspace.membership.role);
   const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, reviewResult, matchResult, openResult,
-    correctionResult] = await Promise.all([
+    openBreakResult, breakResolutionResult, correctionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
       .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (venue) => venue.id),
@@ -128,6 +135,16 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       }, { count: "exact" }).order("clocked_in_at", { ascending: false }).order("session_id").range(from, to),
       (row) => row && typeof row.session_id === "string" ? row.session_id : "")
       : Promise.resolve({ data: [], error: null }),
+    canReview
+      ? readAllPages<OfflineOpenBreak>((from, to) => workspace.supabase.rpc("list_attendance_offline_open_breaks", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+      }, { count: "exact" }).order("started_at", { ascending: false }).order("break_id").range(from, to),
+      (row) => row && typeof row.break_id === "string" ? row.break_id : "")
+      : Promise.resolve({ data: [], error: null }),
+    readAllPages<OfflineBreakResolution>((from, to) => workspace.supabase.rpc("list_attendance_offline_break_resolutions", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("created_at", { ascending: false }).order("id").range(from, to),
+    (row) => row && typeof row.id === "string" ? row.id : ""),
     readAllPages<AttendanceCorrection>((from, to) => workspace.supabase.rpc("list_attendance_corrections", {
       p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
     }, { count: "exact" }).order("sequence", { ascending: false }).order("id").range(from, to),
@@ -140,10 +157,14 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const claimReviews = parseOfflineClaimReviews(reviewResult.data);
   const matchEvents = parseOfflineMatchEvents(matchResult.data);
   const openSessions = parseOfflineOpenSessions(openResult.data);
+  const openBreaks = parseOfflineOpenBreaks(openBreakResult.data);
+  const breakResolutions = parseOfflineBreakResolutions(breakResolutionResult.data);
   const reviewsByClaim = new Map<string, OfflineClaimReviewRow[]>();
   const eventsByWorker = new Map<string, OfflineMatchEvent[]>();
   const pendingEndsByWorker = new Map<string, SubmittedOfflineClaim[]>();
   const openSessionsByWorker = new Map<string, OfflineOpenSession[]>();
+  const openBreaksByWorker = new Map<string, OfflineOpenBreak[]>();
+  const breakResolutionsByClaim = new Map<string, OfflineBreakResolution[]>();
   for (const review of claimReviews ?? []) {
     const history = reviewsByClaim.get(review.claim_id) ?? [];
     history.push(review);
@@ -160,6 +181,17 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     const sessions = openSessionsByWorker.get(key) ?? [];
     sessions.push(session);
     openSessionsByWorker.set(key, sessions);
+  }
+  for (const item of openBreaks ?? []) {
+    const key = offlineWorkerKey(item);
+    const items = openBreaksByWorker.get(key) ?? [];
+    items.push(item);
+    openBreaksByWorker.set(key, items);
+  }
+  for (const resolution of breakResolutions ?? []) {
+    const items = breakResolutionsByClaim.get(resolution.claim_id) ?? [];
+    items.push(resolution);
+    breakResolutionsByClaim.set(resolution.claim_id, items);
   }
   for (const claim of offlineClaims ?? []) {
     const history = reviewsByClaim.get(claim.id) ?? [];
@@ -194,10 +226,13 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       message: offlineResult.error?.message ?? "The server returned invalid offline attendance claims.",
     });
   }
-  if (reviewResult.error || !claimReviews || matchResult.error || !matchEvents || openResult.error || !openSessions) {
+  if (reviewResult.error || !claimReviews || matchResult.error || !matchEvents || openResult.error || !openSessions ||
+    openBreakResult.error || !openBreaks || breakResolutionResult.error || !breakResolutions) {
     console.error("Could not load offline claim review details.", {
-      code: reviewResult.error?.code ?? matchResult.error?.code ?? openResult.error?.code,
+      code: reviewResult.error?.code ?? matchResult.error?.code ?? openResult.error?.code ??
+        openBreakResult.error?.code ?? breakResolutionResult.error?.code,
       message: reviewResult.error?.message ?? matchResult.error?.message ?? openResult.error?.message ??
+        openBreakResult.error?.message ?? breakResolutionResult.error?.message ??
         "The server returned invalid offline review details.",
     });
   }
@@ -285,6 +320,11 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       {params.saved === "claim-completed" && (
         <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
           Attendance completed with an unverified offline clock-out. Review recorded breaks before approval.
+        </p>
+      )}
+      {params.saved === "claim-break-resolved" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          Manager-reported break end and unverified offline clock-out recorded with an audit trail.
         </p>
       )}
       {loadError || !venueResult.data || !options || !state || !validClockPolicy ? (
@@ -419,7 +459,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
         </p>
         {offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews ||
-          matchResult.error || !matchEvents || openResult.error || !openSessions ? (
+          matchResult.error || !matchEvents || openResult.error || !openSessions ||
+          openBreakResult.error || !openBreaks || breakResolutionResult.error || !breakResolutions ? (
           <p role="alert" className="mt-3 text-sm text-red-800">
             We couldn&apos;t load offline attendance claims and review details. Refresh and try again.
           </p>
@@ -430,6 +471,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
             reviews={reviewsByClaim.get(claim.id) ?? []} events={eventsByWorker.get(offlineMatchKey(claim)) ?? []}
             endClaims={pendingEndsByWorker.get(offlineWorkerKey(claim)) ?? []}
             openSessions={openSessionsByWorker.get(offlineWorkerKey(claim)) ?? []}
+            openBreaks={openBreaksByWorker.get(offlineWorkerKey(claim)) ?? []}
+            breakResolutions={breakResolutionsByClaim.get(claim.id) ?? []}
             venueId={workspace.venue.id}
             timezone={workspace.venue.timezone} canReview={canReview}
             canReopen={["owner", "admin", "general_manager"].includes(workspace.membership.role)} />)}

@@ -5,6 +5,7 @@ const exceptionCodes = [
   "missing_clock_in", "missing_clock_out", "invalid_clock_order",
   "incomplete_break", "invalid_break", "overlapping_breaks",
   "location_unverified", "location_review_required", "location_reviewed", "offline_claim_unverified",
+  "manager_reported_break",
 ] as const;
 const calculationErrors: WorkTimeException[] = [
   "missing_clock_in", "missing_clock_out", "invalid_clock_order",
@@ -125,4 +126,5 @@ export const workTimeExceptionLabels: Record<WorkTimeException, string> = {
   location_review_required: "Location review required",
   location_reviewed: "Location exception reviewed",
   offline_claim_unverified: "Unverified offline times; review recorded breaks",
+  manager_reported_break: "Manager-reported break end; review its history",
 };

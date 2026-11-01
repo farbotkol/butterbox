@@ -220,6 +220,138 @@ test("offline attendance reconciliation serializes retries, decisions, permissio
       await accessChange.release(false);
       await Promise.allSettled([pendingAccess].filter(Boolean));
     }
+    assert.ifError((await admin.from("business_memberships").update({ department_id: fohId })
+      .eq("business_id", businessId).eq("user_id", users[0])).error);
+    assert.ifError((await worker.rpc("clock_out_attendance", {
+      p_business_id: businessId, p_session_id: protectedSession, p_request_id: randomUUID(),
+    })).error);
+
+    async function openBreakFixture() {
+      const sessionId = await clockIn();
+      assert.ifError((await worker.rpc("start_attendance_break", {
+        p_business_id: businessId, p_session_id: sessionId,
+        p_classification: "unpaid", p_request_id: randomUUID(),
+      })).error);
+      const state = await worker.rpc("get_my_attendance_state_with_break", {
+        p_business_id: businessId,
+      }).single();
+      assert.ifError(state.error);
+      assert.equal(state.data.session_id, sessionId);
+      assert.ok(state.data.break_id);
+      const reportedEnd = await sql("select clock_timestamp()::text");
+      const claimId = await clockOutFixture();
+      return { sessionId, breakId: state.data.break_id, claimId, reportedEnd };
+    }
+    function resolveBreak(fixture) {
+      return {
+        p_business_id: businessId, p_venue_id: venueId, p_claim_id: fixture.claimId,
+        p_session_id: fixture.sessionId, p_break_id: fixture.breakId, p_request_id: randomUUID(),
+        p_break_ended_at: fixture.reportedEnd, p_reason: "Confirmed with worker",
+        p_acknowledge_unverified: true,
+      };
+    }
+    async function finishLiveBreak(fixture) {
+      assert.ifError((await worker.rpc("end_attendance_break", {
+        p_business_id: businessId, p_session_id: fixture.sessionId,
+        p_break_id: fixture.breakId, p_request_id: randomUUID(),
+      })).error);
+      assert.ifError((await worker.rpc("clock_out_attendance", {
+        p_business_id: businessId, p_session_id: fixture.sessionId, p_request_id: randomUUID(),
+      })).error);
+    }
+
+    const retryBreak = await openBreakFixture();
+    const resolution = resolveBreak(retryBreak);
+    const breakRetries = await Promise.all(Array.from({ length: 8 }, () =>
+      manager.rpc("complete_attendance_with_offline_break", resolution)));
+    for (const result of breakRetries) {
+      assert.ifError(result.error);
+      assert.equal(result.data, breakRetries[0].data);
+    }
+    const breakEvents = await manager.from("attendance_events").select("event_type, source")
+      .eq("session_id", retryBreak.sessionId).in("event_type", ["break_end", "clock_out"])
+      .order("event_type");
+    assert.ifError(breakEvents.error);
+    assert.deepEqual(breakEvents.data, [
+      { event_type: "break_end", source: "manager_reported" },
+      { event_type: "clock_out", source: "offline_claim" },
+    ]);
+    const resolutions = await manager.from("attendance_offline_break_resolutions").select("review_id")
+      .eq("session_id", retryBreak.sessionId);
+    assert.ifError(resolutions.error);
+    assert.deepEqual(resolutions.data, [{ review_id: breakRetries[0].data }]);
+
+    const liveBreak = await openBreakFixture();
+    const clockingOut = await holdLock(
+      `select set_config('request.jwt.claim.sub', '${users[1]}', true); ` +
+        `set local role authenticated; select public.end_attendance_break(` +
+        `'${businessId}'::uuid, '${liveBreak.sessionId}'::uuid, '${liveBreak.breakId}'::uuid, '${randomUUID()}'::uuid); ` +
+        `select public.clock_out_attendance('${businessId}'::uuid, '${liveBreak.sessionId}'::uuid, '${randomUUID()}'::uuid)`,
+    );
+    let pendingBreakClock;
+    try {
+      pendingBreakClock = Promise.resolve(manager.rpc("complete_attendance_with_offline_break", resolveBreak(liveBreak)));
+      await waitForLock("complete_attendance_with_offline_break");
+      await clockingOut.release(true);
+      assert.equal((await pendingBreakClock).error?.message, "Matching open attendance session not found");
+    } finally {
+      await clockingOut.release(false);
+      await Promise.allSettled([pendingBreakClock].filter(Boolean));
+    }
+    const liveBreakEvents = await worker.from("attendance_events").select("event_type, source")
+      .eq("session_id", liveBreak.sessionId).in("event_type", ["break_end", "clock_out"])
+      .order("event_type");
+    assert.ifError(liveBreakEvents.error);
+    assert.deepEqual(liveBreakEvents.data, [
+      { event_type: "break_end", source: "server_clock" },
+      { event_type: "clock_out", source: "server_clock" },
+    ]);
+
+    const reviewedBreak = await openBreakFixture();
+    const review = await holdLock(
+      `select set_config('request.jwt.claim.sub', '${users[0]}', true); ` +
+        `set local role authenticated; select public.review_attendance_offline_claim(` +
+        `'${businessId}'::uuid, '${venueId}'::uuid, '${reviewedBreak.claimId}'::uuid, '${randomUUID()}'::uuid, ` +
+        `'rejected', null, null, 'Duplicate')`,
+    );
+    let pendingReview;
+    try {
+      pendingReview = Promise.resolve(manager.rpc("complete_attendance_with_offline_break", resolveBreak(reviewedBreak)));
+      await waitForLock("complete_attendance_with_offline_break");
+      await review.release(true);
+      assert.equal((await pendingReview).error?.message, "Claim has already been reviewed");
+    } finally {
+      await review.release(false);
+      await Promise.allSettled([pendingReview].filter(Boolean));
+    }
+    const afterReview = await worker.from("attendance_events").select("id")
+      .eq("session_id", reviewedBreak.sessionId).in("event_type", ["break_end", "clock_out"]);
+    assert.ifError(afterReview.error);
+    assert.deepEqual(afterReview.data, []);
+    await finishLiveBreak(reviewedBreak);
+
+    const restrictedBreak = await openBreakFixture();
+    const revokeBreakAccess = await holdLock(
+      `update public.business_memberships set department_id = '${bohId}'::uuid ` +
+        `where business_id = '${businessId}'::uuid and user_id = '${users[0]}'::uuid returning user_id`,
+      users[0],
+    );
+    let pendingBreakAccess;
+    try {
+      pendingBreakAccess = Promise.resolve(manager.rpc("complete_attendance_with_offline_break",
+        resolveBreak(restrictedBreak)));
+      await waitForLock("complete_attendance_with_offline_break");
+      await revokeBreakAccess.release(true);
+      assert.equal((await pendingBreakAccess).error?.message, "Claim not found or permission denied");
+    } finally {
+      await revokeBreakAccess.release(false);
+      await Promise.allSettled([pendingBreakAccess].filter(Boolean));
+    }
+    const afterRevocation = await worker.from("attendance_events").select("id")
+      .eq("session_id", restrictedBreak.sessionId).in("event_type", ["break_end", "clock_out"]);
+    assert.ifError(afterRevocation.error);
+    assert.deepEqual(afterRevocation.data, []);
+    await finishLiveBreak(restrictedBreak);
   } finally {
     assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);
     for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);

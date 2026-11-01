@@ -55,6 +55,26 @@ export type OfflineOpenSession = {
   open_break: boolean;
   locked: boolean;
 };
+export type OfflineOpenBreak = {
+  break_id: string;
+  session_id: string;
+  employee_id: string;
+  department_id: string;
+  actor_id: string;
+  classification: "paid" | "unpaid";
+  started_at: string;
+};
+export type OfflineBreakResolution = {
+  id: string;
+  claim_id: string;
+  session_id: string;
+  actor_id: string;
+  classification: "paid" | "unpaid";
+  started_at: string;
+  reported_end_at: string;
+  reason: string;
+  created_at: string;
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
@@ -163,6 +183,48 @@ export function parseOfflineOpenSessions(value: unknown): OfflineOpenSession[] |
       session_id: row.session_id, employee_id: row.employee_id, department_id: row.department_id,
       actor_id: row.actor_id, clocked_in_at: row.clocked_in_at, latest_event_at: row.latest_event_at,
       open_break: row.open_break, locked: row.locked,
+    });
+  }
+  return rows;
+}
+
+export function parseOfflineOpenBreaks(value: unknown): OfflineOpenBreak[] | null {
+  if (!Array.isArray(value)) return null;
+  const rows: OfflineOpenBreak[] = [];
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!isRecord(row) || !isUuid(row.break_id) || !isUuid(row.session_id) ||
+      !isUuid(row.employee_id) || !isUuid(row.department_id) || !isUuid(row.actor_id) ||
+      (row.classification !== "paid" && row.classification !== "unpaid") ||
+      !isTimestamp(row.started_at)) return null;
+    const key = row.break_id.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    rows.push({
+      break_id: row.break_id, session_id: row.session_id, employee_id: row.employee_id,
+      department_id: row.department_id, actor_id: row.actor_id, classification: row.classification,
+      started_at: row.started_at,
+    });
+  }
+  return rows;
+}
+
+export function parseOfflineBreakResolutions(value: unknown): OfflineBreakResolution[] | null {
+  if (!Array.isArray(value)) return null;
+  const rows: OfflineBreakResolution[] = [];
+  const seen = new Set<string>();
+  for (const row of value) {
+    if (!isRecord(row) || !isUuid(row.id) || !isUuid(row.claim_id) || !isUuid(row.session_id) ||
+      !isUuid(row.actor_id) || (row.classification !== "paid" && row.classification !== "unpaid") ||
+      !isTimestamp(row.started_at) || !isTimestamp(row.reported_end_at) ||
+      typeof row.reason !== "string" || !row.reason.trim() || !isTimestamp(row.created_at)) return null;
+    const key = row.id.toLowerCase();
+    if (seen.has(key)) return null;
+    seen.add(key);
+    rows.push({
+      id: row.id, claim_id: row.claim_id, session_id: row.session_id, actor_id: row.actor_id,
+      classification: row.classification, started_at: row.started_at, reported_end_at: row.reported_end_at,
+      reason: row.reason, created_at: row.created_at,
     });
   }
   return rows;
