@@ -4556,3 +4556,337 @@ test("sample teams are opt-in only after an isolated database operator enables t
     }
   }
 });
+
+async function openInvitationMail(page, email) {
+  const link = await waitForMail(email, /confirm|magic|sign-in/i);
+  const response = await fetch(link, { redirect: "manual" });
+  expect(response.status).toBe(303);
+  const target = new URL(response.headers.get("location"));
+  expect(target.origin).toBe(new URL(appUrl).origin);
+  expect(target.pathname).toMatch(/^\/invitations\/[0-9a-f-]{36}$/i);
+  const fragment = new URLSearchParams(target.hash.slice(1));
+  expect(fragment.has("access_token")).toBe(true);
+  expect(fragment.has("refresh_token")).toBe(true);
+  await page.goto("/");
+  const navigation = page.waitForURL((url) => url.pathname === target.pathname);
+  await page.evaluate(({ path, hash }) => {
+    window.location.replace(new URL(`${path}${hash}`, window.location.origin).href);
+  }, { path: `${target.pathname}${target.search}`, hash: target.hash });
+  await navigation;
+  return target.pathname;
+}
+
+test("staff invitations deliver separate-browser email and join only the intended scope", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const recipientPassword = `${randomBytes(18).toString("base64url")}bB2!`;
+  const ownerEmail = `invite-owner-${suffix}@example.test`;
+  const managerEmail = `invite-manager-${suffix}@example.test`;
+  const outsideEmail = `invite-outside-${suffix}@example.test`;
+  const recipientEmail = `invite-recipient-${suffix}@example.test`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, departmentId, outsideDepartment, employeeId] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const email of [ownerEmail, managerEmail, outsideEmail]) {
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Invitation cafe" },
+      { id: outsideBusiness, name: "Outside invitation cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Main venue", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[2], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "Taylor Invitee", email: recipientEmail, role_title: "Server",
+    })).error).toBeNull();
+
+    await signIn(page, managerEmail, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const form = page.getByRole("form", { name: "Invite Taylor Invitee" });
+    await expect(form.getByLabel("Invitation email")).toHaveValue(recipientEmail);
+    await form.getByRole("button", { name: "Send invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation email requested");
+    const manager = createClient(apiUrl, anonKey, options);
+    expect((await manager.auth.signInWithPassword({ email: managerEmail, password })).error).toBeNull();
+    const invitation = await manager.from("staff_invitations").select("id, status, email")
+      .eq("employee_id", employeeId).single();
+    expect(invitation.error).toBeNull();
+    expect(invitation.data).toMatchObject({ status: "pending", email: recipientEmail });
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, outsideEmail, password);
+    await outsidePage.goto(`/invitations/${invitation.data.id}`);
+    await expect(outsidePage.getByText(/unavailable for the signed-in email/)).toBeVisible();
+    await expect(outsidePage.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+
+    const recipientContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(recipientContext);
+    const recipientPage = await recipientContext.newPage();
+    await openInvitationMail(recipientPage, recipientEmail);
+    await expect(recipientPage.getByRole("button", { name: "Accept invitation" })).toBeVisible();
+    await expect(recipientPage.getByText(/Invitation cafe invited Taylor Invitee to Main venue/)).toBeVisible();
+    expect(new URL(recipientPage.url()).hash === "").toBe(true);
+    await recipientPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(recipientPage.getByRole("status")).toContainText("invitation has been accepted");
+    const recipient = await findUser(recipientEmail);
+    expect(recipient).toBeDefined();
+    const membership = await admin.from("business_memberships").select("business_id, venue_id, department_id, role")
+      .eq("user_id", recipient.id);
+    expect(membership.error).toBeNull();
+    expect(membership.data).toEqual([{
+      business_id: businessId, venue_id: venueId, department_id: departmentId, role: "employee",
+    }]);
+    const employee = await admin.from("employees").select("auth_user_id").eq("id", employeeId).single();
+    expect(employee.error).toBeNull();
+    expect(employee.data.auth_user_id).toBe(recipient.id);
+    const events = await manager.from("staff_invitation_events").select("event, actor_id")
+      .eq("invitation_id", invitation.data.id).order("id");
+    expect(events.error).toBeNull();
+    expect(events.data).toEqual([
+      { event: "created", actor_id: users[1] }, { event: "accepted", actor_id: recipient.id },
+    ]);
+    await expect(recipientPage.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+    await recipientPage.getByRole("link", { name: "Choose a password" }).click();
+    await recipientPage.getByLabel("New password").fill(recipientPassword);
+    await recipientPage.getByRole("button", { name: "Update password" }).click();
+    await expect(recipientPage).toHaveURL(/\/login\?message=password-updated/);
+    await signIn(recipientPage, recipientEmail, recipientPassword);
+    await expect(recipientPage.getByText("Invitation cafe", { exact: true })).toBeVisible();
+    await expect(recipientPage.getByText("Outside invitation cafe", { exact: true })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    const recipient = await findUser(recipientEmail);
+    if (recipient) users.push(recipient.id);
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("staff invitations reject revocation and expiry and require consent before switching sessions", async ({ page, browser }) => {
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const ownerEmail = `invite-owner2-${suffix}@example.test`;
+  const addresses = {
+    Revoked: `invite-revoked-${suffix}@example.test`,
+    Expired: `invite-expired-${suffix}@example.test`,
+    Session: `invite-session-${suffix}@example.test`,
+    Resend: `invite-resend-${suffix}@example.test`,
+  };
+  const [businessId, venueId, departmentId, revokedEmployee, expiredEmployee, sessionEmployee, resendEmployee] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const contexts = [];
+  let ownerId;
+  try {
+    const owner = await admin.auth.admin.createUser({ email: ownerEmail, password, email_confirm: true });
+    expect(owner.error).toBeNull();
+    ownerId = owner.data.user.id;
+    expect((await admin.auth.admin.createUser({
+      email: addresses.Session, password, email_confirm: true,
+    })).error).toBeNull();
+    expect((await admin.from("businesses").insert({ id: businessId, name: "Invitation safety cafe" })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Main venue", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: ownerId, role: "owner",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: revokedEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Revoked", email: addresses.Revoked, role_title: "Server" },
+      { id: expiredEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Expired", email: addresses.Expired, role_title: "Server" },
+      { id: sessionEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Session", email: addresses.Session, role_title: "Server" },
+      { id: resendEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Resend", email: addresses.Resend, role_title: "Server" },
+    ])).error).toBeNull();
+    await signIn(page, ownerEmail, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const ownerClient = createClient(apiUrl, anonKey, options);
+    expect((await ownerClient.auth.signInWithPassword({ email: ownerEmail, password })).error).toBeNull();
+
+    async function send(name, employeeId) {
+      await page.goto(`/people?venue=${venueId}`);
+      const form = page.getByRole("form", { name: `Invite ${name}` });
+      await form.getByRole("button", { name: "Send invitation" }).click();
+      await expect(page.getByRole("status")).toContainText("Invitation email requested");
+      const result = await ownerClient.from("staff_invitations").select("id")
+        .eq("employee_id", employeeId).eq("status", "pending").single();
+      expect(result.error).toBeNull();
+      return result.data.id;
+    }
+
+    const resendId = await send("Resend", resendEmployee);
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("form", { name: "Resend invitation for Resend" })
+      .getByRole("button", { name: "Resend email" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation email requested");
+    const resent = await ownerClient.from("staff_invitations").select("id, status")
+      .eq("employee_id", resendEmployee).eq("status", "pending");
+    expect(resent.error).toBeNull();
+    expect(resent.data).toEqual([{ id: resendId, status: "pending" }]);
+    await expect.poll(async () => {
+      const list = await (await fetch(new URL("/api/v1/messages", mailUrl))).json();
+      return list.messages.filter((message) =>
+        message.To.some((recipient) => recipient.Address === addresses.Resend)).length;
+    }).toBeGreaterThanOrEqual(2);
+
+    const revokedId = await send("Revoked", revokedEmployee);
+    await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("form", { name: "Revoke invitation for Revoked" })
+      .getByRole("button", { name: "Revoke invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation revoked");
+    const revokedContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(revokedContext);
+    const revokedPage = await revokedContext.newPage();
+    await openInvitationMail(revokedPage, addresses.Revoked);
+    await expect(revokedPage.getByText("This invitation is revoked.", { exact: false })).toBeVisible();
+    await expect(revokedPage.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+
+    const expiredId = await send("Expired", expiredEmployee);
+    await sql(`update public.staff_invitations set created_at = clock_timestamp() - interval '8 days', expires_at = clock_timestamp() - interval '1 minute' where id = '${expiredId}'::uuid`);
+    await page.reload();
+    await expect(page.getByRole("region", { name: "Invitation for Expired" })).toContainText("Expired invitation");
+    await expect(page.getByRole("form", { name: "Invite Expired" })).toBeVisible();
+    const expiredContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(expiredContext);
+    const expiredPage = await expiredContext.newPage();
+    await openInvitationMail(expiredPage, addresses.Expired);
+    await expect(expiredPage.getByText("This invitation is expired.", { exact: false })).toBeVisible();
+    await expect(expiredPage.getByRole("button", { name: "Accept invitation" })).toHaveCount(0);
+
+    const sessionId = await send("Session", sessionEmployee);
+    const ownerSession = (await ownerClient.auth.getSession()).data.session;
+    expect(ownerSession).not.toBeNull();
+    const invitedClient = createClient(apiUrl, anonKey, options);
+    const invitedLogin = await invitedClient.auth.signInWithPassword({ email: addresses.Session, password });
+    expect(invitedLogin.error).toBeNull();
+    expect(invitedLogin.data.session).not.toBeNull();
+    const tamperedPage = await page.context().newPage();
+    await tamperedPage.goto(`/invitations/${sessionId}`);
+    await tamperedPage.evaluate(({ accessToken, refreshToken }) => {
+      const fragment = new URLSearchParams({ access_token: accessToken, refresh_token: refreshToken });
+      window.history.replaceState(null, "", `${window.location.pathname}#${fragment}`);
+      window.location.reload();
+    }, { accessToken: invitedLogin.data.session.access_token, refreshToken: ownerSession.refresh_token });
+    await expect(tamperedPage.getByText("This email link is invalid or expired.", { exact: false })).toBeVisible();
+    await expect(tamperedPage.getByRole("button", { name: "Continue with invitation email" })).toHaveCount(0);
+    expect(new URL(tamperedPage.url()).hash).toBe("");
+    await tamperedPage.goto("/");
+    await expect(tamperedPage.getByText("Invitation safety cafe", { exact: true })).toBeVisible();
+    await tamperedPage.close();
+    const existingContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(existingContext);
+    const existingPage = await existingContext.newPage();
+    await signIn(existingPage, ownerEmail, password);
+    await openInvitationMail(existingPage, addresses.Session);
+    await expect(existingPage.getByText("You are already signed in.", { exact: false })).toBeVisible();
+    const ownerTab = await existingContext.newPage();
+    await ownerTab.goto("/");
+    await expect(ownerTab.getByText("Invitation safety cafe", { exact: true })).toBeVisible();
+    await existingPage.getByRole("button", { name: "Continue with invitation email" }).click();
+    await expect(existingPage.getByRole("button", { name: "Accept invitation" })).toBeVisible();
+    await existingPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(existingPage.getByRole("status")).toContainText("invitation has been accepted");
+    const revoked = await ownerClient.from("staff_invitations").select("status").eq("id", revokedId).single();
+    expect(revoked.error).toBeNull();
+    expect(revoked.data.status).toBe("revoked");
+    for (const address of [addresses.Revoked, addresses.Expired]) {
+      const recipient = await findUser(address);
+      expect(recipient).toBeDefined();
+      const membership = await admin.from("business_memberships").select("id").eq("user_id", recipient.id);
+      expect(membership.error).toBeNull();
+      expect(membership.data).toEqual([]);
+    }
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const address of Object.values(addresses)) {
+      const recipient = await findUser(address);
+      if (recipient) expect((await admin.auth.admin.deleteUser(recipient.id)).error).toBeNull();
+    }
+    if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
+  }
+});
+
+test("ambiguous business memberships fail closed in stale forms and workspace pages", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const email = `multiple-businesses-${suffix}@example.test`;
+  const [businessId, otherBusiness, venueId, otherVenue, departmentId, otherDepartment] =
+    Array.from({ length: 6 }, () => randomUUID());
+  let userId;
+  try {
+    const user = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    expect(user.error).toBeNull();
+    userId = user.data.user.id;
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "First private business" }, { id: otherBusiness, name: "Second private business" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "First", timezone: "UTC" },
+      { id: otherVenue, business_id: otherBusiness, name: "Second", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "First FOH" },
+      { id: otherDepartment, business_id: otherBusiness, venue_id: otherVenue, name: "Second FOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: userId, role: "owner",
+    })).error).toBeNull();
+    await signIn(page, email, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const newEmployee = page.getByRole("region", { name: "New employee" });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Stale staff");
+    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
+    await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
+    expect((await admin.from("business_memberships").insert({
+      business_id: otherBusiness, user_id: userId, role: "employee",
+      venue_id: otherVenue, department_id: otherDepartment,
+    })).error).toBeNull();
+    await newEmployee.getByRole("button", { name: "Add employee" }).click();
+    await expect(page.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
+    await expect(page.getByText(/Safe business switching is not available yet/)).toBeVisible();
+    await expect(page.getByText("First private business", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+    const stale = await admin.from("employees").select("id").eq("business_id", businessId).eq("name", "Stale staff");
+    expect(stale.error).toBeNull();
+    expect(stale.data).toEqual([]);
+    await page.goto(`/roster?venue=${otherVenue}`);
+    await expect(page.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
+    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await page.goto("/");
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login\?message=signed-out/);
+  } finally {
+    for (const business of [businessId, otherBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});

@@ -22,7 +22,10 @@ Never put a Supabase `service_role` or secret key in a `NEXT_PUBLIC_` variable.
 The local Supabase configuration requires email confirmation. Open the local
 Mailpit inbox shown by `supabase status` to use test confirmation and reset
 links. Configure confirmation and allowed redirect URLs separately for each
-deployed environment.
+deployed environment. Staff invitation emails use Supabase Auth and require
+the application origin's `/invitations/**` path on its redirect allowlist.
+Configure a working email provider and appropriate Auth rate limits before
+using this workflow outside a local test project.
 
 After confirming an account, first-time owners can save partial business and
 venue details and resume setup later. The first venue requires an address and
@@ -58,8 +61,7 @@ current migrations before configuring venue locations.
 Owners can open **Permissions** to assign roles to existing business members.
 Owners are business-wide; general managers have a venue; FOH/BOH managers and
 employees have a venue and department. A business must retain at least one
-owner. Joining new members by invitation is a separate, not-yet-delivered
-workflow. Apply the scoped-membership migration before using this screen.
+owner. Apply the scoped-membership migration before using this screen.
 
 Managers can open **People** to add and edit employee names, preferred contact
 emails, job titles and employment types. Archive rather than delete former
@@ -69,6 +71,24 @@ existing shifts retain their original department references.
 The directory searches names and filters by permitted venue, department,
 job title and active/archive status. Select **All roles** and **All departments**
 when switching venues if the previous filters are not available there.
+
+Managers can invite an active, unlinked employee from their primary department
+on **People**. The recipient verifies the email in their own browser and can
+choose their own password; the manager never sets it. Invitations expire after
+seven days, cannot be reused, and can be revoked or resent while pending. A
+failed email request leaves the invitation pending so the manager can retry.
+Creation, acceptance, revocation and recorded expiry have protected audit
+events. A new account receives employee access only to the invited venue and
+department; an existing member keeps their existing role and scope. The email
+session is verified and its refresh token exchanged before matching it to the
+invitation. Before replacing an existing session, the recipient is asked for
+confirmation and shown the invited account.
+
+An account already belonging to another business cannot accept an invitation
+until safe business switching is implemented. Accounts with multiple existing
+memberships currently see a workspace-unavailable message rather than silently
+entering an arbitrary business. Contact an administrator; do not remove a
+membership merely to bypass this safeguard.
 
 Managers can record each worker's eligible job roles in their linked
 departments and choose a qualified primary role. An existing free-text job
@@ -112,7 +132,7 @@ their accounts are linked. Email and push delivery are not yet implemented.
 
 Owners can link an existing business member to an employee profile on
 **People**; the member's venue and department scope must permit that profile.
-Invitations for new members are not yet implemented. Linked active employees
+Linked active employees
 can save multiple weekly time ranges on **Availability**, in the venue's local
 time zone. An end time at or before the start is on the following day; equal
 times represent 24 hours. An explicitly empty pattern means unavailable all

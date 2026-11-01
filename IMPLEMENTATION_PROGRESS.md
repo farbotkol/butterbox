@@ -2,8 +2,8 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **24**. In Progress: **5**.
-  Blocked: **2**. Not started (Backlog): **56**.
+- Total stories: **87**. Verified Done: **24**. In Progress: **7**.
+  Blocked: **2**. Not started (Backlog): **54**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
@@ -61,6 +61,18 @@
   Node-only invocation. All disposable users and businesses were removed,
   the sample policy was disabled and the temporary app server stopped.
   Production isolation remains unverified, so the story is Blocked, not Done.
+- The BB-SAAS-003 checkpoint was committed as `dd2e01b` and pushed to the
+  requested development branch; the remote SHA matched.
+- BB-FOUND-005's invitation checkpoint passed **1,352/1,352** isolated
+  pgTAP assertions across 30 files, including 66 invitation assertions.
+  The serialized Node run passed **74 tests**; its nine separately run
+  authenticated integrations cover tenant boundaries and concurrency.
+  Full ESLint, TypeScript and split production compile/generate passed.
+  All **40/40** production-browser scenarios passed before the final
+  refresh-token verification change; the rebuilt three focused scenarios
+  subsequently passed against that final change, including deliberately
+  mismatched access and refresh tokens. Disposable users and businesses were
+  removed, sample policy remained disabled and the temporary app server stopped.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -123,17 +135,30 @@
 
 ## Current story
 
+- **BB-FOUND-005 — Invite and onboard users** is In Progress. An uncommitted
+  database migration implements scoped, seven-day invitations, verified-email
+  acceptance, duplicate and revocation handling, and protected event history.
+  A clean isolated replay of all 30 migrations passed **1,352/1,352** pgTAP
+  assertions, including 66 invitation assertions, and all nine authenticated
+  tenant/concurrency integrations passed. All 40 production-browser scenarios
+  passed before the final token-pair safeguard; three rebuilt focused scenarios
+  passed afterward, covering separate-browser delivery, password choice,
+  resend, expiry, revocation, mismatched tokens and the multi-business guard.
+  Existing accounts with another business are explicitly rejected until
+  business switching is safe. A local Supabase proof confirmed that an
+  implicit-flow email redirect reaches a separate recipient browser with
+  session tokens in the URL fragment; no tokens were printed.
+- **BB-FOUND-006 — Switch between business memberships** is In Progress. The
+  application now fails closed instead of silently choosing the first of
+  multiple memberships; a stale-form and cross-page browser scenario passed.
+  Actual selection, independent request context and switching remain unimplemented.
 - **BB-SAAS-003 — Tenant onboarding and support** is Blocked. The owner
   checklist, contextual help and default-off protected sample policy are
   implemented and tested in the disposable environment. Production isolation
   and whether historical production sample records exist have not been
   verified; the policy can still be enabled deliberately by a database operator.
-- **Next: BB-FOUND-005 — Invite and onboard users.** Scoped email invitations
-  are a prerequisite to onboarding unlinked staff and completing roster
-  notifications. The app currently chooses its first membership; safe handling
-  of existing multi-business users must be resolved rather than silently
-  selecting the wrong business. Supabase PKCE links initiated in a manager's
-  browser cannot be assumed to work in a recipient's separate browser.
+- Supabase PKCE links initiated in a manager's browser cannot be assumed to
+  work in a recipient's separate browser.
 - **BB-ROSTER-004 — Copy week and roster template** is Done. A scoped manager
   copies an entire department atomically into private, editable drafts, with
   eligibility rechecks, idempotent retries and safe clock-change handling.
@@ -184,6 +209,29 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-FOUND-005 — Invite and onboard users (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| FOUND-005.1 Invitation expires and cannot be reused | Database-time expiry and atomic acceptance reject expired or already-consumed invitations. | The 66-assertion invitation pgTAP suite and authenticated acceptance races passed; production Chromium showed expired invitations cannot be accepted. | Pass |
+| FOUND-005.2 Recipient joins only the intended business and venue | Verified email acceptance links the intended employee and creates only its scoped membership; an existing same-business member retains their role and scope. Existing members of another business are explicitly rejected until safe switching exists. | pgTAP and authenticated cross-tenant/concurrency tests passed; separate-browser Chromium confirmed the intended business, venue and department and denied an unrelated user. The existing-other-business case is intentionally unavailable. | Blocked |
+| FOUND-005.3 Duplicates and revocation are handled | Unique pending indexes and transaction locks prevent duplicate employee/email invitations; managers can resend or revoke; expired invitations can be replaced. | pgTAP and concurrent duplicate/revocation tests passed; Chromium verified resend preserves one pending invitation and revoked links cannot be accepted. | Pass |
+| FOUND-005.4 Audit entry is stored | Protected append-only events record invitation creation and status changes with tenant, department, actor and time. | pgTAP verified scoped access and mutation protection; authenticated and browser tests confirmed creation and acceptance actors. | Pass |
+
+Files: `supabase/migrations/20261102070000_staff_invitations.sql`,
+`supabase/tests/database/staff_invitations.test.sql`,
+`tests/staff-invitations.integration.test.mjs`, `scripts/test-tenant-isolation.mjs`,
+`src/app/actions.ts`, `src/app/people/page.tsx`, `src/app/invitations/[id]/page.tsx`,
+`src/components/invitation-session.tsx`, `src/lib/invitations.ts`,
+`src/lib/auth-urls.ts`, `src/lib/workspace.ts`, `src/app/page.tsx`,
+`src/app/setup/page.tsx`, `tests/invitations.test.mjs`,
+`tests/auth-urls.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`.
+The recipient refresh token is exchanged in an isolated client, and the
+resulting session is verified against the invitation before an existing
+browser session can be replaced. This rejects mismatched access and refresh
+tokens. Email delivery and redirect allowlists must be configured separately
+in each deployed environment.
 
 ### BB-SAAS-003 — Tenant onboarding and support (Blocked)
 
@@ -765,11 +813,13 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-FOUND-005 — Invite and onboard users**. Preserve tenant and
-  membership isolation and do not assume manager-initiated PKCE email links
-  work in a recipient's browser. Continue toward corrections, timesheet review
-  and approval. Revisit BB-SAAS-003 only after production isolation and any
-  historical sample data can be verified safely.
+- Finish the full regression and checkpoint the invitation workflow. Continue
+  with **BB-ATTEND-005 — Time capture fallback**, preserving claimed and
+  server-confirmed times without overwriting original attendance events.
+  Completing invitations for existing other-business users requires
+  **BB-FOUND-006** safe per-request switching. Continue toward corrections,
+  timesheet review and approval. Revisit BB-SAAS-003 only after production
+  isolation and any historical sample data can be verified safely.
 - The new location migration has been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:

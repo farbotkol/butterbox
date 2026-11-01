@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { signOutAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { BrandLockup } from "@/components/brand-lockup";
 import { CoastalIllustration } from "@/components/coastal-illustration";
@@ -99,13 +100,18 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
+    const multipleMemberships = "reason" in workspace && workspace.reason === "multiple_memberships";
     return (
       <main className="mx-auto mt-20 max-w-lg rounded-2xl bg-white p-8">
         <h1 className="text-xl font-semibold">Workspace unavailable</h1>
         <p className="mt-3 text-sm leading-6 text-muted">
-          We couldn&apos;t verify your session or load your workspace. Check
-          your connection and account settings, then try again.
+          {multipleMemberships
+            ? "Your account belongs to more than one business. Safe business switching is not available yet. Contact your administrator before continuing."
+            : "We couldn't verify your session or load your workspace. Check your connection and account settings, then try again."}
         </p>
+        {multipleMemberships && <form action={signOutAction} className="mt-4">
+          <button type="submit" className="rounded-lg border border-line px-4 py-2 text-sm font-semibold">Sign out</button>
+        </form>}
       </main>
     );
   }

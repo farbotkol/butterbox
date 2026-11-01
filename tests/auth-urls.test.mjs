@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { authCallbackUrl, safeAuthRedirect } from "../src/lib/auth-urls.ts";
+import { authCallbackUrl, invitationEmailUrl, safeAuthRedirect } from "../src/lib/auth-urls.ts";
 
 test("authentication callbacks use a configured secure application origin", () => {
   assert.equal(
@@ -40,5 +40,19 @@ test("authentication redirects cannot leave the request origin", () => {
     "relative",
   ]) {
     assert.equal(safeAuthRedirect(invalid), "/");
+  }
+});
+
+test("invitation links use the configured origin and a single UUID", () => {
+  const id = "a4000000-0000-4000-8000-000000000001";
+  assert.equal(invitationEmailUrl("https://butterbox.example", id),
+    `https://butterbox.example/invitations/${id}`);
+  assert.equal(invitationEmailUrl("http://127.0.0.1:3117", id),
+    `http://127.0.0.1:3117/invitations/${id}`);
+  for (const site of [undefined, "", "http://butterbox.example", "https://butterbox.example/path"]) {
+    assert.equal(invitationEmailUrl(site, id), null);
+  }
+  for (const invalid of ["", "../login", `${id}/../../login`, "https://evil.example", `${id}?token=x`]) {
+    assert.equal(invitationEmailUrl("https://butterbox.example", invalid), null);
   }
 });

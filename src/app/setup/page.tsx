@@ -14,6 +14,8 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   const workspace = await getWorkspace();
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "ready") redirect("/");
+  if (workspace.status === "error" && "reason" in workspace &&
+    workspace.reason === "multiple_memberships") redirect("/");
   const params = await searchParams;
   const [draftResult, demoResult] =
     workspace.status === "needs_setup"

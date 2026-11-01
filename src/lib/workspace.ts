@@ -44,10 +44,19 @@ export async function getWorkspace(venueId?: string) {
     .from("business_memberships")
     .select("business_id, role, venue_id, department_id")
     .eq("user_id", user.id)
-    .limit(1);
+    .limit(2);
 
   if (membershipError) {
     return { status: "error" as const, user, message: membershipError.message };
+  }
+
+  if (memberships && memberships.length > 1) {
+    return {
+      status: "error" as const,
+      reason: "multiple_memberships" as const,
+      user,
+      message: "Business switching is not yet available for this account.",
+    };
   }
 
   const membership = memberships?.[0] as Membership | undefined;

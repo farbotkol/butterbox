@@ -1,14 +1,16 @@
 "use server";
 
+import { createClient as createAuthClient } from "@supabase/supabase-js";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
 import { parseLocationCapture, parseLocationClockReceipt } from "@/lib/attendance-location";
-import { authCallbackUrl } from "@/lib/auth-urls";
+import { authCallbackUrl, invitationEmailUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
@@ -131,6 +133,124 @@ export async function signOutAction() {
   const { error } = await supabase.auth.signOut();
   if (error) redirect("/login?error=signout");
   redirect("/login?message=signed-out");
+}
+
+async function sendInvitationEmail(email: string, invitationId: string): Promise<boolean> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const emailRedirectTo = invitationEmailUrl(process.env.NEXT_PUBLIC_SITE_URL, invitationId);
+  if (!url || !anonKey || !emailRedirectTo) {
+    console.error("Invitation email configuration is incomplete or invalid.");
+    return false;
+  }
+  const auth = createAuthClient(url, anonKey, {
+    auth: { flowType: "implicit", persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+  });
+  const { error } = await auth.auth.signInWithOtp({
+    email, options: { emailRedirectTo, shouldCreateUser: true },
+  });
+  if (error) {
+    console.error("Could not request an invitation email.", { code: error.code, status: error.status });
+    return false;
+  }
+  return true;
+}
+
+export async function createStaffInvitationAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  if (venueIds?.length !== 1 || departmentIds?.length !== 1 || employeeIds?.length !== 1) {
+    console.error("Invalid invitation scope.");
+    redirect("/people?error=invite");
+  }
+  const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const rawEmail = formData.get("email");
+  const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
+  if (!email || email.length > 254) redirect(`${destination}&error=invite-email`);
+
+  const { data, error } = await workspace.supabase.rpc("create_staff_invitation", {
+    p_business_id: workspace.business.id, p_venue_id: venueIds[0],
+    p_department_id: departmentIds[0], p_employee_id: employeeIds[0], p_email: email,
+  });
+  if (error || typeof data !== "string" || !isInvitationId(data)) {
+    console.error("Could not create an invitation.", { code: error?.code, message: error?.message });
+    const reason = error?.message === "An active invitation already exists" ? "invite-duplicate"
+      : error?.message === "Invalid invitation email" ? "invite-email" : "invite";
+    redirect(`${destination}&error=${reason}`);
+  }
+  const sent = await sendInvitationEmail(email, data);
+  revalidatePath("/people");
+  redirect(`${destination}&${sent ? "saved=invite-sent" : "error=invite-send"}`);
+}
+
+async function findManageableInvitation(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const invitationIds = uuidList(formData, "invitation_id", 1);
+  if (venueIds?.length !== 1 || invitationIds?.length !== 1) {
+    console.error("Invalid invitation selection.");
+    redirect("/people?error=invite");
+  }
+  const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status !== "ready") redirect("/");
+  const { data, error } = await workspace.supabase.rpc("list_pending_staff_invitations", {
+    p_business_id: workspace.business.id, p_venue_id: venueIds[0],
+  }).eq("id", invitationIds[0]).maybeSingle();
+  const invitation = parsePendingStaffInvitation(data);
+  if (error || !invitation) {
+    console.error("Could not load the selected invitation.", { code: error?.code, message: error?.message });
+    redirect(`${destination}&error=invite`);
+  }
+  return { workspace, invitation, destination };
+}
+
+export async function resendStaffInvitationAction(formData: FormData) {
+  const { invitation, destination } = await findManageableInvitation(formData);
+  if (invitation.status !== "pending") {
+    redirect(`${destination}&error=invite-expired`);
+  }
+  const sent = await sendInvitationEmail(invitation.email, invitation.id);
+  redirect(`${destination}&${sent ? "saved=invite-sent" : "error=invite-send"}`);
+}
+
+export async function revokeStaffInvitationAction(formData: FormData) {
+  const { workspace, invitation, destination } = await findManageableInvitation(formData);
+  const { error } = await workspace.supabase.rpc("revoke_staff_invitation", { p_invitation_id: invitation.id });
+  if (error) {
+    console.error("Could not revoke an invitation.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=invite`);
+  }
+  revalidatePath("/people");
+  redirect(`${destination}&saved=invite-revoked`);
+}
+
+export async function acceptStaffInvitationAction(formData: FormData) {
+  const rawId = formData.get("invitation_id");
+  const invitationId = typeof rawId === "string" ? rawId.trim() : "";
+  if (!isInvitationId(invitationId)) {
+    console.error("Invalid invitation identifier.");
+    redirect("/");
+  }
+  const destination = `/invitations/${invitationId}`;
+  if (!isSupabaseConfigured()) redirect(`${destination}?error=setup`);
+  const supabase = await createClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) redirect(`${destination}?error=authentication`);
+  const { error } = await supabase.rpc("accept_staff_invitation", { p_invitation_id: invitationId });
+  if (error) {
+    console.error("Could not accept an invitation.", { code: error.code, message: error.message });
+    const reason = error.message === "Business switching is not yet available for this account" ? "business"
+      : error.message === "Your existing membership cannot access this department" ? "scope"
+        : "unavailable";
+    redirect(`${destination}?error=${reason}`);
+  }
+  revalidatePath("/");
+  redirect(`${destination}?accepted=1`);
 }
 
 export async function assignMemberRoleAction(formData: FormData) {

@@ -1,6 +1,9 @@
 import { redirect } from "next/navigation";
 import {
+  createStaffInvitationAction,
   linkSharedWorkerAction,
+  resendStaffInvitationAction,
+  revokeStaffInvitationAction,
   saveEmployeeAction,
   setEmployeeAuthUserAction,
   setEmployeeDepartmentsAction,
@@ -9,6 +12,7 @@ import {
   unlinkSharedWorkerAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import type { PendingStaffInvitation } from "@/lib/invitations";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace, type BusinessMember } from "@/lib/workspace";
@@ -67,10 +71,62 @@ function EmployeeAccountForm({ employee, members, venueId }: {
       </label>
       <p className="mt-2 text-xs text-muted">
         Link an existing member to let them view their shifts and manage their own availability.
-        Invitations are a separate workflow.
       </p>
       <button type="submit" className="mt-3 rounded-lg border border-line px-4 py-2 text-sm font-semibold">Save account link</button>
     </form>
+  );
+}
+
+function EmployeeInvitationForm({ employee, invitation, venueId, departmentActive }: {
+  employee: Employee; invitation?: PendingStaffInvitation; venueId: string; departmentActive: boolean;
+}) {
+  const expired = invitation?.status === "expired";
+  const canInvite = employee.active && !employee.auth_user_id && departmentActive;
+  return (
+    <section aria-label={`Invitation for ${employee.name}`} className="mt-4 rounded-lg border border-line p-4">
+      <h3 className="text-sm font-semibold">Staff invitation</h3>
+      {invitation && <>
+        <p className="mt-2 text-sm text-muted">
+          {expired ? "Expired invitation" : "Pending invitation"}: {invitation.email}.
+          {!expired && ` Expires ${new Date(invitation.expires_at).toUTCString()}.`}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-3">
+          {!expired && canInvite && <form action={resendStaffInvitationAction} aria-label={`Resend invitation for ${employee.name}`}>
+            <input type="hidden" name="venue_id" value={venueId} />
+            <input type="hidden" name="invitation_id" value={invitation.id} />
+            <button type="submit" className="rounded-lg border border-line px-4 py-2 text-sm font-semibold">Resend email</button>
+          </form>}
+          <form action={revokeStaffInvitationAction} aria-label={`Revoke invitation for ${employee.name}`}>
+            <input type="hidden" name="venue_id" value={venueId} />
+            <input type="hidden" name="invitation_id" value={invitation.id} />
+            <button type="submit" className="rounded-lg border border-line px-4 py-2 text-sm font-semibold">Revoke invitation</button>
+          </form>
+        </div>
+        {!canInvite && <p className="mt-2 text-xs text-muted">
+          This profile is not available for acceptance. Revoke the invitation if it is no longer needed.
+        </p>}
+      </>}
+      {canInvite && (!invitation || expired) && <form
+        action={createStaffInvitationAction} aria-label={`Invite ${employee.name}`} className="mt-3">
+        <input type="hidden" name="venue_id" value={venueId} />
+        <input type="hidden" name="department_id" value={employee.department_id} />
+        <input type="hidden" name="employee_id" value={employee.id} />
+        <label className="block text-sm">Invitation email
+          <input type="email" name="email" required maxLength={254} defaultValue={employee.email ?? ""}
+            className="mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink" />
+        </label>
+        <p className="mt-2 text-xs text-muted">
+          The recipient verifies their email and chooses their own password. Invitations expire after seven days.
+          Accounts already linked to another business cannot join until business switching is available.
+        </p>
+        <button type="submit" className="mt-3 rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">
+          Send invitation
+        </button>
+      </form>}
+      {!canInvite && !invitation && <p className="mt-2 text-sm text-muted">
+        {employee.auth_user_id ? "This profile already has a linked account." : "Only active staff in active departments can be invited."}
+      </p>}
+    </section>
   );
 }
 
@@ -299,7 +355,7 @@ export default async function PeoplePage({
     redirect("/people?error=filter");
   }
   const venueId = selectedVenue?.id ?? workspace.venue.id;
-  const [departments, profileRoles, jobRoles, qualifications, preferences, members] = await Promise.all([
+  const [departments, profileRoles, jobRoles, qualifications, preferences, members, invitations] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active").eq("venue_id", venueId).order("name"),
     workspace.supabase.from("employees").select("role_title").eq("venue_id", venueId).order("role_title"),
     workspace.supabase.from("job_roles").select("id, name, department_id, active").eq("venue_id", venueId).order("name"),
@@ -310,6 +366,10 @@ export default async function PeoplePage({
     workspace.membership.role === "owner"
       ? workspace.supabase.rpc("list_business_members", { p_business_id: workspace.business.id })
       : Promise.resolve({ data: [], error: null }),
+    readAllPages<PendingStaffInvitation>((from, to) => workspace.supabase.rpc("list_pending_staff_invitations", {
+      p_business_id: workspace.business.id, p_venue_id: venueId,
+    }, { count: "exact" })
+      .order("id").range(from, to), (invitation) => invitation.id),
   ]);
   const roleTitles = [...new Set([
     ...(profileRoles.data?.map((employee) => employee.role_title) ?? []),
@@ -369,7 +429,7 @@ export default async function PeoplePage({
   const canAssignDepartments = ["owner", "admin", "general_manager"].includes(workspace.membership.role);
   const loadError = venues.error || departments.error || profileRoles.error || jobRoles.error ||
     qualifications.error || preferences.error || members.error || filterError || employees.error || links.error ||
-    otherEmployees.error || sharedProfiles.error;
+    otherEmployees.error || sharedProfiles.error || invitations.error;
   if (loadError) console.error("Could not load employee profiles.", { code: loadError.code, message: loadError.message });
   return (
     <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -393,6 +453,11 @@ export default async function PeoplePage({
           : params.error === "shared-groups" ? "These profiles belong to different shared workers. Unlink the incorrect profiles before linking them."
           : params.error === "shared-clock" ? "Finish at least one open clock session before linking these profiles."
           : params.error === "shared" ? "Could not change the shared-worker link. Check the profiles and try again."
+          : params.error === "invite-duplicate" ? "An active invitation already exists. Resend or revoke it before creating another."
+          : params.error === "invite-email" ? "Enter a valid invitation email address."
+          : params.error === "invite-send" ? "The invitation was saved, but its email could not be requested. Check your email configuration or try Resend email later."
+          : params.error === "invite-expired" ? "That invitation has expired. Send a new invitation instead."
+          : params.error === "invite" ? "Could not change the invitation. Check your access and the employee's status, then try again."
           : params.error === "filter"
           ? "That directory filter is unavailable. Choose a permitted venue, department and role."
           : "Could not save employee. Check the details and try again."}
@@ -402,6 +467,8 @@ export default async function PeoplePage({
           : params.saved === "roles" ? "Eligible roles saved."
             : params.saved === "primary" ? "Primary role saved."
               : params.saved === "account" ? "Account link saved."
+                : params.saved === "invite-sent" ? "Invitation email requested. The recipient should check their inbox."
+                  : params.saved === "invite-revoked" ? "Invitation revoked."
                 : params.saved === "shared-link" ? "Shared-worker profiles linked."
                   : params.saved === "shared-unlink" ? "Shared-worker profile unlinked." : "Employee profile saved."}
       </p>}
@@ -469,6 +536,11 @@ export default async function PeoplePage({
                 </section>
                 {workspace.membership.role === "owner" && (
                   <EmployeeAccountForm employee={employee} members={members.data ?? []} venueId={venueId} />
+                )}
+                {departments.data?.some((department) => department.id === employee.department_id) && (
+                  <EmployeeInvitationForm employee={employee} venueId={venueId}
+                    departmentActive={Boolean(departments.data.find((department) => department.id === employee.department_id)?.active)}
+                    invitation={invitations.data?.find((invitation) => invitation.employee_id === employee.id)} />
                 )}
                 {departments.data?.some((department) => department.id === employee.department_id) ? <>
                   <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
