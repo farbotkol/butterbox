@@ -510,6 +510,303 @@ test("offline attendance claims survive reconnect failures and stay scoped to th
   }
 });
 
+test("prepared attendance reopens offline without crossing account or tenant sessions", async ({
+  page, context, browser,
+}) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const passphrase = "an offline phrase for this test";
+  const [businessId, outsideBusiness, venueId, outsideVenue, departmentId, outsideDepartment, employeeId, outsideEmployee] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  const outsideContext = await browser.newContext({ baseURL: appUrl });
+  let mirrored;
+
+  async function prepare(target) {
+    const section = target.getByRole("region", { name: "Offline attendance fallback" });
+    await section.getByText("Prepare this tab for offline reopening").click();
+    await section.getByLabel("Offline passphrase", { exact: true }).fill(passphrase);
+    await section.getByLabel("Confirm offline passphrase").fill(passphrase);
+    await section.getByRole("button", { name: "Prepare offline reopening" }).click();
+    await expect(section.getByRole("status")).toContainText("Offline reopening is prepared");
+    expect(await target.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+    return section;
+  }
+
+  async function unlock(target) {
+    await target.getByLabel("Offline passphrase").fill(passphrase);
+    await target.getByRole("button", { name: "Unlock offline attendance" }).click();
+    await expect(target.getByRole("region", { name: "Offline attendance fallback" })).toBeVisible();
+  }
+
+  async function replaceAuthCookies(cookies) {
+    for (const cookie of (await context.cookies(appUrl)).filter((item) =>
+      /^sb-.+-auth-token(?:\.\d+)?$/.test(item.name))) {
+      await context.clearCookies({ name: cookie.name });
+    }
+    await context.addCookies(cookies);
+  }
+
+  try {
+    for (const role of ["worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `reopen-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Reopen cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside reopen cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside department" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[1], role: "employee", venue_id: outsideVenue,
+        department_id: outsideDepartment },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[0], name: "Reopen Worker", role_title: "Server" },
+      { id: outsideEmployee, business_id: outsideBusiness, venue_id: outsideVenue, department_id: outsideDepartment,
+        auth_user_id: users[1], name: "Outside Worker", role_title: "Server" },
+    ])).error).toBeNull();
+
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `reopen-outside-${suffix}@example.test`, password);
+    const outsideCookies = (await outsideContext.cookies(appUrl))
+      .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
+    expect(outsideCookies.length).toBeGreaterThan(0);
+    await signIn(page, `reopen-worker-${suffix}@example.test`, password);
+    expect((await workerApi.auth.signInWithPassword({
+      email: `reopen-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    await page.goto(`/attendance?venue=${venueId}`);
+    const fallback = await prepare(page);
+    const workerCookies = (await context.cookies(appUrl))
+      .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
+    const envelope = await page.evaluate(() => sessionStorage.getItem("butterbox:offline-attendance-context:v1"));
+    expect(envelope).toBeTruthy();
+    expect(envelope).not.toContain("Reopen Worker");
+    expect(envelope).not.toContain(users[0]);
+    const cached = await page.evaluate(async () => {
+      const cache = await caches.open("butterbox-offline-shell-v1");
+      const requests = await cache.keys();
+      return {
+        paths: requests.map((request) => new URL(request.url).pathname).sort(),
+        credentials: requests.map((request) => request.credentials),
+      };
+    });
+    expect(cached.paths).toEqual([
+      "/offline-attendance-app.mjs", "/offline-attendance-shared.mjs",
+      "/offline-attendance.css", "/offline-attendance.html",
+    ]);
+    expect(cached.credentials.every((credentials) => credentials === "omit")).toBe(true);
+
+    await page.evaluate(() => {
+      const original = Storage.prototype.setItem;
+      window.testOriginalSetItem = original;
+      Storage.prototype.setItem = function (key, value) {
+        if (key === "butterbox:offline-attendance-context:v1") {
+          throw new DOMException("Storage full", "QuotaExceededError");
+        }
+        return original.call(this, key, value);
+      };
+    });
+    await fallback.getByLabel("Offline passphrase", { exact: true }).fill(passphrase);
+    await fallback.getByLabel("Confirm offline passphrase").fill(passphrase);
+    await fallback.getByRole("button", { name: "Prepare offline reopening" }).click();
+    await expect(fallback.getByRole("alert")).toContainText("Offline preparation could not be stored");
+    await page.evaluate(() => { Storage.prototype.setItem = window.testOriginalSetItem; });
+    expect(await page.evaluate(() => sessionStorage.getItem("butterbox:offline-attendance-context:v1"))).toBe(envelope);
+
+    let startPreparation;
+    let resumePreparation;
+    const preparationStarted = new Promise((resolve) => { startPreparation = resolve; });
+    const preparationResumed = new Promise((resolve) => { resumePreparation = resolve; });
+    const optionsRoute = "**/rest/v1/rpc/list_my_clock_options*";
+    await context.route(optionsRoute, async (route) => {
+      startPreparation();
+      await preparationResumed;
+      await route.continue();
+    });
+    try {
+      await fallback.getByLabel("Offline passphrase", { exact: true }).fill(passphrase);
+      await fallback.getByLabel("Confirm offline passphrase").fill(passphrase);
+      await fallback.getByRole("button", { name: "Prepare offline reopening" }).click();
+      await preparationStarted;
+      await replaceAuthCookies(outsideCookies);
+      await expect(fallback.getByRole("alert")).toContainText("account session changed", { timeout: 7_000 });
+      const failedPreparation = page.waitForEvent("console", {
+        predicate: (message) => message.type() === "error" &&
+          message.text().includes("Could not prepare offline attendance reopening."),
+      });
+      resumePreparation();
+      await failedPreparation;
+      expect(await page.evaluate(() => sessionStorage.getItem("butterbox:offline-attendance-context:v1"))).toBe(envelope);
+    } finally {
+      resumePreparation();
+      await context.unroute(optionsRoute);
+    }
+    await replaceAuthCookies(workerCookies);
+    await page.goto(`/attendance?venue=${venueId}`);
+
+    await context.setOffline(true);
+    await replaceAuthCookies(outsideCookies);
+    await expect(fallback.getByRole("alert")).toContainText("account session changed", { timeout: 7_000 });
+    await expect(fallback).not.toContainText("Reopen Worker");
+    await expect(fallback.getByRole("button", { name: "Save offline clock in" })).toHaveCount(0);
+    await replaceAuthCookies(workerCookies);
+    await page.reload();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await expect(page.getByRole("heading", { name: "Offline attendance" })).toBeVisible();
+    await page.evaluate(async () => {
+      const shell = await caches.open("butterbox-offline-shell-v1");
+      const backup = await caches.open("test-offline-asset-backup");
+      await backup.put("/offline-attendance-app.mjs", await shell.match("/offline-attendance-app.mjs"));
+      await shell.delete("/offline-attendance-app.mjs");
+    });
+    await page.reload();
+    await expect(page.getByRole("alert")).toContainText("Offline controls are loading");
+    await page.evaluate(async () => {
+      const shell = await caches.open("butterbox-offline-shell-v1");
+      const backup = await caches.open("test-offline-asset-backup");
+      await shell.put("/offline-attendance-app.mjs", await backup.match("/offline-attendance-app.mjs"));
+      await caches.delete("test-offline-asset-backup");
+    });
+    await page.reload();
+    await page.getByLabel("Offline passphrase").fill("incorrect passphrase");
+    await page.getByRole("button", { name: "Unlock offline attendance" }).click();
+    await expect(page.getByRole("alert")).toContainText("passphrase is incorrect");
+    await unlock(page);
+    await expect(page.getByRole("combobox", { name: "Employee and department" })).toContainText("Reopen Worker");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.goto(`/attendance?venue=${outsideVenue}`);
+    await page.getByLabel("Offline passphrase").fill(passphrase);
+    await page.getByRole("button", { name: "Unlock offline attendance" }).click();
+    await expect(page.getByRole("alert")).toContainText("prepared for another venue");
+    await page.goto(`/attendance?venue=${venueId}`);
+    await unlock(page);
+    await page.evaluate(({ employee, department }) => {
+      const select = document.querySelector("#offline-selection");
+      select.add(new Option("Injected outside worker", `${employee}:${department}`, true, true));
+    }, { employee: outsideEmployee, department: outsideDepartment });
+    await page.getByRole("button", { name: "Save offline clock in" }).click();
+    await expect(page.getByRole("alert")).toContainText("Choose your employee and department");
+    await page.getByRole("combobox", { name: "Employee and department" }).selectOption({
+      label: "Reopen Worker · FOH",
+    });
+    await page.getByRole("button", { name: "Save offline clock in" }).click();
+    await page.getByRole("button", { name: "Save offline clock out" }).click();
+    await expect(page.getByRole("status")).toContainText("2 claims pending");
+    await page.reload();
+    await unlock(page);
+    await expect(page.getByRole("list", { name: "Claims pending on this device" }).getByRole("listitem")).toHaveCount(2);
+
+    await page.evaluate(() => {
+      Object.defineProperty(window, "indexedDB", {
+        configurable: true, get() { throw new DOMException("Storage unavailable", "SecurityError"); },
+      });
+    });
+    await page.getByRole("button", { name: "Save offline clock in" }).click();
+    await expect(page.getByRole("alert")).toContainText("The claim was not saved");
+    await page.reload();
+    await unlock(page);
+    await page.evaluate(() => {
+      const original = indexedDB.open;
+      let calls = 0;
+      window.testOriginalIndexedDbOpen = original;
+      indexedDB.open = function (...args) {
+        calls += 1;
+        if (calls === 2) throw new DOMException("Storage unavailable", "SecurityError");
+        return original.apply(this, args);
+      };
+    });
+    await page.getByRole("button", { name: "Save offline clock in" }).click();
+    await expect(page.getByRole("alert")).toContainText("The claim was saved, but its pending status");
+    await page.evaluate(() => { indexedDB.open = window.testOriginalIndexedDbOpen; });
+    await page.reload();
+    await unlock(page);
+    const stored = await page.evaluate(() => new Promise((resolve, reject) => {
+      const request = indexedDB.open("butterbox-offline-attendance", 1);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const database = request.result;
+        const transaction = database.transaction("claims", "readonly");
+        const all = transaction.objectStore("claims").getAll();
+        all.onerror = () => reject(all.error);
+        all.onsuccess = () => resolve(all.result);
+        transaction.oncomplete = () => database.close();
+      };
+    }));
+    expect(stored).toHaveLength(3);
+    expect(stored.every((claim) => claim.actorId === users[0] && claim.businessId === businessId)).toBe(true);
+
+    await replaceAuthCookies(outsideCookies);
+    await expect(page.getByRole("alert")).toContainText("account session changed", { timeout: 7_000 });
+    await expect(page.getByRole("region", { name: "Offline attendance fallback" })).toBeHidden();
+    await page.getByLabel("Offline passphrase").fill(passphrase);
+    await page.getByRole("button", { name: "Unlock offline attendance" }).click();
+    await expect(page.getByRole("alert")).toContainText("account session changed");
+
+    await context.setOffline(false);
+    const otherTenant = await context.newPage();
+    await otherTenant.goto(`/attendance?venue=${outsideVenue}`);
+    const otherFallback = await prepare(otherTenant);
+    await expect(otherFallback).toContainText("No claims are waiting on this device");
+    await context.setOffline(true);
+    await otherTenant.reload();
+    await unlock(otherTenant);
+    await expect(otherTenant.getByRole("status")).toContainText("No claims are waiting on this device");
+    await expect(otherTenant.getByRole("region", { name: "Offline attendance fallback" })).not.toContainText("Reopen Worker");
+    await replaceAuthCookies(workerCookies);
+    await expect(otherTenant.getByRole("alert")).toContainText("account session changed", { timeout: 7_000 });
+    await unlock(page);
+    await expect(page.getByRole("status")).toContainText("3 claims pending");
+    await context.setOffline(false);
+    await page.getByRole("button", { name: "Reconnect and upload" }).click();
+    const submitted = page.getByRole("region", { name: "Submitted offline attendance claims" });
+    await expect(submitted.getByRole("listitem")).toHaveCount(3);
+    const received = await workerApi.from("attendance_offline_claims")
+      .select("request_id, claimed_at, received_at").eq("business_id", businessId);
+    expect(received.error).toBeNull();
+    expect(received.data).toHaveLength(3);
+    for (const claim of stored) {
+      const row = received.data.find((item) => item.request_id === claim.requestId);
+      expect(row).toBeDefined();
+      expect(new Date(row.claimed_at).toISOString()).toBe(claim.claimedAt);
+      expect(Date.parse(row.received_at)).toBeGreaterThanOrEqual(Date.parse(claim.claimedAt));
+    }
+
+    mirrored = await context.newPage();
+    await mirrored.goto("/offline-attendance.html");
+    await mirrored.evaluate((value) => sessionStorage.setItem("butterbox:offline-attendance-context:v1", value), envelope);
+    await unlock(mirrored);
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page).toHaveURL(/\/login\?message=signed-out/);
+    await expect(mirrored.getByRole("alert")).toContainText("account session changed");
+    await expect(mirrored.getByRole("region", { name: "Offline attendance fallback" })).toBeHidden();
+    expect(await page.evaluate(() => sessionStorage.getItem("butterbox:offline-attendance-context:v1"))).toBeNull();
+    expect(await mirrored.evaluate(() => sessionStorage.getItem("butterbox:offline-attendance-context:v1"))).toBeNull();
+  } finally {
+    await context.setOffline(false);
+    await outsideContext.close();
+    if (mirrored) await mirrored.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 async function withPermissionFixtures(initialRole, run) {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

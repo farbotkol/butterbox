@@ -1,0 +1,81 @@
+:root {
+  color-scheme: light;
+  font-family: system-ui, sans-serif;
+  color: #172f32;
+  background: #faf9f6;
+}
+
+body {
+  margin: 0;
+  padding: 1rem;
+}
+
+main {
+  max-width: 42rem;
+  margin: 2rem auto;
+  padding: 1.5rem;
+  border: 1px solid #d5dfdc;
+  border-radius: 1rem;
+  background: white;
+  line-height: 1.5;
+}
+
+.eyebrow {
+  color: #426b6a;
+  font-weight: 600;
+}
+
+h1 {
+  font-size: 1.8rem;
+}
+
+h2 {
+  font-size: 1.2rem;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+}
+
+input, select, button {
+  box-sizing: border-box;
+  min-height: 2.75rem;
+  max-width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #9aafab;
+  border-radius: 0.5rem;
+  font: inherit;
+}
+
+input, select {
+  display: block;
+  width: 100%;
+  margin: 0.4rem 0 0.8rem;
+  background: white;
+}
+
+button {
+  color: #fff;
+  background: #123f4a;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
+[role="alert"] {
+  padding: 0.8rem;
+  border-radius: 0.5rem;
+  color: #8d1d1d;
+  background: #fff0f0;
+}

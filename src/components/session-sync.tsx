@@ -2,8 +2,9 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { sessionEventKey } from "../../public/offline-attendance-shared.mjs";
+import { announceSessionChange, discardOfflinePreparation } from "@/lib/session-notifications";
 
-const sessionEventKey = "butterbox:session-ended";
 const publicAuthPages = new Set(["/login", "/signup", "/forgot-password"]);
 const authFormPages = new Set([...publicAuthPages, "/reset-password"]);
 
@@ -13,8 +14,9 @@ export function SessionSync() {
 
   useEffect(() => {
     function onStorage(event: StorageEvent) {
-      if (event.key === sessionEventKey && event.newValue && !publicAuthPages.has(pathname)) {
-        window.location.replace("/login");
+      if (event.key === sessionEventKey && event.newValue) {
+        discardOfflinePreparation();
+        if (!publicAuthPages.has(pathname)) window.location.replace("/login");
       }
     }
 
@@ -37,11 +39,7 @@ export function SessionSync() {
 
 export function AnnounceSessionEnd() {
   useEffect(() => {
-    try {
-      window.localStorage.setItem(sessionEventKey, crypto.randomUUID());
-    } catch (error) {
-      console.error("Could not notify other tabs that the session ended.", error);
-    }
+    announceSessionChange();
   }, []);
 
   return null;

@@ -166,7 +166,19 @@ coordinates. Device-reported location can be spoofed and is not proof of
 physical presence. Verification results are separate records: original events
 retain their original unverified status, and older events are not retroactively
 checked. If the network fails while the attendance page is already open, an
-employee can save a clock-in or clock-out claim on that device. The device time
+employee can save a clock-in or clock-out claim on that device. To reopen the
+fallback after a network failure, while signed in and online select the venue,
+expand **Prepare this tab for offline reopening** and choose a separate
+12–128-character offline passphrase. Reopen `/attendance` in that tab and
+unlock with the passphrase. Only the generic offline shell is cached, not
+authenticated pages or API responses. The saved employee and venue scope is
+encrypted and tied to the current browser session; signing out removes the
+preparation, and a different session cannot unlock it. This local check is not
+offline authentication and cannot detect a server-side access revocation while
+disconnected. Unsupported browser storage or a changed session requires
+reconnecting and preparing the tab again. Closing the tab can remove its
+preparation; pending claims remain on the device until uploaded or browser
+storage is cleared. The device time
 is untrusted; the claim is queued in browser storage and submitted when the
 same account reconnects, retaining both that claimed time and the server's
 receipt time. Claims are visible within the employee's or manager's scope, but
@@ -194,9 +206,9 @@ flagged in **Work time**. No break end is inferred automatically. Out-of-order
 or overlapping events, edit locks and overlapping sessions prevent completion.
 Reopening a previously linked claim does not allow it to create another
 attendance session or clock event. Timesheet approvals are not yet available.
-The page cannot be opened offline, and clearing browser data or losing the
-device can lose unsent claims.
-Device storage is shared by accounts using the same browser profile, so use a
+Pending claims are not encrypted; clearing browser data or losing the device
+can lose unsent claims. Device storage is shared by accounts using the same
+browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the
 current migrations before using the clock.

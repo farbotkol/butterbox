@@ -1,3 +1,5 @@
+import { parseOfflineAttendanceClaim as parseSharedAttendanceClaim } from "../../public/offline-attendance-shared.mjs";
+
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export type OfflineEventType = "clock_in" | "clock_out";
@@ -93,16 +95,7 @@ function isEventType(value: unknown): value is OfflineEventType {
 }
 
 export function parseOfflineAttendanceClaim(value: unknown): OfflineAttendanceClaim | null {
-  if (!isRecord(value) || !isUuid(value.requestId) || !isUuid(value.actorId) ||
-    !isUuid(value.businessId) || !isUuid(value.venueId) || !isUuid(value.departmentId) ||
-    !isUuid(value.employeeId) || !isEventType(value.eventType) || !isTimestamp(value.claimedAt)) {
-    return null;
-  }
-  return {
-    requestId: value.requestId, actorId: value.actorId, businessId: value.businessId,
-    venueId: value.venueId, departmentId: value.departmentId, employeeId: value.employeeId,
-    eventType: value.eventType, claimedAt: value.claimedAt,
-  };
+  return parseSharedAttendanceClaim(value);
 }
 
 export function parseOfflineClaimReceipt(value: unknown): { id: string; receivedAt: string } | null {

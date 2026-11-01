@@ -5,6 +5,7 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { useEffect, useRef, useState } from "react";
 import { isEndedSession } from "@/lib/auth-errors";
 import { parseInvitationPreview } from "@/lib/invitations";
+import { announceSessionChange } from "@/lib/session-notifications";
 
 type Phase = "idle" | "checking" | "confirm" | "applying" | "check-error" | "apply-error" | "link-error";
 type Tokens = { access_token: string; refresh_token: string };
@@ -37,6 +38,7 @@ export function InvitationSession({ url, anonKey, invitationId }: {
       return;
     }
     tokens.current = null;
+    announceSessionChange();
     window.location.replace(`${window.location.pathname}${window.location.search}`);
   }
 

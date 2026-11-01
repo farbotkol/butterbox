@@ -4,9 +4,11 @@ import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { browserSessionIdentity, sessionEventKey } from "../../public/offline-attendance-shared.mjs";
 import { parseClockOptionValue, type ClockOption } from "@/lib/attendance";
 import { parseOfflineClaimReceipt, type OfflineAttendanceClaim, type OfflineEventType } from "@/lib/offline-attendance";
 import { listOfflineClaims, removeOfflineClaim, saveOfflineClaim } from "@/lib/offline-attendance-queue";
+import { OfflineReopenSetup } from "@/components/offline-reopen-setup";
 
 export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, options }: {
   url: string; anonKey: string; actorId: string; businessId: string; venueId: string; options: ClockOption[];
@@ -20,14 +22,45 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
   const [offline, setOffline] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [recording, setRecording] = useState(false);
+  const [accountChanged, setAccountChanged] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const client = useRef<SupabaseClient | null>(null);
   const syncInProgress = useRef(false);
   const syncAgain = useRef(false);
   const recordInProgress = useRef(false);
+  const sessionIdentity = useRef<{ actorId: string; sessionId: string } | null>(null);
+
+  const readSession = useCallback(() => {
+    try {
+      const cookieName = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+      return browserSessionIdentity(document.cookie, cookieName);
+    } catch (caught) {
+      if (!(caught instanceof DOMException)) throw caught;
+      console.error("Could not check the offline attendance browser session.", caught);
+      return null;
+    }
+  }, [url]);
+
+  const hasCurrentSession = useCallback(() => {
+    const expected = sessionIdentity.current;
+    const current = readSession();
+    return expected !== null && current?.actorId === actorId && current.sessionId === expected.sessionId;
+  }, [actorId, readSession]);
+
+  const invalidateSession = useCallback(() => {
+    sessionIdentity.current = null;
+    setAccountChanged(true);
+    setQueued([]);
+    setQueueLoaded(false);
+    setMessage("");
+  }, []);
 
   const sync = useCallback(async () => {
+    if (!hasCurrentSession()) {
+      invalidateSession();
+      return;
+    }
     if (syncInProgress.current) {
       syncAgain.current = true;
       return;
@@ -35,6 +68,10 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
     syncInProgress.current = true;
     async function flush() {
       const claims = await listOfflineClaims(actorId, businessId);
+      if (!hasCurrentSession()) {
+        invalidateSession();
+        return;
+      }
       setQueued(claims);
       setQueueLoaded(true);
       if (!claims.length || !navigator.onLine) return;
@@ -42,6 +79,10 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
       setError("");
       if (!client.current) client.current = createBrowserClient(url, anonKey);
       const { data: { user }, error: authError } = await client.current.auth.getUser();
+      if (!hasCurrentSession()) {
+        invalidateSession();
+        return;
+      }
       if (authError || !user || user.id !== actorId) {
         console.error("Could not verify the offline attendance account.", { code: authError?.code });
         setError("The claims remain on this device. Reconnect and sign in as the same account before retrying.");
@@ -51,6 +92,10 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
       let received = 0;
       let failed = false;
       for (const claim of claims) {
+        if (!hasCurrentSession()) {
+          invalidateSession();
+          return;
+        }
         const { data, error: submissionError } = await client.current.rpc("submit_attendance_offline_claim", {
           p_business_id: claim.businessId, p_venue_id: claim.venueId, p_department_id: claim.departmentId,
           p_employee_id: claim.employeeId, p_actor_id: claim.actorId, p_request_id: claim.requestId,
@@ -67,7 +112,12 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
         await removeOfflineClaim(claim.requestId);
         received += 1;
       }
-      setQueued(await listOfflineClaims(actorId, businessId));
+      const remaining = await listOfflineClaims(actorId, businessId);
+      if (!hasCurrentSession()) {
+        invalidateSession();
+        return;
+      }
+      setQueued(remaining);
       if (received) {
         setMessage(`${received} claim${received === 1 ? "" : "s"} received by the server and awaiting manager review.`);
         router.refresh();
@@ -88,27 +138,50 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
       setSyncing(false);
       syncInProgress.current = false;
     }
-  }, [actorId, anonKey, businessId, router, url]);
+  }, [actorId, anonKey, businessId, hasCurrentSession, invalidateSession, router, url]);
 
   useEffect(() => {
+    const initialSession = readSession();
+    sessionIdentity.current = initialSession?.actorId === actorId ? initialSession : null;
+    function checkSession() {
+      if (sessionIdentity.current && !hasCurrentSession()) invalidateSession();
+    }
     function connectionChanged() {
+      if (!hasCurrentSession()) {
+        invalidateSession();
+        return;
+      }
       setOffline(!navigator.onLine);
       if (navigator.onLine) void sync();
     }
     queueMicrotask(() => {
-      setOffline(!navigator.onLine);
-      void sync();
+      if (!hasCurrentSession()) invalidateSession();
+      else {
+        setAccountChanged(false);
+        setOffline(!navigator.onLine);
+        void sync();
+      }
     });
+    const timer = window.setInterval(checkSession, 2_000);
     window.addEventListener("online", connectionChanged);
     window.addEventListener("offline", connectionChanged);
+    window.addEventListener(sessionEventKey, checkSession);
+    document.addEventListener("visibilitychange", checkSession);
     return () => {
+      window.clearInterval(timer);
       window.removeEventListener("online", connectionChanged);
       window.removeEventListener("offline", connectionChanged);
+      window.removeEventListener(sessionEventKey, checkSession);
+      document.removeEventListener("visibilitychange", checkSession);
     };
-  }, [sync]);
+  }, [actorId, hasCurrentSession, invalidateSession, readSession, sync]);
 
   async function record(eventType: OfflineEventType) {
     if (recordInProgress.current) return;
+    if (!hasCurrentSession()) {
+      invalidateSession();
+      return;
+    }
     const optionValue = options.length === 1
       ? `${options[0].employee_id}:${options[0].department_id}` : selection;
     const option = parseClockOptionValue(optionValue);
@@ -140,15 +213,27 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
     }
   }
 
+  if (accountChanged) {
+    return <section aria-label="Offline attendance fallback" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+      <h2 className="text-lg font-semibold">Offline attendance fallback</h2>
+      <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">
+        The account session changed or could not be checked. Reconnect and refresh before using offline attendance.
+        Pending claims remain on this device for their original account.
+      </p>
+    </section>;
+  }
+
   return (
     <section aria-label="Offline attendance fallback" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
       <h2 className="text-lg font-semibold">Offline attendance fallback</h2>
       <p className="mt-2 text-sm text-muted">
         If clocking fails, save an unverified claim using this device&apos;s clock. It stays on this device
         until uploaded, requires manager review and does not automatically change recorded work time.
-        This fallback is available while this attendance page remains open. Clearing browser data before
-        upload will lose pending claims.
+        Prepare this tab while online if you need to reopen the fallback after a network failure.
+        Clearing browser data before upload will lose pending claims.
       </p>
+      {options.length > 0 && <OfflineReopenSetup url={url} anonKey={anonKey} actorId={actorId}
+        businessId={businessId} venueId={venueId} />}
       {options.length > 1 && <label className="mt-4 block text-sm">
         Employee and department for the claim
         <select value={selection} onChange={(event) => setSelection(event.target.value)}
