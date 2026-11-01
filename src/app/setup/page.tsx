@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createBusinessAction } from "@/app/actions";
+import { BrandLockup } from "@/components/brand-lockup";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
@@ -16,21 +17,18 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   const params = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f7f6f0] px-5 py-12">
+    <main className="flex min-h-screen items-center justify-center bg-cloud px-5 py-12">
       <section className="w-full max-w-[600px] rounded-[26px] bg-white p-7 shadow-[0_18px_60px_rgba(27,52,40,0.1)] sm:p-10">
         <Link href="/" className="flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f4d56d] text-lg font-black text-[#173d32]">
-            b
-          </span>
-          <span className="text-xl font-semibold tracking-tight">butterbox</span>
+          <BrandLockup />
         </Link>
-        <p className="mt-10 text-xs font-semibold uppercase tracking-[0.18em] text-[#9a7a22]">
+        <p className="mt-10 text-xs font-semibold uppercase tracking-[0.18em] text-ocean">
           Let&apos;s get your venue ready
         </p>
-        <h1 className="mt-3 text-3xl font-semibold tracking-tight">
+        <h1 className="mt-3 text-3xl font-semibold">
           Set up your workspace
         </h1>
-        <p className="mt-3 leading-7 text-[#747d77]">
+        <p className="mt-3 leading-7 text-muted">
           You&apos;ll be the business owner. Add your first venue and start with
           a clean roster or a fictional sample team.
         </p>
@@ -51,7 +49,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="block text-sm font-medium">
             Business name
             <input
-              className="mt-2 block w-full rounded-xl border border-[#dfe3da] px-4 py-3 outline-none focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
+              className="mt-2 block w-full rounded-xl border border-line px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
               maxLength={100}
               name="business_name"
               placeholder="The Corner Café"
@@ -61,7 +59,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="block text-sm font-medium">
             First venue
             <input
-              className="mt-2 block w-full rounded-xl border border-[#dfe3da] px-4 py-3 outline-none focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
+              className="mt-2 block w-full rounded-xl border border-line px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
               maxLength={100}
               name="venue_name"
               placeholder="Surry Hills"
@@ -71,7 +69,7 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="block text-sm font-medium">
             Venue timezone
             <select
-              className="mt-2 block w-full rounded-xl border border-[#dfe3da] bg-white px-4 py-3 outline-none focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
+              className="mt-2 block w-full rounded-xl border border-line bg-white px-4 py-3 outline-none focus:border-ocean focus:ring-2 focus:ring-ocean/10"
               defaultValue="Australia/Sydney"
               name="timezone"
               required
@@ -86,23 +84,23 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
               <option value="Australia/Canberra">Canberra, ACT</option>
             </select>
           </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[#e6e8df] bg-[#fbfbf8] p-4">
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-line bg-cloud p-4">
             <input
-              className="mt-1 accent-[#173d32]"
+              className="mt-1 accent-ocean"
               defaultChecked
               name="sample_data"
               type="checkbox"
             />
             <span>
               <span className="block text-sm font-semibold">Add a sample team</span>
-              <span className="mt-1 block text-xs leading-5 text-[#747d77]">
+              <span className="mt-1 block text-xs leading-5 text-muted">
                 Adds 24 fictional staff and a draft FOH/BOH roster for this week.
                 You can delete the sample shifts before publishing.
               </span>
             </span>
           </label>
           <button
-            className="w-full rounded-xl bg-[#173d32] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#225643]"
+            className="w-full rounded-xl bg-ocean px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-ocean/90"
             type="submit"
           >
             Create workspace

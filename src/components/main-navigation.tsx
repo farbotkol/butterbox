@@ -1,0 +1,37 @@
+"use client";
+
+import { CalendarDays, LayoutDashboard } from "lucide-react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+const links = [
+  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/roster", label: "Rostering", icon: CalendarDays },
+];
+
+export function MainNavigation() {
+  const pathname = usePathname();
+
+  return (
+    <nav aria-label="Main navigation" className="flex gap-2 overflow-x-auto px-3 pb-3 md:block md:space-y-1 md:px-3 md:pb-0">
+      {links.map(({ href, label, icon: Icon }) => {
+        const active = href === "/" ? pathname === href : pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={`flex min-h-11 shrink-0 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean md:w-full ${
+              active
+                ? "bg-soft-sea text-ocean"
+                : "text-muted hover:bg-cloud hover:text-ocean"
+            }`}
+          >
+            <Icon size={18} aria-hidden="true" />
+            {label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

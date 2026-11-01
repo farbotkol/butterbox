@@ -2,13 +2,13 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Butterbox",
+    name: "Butterbox Systems",
     short_name: "Butterbox",
-    description: "Simple scheduling for hospitality teams.",
+    description: "Less admin, more good days for hospitality teams.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f7f6f0",
-    theme_color: "#173d32",
+    background_color: "#FAF9F6",
+    theme_color: "#123F4A",
     icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
   };
 }

@@ -1,5 +1,6 @@
 "use server";
 
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
@@ -28,17 +29,56 @@ export async function signInAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
-  if (!isSupabaseConfigured()) redirect("/login?error=setup");
+  if (!isSupabaseConfigured()) redirect("/signup?error=setup");
 
   const email = text(formData, "email", 254).toLowerCase();
   const password = secret(formData, "password", 128);
-  if (!email || password.length < 10) redirect("/login?error=signup");
+  if (!email || password.length < 10) redirect("/signup?error=signup");
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signUp({ email, password });
-  if (error) redirect("/login?error=signup");
+  if (error) redirect("/signup?error=signup");
   if (!data.session) redirect("/login?message=confirm");
   redirect("/setup");
+}
+
+export async function resetPasswordAction(formData: FormData) {
+  if (!isSupabaseConfigured()) redirect("/forgot-password?error=setup");
+
+  const email = text(formData, "email", 254).toLowerCase();
+  if (!email) redirect("/forgot-password?error=reset");
+
+  const origin =
+    process.env.NEXT_PUBLIC_SITE_URL || (await headers()).get("origin");
+  if (!origin) redirect("/forgot-password?error=setup");
+
+  const supabase = await createClient();
+  const redirectTo = new URL(
+    "/auth/callback?next=/reset-password",
+    origin,
+  ).toString();
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo,
+  });
+  if (error) redirect("/forgot-password?error=reset");
+  redirect("/forgot-password?message=sent");
+}
+
+export async function updatePasswordAction(formData: FormData) {
+  if (!isSupabaseConfigured()) redirect("/login?error=setup");
+
+  const password = secret(formData, "password", 128);
+  if (password.length < 10) redirect("/reset-password?error=password");
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect("/forgot-password?error=link");
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) redirect("/reset-password?error=update");
+  redirect("/login?message=password-updated");
 }
 
 export async function signOutAction() {

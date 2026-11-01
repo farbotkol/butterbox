@@ -1,13 +1,8 @@
-import {
-  CalendarDays,
-  CircleHelp,
-  LayoutDashboard,
-  LogOut,
-  Settings,
-  UsersRound,
-} from "lucide-react";
+import { CircleHelp, LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOutAction } from "@/app/actions";
+import { BrandLockup } from "@/components/brand-lockup";
+import { MainNavigation } from "@/components/main-navigation";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -17,11 +12,6 @@ type AppShellProps = {
   role: string;
 };
 
-const links = [
-  { href: "/", label: "Overview", icon: LayoutDashboard },
-  { href: "/roster", label: "Weekly roster", icon: CalendarDays },
-];
-
 export function AppShell({
   children,
   businessName,
@@ -30,42 +20,20 @@ export function AppShell({
   role,
 }: AppShellProps) {
   return (
-    <div className="min-h-screen md:flex">
-      <aside className="flex w-full shrink-0 flex-col bg-[#173d32] text-white md:fixed md:inset-y-0 md:w-[246px]">
-        <Link href="/" className="flex items-center gap-3 px-6 py-6">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f4d56d] text-lg font-black text-[#173d32]">
-            b
-          </span>
-          <span className="text-xl font-semibold tracking-tight">butterbox</span>
+    <div className="min-h-screen bg-[#f5f9f8] md:flex">
+      <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:border-b-0 md:border-r">
+        <Link href="/" className="flex items-center gap-3 px-5 py-5 md:px-6 md:py-6">
+          <BrandLockup compact />
         </Link>
-        <div className="mx-4 mb-5 rounded-xl border border-white/10 bg-white/5 px-4 py-3">
-          <p className="truncate text-sm font-semibold">{businessName}</p>
-          <p className="mt-1 truncate text-xs text-white/60">{venueName}</p>
+        <div className="mx-4 mb-3 rounded-lg border border-line bg-cloud px-4 py-3 md:mb-5">
+          <p className="truncate text-sm font-semibold text-ink">{businessName}</p>
+          <p className="mt-1 truncate text-xs text-muted">{venueName}</p>
         </div>
-        <nav aria-label="Main navigation" className="flex gap-2 px-3 md:block md:space-y-1">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/75 transition hover:bg-white/10 hover:text-white"
-            >
-              <Icon size={18} aria-hidden="true" />
-              {label}
-            </Link>
-          ))}
-          <span className="hidden items-center gap-3 rounded-xl px-4 py-3 text-sm text-white/40 md:flex">
-            <UsersRound size={18} aria-hidden="true" />
-            Team <span className="ml-auto text-[10px] uppercase tracking-wide">Soon</span>
-          </span>
-        </nav>
+        <MainNavigation />
         <div className="mt-auto hidden space-y-1 px-3 pb-5 md:block">
-          <span className="flex items-center gap-3 px-4 py-3 text-sm text-white/50">
-            <Settings size={17} aria-hidden="true" />
-            Settings
-          </span>
           <a
             href="mailto:support@butterbox.app"
-            className="flex items-center gap-3 px-4 py-3 text-sm text-white/50 hover:text-white"
+            className="flex min-h-11 items-center gap-3 rounded-lg px-4 py-3 text-sm text-muted hover:bg-cloud hover:text-ocean"
           >
             <CircleHelp size={17} aria-hidden="true" />
             Help
@@ -73,23 +41,23 @@ export function AppShell({
         </div>
       </aside>
       <div className="min-w-0 flex-1 md:ml-[246px]">
-        <header className="flex min-h-[72px] items-center justify-between border-b border-[#e6e8df] bg-white/80 px-5 sm:px-8">
+        <header className="flex min-h-[72px] items-center justify-between border-b border-line bg-white px-5 sm:px-8">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-[#747d77]">
-              Venue workspace
+            <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">
+              PEOPLE <span className="px-1 text-sea-glass">·</span> PLACES <span className="px-1 text-sea-glass">·</span> HOSPITALITY <span className="px-1 text-sea-glass">·</span> PROGRESS
             </p>
             <p className="mt-1 text-sm font-semibold">{venueName}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">
               <p className="max-w-48 truncate text-sm font-medium">{email}</p>
-              <p className="mt-0.5 text-xs capitalize text-[#747d77]">
+              <p className="mt-0.5 text-xs capitalize text-muted">
                 {role.replaceAll("_", " ")}
               </p>
             </div>
             <div
               aria-hidden="true"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-[#e6eee8] text-sm font-semibold text-[#173d32]"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-soft-sea text-sm font-semibold text-ocean"
             >
               {email.charAt(0).toUpperCase()}
             </div>
@@ -98,14 +66,14 @@ export function AppShell({
                 type="submit"
                 aria-label="Sign out"
                 title="Sign out"
-                className="rounded-lg p-2 text-[#747d77] hover:bg-[#f1f2eb] hover:text-[#173d32]"
+                className="min-h-10 min-w-10 rounded-lg p-2 text-muted hover:bg-soft-sea hover:text-ocean focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean"
               >
                 <LogOut size={18} aria-hidden="true" />
               </button>
             </form>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-5 py-7 sm:px-8 sm:py-9">
+        <main className="mx-auto w-full max-w-[1440px] px-5 py-6 sm:px-8 sm:py-8">
           {children}
         </main>
       </div>

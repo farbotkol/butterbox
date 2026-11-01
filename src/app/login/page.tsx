@@ -1,7 +1,9 @@
 import { ArrowRight, LockKeyhole } from "lucide-react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { signInAction, signUpAction } from "@/app/actions";
+import { signInAction } from "@/app/actions";
+import { AuthLayout } from "@/components/auth-layout";
+import { PasswordInput } from "@/components/password-input";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
@@ -10,7 +12,6 @@ type LoginPageProps = {
 
 const errors: Record<string, string> = {
   credentials: "We couldn't sign you in. Check your email and password.",
-  signup: "We couldn't create your account. Use a valid email and a password of at least 10 characters.",
   setup: "Add the Supabase settings in .env.local before signing in.",
 };
 
@@ -27,138 +28,84 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#f7f6f0] px-5 py-12">
-      <div className="grid w-full max-w-[980px] overflow-hidden rounded-[28px] bg-white shadow-[0_24px_80px_rgba(27,52,40,0.12)] md:grid-cols-[0.95fr_1.05fr]">
-        <section className="flex flex-col justify-between bg-[#173d32] p-8 text-white sm:p-11">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#f4d56d] text-lg font-black text-[#173d32]">
-              b
-            </span>
-            <span className="text-xl font-semibold tracking-tight">butterbox</span>
-          </Link>
-          <div className="my-12 max-w-sm">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-[0.22em] text-[#f4d56d]">
-              Made for hospitality
-            </p>
-            <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-[44px]">
-              Great shifts start with a clear plan.
-            </h1>
-            <p className="mt-5 max-w-xs leading-7 text-white/70">
-              A calmer way to plan the week, look after your team and keep your
-              venue moving.
-            </p>
-          </div>
-          <p className="text-xs text-white/45">A little more ease in every shift.</p>
-        </section>
-
-        <section className="p-7 sm:p-11">
-          <div className="mb-8 flex h-11 w-11 items-center justify-center rounded-xl bg-[#f1f3eb] text-[#173d32]">
-            <LockKeyhole size={20} aria-hidden="true" />
-          </div>
-          <h2 className="text-2xl font-semibold tracking-tight">Welcome to Butterbox</h2>
-          <p className="mt-2 text-sm leading-6 text-[#747d77]">
-            Sign in to your venue, or create an account to set one up.
-          </p>
-
-          {params.error && (
-            <p
-              role="alert"
-              className="mt-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800"
-            >
-              {errors[params.error] ?? "Something went wrong. Please try again."}
-            </p>
-          )}
-          {params.message === "confirm" && (
-            <p className="mt-5 rounded-xl border border-[#d9e7d9] bg-[#f1f7f0] px-4 py-3 text-sm text-[#24543e]">
-              Check your inbox to confirm your email, then sign in.
-            </p>
-          )}
-          {!configured && (
-            <p className="mt-5 rounded-xl border border-[#eadcae] bg-[#fff9e6] px-4 py-3 text-sm leading-6 text-[#6b5615]">
-              Authentication is not connected yet. Copy <code>.env.example</code>{" "}
-              to <code>.env.local</code> and add your Supabase project URL and
-              anon key to enable sign-in.
-            </p>
-          )}
-
-          <form action={signInAction} className="mt-7 space-y-4">
-            <label className="block text-sm font-medium">
-              Email address
-              <input
-                autoComplete="email"
-                className="mt-2 block w-full rounded-xl border border-[#dfe3da] bg-white px-4 py-3 outline-none transition focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
-                disabled={!configured}
-                name="email"
-                placeholder="you@yourcafe.com.au"
-                required
-                type="email"
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              Password
-              <input
-                autoComplete="current-password"
-                className="mt-2 block w-full rounded-xl border border-[#dfe3da] bg-white px-4 py-3 outline-none transition focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
-                disabled={!configured}
-                name="password"
-                required
-                type="password"
-              />
-            </label>
-            <button
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#173d32] px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-[#225643] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!configured}
-              type="submit"
-            >
-              Sign in <ArrowRight size={17} aria-hidden="true" />
-            </button>
-          </form>
-
-          <div className="my-7 flex items-center gap-3 text-xs text-[#8a928c]">
-            <span className="h-px flex-1 bg-[#e6e8df]" />
-            NEW TO BUTTERBOX
-            <span className="h-px flex-1 bg-[#e6e8df]" />
-          </div>
-          <form action={signUpAction} className="space-y-4">
-            <label className="block text-sm font-medium">
-              Email address
-              <input
-                autoComplete="email"
-                className="mt-2 block w-full rounded-xl border border-[#dfe3da] bg-white px-4 py-3 outline-none transition focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
-                disabled={!configured}
-                name="email"
-                placeholder="you@yourcafe.com.au"
-                required
-                type="email"
-              />
-            </label>
-            <label className="block text-sm font-medium">
-              Create a password
-              <input
-                autoComplete="new-password"
-                className="mt-2 block w-full rounded-xl border border-[#dfe3da] bg-white px-4 py-3 outline-none transition focus:border-[#173d32] focus:ring-2 focus:ring-[#173d32]/10"
-                disabled={!configured}
-                minLength={10}
-                name="password"
-                placeholder="At least 10 characters"
-                required
-                type="password"
-              />
-            </label>
-            <p className="text-xs leading-5 text-[#747d77]">
-              New accounts become business owners when they set up their first
-              venue.
-            </p>
-            <button
-              className="w-full rounded-xl border border-[#dfe3da] px-5 py-3 text-sm font-semibold text-[#173d32] transition hover:bg-[#f7f8f3] disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={!configured}
-              type="submit"
-            >
-              Create account
-            </button>
-          </form>
-        </section>
+    <AuthLayout>
+      <div className="mb-7 flex h-11 w-11 items-center justify-center rounded-xl bg-soft-sea text-ocean">
+        <LockKeyhole size={20} aria-hidden="true" />
       </div>
-    </main>
+      <h2 className="font-display text-[28px] font-semibold leading-tight text-ocean">Welcome to Butterbox</h2>
+      <p className="mt-2 text-sm leading-6 text-muted">
+        Your team, rosters and timesheets, all in one place.
+      </p>
+
+      {params.error && (
+        <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          {errors[params.error] ?? "Something went wrong. Please try again."}
+        </p>
+      )}
+      {params.message === "confirm" && (
+        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+          Check your inbox to confirm your email, then sign in.
+        </p>
+      )}
+      {params.message === "reset" && (
+        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+          If your account is registered, a password reset email is on its way.
+        </p>
+      )}
+      {params.message === "password-updated" && (
+        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+          Your password has been updated. Sign in with your new password.
+        </p>
+      )}
+      {!configured && (
+        <p className="mt-5 rounded-lg border border-sand bg-soft-sand px-4 py-3 text-sm leading-6 text-ocean">
+          Authentication is not connected yet. Copy <code>.env.example</code> to <code>.env.local</code> and add your Supabase project URL and anon key.
+        </p>
+      )}
+
+      <form action={signInAction} className="mt-7 space-y-5">
+        <label className="block text-sm font-medium text-ink" htmlFor="email">
+          Email address
+          <input
+            autoComplete="email"
+            className="mt-2 block min-h-12 w-full rounded-lg border border-line bg-white px-4 py-3 text-base outline-none transition placeholder:text-muted/55 focus:border-ocean focus:ring-4 focus:ring-ocean/10 disabled:cursor-not-allowed disabled:bg-cloud"
+            disabled={!configured}
+            id="email"
+            name="email"
+            placeholder="you@yourcafe.com.au"
+            required
+            type="email"
+          />
+        </label>
+        <label className="block text-sm font-medium text-ink" htmlFor="password">
+          <span className="flex items-center justify-between gap-3">
+            Password
+            <Link href="/forgot-password" className="text-xs font-medium text-ocean underline-offset-4 hover:underline">
+              Forgot password?
+            </Link>
+          </span>
+          <PasswordInput autoComplete="current-password" id="password" name="password" />
+        </label>
+        <button
+          className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ocean px-5 py-3 text-sm font-semibold text-white transition hover:bg-ocean/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={!configured}
+          type="submit"
+        >
+          Sign in <ArrowRight size={17} aria-hidden="true" />
+        </button>
+      </form>
+
+      <div className="my-7 flex items-center gap-3 text-xs text-muted">
+        <span className="h-px flex-1 bg-line" />
+        NEW TO BUTTERBOX
+        <span className="h-px flex-1 bg-line" />
+      </div>
+      <Link
+        className="flex min-h-12 w-full items-center justify-center rounded-lg border border-ocean/35 bg-white px-5 py-3 text-sm font-semibold text-ocean transition hover:bg-soft-sea focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean"
+        href="/signup"
+      >
+        Create account
+      </Link>
+    </AuthLayout>
   );
 }
