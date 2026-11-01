@@ -3,14 +3,22 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **31**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **70**.
+  BB-PAYRULES stories). Verified Done: **33**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **68**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
-  BB-TIME-005 and BB-PAY-001.
+  BB-TIME-005, BB-TIME-006, BB-PAY-001 and BB-PAY-002.
+- BB-PAY-002 and BB-TIME-006's final clean 43-migration disposable replay
+  passed **2,043/2,043** pgTAP assertions across 43 files, including 64
+  export-ledger assertions. All **18/18** authenticated tenant/concurrency
+  integrations, **128** Node tests, full ESLint, TypeScript and the split
+  production build passed. The 18 integrations skipped in the Node-only run
+  passed separately. All **49/49** serialized production-browser scenarios
+  passed on the final schema. Free disk remained above 31 GiB; no cache,
+  database, volume or worktree deletion was needed.
 - BB-PAY-001's final 42-migration disposable replay passed **1,979/1,979**
   pgTAP assertions across 42 files, including 45 canonical-record assertions.
   An independent real pre-migration finalisation rehearsal passed **11/11**
@@ -278,12 +286,21 @@
 
 ## Current story
 
+- **BB-PAY-002 — Generic CSV export** and **BB-TIME-006 — Timesheet export
+  traceability** are Done (criterion evidence below). Immutable scoped batches
+  contain approved finalised records, protect spreadsheet cells and never
+  automatically export a previously exported session again. Amended hours
+  require explicit manual reconciliation with a reason and confirmation of
+  any necessary external adjustment. Final-schema verification includes the
+  employee-name race and reconciliation-reason boundaries, including BOM
+  whitespace and non-BMP characters. Next: **BB-PAY-003 — Payroll employee
+  mapping**, before Xero. No external payroll access or award compliance is
+  implied by a generic CSV download.
 - **BB-PAY-001 — Canonical payroll record** is Done (verification below).
-  Next is BB-PAY-002, with BB-TIME-006's batch/version and reconciliation
-  requirements considered before any export can be delivered.
+  Its verified checkpoint is `90f29fd`, pushed to the development branch.
 - **BB-TIME-005 — Finalise payroll period** is Done (verification below).
-  Next: BB-PAY-002 (generic CSV), BB-TIME-006 (export traceability) and
-  BB-PAY-003 (employee mapping) before Xero (BB-PAY-004). The new BB-PAYRULES award stories depend on
+  Next: BB-PAY-003 (employee mapping) before Xero (BB-PAY-004).
+  The new BB-PAYRULES award stories depend on
   BB-RULES-001/003 and should follow reliable export.
 - **BB-TIME-004 — Department approval** is Done.
 - **BB-TIME-003 — Employee correction request** is Done. It was recovered
@@ -509,6 +526,53 @@ durations round. Provider mappings and codes are unassigned, not inferred.
 The preview is not an export, Xero integration or award calculation. A future
 export must atomically recheck the finalisation, exceptions, mapping and
 reconciliation under appropriate locks.
+
+### BB-PAY-002 — Generic CSV export (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-002.1 Columns and date/time formats documented | README specifies all 22 columns, UTF-8 BOM, quoted CRLF CSV, venue-local work dates, UTC clock timestamps, exact decimal seconds and half-up hours rounded to six places. Stable employee UUIDs are explicit; display names are not payroll mappings. | Node tests checked exact headers, timestamp/date values, escaping and decimal rounding, including large and sub-second values. Production Chromium downloaded the actual attachment and verified its headers, identifiers, times and hours. Both passed. | Pass |
+| PAY-002.2 Only approved records included | Batch creation and each download recheck full-venue authority, current finalisation, complete canonical snapshots, timezone and unresolved exceptions. The authenticated route validates every paginated record and rechecks the batch before responding with private/no-store headers. | 64-assertion export pgTAP suite passed unfinished/reopened/stale-period, pending-exception, employee, FOH, cross-tenant and direct-table denials. Authenticated integration passed finalisation/reopening, revocation, timezone, claim submission/review and employee-name races. Production Chromium verified owner download, FOH/outsider refusals, reopened batch refusal and late-request refusal. | Pass |
+| PAY-002.3 Formula injection mitigated | Every cell is quoted and embedded quotes doubled. Formula-like prefixes, including whitespace/control/bidi-prefixed formulas, receive an apostrophe. | Node tests verified dangerous prefixes, quoted names and line breaks. Production Chromium verified the formula-like employee name in the downloaded CSV is neutralised. Passed. | Pass |
+| PAY-002.4 Export logged | Preparing the file creates an immutable attributed batch and per-session records linked to its finalisation/version. Scoped history retains entries after reopening; preparing a batch is not represented as proof of browser download or external import. | pgTAP passed append-only and access checks. Integration verified repeated/competing preparation returns one batch. Production Chromium verified the prepared batch, actual download and persistent audit detail after reopening. Passed. | Pass |
+
+### BB-TIME-006 — Timesheet export traceability (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-006.1 Each entry links to batch and version | Immutable export entries reference a batch, finalisation and session, retaining the validated canonical record, approval ID/revision and payroll version. CSV and manager history expose these links. | pgTAP verified the stored snapshot and IDs. Node tests rejected incomplete, duplicate, malformed and incorrectly scoped rows. Production Chromium verified downloaded IDs/version and historical per-session detail. Passed. | Pass |
+| TIME-006.2 Amended entries trigger explicit reconciliation | Payroll-fact changes against the last exported/reconciled baseline block preparation/download. An authorised manager reviews before/after records, submits the exact review hash, a reason and explicit confirmation of any adjustment outside Butterbox. Reconciliation appends immutable records; it never silently rewrites source time or emits an adjustment payment. | pgTAP passed missing confirmation/reason, stale hash, idempotency, changed time, cross-week movement, history and reason boundary tests (including 500 UTF-16 units). Production Chromium verified changed-hours review, refusal before reconciliation, recorded reason/confirmation, and before/after historical values. Passed. | Pass |
+| TIME-006.3 Duplicates prevented | A business/session uniqueness constraint and serialized batch preparation prevent re-export across requests, versions and weeks. Only new sessions enter later batches; reconciliation never automatically resends paid hours. | pgTAP verified repeated requests and cross-week movement cannot create duplicate exports. Authenticated integration passed competing preparations. Production Chromium verified only the new session is downloaded after reconciliation and the original session remains in its first batch. Passed. | Pass |
+
+Files: `supabase/migrations/20261102200000_generic_payroll_exports.sql`,
+`supabase/tests/database/generic_payroll_exports.test.sql`,
+`src/lib/generic-payroll-exports.ts`,
+`src/app/timesheets/payroll-export/route.ts`, `src/app/timesheets/page.tsx`,
+`src/app/actions.ts`, `src/app/attendance/page.tsx`,
+`src/components/offline-attendance.tsx`, `src/lib/offline-attendance.ts`,
+`tests/generic-payroll-exports.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+
+Final verification: clean replay of all 43 migrations on the explicitly
+verified disposable `butterbox-acceptance` project (API 55421, DB 55422);
+**2,043/2,043** database assertions across 43 files (64 export assertions);
+**18/18** authenticated integrations; **128** Node tests (18 integrations
+skipped only in that invocation and run separately); full ESLint, TypeScript,
+split production compile/generate and **49/49** production-browser scenarios.
+Temporary browser servers stopped and disposable users/businesses were removed.
+Disk remained above 31 GiB. Main development/production databases were not
+modified by this work.
+
+Defects fixed during verification: CSV rounding test expectation independently
+checked against decimal arithmetic; browser scenario restored to top-level
+registration; details-state test respects navigation preserving the open state;
+claim/export lock ordering corrected and tested against timezone updates;
+immutable captured employee names validated after insertion so a concurrent
+profile edit cannot create an undownloadable committed batch; SQL reason
+validation aligned with the UI's UTF-16 length limit. No legitimate assertions
+were removed. Generic CSV cannot prevent someone manually importing a downloaded
+file twice into an external system; the UI and README warn about that limitation.
 
 ### BB-TIME-005 — Finalise payroll period (Done)
 
@@ -1178,7 +1242,7 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Payroll export, cross-business employee invitation and email/push
+- Provider payroll delivery, cross-business employee invitation and email/push
   notification remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
@@ -1190,14 +1254,15 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-PAY-002 — Generic CSV export**, accounting for
-  **BB-TIME-006** batch/version, duplicate and reconciliation requirements
-  before making any payroll export available. Follow with BB-PAY-003 employee
-  mapping before BB-PAY-004 Xero.
+- Implement **BB-PAY-003 — Payroll employee mapping**: explicit employee IDs
+  unique within each payroll connection, server-enforced missing-mapping
+  refusal and no inference from display names. Generic CSV remains a
+  provider-neutral hours export; Xero (BB-PAY-004) must not be presented as
+  available without verified provider access and sandbox acceptance.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.
-- The latest bulk-lock migration has been tested only on the isolated stack. The
+- The latest payroll export migration has been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

@@ -2,6 +2,8 @@ import { parseOfflineAttendanceClaim as parseSharedAttendanceClaim } from "../..
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export const attendanceClaimTimezoneChangedMessage = "Venue timezone changed; retry attendance claim";
+
 export type OfflineEventType = "clock_in" | "clock_out";
 export type OfflineAttendanceClaim = {
   requestId: string;

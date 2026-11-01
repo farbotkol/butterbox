@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { browserSessionIdentity, sessionEventKey } from "../../public/offline-attendance-shared.mjs";
 import { parseClockOptionValue, type ClockOption } from "@/lib/attendance";
-import { parseOfflineClaimReceipt, type OfflineAttendanceClaim, type OfflineEventType } from "@/lib/offline-attendance";
+import {
+  attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, type OfflineAttendanceClaim, type OfflineEventType,
+} from "@/lib/offline-attendance";
 import { listOfflineClaims, removeOfflineClaim, saveOfflineClaim } from "@/lib/offline-attendance-queue";
 import { OfflineReopenSetup } from "@/components/offline-reopen-setup";
 
@@ -91,6 +93,7 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
 
       let received = 0;
       let failed = false;
+      let timezoneChanged = false;
       for (const claim of claims) {
         if (!hasCurrentSession()) {
           invalidateSession();
@@ -107,6 +110,7 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
             message: submissionError?.message ?? "The server returned an invalid receipt.",
           });
           failed = true;
+          timezoneChanged ||= submissionError?.message === attendanceClaimTimezoneChangedMessage;
           continue;
         }
         await removeOfflineClaim(claim.requestId);
@@ -122,7 +126,9 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
         setMessage(`${received} claim${received === 1 ? "" : "s"} received by the server and awaiting manager review.`);
         router.refresh();
       }
-      if (failed) setError("Some claims could not be uploaded. They remain on this device; retry or contact your manager.");
+      if (failed) setError(timezoneChanged
+        ? "The venue timezone changed while claims were uploading. They remain on this device; retry or contact your manager."
+        : "Some claims could not be uploaded. They remain on this device; retry or contact your manager.");
     }
     try {
       do {

@@ -110,6 +110,8 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
       client.rpc("list_canonical_payroll_records", { ...scope, p_finalisation_id: finalisationId });
     const asOwner = (statement) =>
       `select set_config('request.jwt.claim.sub', '${users.owner}', true); set local role authenticated; ${statement}`;
+    const asWorker = (statement) =>
+      `select set_config('request.jwt.claim.sub', '${users.worker}', true); set local role authenticated; ${statement}`;
 
     assert.equal((await finalise(clients.foh)).error?.message,
       "Only an owner, admin or general manager with full venue access can finalise or reopen payroll");
@@ -260,6 +262,191 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     assert.equal(JSON.stringify(reloaded.data[0].record), originalRecord,
       "preparing a provider record does not alter persisted attendance or its snapshot");
 
+    const createExport = (client, request = randomUUID()) => client.rpc("create_generic_payroll_export", {
+      ...scope, p_finalisation_id: finalisationId, p_request_id: request,
+    });
+    const exportResults = await Promise.all(Array.from({ length: 8 }, () => createExport(clients.owner)));
+    for (const result of exportResults) {
+      assert.ifError(result.error);
+      assert.equal(result.data, exportResults[0].data, "concurrent requests return the same batch");
+    }
+    const batchId = exportResults[0].data;
+    assert.ok(batchId);
+    assert.equal(await sql(`select count(*) from public.generic_payroll_export_batches where business_id = '${businessId}'::uuid`),
+      "1", "competing requests create only one export batch");
+    assert.equal(await sql(`select count(*) from public.generic_payroll_export_entries where batch_id = '${batchId}'::uuid`),
+      "2", "both approved entries are linked to the single batch");
+    for (const role of ["foh", "worker", "outsider"]) {
+      assert.equal((await createExport(clients[role])).error?.message, "Permission denied");
+    }
+    const downloadEntries = (client) => client.rpc("list_generic_payroll_batch_entries", {
+      p_business_id: businessId, p_venue_id: venueId, p_batch_id: batchId,
+    });
+    assert.equal((await downloadEntries(clients.owner)).data.length, 2);
+    assert.ok((await clients.worker.from("generic_payroll_export_entries").select("session_id")).error);
+
+    let pendingExport;
+    let pendingClaim;
+    const timezoneChange = await holdLock(
+      `update public.venues set timezone = 'UTC' where id = '${venueId}'::uuid returning id`, venueId,
+    );
+    try {
+      pendingExport = Promise.resolve(createExport(clients.owner));
+      await waitForLock("create_generic_payroll_export");
+      await timezoneChange.release(true);
+      assert.equal((await pendingExport).error?.message, "Venue timezone changed; reopen and review payroll before exporting",
+        "an export waiting on a timezone change cannot return a stale batch");
+    } finally {
+      await timezoneChange.release(false);
+      await Promise.allSettled([pendingExport].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+    const timezoneProtectedExport = await holdLock(asOwner(`select public.create_generic_payroll_export(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${week}'::date, '${finalisationId}'::uuid, '${randomUUID()}'::uuid)`));
+    try {
+      pendingTimezone = Promise.resolve(admin.from("venues").update({ timezone: "UTC" }).eq("id", venueId));
+      await waitForLock("venues");
+      await timezoneProtectedExport.release(true);
+      assert.ifError((await pendingTimezone).error);
+      assert.equal((await downloadEntries(clients.owner)).error?.message,
+        "Venue timezone changed; reopen and review payroll before exporting");
+    } finally {
+      await timezoneProtectedExport.release(false);
+      await Promise.allSettled([pendingTimezone].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+
+    const periodGate = await holdLock(`select pg_advisory_xact_lock(public.payroll_period_lock_key(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${week}'::date))`);
+    let timeout;
+    try {
+      pendingClaim = Promise.resolve(clients.worker.rpc("submit_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId, p_employee_id: employeeId,
+        p_actor_id: users.worker, p_request_id: randomUUID(), p_event_type: "clock_out",
+        p_claimed_at: "2024-01-10T11:10:00Z",
+      }));
+      await waitForLock("submit_attendance_offline_claim");
+      pendingTimezone = Promise.resolve(admin.from("venues").update({ timezone: "UTC" }).eq("id", venueId));
+      const update = await Promise.race([
+        pendingTimezone,
+        new Promise((resolve) => { timeout = setTimeout(() => resolve(null), 5000); }),
+      ]);
+      assert.ok(update, "a claim waiting for the payroll lock does not hold the venue row");
+      assert.ifError(update.error);
+      await periodGate.release(true);
+      assert.equal((await pendingClaim).error?.message, "Venue timezone changed; retry attendance claim",
+        "a claim cannot commit with a lock for the old venue timezone");
+    } finally {
+      clearTimeout(timeout);
+      await periodGate.release(false);
+      await Promise.allSettled([pendingClaim, pendingTimezone].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+
+    const claimRequest = randomUUID();
+    const claiming = await holdLock(asWorker(`select claim_id from public.submit_attendance_offline_claim(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${fohId}'::uuid, '${employeeId}'::uuid, ` +
+      `'${users.worker}'::uuid, '${claimRequest}'::uuid, 'clock_out', '2024-01-10 11:15+00'::timestamptz)`));
+    try {
+      pendingExport = Promise.resolve(createExport(clients.owner));
+      await waitForLock("create_generic_payroll_export");
+      await claiming.release(true);
+      assert.equal((await pendingExport).error?.message, "Resolve outstanding payroll exceptions before exporting",
+        "an export waiting for a newly submitted claim sees its exception");
+    } finally {
+      await claiming.release(false);
+      await Promise.allSettled([pendingExport].filter(Boolean));
+    }
+    const claimId = await sql(`select id from public.attendance_offline_claims where business_id = '${businessId}'::uuid ` +
+      `and request_id = '${claimRequest}'::uuid`);
+    const rejectClaim = async (id) => {
+      assert.ifError((await clients.owner.rpc("review_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_claim_id: id, p_request_id: randomUUID(),
+        p_decision: "rejected", p_event_id: null, p_expected_at: null, p_reason: "Checked against payroll",
+      })).error);
+    };
+    await rejectClaim(claimId);
+
+    const reviewGate = await holdLock(`select pg_advisory_xact_lock(public.payroll_period_lock_key(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${week}'::date))`);
+    let pendingReview;
+    try {
+      pendingReview = Promise.resolve(clients.owner.rpc("review_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_claim_id: claimId, p_request_id: randomUUID(),
+        p_decision: "reopened", p_event_id: null, p_expected_at: null, p_reason: "Check this claim again",
+      }));
+      await waitForLock("review_attendance_offline_claim");
+      pendingTimezone = Promise.resolve(admin.from("venues").update({ timezone: "UTC" }).eq("id", venueId));
+      const update = await Promise.race([
+        pendingTimezone,
+        new Promise((resolve) => { timeout = setTimeout(() => resolve(null), 5000); }),
+      ]);
+      assert.ok(update, "a claim review waiting for the payroll lock does not hold the venue row");
+      assert.ifError(update.error);
+      await reviewGate.release(true);
+      assert.equal((await pendingReview).error?.message, "Venue timezone changed; retry attendance claim",
+        "a claim review cannot commit with a lock for the old venue timezone");
+    } finally {
+      clearTimeout(timeout);
+      await reviewGate.release(false);
+      await Promise.allSettled([pendingReview, pendingTimezone].filter(Boolean));
+    }
+    assert.ifError((await admin.from("venues").update({ timezone: "Australia/Sydney" }).eq("id", venueId)).error);
+
+    const reopeningClaim = await holdLock(asOwner(`select public.review_attendance_offline_claim(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${claimId}'::uuid, '${randomUUID()}'::uuid, ` +
+      `'reopened', null, null, 'Check this claim again')`));
+    try {
+      pendingExport = Promise.resolve(createExport(clients.owner));
+      await waitForLock("create_generic_payroll_export");
+      await reopeningClaim.release(true);
+      assert.equal((await pendingExport).error?.message, "Resolve outstanding payroll exceptions before exporting",
+        "an export waiting for a reopened claim sees its exception");
+    } finally {
+      await reopeningClaim.release(false);
+      await Promise.allSettled([pendingExport].filter(Boolean));
+    }
+    await rejectClaim(claimId);
+    const reviewingExport = await holdLock(asOwner(`select public.create_generic_payroll_export(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${week}'::date, '${finalisationId}'::uuid, '${randomUUID()}'::uuid)`));
+    try {
+      pendingReview = Promise.resolve(clients.owner.rpc("review_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_claim_id: claimId, p_request_id: randomUUID(),
+        p_decision: "reopened", p_event_id: null, p_expected_at: null, p_reason: "Check this claim again",
+      }));
+      await waitForLock("review_attendance_offline_claim");
+      await reviewingExport.release(true);
+      assert.ifError((await pendingReview).error);
+      assert.equal((await downloadEntries(clients.owner)).error?.message,
+        "Resolve outstanding payroll exceptions before exporting",
+        "a claim reopened after batch preparation blocks a later download");
+    } finally {
+      await reviewingExport.release(false);
+      await Promise.allSettled([pendingReview].filter(Boolean));
+    }
+    await rejectClaim(claimId);
+
+    const exporting = await holdLock(asOwner(`select public.create_generic_payroll_export('${businessId}'::uuid, ` +
+      `'${venueId}'::uuid, '${week}'::date, '${finalisationId}'::uuid, '${randomUUID()}'::uuid)`));
+    try {
+      pendingClaim = Promise.resolve(clients.worker.rpc("submit_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId, p_employee_id: employeeId,
+        p_actor_id: users.worker, p_request_id: randomUUID(), p_event_type: "clock_out",
+        p_claimed_at: "2024-01-10T11:20:00Z",
+      }));
+      await waitForLock("submit_attendance_offline_claim");
+      await exporting.release(true);
+      const result = await pendingClaim;
+      assert.ifError(result.error);
+      assert.equal((await downloadEntries(clients.owner)).error?.message,
+        "Resolve outstanding payroll exceptions before exporting",
+        "a claim submitted after batch preparation blocks a later download");
+      await rejectClaim(result.data[0].claim_id);
+    } finally {
+      await exporting.release(false);
+      await Promise.allSettled([pendingClaim].filter(Boolean));
+    }
+
     const revocation = await holdLock(
       `delete from public.business_memberships where business_id = '${businessId}'::uuid ` +
         `and user_id = '${users.gm}'::uuid returning user_id`,
@@ -268,26 +455,34 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     let pendingPreview;
     try {
       pendingPreview = Promise.resolve(canonical(clients.gm, finalisationId));
+      pendingExport = Promise.resolve(createExport(clients.gm));
       await waitForLock("list_canonical_payroll_records");
+      await waitForLock("create_generic_payroll_export");
       await revocation.release(true);
       assert.equal((await pendingPreview).error?.message, "Permission denied",
         "a payroll preview waiting on membership revocation rechecks access");
+      assert.equal((await pendingExport).error?.message, "Permission denied",
+        "an export waiting on membership revocation rechecks access");
     } finally {
       await revocation.release(false);
-      await Promise.allSettled([pendingPreview].filter(Boolean));
+      await Promise.allSettled([pendingPreview, pendingExport].filter(Boolean));
     }
 
     const reopening = await holdLock(asOwner(`select public.reopen_payroll_period('${businessId}'::uuid, ` +
       `'${venueId}'::uuid, '${week}'::date, '${randomUUID()}'::uuid, 'Review late request')`));
     try {
       pendingPreview = Promise.resolve(canonical(clients.owner, finalisationId));
+      pendingExport = Promise.resolve(createExport(clients.owner));
       await waitForLock("list_canonical_payroll_records");
+      await waitForLock("create_generic_payroll_export");
       await reopening.release(true);
       assert.equal((await pendingPreview).error?.message, "Payroll period changed; refresh before reviewing records",
         "a preview waiting on reopening cannot return a stale finalisation");
+      assert.equal((await pendingExport).error?.message, "Payroll period changed; refresh before exporting",
+        "an export waiting on reopening cannot use a stale finalisation");
     } finally {
       await reopening.release(false);
-      await Promise.allSettled([pendingPreview].filter(Boolean));
+      await Promise.allSettled([pendingPreview, pendingExport].filter(Boolean));
     }
   } finally {
     for (const id of [businessId, outsideId]) {

@@ -60,6 +60,7 @@ const errors: Record<string, string> = {
   "claim-overlap": "The claimed time would overlap another attendance session.",
   "claim-time": "The claimed time must be in the past and different from the event. If it is already correct, match without changing it.",
   "claim-save": "We could not save the claim decision. Your access may have changed; refresh and try again.",
+  "claim-timezone": "The venue timezone changed while you were working. Refresh and retry the attendance request.",
   "claim-pair-invalid": "Choose matching clock-in and clock-out claims, confirm the warning, and enter a reason.",
   "claim-pair-time": "The clock-out time must be after clock-in and in the past.",
   "claim-pair-used": "A claim was already reviewed or used to create attendance. Refresh and check its history.",

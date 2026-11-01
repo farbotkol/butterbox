@@ -316,7 +316,7 @@ decimal seconds retain microsecond precision; displayed durations are rounded.
 Provider employee mappings and pay codes remain unassigned until explicitly
 configured by future payroll work. The preview is not an export, provider
 integration or award calculation, and outstanding exceptions still need
-resolution before any future export.
+resolution before any export.
 
 Finalisations created before detailed snapshots were introduced cannot safely
 be reconstructed from subsequently changed attendance. If their details are
@@ -325,6 +325,52 @@ with a reason, review it and finalise it again. The earlier finalisation and
 original attendance remain in the audit history. Provider preparation validates
 explicit employee mapping and pay-code totals on a detached, immutable copy;
 it never updates source attendance or approval records.
+
+### Generic payroll CSV
+
+On **Timesheets**, a full-venue payroll manager may prepare a CSV for the
+current finalised week after all exceptions are resolved. It covers the whole
+venue, regardless of the employee filter. Only approved sessions that have
+never appeared in a previous batch are included. Preparing a batch records its
+actor, time, finalisation and individual immutable source records; it does not
+prove that a file was downloaded or imported. An existing current batch may be
+downloaded again, but importing it twice can pay workers twice. Check the
+external payroll system before importing or retrying. Correct a blank or
+excessively long employee name before preparing a batch; the batch is not
+created if a name cannot be represented safely.
+
+Reopening a period prevents downloading the old batch. If a previously
+exported session changes, the manager must review its before/after records,
+handle any necessary adjustment in external payroll, and record a reason and
+explicit confirmation before preparing another batch. Butterbox does not
+create or transmit that adjustment. A previously exported session is never
+automatically emitted again, even if it moves to another week; only newly
+added approved sessions can appear in a later batch. History shows each
+batch's session, exact worked and paid seconds, and finalisation version, as
+well as the before/after reconciliation records. This read-only audit remains
+available to full-venue payroll managers after reopening. A new outstanding
+claim also blocks downloads until it is resolved.
+
+The UTF-8 CSV has a byte-order mark, a header, CRLF line endings and
+double-quoted cells; embedded quotes are doubled. Spreadsheet-formula-like
+values are prefixed with an apostrophe, including values preceded by whitespace
+or control characters. Keep IDs and versions as text when importing into
+spreadsheet software, which may otherwise coerce large numbers or dates.
+
+| Columns | Format and meaning |
+| --- | --- |
+| `batch_id`, `finalisation_id`, `business_id`, `venue_id`, `department_id`, `employee_id`, `session_id`, `approval_id` | Butterbox UUIDs; `employee_id` is not an external payroll ID. |
+| `payroll_version` | Exact decimal finalisation version, represented as text. |
+| `employee_name` | Name captured when the batch was prepared, for human review only; never use it to infer a payroll ID. |
+| `work_date`, `venue_timezone` | Corrected clock-in date as `YYYY-MM-DD` in the named IANA venue timezone. |
+| `clock_in_utc`, `clock_out_utc` | Corrected UTC instants as `YYYY-MM-DDTHH:mm:ss.ffffffZ`, with six fractional digits. |
+| `elapsed_seconds`, `worked_seconds`, `paid_seconds`, `paid_break_seconds`, `unpaid_break_seconds` | Exact non-negative decimal seconds, with up to six fractional digits. Worked time excludes all breaks; paid time excludes unpaid breaks. |
+| `worked_hours`, `paid_hours` | Decimal hours rounded half-up to six decimal places from the exact seconds; use the seconds columns when that rounding is unsuitable. |
+| `approval_revision` | The approved attendance revision as a lowercase SHA-256 hexadecimal value. |
+
+This file contains no external employee mappings, pay rates, award
+interpretation or pay codes. The venue remains responsible for confirming
+payroll import, any manual adjustments and applicable award obligations.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule

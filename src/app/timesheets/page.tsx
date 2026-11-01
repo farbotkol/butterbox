@@ -1,7 +1,10 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { bulkLockWeeklyAttendanceAction, decidePayrollPeriodAction, decideTimesheetAction } from "@/app/actions";
+import {
+  bulkLockWeeklyAttendanceAction, decidePayrollPeriodAction, decideTimesheetAction,
+  prepareGenericPayrollExportAction, reconcileGenericPayrollExportAction,
+} from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
 import {
@@ -9,6 +12,10 @@ import {
   type CanonicalPayrollRecord, type CanonicalPayrollScope,
 } from "@/lib/canonical-payroll";
 import { addDays, formatDay } from "@/lib/dates";
+import {
+  isPayrollUuid, validateGenericPayrollHistory, validateGenericPayrollHistoryEntries, validateGenericPayrollReview,
+  type GenericPayrollHistoryEntry, type GenericPayrollHistoryEvent, type GenericPayrollReview,
+} from "@/lib/generic-payroll-exports";
 import { readAllPages } from "@/lib/paginated-rows";
 import {
   parsePayrollPeriod, parsePayrollPeriodEvents, parsePayrollPeriodExceptions, payrollActorLabel,
@@ -55,6 +62,16 @@ const errors: Record<string, string> = {
   "period-retry": "This request was already used for a different payroll period action. Review the refreshed period and try again.",
   "period-finalised": "This payroll period is finalised. Reopen it with a reason before changing, approving or locking attendance.",
   "period-save": "We couldn't confirm the payroll period change. Check its history before retrying.",
+  "export-invalid": "The payroll export request was invalid. Refresh the period and try again.",
+  "export-permission": "Only an owner, admin or general manager with access to every department in this venue can export payroll.",
+  "export-stale": "Payroll or the reconciliation review changed. Refresh and review it again before proceeding.",
+  "export-exceptions": "Resolve every outstanding payroll exception before preparing or downloading an export.",
+  "export-reconciliation": "Review and reconcile previously exported changes before preparing another export.",
+  "export-reconcile-invalid": "Enter a reason of up to 500 characters and confirm that you handled the changes externally.",
+  "export-empty": "There are no new approved sessions available for export.",
+  "export-name": "An employee name is blank or too long for export. Correct the employee profile, then try again.",
+  "export-retry": "This request was already used for a different payroll action. Refresh and review before retrying.",
+  "export-save": "We couldn't confirm the payroll action. Check the export history before retrying.",
 };
 const periodMessages: Record<string, string> = {
   finalised: "Payroll period finalised. Attendance in this week cannot change until it is reopened.",
@@ -86,7 +103,7 @@ function totalDuration(values: number[]): string {
 export default async function TimesheetsPage({ searchParams }: {
   searchParams: Promise<{
     venue?: string; week?: string; employee?: string; error?: string; receipt?: string; decided?: string;
-    period?: string;
+    period?: string; export_batch?: string; export_reconciliation?: string;
   }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
@@ -223,6 +240,67 @@ export default async function TimesheetsPage({ searchParams }: {
       }
     }
   }
+  const [exportHistoryResult, exportHistoryEntriesResult, exportReviewResult] = await Promise.all([
+    week && !periodError && period?.canFinalise
+      ? readAllPages<Record<string, unknown>>((from, to) => workspace.supabase.rpc(
+        "list_generic_payroll_export_history", {
+          p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+        }, { count: "exact" },
+      ).order("created_at", { ascending: false }).order("id").range(from, to), (row) => String(row.id))
+      : Promise.resolve(null),
+    week && !periodError && period?.canFinalise
+      ? readAllPages<Record<string, unknown>>((from, to) => workspace.supabase.rpc(
+        "list_generic_payroll_export_history_entries", {
+          p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+        }, { count: "exact" },
+      ).order("event_id").order("session_id").range(from, to),
+      (row) => `${String(row.event_id)}:${String(row.session_id)}`)
+      : Promise.resolve(null),
+    canonicalScope && canonicalRecords && periodExceptions?.length === 0
+      ? workspace.supabase.rpc("get_generic_payroll_export_review", {
+        p_business_id: canonicalScope.businessId, p_venue_id: canonicalScope.venueId,
+        p_week_start: canonicalScope.weekStart, p_finalisation_id: canonicalScope.finalisationId,
+      })
+      : Promise.resolve(null),
+  ]);
+  let exportHistory: readonly GenericPayrollHistoryEvent[] | null = null;
+  let exportHistoryEntries: readonly GenericPayrollHistoryEntry[] | null = null;
+  let exportReview: GenericPayrollReview | null = null;
+  let exportError: string | null = null;
+  if (exportHistoryResult || exportHistoryEntriesResult || exportReviewResult) {
+    try {
+      if (exportHistoryResult && exportHistoryEntriesResult && week) {
+        if (exportHistoryResult.error) throw new PayrollRecordValidationError(exportHistoryResult.error.message);
+        if (exportHistoryEntriesResult.error) {
+          throw new PayrollRecordValidationError(exportHistoryEntriesResult.error.message);
+        }
+        exportHistory = validateGenericPayrollHistory(exportHistoryResult.data);
+        exportHistoryEntries = validateGenericPayrollHistoryEntries(exportHistoryEntriesResult.data, exportHistory, {
+          businessId: workspace.business.id, venueId: workspace.venue.id, weekStart: week,
+        });
+      }
+      if (exportReviewResult && canonicalScope && canonicalRecords) {
+        if (exportReviewResult.error) throw new PayrollRecordValidationError(exportReviewResult.error.message);
+        exportReview = validateGenericPayrollReview(exportReviewResult.data, canonicalScope, canonicalRecords);
+      }
+    } catch (error) {
+      if (!(error instanceof PayrollRecordValidationError)) throw error;
+      console.error("Could not verify the payroll export review or history.", { message: error.message });
+      exportError = "We couldn't verify the payroll export review or history. Refresh and check your access before proceeding.";
+      exportHistory = null;
+      exportHistoryEntries = null;
+      exportReview = null;
+    }
+  }
+  const batchReceipt = isPayrollUuid(params.export_batch)
+    ? exportHistory?.find((event) => event.kind === "batch" &&
+      event.id.toLowerCase() === params.export_batch?.toLowerCase()) : null;
+  const reconciliationReceipt = isPayrollUuid(params.export_reconciliation)
+    ? exportHistory?.find((event) => event.kind === "reconciliation" &&
+      event.id.toLowerCase() === params.export_reconciliation?.toLowerCase()) : null;
+  const exportReceiptError = (params.export_batch !== undefined && !batchReceipt) ||
+    (params.export_reconciliation !== undefined && !reconciliationReceipt);
+  if (exportReceiptError) console.error("Could not verify the payroll export receipt.");
   const venues = parseTimesheetEmployees(venuesResult.data);
   const currentEmployees = parseTimesheetEmployees(employeesResult.data);
   const planned = parseTimesheetPlannedShifts(plannedResult.data);
@@ -271,6 +349,13 @@ export default async function TimesheetsPage({ searchParams }: {
     <input type="hidden" name="employee_id" value={employee ?? ""} />
     <input type="hidden" name="request_id" value={randomUUID()} />
     <input type="hidden" name="period_action" value={action} />
+  </>;
+  const exportHidden = () => <>
+    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+    <input type="hidden" name="week" value={week ?? ""} />
+    <input type="hidden" name="employee_id" value={employee ?? ""} />
+    <input type="hidden" name="finalisation_id" value={canonicalScope?.finalisationId ?? ""} />
+    <input type="hidden" name="request_id" value={randomUUID()} />
   </>;
   const decisionHidden = (sessionId: string, revision: string, decision: "approved" | "rejected") => <>
     <input type="hidden" name="venue_id" value={workspace.venue.id} />
@@ -451,6 +536,135 @@ export default async function TimesheetsPage({ searchParams }: {
               </ul>}
             <p className="mt-2 text-muted">Displayed durations are rounded; the snapshot retains exact seconds.</p>
           </details>}
+          {period.canFinalise && <section aria-labelledby="payroll-export-heading" className="mt-4 border-t border-line pt-4">
+            <h3 id="payroll-export-heading" className="font-semibold">Generic payroll CSV</h3>
+            <p className="mt-2 text-muted">
+              This whole-venue export includes only approved, finalised sessions that have never been exported.
+              Employee filters do not limit it. It is not an award calculation and contains no external payroll IDs.
+            </p>
+            <p className="mt-2 rounded-lg bg-amber-50 p-3 text-amber-950">
+              Preparing a batch records the approved hours but does not confirm a download or payroll import.
+              Re-downloading and importing the same batch again may pay people twice. Check your payroll system first.
+            </p>
+            {exportError && <p role="alert" className="mt-2 rounded-lg bg-red-50 p-3 text-red-800">{exportError}</p>}
+            {exportReceiptError && <p role="alert" className="mt-2 rounded-lg bg-red-50 p-3 text-red-800">
+              We couldn&apos;t verify the payroll action receipt. Check the export history before retrying.
+            </p>}
+            {batchReceipt && !exportReceiptError && <p role="status" className="mt-2 rounded-lg bg-green-50 p-3 text-green-900">
+              Batch {batchReceipt.id} is recorded for {batchReceipt.entryCount} approved{" "}
+              {batchReceipt.entryCount === 1 ? "session" : "sessions"}. Confirm any import separately in your payroll system.
+            </p>}
+            {reconciliationReceipt && !exportReceiptError && <p role="status" className="mt-2 rounded-lg bg-green-50 p-3 text-green-900">
+              The manual reconciliation is recorded. Previously exported sessions will not be emitted again.
+            </p>}
+            {period.status !== "finalised" && <p className="mt-2 text-muted">
+              Finalise the week before preparing or downloading its current batch.
+            </p>}
+            {period.status === "finalised" && periodExceptions.length > 0 && <p className="mt-2 text-amber-900">
+              Resolve outstanding exceptions before preparing or downloading a batch.
+            </p>}
+            {exportReview && exportHistory && <>
+              {exportReview.changes.length > 0
+                ? <>
+                  <h4 className="mt-3 font-semibold">Previously exported changes need reconciliation</h4>
+                  <p className="mt-1 text-muted">
+                    Review each before and after record and make any necessary adjustment in the external payroll
+                    system. Butterbox does not create or send that adjustment; these sessions will not be exported again.
+                  </p>
+                  <ul aria-label="Payroll changes requiring reconciliation" className="mt-2 space-y-3">
+                    {exportReview.changes.map((change) => <li key={change.sessionId} className="rounded-lg border border-line p-3">
+                      <p className="font-semibold">{change.employeeName} · session {change.sessionId}</p>
+                      {([["Previous", change.previous], ["Current", change.current]] as const).map(([label, record]) =>
+                        <div key={label} className="mt-2">
+                          <p className="font-medium">{label}</p>
+                          {record ? <p className="break-words text-muted">
+                            {record.workDate} · employee {record.worker.employeeId} · department {record.venue.departmentId} ·{" "}
+                            {record.attendance.clockInAt} to {record.attendance.clockOutAt} · worked {record.hours.worked} seconds ·{" "}
+                            paid {record.hours.paid} seconds · paid breaks {record.hours.paidBreak} seconds · unpaid breaks{" "}
+                            {record.hours.unpaidBreak} seconds
+                          </p> : <p className="text-muted">Not present in this finalised period.</p>}
+                        </div>)}
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium">Full before and after records</summary>
+                        <pre className="mt-2 whitespace-pre-wrap break-all rounded-lg bg-slate-50 p-2 text-xs">
+                          {JSON.stringify({ previous: change.previous, current: change.current }, null, 2)}
+                        </pre>
+                      </details>
+                    </li>)}
+                  </ul>
+                  <form action={reconcileGenericPayrollExportAction} className="mt-3">
+                    {exportHidden()}
+                    <input type="hidden" name="review_hash" value={exportReview.reviewHash} />
+                    <label htmlFor="payroll-reconciliation-reason" className="block font-medium">Reconciliation reason</label>
+                    <input id="payroll-reconciliation-reason" name="reason" required maxLength={500}
+                      className="mt-1 block w-full rounded-lg border border-line p-2" />
+                    <label className="mt-3 flex items-start gap-2">
+                      <input type="checkbox" name="confirmed" value="yes" required className="mt-1" />
+                      <span>I reviewed all changes and handled any necessary adjustment in the external payroll system.</span>
+                    </label>
+                    <button type="submit"
+                      className="mt-3 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+                      Record manual reconciliation
+                    </button>
+                  </form>
+                </>
+                : exportReview.newCount > 0
+                  ? <form action={prepareGenericPayrollExportAction} className="mt-3">
+                    {exportHidden()}
+                    <p>{exportReview.newCount} new approved {exportReview.newCount === 1 ? "session" : "sessions"} available.</p>
+                    <button type="submit"
+                      className="mt-2 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+                      Prepare payroll CSV
+                    </button>
+                  </form>
+                  : <p className="mt-3 text-muted">No new approved sessions are available for export.</p>}
+            </>}
+            {exportHistory && exportHistoryEntries && exportHistory.length > 0 && <details className="mt-3">
+              <summary className="cursor-pointer font-semibold">Payroll export history ({exportHistory.length})</summary>
+              <ol aria-label="Payroll export history" className="mt-2 space-y-2">
+                {exportHistory.map((event) => <li key={event.id} className="rounded-lg border border-line p-3">
+                  <p className="font-semibold">
+                    {event.kind === "batch" ? "Batch prepared" : "Manually reconciled"} by{" "}
+                    {payrollActorLabel(event.actorRole, event.actorIsSelf)} on{" "}
+                    <time dateTime={event.createdAt}>{formatClockTime(event.createdAt, workspace.venue.timezone)}</time>
+                  </p>
+                  <p className="mt-1 break-all">
+                    {event.entryCount} {event.entryCount === 1 ? "session" : "sessions"} · {event.kind} {event.id}
+                    {" "}· finalisation {event.finalisationId}
+                  </p>
+                  {event.reason && <p className="mt-1 break-words">Reason: {event.reason}</p>}
+                  <ul aria-label={`Entries for ${event.kind} ${event.id}`} className="mt-2 space-y-2">
+                    {exportHistoryEntries.filter((entry) => entry.eventId.toLowerCase() === event.id.toLowerCase())
+                      .map((entry) => <li key={entry.sessionId} className="rounded-lg bg-slate-50 p-2">
+                        <p className="break-all font-medium">{entry.employeeName} · session {entry.sessionId}</p>
+                        {(event.kind === "batch"
+                          ? [["Exported", entry.current]] as const
+                          : [["Previous", entry.previous], ["Reconciled", entry.current]] as const
+                        ).map(([label, record]) => <p key={label} className="mt-1 break-words text-muted">
+                          {label}: {record ? <>
+                            {record.workDate} · employee {record.worker.employeeId} · worked {record.hours.worked} seconds ·{" "}
+                            paid {record.hours.paid} seconds · finalisation version {record.period.version}
+                          </> : "Not present in the finalised period."}
+                        </p>)}
+                        <details className="mt-1">
+                          <summary className="cursor-pointer font-medium">Full audit records</summary>
+                          <pre className="mt-2 whitespace-pre-wrap break-all rounded-lg bg-white p-2 text-xs">
+                            {JSON.stringify({ previous: entry.previous, current: entry.current }, null, 2)}
+                          </pre>
+                        </details>
+                      </li>)}
+                  </ul>
+                  {event.kind === "batch" && exportReview?.changes.length === 0 &&
+                    canonicalScope?.finalisationId.toLowerCase() === event.finalisationId.toLowerCase() &&
+                    <a href={`/timesheets/payroll-export?${new URLSearchParams({
+                      venue: workspace.venue.id, batch: event.id,
+                    })}`} className="mt-2 inline-flex min-h-11 items-center rounded-lg border border-line px-3 font-semibold text-ocean">
+                      Download payroll CSV
+                    </a>}
+                </li>)}
+              </ol>
+            </details>}
+          </section>}
           {periodEvents.length > 0 && <details className="mt-3">
             <summary className="cursor-pointer font-semibold">Payroll period history ({periodEvents.length})</summary>
             <ol aria-label="Payroll period history" className="mt-2 space-y-2">

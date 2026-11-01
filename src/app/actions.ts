@@ -13,8 +13,11 @@ import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
-import { parseOfflineClaimReceipt, parseOfflineMatchOption } from "@/lib/offline-attendance";
+import {
+  attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
+} from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
@@ -872,6 +875,7 @@ export async function submitAttendanceCorrectionRequestAction(formData: FormData
       "Employee not found or permission denied": "permission",
       "Employee or department is unavailable": "unavailable",
       "Permission denied": "permission",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "request-save"}`);
@@ -932,6 +936,7 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
       "Corrected attendance overlaps another session": "claim-overlap",
       "Invalid attendance correction time": "claim-time",
       "The event does not match the requested time": "request-mismatch",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -982,6 +987,7 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
       "A claim was already linked to attendance": "claim-pair-used",
       "Claimed attendance overlaps another session": "claim-overlap",
       [payrollFinalisedMessage]: "period-finalised",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1033,6 +1039,7 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1096,6 +1103,7 @@ export async function completeAttendanceWithOfflineBreakAction(formData: FormDat
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1382,6 +1390,98 @@ export async function decidePayrollPeriodAction(formData: FormData) {
   revalidatePath("/work-time");
   revalidatePath("/attendance");
   redirect(`${destination}&period=${input.action}#payroll-period`);
+}
+
+async function payrollExportActionContext(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const finalisations = uuidList(formData, "finalisation_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1 || finalisations?.length !== 1) {
+    console.error("Invalid payroll export scope.");
+    redirect("/timesheets?error=export-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the payroll export workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  if (!week || weeks[0] !== week || employee === undefined) {
+    console.error("Invalid payroll export filters.");
+    redirect(`${destination}&error=export-invalid#payroll-period`);
+  }
+  return {
+    workspace, week, destination, requestId: requests[0], finalisationId: finalisations[0],
+  };
+}
+
+function payrollExportFailureReason(message: string | undefined): string {
+  const reasons: Record<string, string> = {
+    "Permission denied": "export-permission",
+    "Payroll period changed; refresh before exporting": "export-stale",
+    "Venue timezone changed; reopen and review payroll before exporting": "export-stale",
+    "Resolve outstanding payroll exceptions before exporting": "export-exceptions",
+    "Previously exported time requires reconciliation": "export-reconciliation",
+    "Payroll reconciliation changed; refresh and review again": "export-stale",
+    "No payroll reconciliation is required": "export-stale",
+    "No new approved sessions are available for export": "export-empty",
+    "Employee name is too long or blank; correct the employee profile before preparing payroll": "export-name",
+    "Request identifier already used": "export-retry",
+    "Invalid payroll reconciliation request": "export-reconcile-invalid",
+  };
+  return message && Object.hasOwn(reasons, message) ? reasons[message] : "export-save";
+}
+
+export async function prepareGenericPayrollExportAction(formData: FormData) {
+  const { workspace, week, destination, requestId, finalisationId } = await payrollExportActionContext(formData);
+  const { data, error } = await workspace.supabase.rpc("create_generic_payroll_export", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+    p_finalisation_id: finalisationId, p_request_id: requestId,
+  });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Preparing the payroll export failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid batch receipt.",
+    });
+    redirect(`${destination}&error=${payrollExportFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  redirect(`${destination}&export_batch=${data}#payroll-period`);
+}
+
+export async function reconcileGenericPayrollExportAction(formData: FormData) {
+  const { workspace, week, destination, requestId, finalisationId } = await payrollExportActionContext(formData);
+  const hashes = formData.getAll("review_hash");
+  const reasons = formData.getAll("reason");
+  const confirmations = formData.getAll("confirmed");
+  const hash = hashes.length === 1 ? hashes[0] : null;
+  const reason = reasons.length === 1 && typeof reasons[0] === "string" ? reasons[0].trim() : "";
+  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || reason.length === 0 || reason.length > 500 ||
+    confirmations.length !== 1 || confirmations[0] !== "yes") {
+    console.error("Invalid payroll reconciliation details.");
+    redirect(`${destination}&error=export-reconcile-invalid#payroll-period`);
+  }
+  const { data, error } = await workspace.supabase.rpc("reconcile_generic_payroll_export", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+    p_finalisation_id: finalisationId, p_request_id: requestId, p_review_hash: hash,
+    p_reason: reason, p_confirmed: true,
+  });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Payroll reconciliation failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid reconciliation receipt.",
+    });
+    redirect(`${destination}&error=${payrollExportFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  redirect(`${destination}&export_reconciliation=${data}#payroll-period`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

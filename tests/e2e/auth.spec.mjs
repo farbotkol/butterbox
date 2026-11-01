@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import {
   combineChunks,
@@ -408,6 +409,17 @@ test("offline attendance claims survive reconnect failures and stay scoped to th
     let rows = await workerApi.from("attendance_offline_claims").select("id");
     expect(rows.error).toBeNull();
     expect(rows.data).toEqual([]);
+
+    await context.unroute("**/rest/v1/rpc/submit_attendance_offline_claim");
+    await context.route("**/rest/v1/rpc/submit_attendance_offline_claim", (route) => route.fulfill({
+      status: 400, contentType: "application/json",
+      body: JSON.stringify({ code: "P0001", message: "Venue timezone changed; retry attendance claim" }),
+    }));
+    await recovered.getByRole("button", { name: "Retry upload" }).click();
+    await expect(recovered.getByRole("alert")).toContainText("venue timezone changed");
+    await expect(recovered.getByRole("status")).toContainText("2 claims pending on this device");
+    await context.unroute("**/rest/v1/rpc/submit_attendance_offline_claim");
+    await context.route("**/rest/v1/rpc/submit_attendance_offline_claim", (route) => route.abort());
 
     await recoveryPage.getByRole("button", { name: "Sign out" }).click();
     await expect(recoveryPage).toHaveURL(/\/login\?message=signed-out/);
@@ -5949,6 +5961,7 @@ test("authorised managers finalise payroll periods after exceptions and reopen t
       const result = await admin.auth.admin.createUser({
         email: `payroll-${role}-${suffix}@example.test`, password, email_confirm: true,
       });
+
       expect(result.error).toBeNull();
       users.push(result.data.user.id);
     }
@@ -6861,5 +6874,228 @@ test("ambiguous business memberships fail closed in stale forms and workspace pa
       expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
     }
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
+test("generic payroll CSV downloads approved hours and reconciles amended exports", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, fohId, workerId, firstSession, secondSession, thirdSession,
+    firstIn, firstOut, secondIn, secondOut, thirdIn, thirdOut] = Array.from({ length: 14 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const employeeName = "=SUM(1,2)";
+  const scope = { p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30" };
+  try {
+    for (const role of ["owner", "gm", "foh", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `payroll-csv-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `CSV cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside CSV cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: fohId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[3], name: employeeName, role_title: "Server",
+    })).error).toBeNull();
+    const addSessions = async (rows) => {
+      expect((await admin.from("attendance_sessions").insert(rows.map(([id]) => ({
+        id, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        started_by: users[3],
+      })))).error).toBeNull();
+      expect((await admin.from("attendance_events").insert(rows.flatMap(([session, startId, endId, start, end]) =>
+        [[startId, "clock_in", start], [endId, "clock_out", end]].map(([id, eventType, occurredAt]) => ({
+          id, session_id: session, business_id: businessId, venue_id: venueId, department_id: fohId,
+          employee_id: workerId, actor_id: users[3], request_id: randomUUID(), event_type: eventType,
+          occurred_at: occurredAt, source: "server_clock",
+        }))))).error).toBeNull();
+    };
+    await addSessions([
+      [firstSession, firstIn, firstOut, "2024-09-30T22:00:00Z", "2024-10-01T02:00:00Z"],
+      [secondSession, secondIn, secondOut, "2024-10-02T22:00:00Z", "2024-10-03T02:00:00Z"],
+    ]);
+    const signedIn = async (role) => {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `payroll-csv-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      return client;
+    };
+    const ownerApi = await signedIn("owner");
+    const fohApi = await signedIn("foh");
+    const workerApi = await signedIn("worker");
+    const approve = async (sessionIds) => {
+      const rows = await fohApi.rpc("list_weekly_worked_time_for_edit", scope);
+      expect(rows.error).toBeNull();
+      for (const sessionId of sessionIds) {
+        const row = rows.data.find((item) => item.session_id === sessionId);
+        expect(row).toBeDefined();
+        expect((await fohApi.rpc("decide_attendance_timesheet", {
+          p_business_id: businessId, p_venue_id: venueId, p_session_id: sessionId, p_request_id: randomUUID(),
+          p_expected_revision: row.edit_revision, p_decision: "approved", p_reason: null,
+        })).error).toBeNull();
+      }
+    };
+    await approve([firstSession, secondSession]);
+    expect((await ownerApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error).toBeNull();
+
+    await signIn(page, `payroll-csv-owner-${suffix}@example.test`, password);
+    const timesheetUrl = `/timesheets?venue=${venueId}&week=2024-09-30`;
+    await page.goto(timesheetUrl);
+    const period = page.getByRole("region", { name: "Payroll period" });
+    const exportSection = period.getByRole("region", { name: "Generic payroll CSV" });
+    await expect(exportSection).toContainText("2 new approved sessions available");
+    await expect(exportSection).toContainText("Re-downloading and importing the same batch again may pay people twice");
+    await exportSection.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("Batch");
+    let history = await ownerApi.rpc("list_generic_payroll_export_history", scope);
+    expect(history.error).toBeNull();
+    const firstBatch = history.data.find((event) => event.kind === "batch");
+    expect(firstBatch.entry_count).toBe(2);
+    const firstHistorySummary = exportSection.getByText("Payroll export history (1)");
+    if (!(await firstHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await firstHistorySummary.click();
+    }
+    const downloadLink = exportSection.getByRole("link", { name: "Download payroll CSV" });
+    const downloadUrl = await downloadLink.getAttribute("href");
+    const [download] = await Promise.all([page.waitForEvent("download"), downloadLink.click()]);
+    expect(download.suggestedFilename()).toBe(`butterbox-hours-2024-09-30-${firstBatch.id}.csv`);
+    const csv = await readFile(await download.path(), "utf8");
+    expect(csv.startsWith('\uFEFF"batch_id","finalisation_id"')).toBe(true);
+    expect(csv).toContain(`"'${employeeName}"`);
+    expect(csv).toContain(firstSession);
+    expect(csv).toContain(secondSession);
+    expect(csv).not.toContain(thirdSession);
+    const ownerDownload = await page.request.get(downloadUrl);
+    expect(ownerDownload.status()).toBe(200);
+    expect(ownerDownload.headers()["cache-control"]).toContain("no-store");
+    expect(ownerDownload.headers()["x-content-type-options"]).toBe("nosniff");
+
+    for (const [role, expectedStatus] of [["gm", 200], ["foh", 404], ["worker", 404], ["outside", 404]]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const rolePage = await context.newPage();
+      await signIn(rolePage, `payroll-csv-${role}-${suffix}@example.test`, password);
+      expect((await rolePage.request.get(downloadUrl)).status(), role).toBe(expectedStatus);
+      if (role === "foh") {
+        await rolePage.goto(timesheetUrl);
+        await expect(rolePage.getByRole("region", { name: "Generic payroll CSV" })).toHaveCount(0);
+      }
+    }
+    const anonymousContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(anonymousContext);
+    expect((await anonymousContext.request.get(downloadUrl)).status()).toBe(401);
+
+    await period.getByLabel("Reason for reopening").fill("Correct an exported finish time");
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(period).toContainText("Reopened — not finalised");
+    expect((await page.request.get(downloadUrl)).status()).toBe(409);
+    const reopenedHistorySummary = exportSection.getByText("Payroll export history (1)");
+    if (!(await reopenedHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await reopenedHistorySummary.click();
+    }
+    const oldEntries = exportSection.getByRole("list", { name: `Entries for batch ${firstBatch.id}` });
+    await expect(oldEntries.getByRole("listitem")).toHaveCount(2);
+    await expect(oldEntries).toContainText(firstSession);
+    await expect(oldEntries).toContainText("paid 14400.000000 seconds");
+    await expect(oldEntries).toContainText("finalisation version");
+    await expect(exportSection.getByRole("link", { name: "Download payroll CSV" })).toHaveCount(0);
+    expect((await ownerApi.rpc("set_attendance_edit_lock", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: firstSession, p_request_id: randomUUID(),
+      p_locked: false, p_reason: "Worker confirmed a later finish",
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: firstSession, p_event_id: firstOut,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-01T02:00:00Z",
+      p_new_at: "2024-10-01T03:00:00Z", p_reason: "Worker confirmed a later finish",
+    })).error).toBeNull();
+    await addSessions([[thirdSession, thirdIn, thirdOut, "2024-10-04T22:00:00Z", "2024-10-05T00:00:00Z"]]);
+    await approve([firstSession, thirdSession]);
+    expect((await ownerApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(timesheetUrl);
+    const changes = exportSection.getByRole("list", { name: "Payroll changes requiring reconciliation" });
+    await expect(changes.getByRole("listitem")).toHaveCount(1);
+    await expect(changes).toContainText("paid 14400.000000 seconds");
+    await expect(changes).toContainText("paid 18000.000000 seconds");
+    await expect(exportSection.getByRole("button", { name: "Prepare payroll CSV" })).toHaveCount(0);
+    await expect(exportSection).toContainText("Butterbox does not create or send that adjustment");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    await exportSection.getByLabel("Reconciliation reason").fill("   ");
+    await exportSection.getByLabel("Reconciliation reason").evaluate((input) => { input.required = false; });
+    await exportSection.getByRole("checkbox", { name: /I reviewed all changes/ })
+      .evaluate((input) => { input.required = false; });
+    await exportSection.getByRole("button", { name: "Record manual reconciliation" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("Enter a reason");
+    await exportSection.getByLabel("Reconciliation reason").fill("Adjustment entered in external payroll");
+    await exportSection.getByRole("checkbox", { name: /I reviewed all changes/ }).check();
+    await exportSection.getByRole("button", { name: "Record manual reconciliation" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("manual reconciliation is recorded");
+    await expect(exportSection).toContainText("1 new approved session available");
+    await exportSection.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("1 approved session");
+    history = await ownerApi.rpc("list_generic_payroll_export_history", scope);
+    expect(history.error).toBeNull();
+    expect(history.data.filter((event) => event.kind === "batch")).toHaveLength(2);
+    const reconciliation = history.data.find((event) => event.kind === "reconciliation");
+    expect(reconciliation.reason).toBe("Adjustment entered in external payroll");
+    const finalHistorySummary = exportSection.getByText("Payroll export history (3)");
+    if (!(await finalHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await finalHistorySummary.click();
+    }
+    const reconciledEntries = exportSection.getByRole("list", { name: `Entries for reconciliation ${reconciliation.id}` });
+    await expect(reconciledEntries).toContainText("paid 14400.000000 seconds");
+    await expect(reconciledEntries).toContainText("paid 18000.000000 seconds");
+    const newDownload = exportSection.getByRole("link", { name: "Download payroll CSV" });
+    await expect(newDownload).toHaveCount(1);
+    const newUrl = await newDownload.getAttribute("href");
+    const [secondDownload] = await Promise.all([page.waitForEvent("download"), newDownload.click()]);
+    const newCsv = await readFile(await secondDownload.path(), "utf8");
+    expect(newCsv).toContain(thirdSession);
+    expect(newCsv).not.toContain(firstSession);
+    expect(newCsv).not.toContain(secondSession);
+    expect((await page.request.get(downloadUrl)).status()).toBe(409);
+
+    const claim = await workerApi.rpc("submit_attendance_offline_claim", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId, p_employee_id: workerId,
+      p_actor_id: users[3], p_request_id: randomUUID(), p_event_type: "clock_out",
+      p_claimed_at: "2024-10-05T00:10:00Z",
+    });
+    expect(claim.error).toBeNull();
+    expect((await page.request.get(newUrl)).status()).toBe(409);
+    expect((await ownerApi.rpc("review_attendance_offline_claim", {
+      p_business_id: businessId, p_venue_id: venueId, p_claim_id: claim.data[0].claim_id,
+      p_request_id: randomUUID(), p_decision: "rejected", p_event_id: null, p_expected_at: null,
+      p_reason: "Already included",
+    })).error).toBeNull();
+    expect((await page.request.get(newUrl)).status()).toBe(200);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
