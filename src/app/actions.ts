@@ -14,6 +14,9 @@ import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
+import {
+  isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
+} from "@/lib/payroll-mapping";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
 import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
@@ -1482,6 +1485,74 @@ export async function reconcileGenericPayrollExportAction(formData: FormData) {
   }
   revalidatePath("/timesheets");
   redirect(`${destination}&export_reconciliation=${data}#payroll-period`);
+}
+
+export async function savePayrollMappingAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const connections = uuidList(formData, "connection_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || connections?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid payroll mapping scope.");
+    redirect("/settings/payroll?error=invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load payroll mapping workspace.", { message: workspace.message });
+    redirect("/settings/payroll?error=venue");
+  }
+  const query = new URLSearchParams({ venue: workspace.venue.id, connection: connections[0] });
+  const destination = `/settings/payroll?${query}`;
+  if (!["owner", "admin"].includes(workspace.membership.role)) {
+    console.error("Payroll mapping management denied.");
+    redirect(`${destination}&error=permission`);
+  }
+  const one = (key: string) => {
+    const values = formData.getAll(key);
+    return values.length === 1 ? values[0] : null;
+  };
+  const operation = one("operation");
+  let result;
+  if (operation === "connection") {
+    const provider = one("provider");
+    const accountId = payrollMappingText(one("account_id"), 255);
+    const name = payrollMappingText(one("name"), 100);
+    if (!isPayrollProvider(provider) || !accountId || !name) {
+      console.error("Invalid payroll mapping connection.");
+      redirect(`${destination}&error=invalid`);
+    }
+    result = await workspace.supabase.rpc("create_payroll_mapping_connection", {
+      p_business_id: workspace.business.id, p_connection_id: connections[0],
+      p_provider: provider, p_account_id: accountId, p_name: name,
+    });
+  } else {
+    const employees = uuidList(formData, "employee_id", 1);
+    const revision = payrollMappingRevision(one("revision"));
+    const reason = payrollMappingText(one("reason"), 500);
+    const external = one("external_employee_id");
+    const externalId = typeof external === "string" && external.trim() === "" ? null
+      : payrollMappingText(external, 255);
+    if (operation !== "mapping" || employees?.length !== 1 || revision === null || !reason ||
+      typeof external !== "string" || (external.trim() !== "" && externalId === null)) {
+      console.error("Invalid payroll employee mapping.");
+      redirect(`${destination}&error=invalid`);
+    }
+    result = await workspace.supabase.rpc("set_payroll_employee_mapping", {
+      p_business_id: workspace.business.id, p_connection_id: connections[0], p_employee_id: employees[0],
+      p_expected_revision: revision, p_external_employee_id: externalId, p_reason: reason, p_request_id: requests[0],
+    });
+  }
+  if (result.error || !isPayrollUuid(result.data)) {
+    console.error("Payroll mapping save failed.", {
+      code: result.error?.code, message: result.error?.message ?? "Invalid mapping receipt.",
+    });
+    redirect(`${destination}&error=${payrollMappingFailure(result.error?.message)}`);
+  }
+  revalidatePath("/settings/payroll");
+  revalidatePath("/timesheets");
+  if (operation === "connection") query.set("connection", result.data);
+  redirect(`/settings/payroll?${query}&saved=${operation}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

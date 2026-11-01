@@ -3,14 +3,22 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **33**. In Progress: **6**.
-  Blocked: **2**. Not started (Backlog): **68**.
+  BB-PAYRULES stories). Verified Done: **34**. In Progress: **6**.
+  Blocked: **2**. Not started (Backlog): **67**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
-  BB-TIME-005, BB-TIME-006, BB-PAY-001 and BB-PAY-002.
+  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002 and BB-PAY-003.
+- BB-PAY-003's final clean 44-migration disposable replay passed
+  **2,072/2,072** pgTAP assertions across 44 files, including 29 mapping
+  assertions. All **18/18** authenticated integrations, **131** Node tests,
+  ESLint, TypeScript and split production compile/generate passed. The 18
+  integrations skipped in the Node-only run passed separately. All **50/50**
+  serialized production-browser scenarios passed, including explicit mapping
+  of two employees with identical names and mobile layout. Free disk remained
+  above 30 GiB.
 - BB-PAY-002 and BB-TIME-006's final clean 43-migration disposable replay
   passed **2,043/2,043** pgTAP assertions across 43 files, including 64
   export-ledger assertions. All **18/18** authenticated tenant/concurrency
@@ -286,6 +294,17 @@
 
 ## Current story
 
+- **BB-PAY-003 — Payroll employee mapping** is Done. Owner/admin
+  setup creates business-wide mapping destinations, not authenticated provider
+  connections. Explicit case-sensitive employee IDs are unique per destination;
+  versioned saves/removals append attributed audit events. Provider-ready
+  records use detached canonical records, refuse incomplete mappings and
+  serialize with mapping edits. All criteria and final clean replay/regressions
+  passed (evidence below). No provider is connected or enabled by this feature.
+  Next: **BB-PAY-004 — Xero Payroll adapter**, which requires current provider
+  access and an isolated Australian payroll test organisation for sandbox
+  acceptance. If that access is unavailable, preserve the provider gate and
+  continue independent foundation work rather than claiming delivery works.
 - **BB-PAY-002 — Generic CSV export** and **BB-TIME-006 — Timesheet export
   traceability** are Done (criterion evidence below). Immutable scoped batches
   contain approved finalised records, protect spreadsheet cells and never
@@ -293,13 +312,15 @@
   require explicit manual reconciliation with a reason and confirmation of
   any necessary external adjustment. Final-schema verification includes the
   employee-name race and reconciliation-reason boundaries, including BOM
-  whitespace and non-BMP characters. Next: **BB-PAY-003 — Payroll employee
-  mapping**, before Xero. No external payroll access or award compliance is
-  implied by a generic CSV download.
+  whitespace and non-BMP characters. BB-PAY-003 is now complete.
+  No external payroll access or award compliance is
+  implied by a generic CSV download. Verified checkpoint `109df0b` was pushed;
+  the remote SHA matched `109df0b3c1a576569d3a569e3f41020e3e9a07de`.
 - **BB-PAY-001 — Canonical payroll record** is Done (verification below).
   Its verified checkpoint is `90f29fd`, pushed to the development branch.
 - **BB-TIME-005 — Finalise payroll period** is Done (verification below).
-  Next: BB-PAY-003 (employee mapping) before Xero (BB-PAY-004).
+  Canonical records, generic CSV, export traceability and employee mapping
+  have now been completed before Xero (BB-PAY-004).
   The new BB-PAYRULES award stories depend on
   BB-RULES-001/003 and should follow reliable export.
 - **BB-TIME-004 — Department approval** is Done.
@@ -526,6 +547,38 @@ durations round. Provider mappings and codes are unassigned, not inferred.
 The preview is not an export, Xero integration or award calculation. A future
 export must atomically recheck the finalisation, exceptions, mapping and
 reconciliation under appropriate locks.
+
+### BB-PAY-003 — Payroll employee mapping (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-003.1 Mapping unique per connection and employee | Business-scoped mapping destinations have immutable provider/account identity. One mapping per destination/employee and one employee per external ID are enforced by constraints and the owner/admin-only RPC. Saves/removals require a reason, expected revision and idempotent request; changes append immutable audit events. Destinations are mapping setup, not OAuth authentication or an enabled adapter. | 29-assertion pgTAP suite passed uniqueness, independent destinations, role/tenant denials, invalid IDs, request retries, stale edits, removals and audit immutability. Authenticated integration passed eight competing edits with one winner and six retries returning one audit receipt. Production Chromium verified owner setup, duplicate-ID refusal, successful distinct IDs and removal with incremented revisions. Passed. | Pass |
+| PAY-003.2 Missing mappings block provider export | `list_provider_payroll_records` is the adapter input boundary: full-venue authorization, current finalisation/exceptions and destination tenant are checked, then mapping reads serialize with edits. It refuses to return any records if any employee is unmapped. Generic CSV remains provider-neutral. No external adapter is enabled by mapping setup. | pgTAP verified missing/partial mappings, removal and a different destination each refuse all provider-ready records. Authenticated integration verified an in-flight mapping removal blocks the provider read until commit, then it fails with `Missing payroll employee mappings`. Complete reads returned two validated records for the exact explicit connection; employees, FOH and outsiders were denied. Passed. | Pass |
+| PAY-003.3 Worker IDs not inferred from names | The UI requires explicit case-sensitive IDs next to stable Butterbox employee UUIDs. The adapter boundary joins only by employee/connection IDs and attaches mapping metadata to detached canonical records, leaving original attendance, snapshots and CSV unchanged. | pgTAP verified two identical names produce their separately entered payroll IDs and original snapshots retain null provider mapping. Production Chromium verified saving one same-name employee leaves the other unmapped, and after saving both, removing one preserves the other's explicit ID. Unit tests passed input, revision and malformed/duplicate-response checks. Passed. | Pass |
+
+Files: `supabase/migrations/20261102210000_payroll_employee_mapping.sql`,
+`supabase/tests/database/payroll_employee_mapping.test.sql`,
+`src/lib/payroll-mapping.ts`, `src/app/settings/payroll/page.tsx`,
+`src/app/actions.ts`, `src/app/timesheets/page.tsx`,
+`tests/payroll-mapping.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+
+Verification: clean replay of all 44 migrations on the identity/port-verified
+disposable project; **2,072/2,072** database assertions across 44 files;
+**18/18** authenticated integrations; **131** Node tests (18 integrations
+skipped only in that invocation and run separately); full ESLint, TypeScript,
+split production compile/generate and **50/50** production-browser scenarios.
+The first focused browser run exposed a provider select whose implicit label
+included option text; an explicit label/control association fixed it, and
+the rebuilt focused and complete regressions passed without dropping assertions.
+Owner/admin management is intentionally business-wide; full-venue GMs can read
+mapped provider-ready records but cannot change business-wide destinations.
+No provider credentials are stored or external payroll calls made. A future
+adapter must snapshot the mapping used in its immutable delivery record and
+pass its own sandbox acceptance; this story does not claim Xero delivery.
+Temporary browser servers stopped, fixtures were cleaned up and free disk
+stayed above 30 GiB. Main development and production databases were untouched.
 
 ### BB-PAY-002 — Generic CSV export (Done)
 
@@ -1254,11 +1307,12 @@ not yet run remotely.
 
 ## Next story
 
-- Implement **BB-PAY-003 — Payroll employee mapping**: explicit employee IDs
-  unique within each payroll connection, server-enforced missing-mapping
-  refusal and no inference from display names. Generic CSV remains a
-  provider-neutral hours export; Xero (BB-PAY-004) must not be presented as
-  available without verified provider access and sandbox acceptance.
+- Next operational story: **BB-PAY-004 — Xero Payroll adapter**. Confirm
+  current Australian endpoints/scopes and obtain secure OAuth client/test
+  organisation access before claiming end-to-end acceptance. Generic CSV and
+  mapping destinations do not enable provider delivery. If external access
+  is absent, the independent foundation prerequisite is **BB-FOUND-006** safe
+  business switching, which also unblocks the remaining invitation work.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.

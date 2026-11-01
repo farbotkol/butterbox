@@ -441,6 +441,9 @@ export default async function TimesheetsPage({ searchParams }: {
     {week && <section id="payroll-period" aria-labelledby="payroll-period-heading"
       className="mt-4 rounded-xl border border-line bg-white p-4 text-sm">
       <h2 id="payroll-period-heading" className="text-base font-semibold">Payroll period</h2>
+      {["owner", "admin"].includes(workspace.membership.role) &&
+        <Link href={`/settings/payroll?venue=${workspace.venue.id}`}
+          className="mt-2 inline-block font-semibold text-ocean">Manage payroll employee mapping</Link>}
       {periodError || !period || !periodExceptions || !periodEvents
         ? <p role="alert" className="mt-2 rounded-lg bg-red-50 p-3 text-red-800">
           We couldn&apos;t load this payroll period. Attendance changes are unavailable until it loads; refresh and

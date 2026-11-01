@@ -6877,6 +6877,104 @@ test("ambiguous business memberships fail closed in stale forms and workspace pa
   }
 });
 
+test("owners explicitly map same-name employees to payroll destinations without connecting a provider", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, departmentId, firstEmployee, secondEmployee] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "foh", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `mapping-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Explicit payroll mapping cafe" }, { id: outsideId, name: "Outside mapping cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideId, user_id: users[2], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([firstEmployee, secondEmployee].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "Same Name", role_title: "Server",
+    })))).error).toBeNull();
+
+    await signIn(page, `mapping-owner-${suffix}@example.test`, password);
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-01-08`);
+    await page.getByRole("link", { name: "Manage payroll employee mapping" }).click();
+    await expect(page.getByRole("heading", { name: "Payroll employee mapping", exact: true })).toBeVisible();
+    const add = page.getByRole("region", { name: "Add payroll destination" });
+    await add.getByLabel("Provider", { exact: true }).selectOption("xero");
+    await add.getByLabel("Destination name").fill("Test Xero account");
+    await add.getByLabel("Payroll account ID").fill("explicit-account-id");
+    await add.getByRole("button", { name: "Add mapping destination" }).click();
+    await expect(page.locator("main").getByRole("status"))
+      .toContainText("Payroll mapping destination created. No provider has been connected.");
+    const first = page.locator(`#payroll-employee-${firstEmployee}`);
+    const second = page.locator(`#payroll-employee-${secondEmployee}`);
+    await expect(first).toContainText("Missing payroll mapping");
+    await expect(second).toContainText("Missing payroll mapping");
+    await first.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
+    await first.getByLabel("Reason for mapping change").fill("Copied exact employee ID from payroll account");
+    await first.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(first.locator('input[name="revision"]')).toHaveValue("1");
+    await expect(first.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-001");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("");
+    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
+    await second.getByLabel("Reason for mapping change").fill("Attempt duplicate ID");
+    await second.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("already assigned to another employee");
+    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-002");
+    await second.getByLabel("Reason for mapping change").fill("Distinct ID despite same name");
+    await second.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(second.locator('input[name="revision"]')).toHaveValue("1");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await page.reload();
+    await first.getByLabel("Payroll employee ID", { exact: true }).fill("");
+    await first.getByLabel("Reason for mapping change").fill("Remove incorrect assignment");
+    await first.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(first.locator('input[name="revision"]')).toHaveValue("2");
+    await expect(first).toContainText("Missing payroll mapping");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const fohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    await signIn(fohPage, `mapping-foh-${suffix}@example.test`, password);
+    await fohPage.goto(`/settings/payroll?venue=${venueId}`);
+    await expect(fohPage).toHaveURL(/error=permission/);
+    await expect(fohPage.getByRole("button", { name: "Save payroll ID" })).toHaveCount(0);
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `mapping-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/settings/payroll?venue=${venueId}`);
+    await expect(outsidePage.getByRole("heading", { name: "Payroll mappings unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Staff-002")).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const id of [businessId, outsideId]) {
+      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("generic payroll CSV downloads approved hours and reconciles amended exports", async ({ page, browser }) => {
   test.setTimeout(120_000);
   page.setDefaultTimeout(20_000);

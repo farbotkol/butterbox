@@ -262,6 +262,69 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     assert.equal(JSON.stringify(reloaded.data[0].record), originalRecord,
       "preparing a provider record does not alter persisted attendance or its snapshot");
 
+    const connectionId = randomUUID();
+    const createConnection = (client) => client.rpc("create_payroll_mapping_connection", {
+      p_business_id: businessId, p_connection_id: connectionId,
+      p_provider: "xero", p_account_id: `test-org-${suffix}`, p_name: "Mapping setup only",
+    });
+    for (const role of ["gm", "foh", "worker", "outsider"]) {
+      assert.equal((await createConnection(clients[role])).error?.message, "Permission denied");
+    }
+    assert.ifError((await createConnection(clients.owner)).error);
+    const mappedRecords = (client) => client.rpc("list_provider_payroll_records", {
+      ...scope, p_finalisation_id: finalisationId, p_connection_id: connectionId,
+    });
+    assert.equal((await mappedRecords(clients.owner)).error?.message, "Missing payroll employee mappings");
+    const setMapping = (externalId, revision, request = randomUUID()) =>
+      clients.owner.rpc("set_payroll_employee_mapping", {
+        p_business_id: businessId, p_connection_id: connectionId, p_employee_id: employeeId,
+        p_expected_revision: revision, p_external_employee_id: externalId,
+        p_reason: "Explicit payroll ID verified in test account", p_request_id: request,
+      });
+    const competingMappings = await Promise.all(Array.from({ length: 8 }, (_, index) =>
+      setMapping(`exact-worker-${index}`, 0)));
+    assert.equal(competingMappings.filter((result) => !result.error).length, 1,
+      "concurrent edits cannot replace the mapping without a fresh revision");
+    for (const result of competingMappings.filter((item) => item.error)) {
+      assert.equal(result.error.message, "Payroll mapping changed; refresh before saving");
+    }
+    const mappingRequest = randomUUID();
+    const mappingRetries = await Promise.all(Array.from({ length: 6 }, () =>
+      setMapping("verified-worker-id", 1, mappingRequest)));
+    for (const result of mappingRetries) {
+      assert.ifError(result.error);
+      assert.equal(result.data, mappingRetries[0].data);
+    }
+    const providerRows = await mappedRecords(clients.gm);
+    assert.ifError(providerRows.error);
+    const providerRecords = validateCanonicalPayrollRows(providerRows.data, {
+      businessId, venueId, weekStart: week, finalisationId, sessionCount: 2,
+    });
+    assert.ok(providerRecords.every((record) =>
+      record.worker.providerMapping.externalEmployeeId === "verified-worker-id" &&
+      record.worker.providerMapping.connectionId === connectionId));
+    for (const role of ["foh", "worker", "outsider"]) {
+      assert.equal((await mappedRecords(clients[role])).error?.message, "Permission denied");
+    }
+    assert.equal((await canonical(clients.owner, finalisationId)).data[0].record.worker.providerMapping, null,
+      "provider mapping is detached from the immutable source snapshot");
+    const mappingGate = await holdLock(asOwner(`select public.set_payroll_employee_mapping(` +
+      `'${businessId}'::uuid, '${connectionId}'::uuid, '${employeeId}'::uuid, 2, null, ` +
+      `'Remove mapping before a provider read', '${randomUUID()}'::uuid)`));
+    let pendingMappedRecords;
+    try {
+      pendingMappedRecords = Promise.resolve(mappedRecords(clients.owner));
+      await waitForLock("list_provider_payroll_records");
+      await mappingGate.release(true);
+      assert.equal((await pendingMappedRecords).error?.message, "Missing payroll employee mappings",
+        "a provider record read waits for an in-flight mapping removal and fails closed");
+    } finally {
+      await mappingGate.release(false);
+      await Promise.allSettled([pendingMappedRecords].filter(Boolean));
+    }
+    assert.equal(await sql(`select count(*) from public.payroll_employee_mapping_events ` +
+      `where business_id = '${businessId}'::uuid`), "3", "mapping retries do not duplicate audit events");
+
     const createExport = (client, request = randomUUID()) => client.rpc("create_generic_payroll_export", {
       ...scope, p_finalisation_id: finalisationId, p_request_id: request,
     });

@@ -307,6 +307,28 @@ reopening is kept as an immutable, attributed history entry with its totals, and
 earlier snapshots are retained. Finalising does not export payroll or verify
 award compliance.
 
+Owners and admins can open **Manage payroll employee mapping** from the
+**Payroll period** panel. Register a mapping destination using the provider's
+account/organisation ID and a display label, then enter each employee's exact,
+case-sensitive payroll ID. Destinations belong to the business; the employee
+list is scoped to the selected venue. A worker can have different IDs in
+different destinations, but an ID cannot identify two workers in the same
+destination. Identical employee names are not matched or copied automatically.
+Leave an ID blank to remove it. Each save requires a reason, checks the reviewed
+revision and appends an attributed audit event; retries do not duplicate events.
+
+The `list_provider_payroll_records` RPC is the provider-adapter input boundary:
+it checks current finalisation, venue authority, exceptions, destination tenant
+and complete explicit mappings before returning any records. It adds mapping
+metadata only to detached records; original snapshots and generic CSV batches
+remain unchanged. Provider-ready reads serialize with mapping changes and
+refuse a missing or removed mapping rather than returning a partial payroll.
+An adapter must persist the mapping it uses in its own immutable delivery
+record. **Mapping setup does not authenticate, connect or enable Xero, MYOB,
+Employment Hero or QuickBooks.** No provider credentials are collected and no
+payroll is sent by this workflow; provider-specific sandbox acceptance remains
+required.
+
 For newly finalised weeks, **Finalised payroll records** is a whole-venue,
 read-only preview available to those same full-venue payroll managers. Each
 versioned record retains the employee and venue IDs, venue-local work date,
