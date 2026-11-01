@@ -5,8 +5,10 @@ import { revalidatePath } from "next/cache";
 import { authCallbackUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { getWeekStart } from "@/lib/dates";
+import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
+import { parseVenueGeofence } from "@/lib/venue-geofence";
 import { getWorkspace } from "@/lib/workspace";
 
 function text(formData: FormData, key: string, maxLength: number) {
@@ -187,6 +189,55 @@ const organisationErrors: Record<string, string> = {
 function activeFlag(formData: FormData) {
   const active = formData.get("active");
   return active === "true" ? true : active === "false" ? false : null;
+}
+
+export async function saveVenueGeofenceAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid venue submitted for geofence configuration.");
+    redirect("/settings/organisation?error=geofence");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the geofence workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  const destination = `/settings/organisation?venue=${encodeURIComponent(workspace.venue.id)}`;
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+
+  const latitude = formData.getAll("latitude");
+  const longitude = formData.getAll("longitude");
+  const radiusMeters = formData.getAll("radius_meters");
+  if (latitude.length !== 1 || typeof latitude[0] !== "string" ||
+    longitude.length !== 1 || typeof longitude[0] !== "string" ||
+    radiusMeters.length !== 1 || typeof radiusMeters[0] !== "string") {
+    console.error("Invalid venue geofence submitted.");
+    redirect(`${destination}&error=geofence`);
+  }
+  const geofence = parseVenueGeofence({
+    latitude: latitude[0], longitude: longitude[0], radiusMeters: radiusMeters[0],
+  });
+  if (!geofence.valid) {
+    console.error("Invalid venue geofence submitted.");
+    redirect(`${destination}&error=geofence`);
+  }
+  const { error } = await workspace.supabase.rpc("save_venue_geofence", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_latitude: geofence.latitude,
+    p_longitude: geofence.longitude,
+    p_radius_meters: geofence.radiusMeters,
+  });
+  if (error) {
+    console.error("Venue geofence save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Invalid venue geofence" ? "geofence" : "save";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/settings/organisation");
+  redirect(`${destination}&saved=geofence`);
 }
 
 export async function saveDepartmentAction(formData: FormData) {
@@ -384,6 +435,44 @@ async function availabilityActionContext(formData: FormData) {
     workspace,
     destination: `/availability?venue=${encodeURIComponent(workspace.venue.id)}`,
   };
+}
+
+export async function saveEmployeePreferencesAction(formData: FormData) {
+  const { workspace, destination } = await availabilityActionContext(formData);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const preferredWeeklyHours = formData.get("preferred_weekly_hours");
+  const notifyScheduleEmail = formData.get("notify_schedule_email");
+  const notifyLeaveEmail = formData.get("notify_leave_email");
+  if (!employeeIds || employeeIds.length !== 1 ||
+    typeof preferredWeeklyHours !== "string" ||
+    typeof notifyScheduleEmail !== "string" || typeof notifyLeaveEmail !== "string") {
+    console.error("Invalid employee preferences submitted.");
+    redirect(`${destination}&error=preferences-invalid`);
+  }
+  const preferences = parseEmployeePreferences({
+    preferredWeeklyHours, notifyScheduleEmail, notifyLeaveEmail,
+  });
+  if (!preferences.valid) {
+    console.error("Invalid employee preferences submitted.");
+    redirect(`${destination}&error=preferences-invalid`);
+  }
+
+  const { error } = await workspace.supabase.rpc("save_employee_preferences", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_employee_id: employeeIds[0],
+    p_preferred_weekly_hours: preferences.preferredWeeklyHours,
+    p_notify_schedule_email: preferences.notifyScheduleEmail,
+    p_notify_leave_email: preferences.notifyLeaveEmail,
+  });
+  if (error) {
+    console.error("Employee preferences save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Invalid employee preferences" ? "preferences-invalid" : "save";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/people");
+  redirect(`${destination}&saved=preferences`);
 }
 
 export async function saveRecurringAvailabilityAction(formData: FormData) {
@@ -607,7 +696,7 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
     console.error("Shift save failed.", { code: result.error.code, message: result.error.message });
     const message = result.error.message.toLowerCase();
     if (message.includes("no eligible employee")) {
-      state.errors.employee = "No eligible worker is free of overlapping shifts. Choose another time, role or assignment.";
+      state.errors.employee = "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.";
     } else if (message.includes("overlap")) {
       state.errors.employee = "That employee already has a shift during this time.";
     } else if (message.includes("employee is not eligible")) {

@@ -17,9 +17,16 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { ShiftEditor } from "@/components/shift-editor";
-import { availabilityForDate, formatWallTime } from "@/lib/availability";
+import {
+  availabilityForDate,
+  formatWallTime,
+  type AvailabilityException,
+  type AvailabilityInterval,
+} from "@/lib/availability";
+import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
 import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
+import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
@@ -55,7 +62,15 @@ const errorMessages: Record<string, string> = {
   delete: "We couldn't delete that shift. Published shifts cannot be deleted.",
   publish: "We couldn't publish this roster. Check your permissions and try again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
-  "no-eligible": "No eligible worker is free of overlapping shifts. Choose another time, role or assignment.",
+  "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
+};
+
+const conflictMessages: Record<ShiftConflict, string> = {
+  "invalid-duration": "Shift exceeds 24 hours; review availability manually",
+  "overlapping-shift": "Overlaps another shift",
+  "blocked-date": "Date blocked",
+  "approved-leave": "Approved leave",
+  "recurring-availability": "Outside submitted availability",
 };
 
 function isManager(role: string) {
@@ -97,7 +112,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
-  const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, exceptionResult] = await Promise.all([
+  const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, shiftResult] = await Promise.all([
     workspace.supabase.from("venues").select("id, name")
       .eq("business_id", workspace.business.id).order("created_at"),
     workspace.supabase
@@ -121,15 +136,41 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       p_business_id: workspace.business.id,
       p_venue_id: workspace.venue.id,
     }),
-    workspace.supabase.from("employee_availability_patterns").select("employee_id")
-      .eq("venue_id", workspace.venue.id),
-    workspace.supabase.from("employee_availability_intervals")
-      .select("employee_id, weekday, start_minute, end_minute")
-      .eq("venue_id", workspace.venue.id),
-    workspace.supabase.from("employee_availability_exceptions")
-      .select("employee_id, starts_on, ends_on, exception_type, status")
+    readAllPages((from, to) => workspace.supabase.from("employee_availability_patterns")
+      .select("employee_id", { count: "exact" })
+      .eq("venue_id", workspace.venue.id).order("employee_id").range(from, to),
+      (pattern) => pattern.employee_id),
+    readAllPages((from, to) => workspace.supabase.from("employee_availability_intervals")
+      .select("id, employee_id, weekday, start_minute, end_minute", { count: "exact" })
+      .eq("venue_id", workspace.venue.id).order("id").range(from, to),
+      (interval) => interval.id),
+    workspace.supabase.from("shifts")
+      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published")
+      .eq("venue_id", workspace.venue.id).eq("status", "scheduled")
+      .gte("starts_at", startAt).lt("starts_at", endAt).order("starts_at"),
+  ]);
+  const exceptionDates = [
+    week,
+    addDays(weekEnd, -1),
+    ...(shiftResult.data ?? [])
+      .filter((shift) => shift.employee_id &&
+        new Date(shift.ends_at).valueOf() - new Date(shift.starts_at).valueOf() <= 24 * 60 * 60 * 1000)
+      .map((shift) => getVenueDate(shift.ends_at, workspace.venue.timezone)),
+  ].sort();
+  // Include overnight shifts and clock changes that cross local date boundaries.
+  const [exceptionResult, overlapResult] = await Promise.all([
+    readAllPages((from, to) => workspace.supabase
+      .from("employee_availability_exceptions")
+      .select("id, employee_id, starts_on, ends_on, exception_type, status", { count: "exact" })
       .eq("venue_id", workspace.venue.id)
-      .lte("starts_on", addDays(weekEnd, -1)).gte("ends_on", week),
+      .lte("starts_on", addDays(exceptionDates[exceptionDates.length - 1], 2))
+      .gte("ends_on", addDays(exceptionDates[0], -2))
+      .order("id").range(from, to), (exception) => exception.id),
+    workspace.supabase.rpc("list_roster_overlap_conflicts", {
+      p_business_id: workspace.business.id,
+      p_venue_id: workspace.venue.id,
+      p_shift_ids: (shiftResult.data ?? []).map((shift) => shift.id),
+    }),
   ]);
   const departmentRows = departmentResult.data;
   const employeeRows = employeeResult.data;
@@ -160,19 +201,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       : departments.find((department) => department.id === params.department)?.id ??
         defaultDepartment;
 
-  const shiftResult = await workspace.supabase
-    .from("shifts")
-    .select(
-      "id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published",
-    )
-    .eq("venue_id", workspace.venue.id)
-    .eq("status", "scheduled")
-    .gte("starts_at", startAt)
-    .lt("starts_at", endAt)
-    .order("starts_at");
   const loadError = venueResult.error || departmentResult.error || employeeResult.error || jobRoleResult.error ||
     linkResult.error || ownDepartmentsResult.error || patternResult.error || intervalResult.error ||
-    exceptionResult.error || shiftResult.error;
+    exceptionResult.error || overlapResult.error || shiftResult.error;
   if (loadError) {
     console.error("Could not load the roster.", { code: loadError.code, message: loadError.message });
     return (
@@ -190,6 +221,37 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const visibleShifts = (shifts ?? []).filter(
     (shift) => !selectedDepartment || shift.department_id === selectedDepartment,
   );
+  const patternEmployees = new Set((patternResult.data ?? []).map((pattern) => pattern.employee_id));
+  const employeeIntervals = new Map<string, AvailabilityInterval[]>();
+  for (const interval of intervalResult.data ?? []) {
+    const intervals = employeeIntervals.get(interval.employee_id) ?? [];
+    intervals.push(interval);
+    employeeIntervals.set(interval.employee_id, intervals);
+  }
+  const employeeExceptions = new Map<string, AvailabilityException[]>();
+  for (const exception of exceptionResult.data ?? []) {
+    const exceptions = employeeExceptions.get(exception.employee_id) ?? [];
+    exceptions.push(exception);
+    employeeExceptions.set(exception.employee_id, exceptions);
+  }
+  const availabilityIntervals = (employeeId: string) => patternEmployees.has(employeeId)
+    ? employeeIntervals.get(employeeId) ?? [] : null;
+  const overlapRows: { shift_id: string }[] = overlapResult.data ?? [];
+  const overlappingShifts = new Set(overlapRows.map((conflict) => conflict.shift_id));
+  const conflictsByShift = new Map<string, ShiftConflict[]>();
+  for (const shift of visibleShifts) {
+    if (shift.employee_id) {
+      const conflicts = shiftConflicts({
+        startsAt: shift.starts_at,
+        endsAt: shift.ends_at,
+        timezone: workspace.venue.timezone,
+        intervals: availabilityIntervals(shift.employee_id),
+        exceptions: employeeExceptions.get(shift.employee_id) ?? [],
+      });
+      if (overlappingShifts.has(shift.id)) conflicts.unshift("overlapping-shift");
+      conflictsByShift.set(shift.id, conflicts);
+    }
+  }
   const employees = (employeeRows ?? []).filter(
     (employee) =>
       employee.active && (!selectedDepartment ||
@@ -394,7 +456,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               </button>
             </form>
           </div>
-          <ShiftEditor key={`${workspace.venue.id}:${selectedDepartment}:${week}:${editingShift?.id ?? params.created ?? "new"}`}
+          <ShiftEditor key={`${workspace.venue.id}:${selectedDepartment}:${week}:${editingShift ? `edit:${editingShift.id}` : `new:${params.created ?? ""}`}`}
             week={week} venueId={workspace.venue.id} departmentId={selectedDepartment}
             collapsed={collapsed} employees={employees} unavailableEmployee={unavailableEmployee}
             roleSuggestions={roleSuggestions.map((role) => role.name)} shiftId={editingShift?.id}
@@ -427,6 +489,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             <h2 className="text-base font-semibold">Team roster</h2>
             <p className="mt-1 text-xs text-muted">
               Shifts by team member and day · times shown in venue local time
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Availability warnings do not block manual assignment or publication. Automatic
+              selection checks submitted availability, date blocks and approved leave. New
+              overlaps for the same worker at this venue are rejected.
             </p>
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
@@ -492,14 +559,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                         shift.department_id === department.id &&
                         getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
                     );
-                    const hasAvailability = patternResult.data?.some(
-                      (pattern) => pattern.employee_id === employee.id,
-                    );
                     const availability = availabilityForDate(
                       date,
-                      hasAvailability ? (intervalResult.data ?? [])
-                        .filter((interval) => interval.employee_id === employee.id) : null,
-                      (exceptionResult.data ?? []).filter((item) => item.employee_id === employee.id),
+                      availabilityIntervals(employee.id),
+                      employeeExceptions.get(employee.id) ?? [],
                     );
                     const unavailable = availability.unavailable;
                     return (
@@ -555,6 +618,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                 <p className="truncate text-[10px] font-medium text-ocean">
                                   {departments.find((department) => department.id === shift.department_id)?.name}
                                 </p>
+                              )}
+                              {(conflictsByShift.get(shift.id) ?? []).length > 0 && (
+                                <div role="note"
+                                  aria-label={`Scheduling conflict for ${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}`}
+                                  className="mt-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-medium text-rose-900">
+                                  <span className="block font-semibold">Conflict</span>
+                                  {conflictsByShift.get(shift.id)?.map((conflict) => (
+                                    <span key={conflict} className="block">{conflictMessages[conflict]}</span>
+                                  ))}
+                                </div>
                               )}
                               <div className="mt-1 flex items-center justify-between gap-1">
                                 <span className={`text-[9px] font-semibold ${shift.is_published ? "text-teal-800" : "text-sky-800"}`}>

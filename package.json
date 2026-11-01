@@ -12,6 +12,7 @@
     "test:auth": "node scripts/test-auth.mjs"
   },
   "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
     "@supabase/ssr": "0.12.7",
     "@supabase/supabase-js": "2.118.0",
     "lucide-react": "1.65.0",

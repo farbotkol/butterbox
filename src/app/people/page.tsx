@@ -222,11 +222,14 @@ export default async function PeoplePage({
     redirect("/people?error=filter");
   }
   const venueId = selectedVenue?.id ?? workspace.venue.id;
-  const [departments, profileRoles, jobRoles, qualifications, members] = await Promise.all([
+  const [departments, profileRoles, jobRoles, qualifications, preferences, members] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active").eq("venue_id", venueId).order("name"),
     workspace.supabase.from("employees").select("role_title").eq("venue_id", venueId).order("role_title"),
     workspace.supabase.from("job_roles").select("id, name, department_id, active").eq("venue_id", venueId).order("name"),
     workspace.supabase.from("employee_job_roles").select("employee_id, department_id, job_role_id, is_primary").eq("venue_id", venueId),
+    workspace.supabase.from("employee_preferences")
+      .select("employee_id, preferred_weekly_hours, notify_schedule_email, notify_leave_email")
+      .eq("business_id", workspace.business.id).eq("venue_id", venueId),
     workspace.membership.role === "owner"
       ? workspace.supabase.rpc("list_business_members", { p_business_id: workspace.business.id })
       : Promise.resolve({ data: [], error: null }),
@@ -274,7 +277,7 @@ export default async function PeoplePage({
   const departmentName = (id: string) => departments.data?.find((department) => department.id === id)?.name;
   const canAssignDepartments = ["owner", "admin", "general_manager"].includes(workspace.membership.role);
   const loadError = venues.error || departments.error || profileRoles.error || jobRoles.error ||
-    qualifications.error || members.error || filterError || employees.error || links.error;
+    qualifications.error || preferences.error || members.error || filterError || employees.error || links.error;
   if (loadError) console.error("Could not load employee profiles.", { code: loadError.code, message: loadError.message });
   return (
     <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -341,30 +344,46 @@ export default async function PeoplePage({
           </section>
         ) : <p className="mt-6">No manageable departments are available.</p>}
         <div className="mt-6 space-y-4">
-          {employees.data?.map((employee) => <section key={employee.id}
-            aria-label={`Employee ${employee.name}`} className="rounded-xl border border-line bg-white p-5">
-            <h2 className="font-semibold">{employee.name} {employee.active ? "" : "(Archived)"}</h2>
-            <p className="mt-1 text-sm text-muted">
-              Departments: {linkedDepartments(employee.id).map(departmentName).filter(Boolean).join(", ")}
-            </p>
-            {workspace.membership.role === "owner" && (
-              <EmployeeAccountForm employee={employee} members={members.data ?? []} venueId={venueId} />
-            )}
-            {departments.data?.some((department) => department.id === employee.department_id) ? <>
-              <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
-              {canAssignDepartments && <DepartmentMembershipForm employee={employee} departments={departments.data ?? []}
-                linkedIds={linkedDepartments(employee.id)} venueId={venueId} />}
-            </> : <p className="mt-3 text-sm text-muted">Profile details are managed by this worker&apos;s primary department.</p>}
-            {departments.data?.filter((department) => linkedDepartments(employee.id).includes(department.id))
-              .map((department) => (
-                <EligibleRolesForm key={department.id} employee={employee} department={department}
-                  roles={jobRoles.data ?? []} qualifications={qualifications.data ?? []} venueId={venueId} />
-              ))}
-            {departments.data?.some((department) => department.id === employee.department_id) && (
-              <PrimaryRoleForm employee={employee} departments={departments.data ?? []}
-                roles={jobRoles.data ?? []} qualifications={qualifications.data ?? []} venueId={venueId} />
-            )}
-          </section>)}
+          {employees.data?.map((employee) => {
+            const employeePreferences = preferences.data?.find((item) => item.employee_id === employee.id);
+            return (
+              <section key={employee.id}
+                aria-label={`Employee ${employee.name}`} className="rounded-xl border border-line bg-white p-5">
+                <h2 className="font-semibold">{employee.name} {employee.active ? "" : "(Archived)"}</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Departments: {linkedDepartments(employee.id).map(departmentName).filter(Boolean).join(", ")}
+                </p>
+                <section aria-label={`Work preferences for ${employee.name}`} className="mt-4 rounded-lg border border-line p-4 text-sm">
+                  <h3 className="font-semibold">Work preferences</h3>
+                  {employeePreferences ? <>
+                    <p className="mt-2">
+                      Preferred weekly hours: {employeePreferences.preferred_weekly_hours ?? "Not specified"}
+                    </p>
+                    <p>Schedule emails: {employeePreferences.notify_schedule_email ? "Yes" : "No"}</p>
+                    <p>Leave decision emails: {employeePreferences.notify_leave_email ? "Yes" : "No"}</p>
+                  </> : <p className="mt-2 text-muted">No preferences submitted.</p>}
+                  <p className="mt-2 text-xs text-muted">Preferences are not contractual limits. Notification delivery is not yet available.</p>
+                </section>
+                {workspace.membership.role === "owner" && (
+                  <EmployeeAccountForm employee={employee} members={members.data ?? []} venueId={venueId} />
+                )}
+                {departments.data?.some((department) => department.id === employee.department_id) ? <>
+                  <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
+                  {canAssignDepartments && <DepartmentMembershipForm employee={employee} departments={departments.data ?? []}
+                    linkedIds={linkedDepartments(employee.id)} venueId={venueId} />}
+                </> : <p className="mt-3 text-sm text-muted">Profile details are managed by this worker&apos;s primary department.</p>}
+                {departments.data?.filter((department) => linkedDepartments(employee.id).includes(department.id))
+                  .map((department) => (
+                    <EligibleRolesForm key={department.id} employee={employee} department={department}
+                      roles={jobRoles.data ?? []} qualifications={qualifications.data ?? []} venueId={venueId} />
+                  ))}
+                {departments.data?.some((department) => department.id === employee.department_id) && (
+                  <PrimaryRoleForm employee={employee} departments={departments.data ?? []}
+                    roles={jobRoles.data ?? []} qualifications={qualifications.data ?? []} venueId={venueId} />
+                )}
+              </section>
+            );
+          })}
           {employees.data?.length === 0 && <p>No employees match these filters.</p>}
         </div>
       </>}

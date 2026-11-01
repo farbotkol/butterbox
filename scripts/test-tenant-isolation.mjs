@@ -16,7 +16,12 @@ if (!settings.API_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
 
 const result = spawnSync(
   process.execPath,
-  ["--experimental-strip-types", "--test", "tests/tenant-isolation.integration.test.mjs"],
+  [
+    "--experimental-strip-types", "--test", "--test-concurrency=1",
+    "tests/tenant-isolation.integration.test.mjs",
+    ...(process.env.BUTTERBOX_TEST_DB_CONTAINER
+      ? ["tests/auto-assignment-concurrency.integration.test.mjs"] : []),
+  ],
   {
     stdio: "inherit",
     env: {

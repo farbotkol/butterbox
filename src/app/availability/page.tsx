@@ -4,6 +4,7 @@ import {
   cancelAvailabilityExceptionAction,
   requestAvailabilityExceptionAction,
   reviewLeaveRequestAction,
+  saveEmployeePreferencesAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { AvailabilityEditor } from "@/components/availability-editor";
@@ -26,11 +27,13 @@ const savedMessages: Record<string, string> = {
   cancelled: "Availability exception cancelled.",
   approved: "Leave approved.",
   rejected: "Leave rejected.",
+  preferences: "Work preferences saved.",
 };
 const errorMessages: Record<string, string> = {
   permission: "You cannot make that change. Ask your owner to check your account link and permissions.",
   invalid: "Check the days and times, or confirm that you are unavailable all week.",
   "exception-invalid": "Choose a valid date range of at most 366 days and an exception type.",
+  "preferences-invalid": "Choose both email preferences and enter weekly hours from 0 to 168 in quarter-hour increments.",
   resolved: "That request has already changed. Refresh the page before trying again.",
   refresh: "Your exception was saved, but its confirmation was unavailable. Refresh before trying again.",
   venue: "That venue is unavailable. Select an accessible venue and try again.",
@@ -80,17 +83,21 @@ export default async function AvailabilityPage({
   ]);
   const employees = employeeResult.data ?? [];
   const employeeIds = employees.map((employee) => employee.id);
-  const [patterns, intervals] = employeeIds.length
+  const [patterns, intervals, preferences] = employeeIds.length
     ? await Promise.all([
         workspace.supabase.from("employee_availability_patterns")
           .select("employee_id").in("employee_id", employeeIds),
         workspace.supabase.from("employee_availability_intervals")
           .select("id, employee_id, weekday, start_minute, end_minute")
           .in("employee_id", employeeIds).order("weekday").order("start_minute"),
+        workspace.supabase.from("employee_preferences")
+          .select("employee_id, preferred_weekly_hours, notify_schedule_email, notify_leave_email")
+          .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
+          .in("employee_id", employeeIds),
       ])
-    : [{ data: [], error: null }, { data: [], error: null }];
+    : [{ data: [], error: null }, { data: [], error: null }, { data: [], error: null }];
   const loadError = venues.error || employeeResult.error || exceptions.error || team.error ||
-    patterns.error || intervals.error;
+    patterns.error || intervals.error || preferences.error;
   if (loadError) console.error("Could not load availability.", { code: loadError.code, message: loadError.message });
   const reviewRequests = (exceptions.data ?? []).filter((item) =>
     item.exception_type === "leave" && (item.status === "pending" || item.status === "approved") &&
@@ -134,9 +141,42 @@ export default async function AvailabilityPage({
             <div className="mt-6 space-y-4">
               {employees.map((employee) => {
                 const employeeExceptions = (exceptions.data ?? []).filter((item) => item.employee_id === employee.id);
+                const employeePreferences = preferences.data?.find((item) => item.employee_id === employee.id);
                 return (
                   <section key={employee.id} className="rounded-xl border border-line bg-white p-5">
                     <h2 className="font-semibold">{employee.name}</h2>
+                    <h3 className="mt-4 text-sm font-semibold">Work preferences</h3>
+                    <p className="mt-2 text-sm text-muted">
+                      These are preferences, not contractual limits. Notification delivery is not yet available.
+                    </p>
+                    <form action={saveEmployeePreferencesAction} aria-label={`Work preferences for ${employee.name}`}
+                      className="mt-3 grid gap-3 sm:grid-cols-3">
+                      <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                      <input type="hidden" name="employee_id" value={employee.id} />
+                      <label className="text-sm">Preferred weekly hours (optional)
+                        <input type="number" name="preferred_weekly_hours" min={0} max={168} step={0.25}
+                          defaultValue={employeePreferences?.preferred_weekly_hours ?? ""} className={fieldClass} />
+                      </label>
+                      <label className="text-sm">Email about schedule updates
+                        <select name="notify_schedule_email" required className={fieldClass}
+                          defaultValue={employeePreferences ? String(employeePreferences.notify_schedule_email) : ""}>
+                          <option value="">Choose one</option>
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      </label>
+                      <label className="text-sm">Email about leave decisions
+                        <select name="notify_leave_email" required className={fieldClass}
+                          defaultValue={employeePreferences ? String(employeePreferences.notify_leave_email) : ""}>
+                          <option value="">Choose one</option>
+                          <option value="true">Yes</option>
+                          <option value="false">No</option>
+                        </select>
+                      </label>
+                      <button type="submit" className="self-end rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">
+                        Save work preferences
+                      </button>
+                    </form>
                     <h3 className="mt-4 text-sm font-semibold">Recurring availability</h3>
                     <AvailabilityEditor employeeId={employee.id} employeeName={employee.name} venueId={workspace.venue.id}
                       submitted={patterns.data?.some((pattern) => pattern.employee_id === employee.id) ?? false}

@@ -507,6 +507,301 @@ test("employee profiles and filtered team directory", async ({ page }) => {
   });
 });
 
+test("owners configure venue geofences with protected audit and scoped access", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId] = [randomUUID(), randomUUID()];
+  const [venueId, secondVenueId, outsideVenueId] = [randomUUID(), randomUUID(), randomUUID()];
+  const departmentId = randomUUID();
+  const userIds = [];
+  const contexts = [];
+  try {
+    for (const name of ["owner", "manager", "worker", "outside"]) {
+      const user = await admin.auth.admin.createUser({
+        email: `geofence-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(user.error).toBeNull();
+      userIds.push(user.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Geofence ${suffix}` },
+      { id: outsideBusinessId, name: `Outside geofence ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour" },
+      { id: secondVenueId, business_id: businessId, name: "Riverside" },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: userIds[0], role: "owner" },
+      { business_id: businessId, user_id: userIds[1], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: userIds[2], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusinessId, user_id: userIds[3], role: "owner" },
+    ])).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `geofence-owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/organisation?venue=${venueId}`);
+    const region = page.getByRole("region", { name: "Venue location and geofence" });
+    const form = page.getByRole("form", { name: "Configure venue geofence" });
+    await expect(region).toContainText("staff may need to allow location access");
+    await expect(region).toContainText("Clocking and geofence enforcement are not implemented yet");
+    await expect(form.getByLabel("Latitude")).toHaveValue("");
+    await expect(form.getByLabel("Longitude")).toHaveValue("");
+    await expect(form.getByLabel("Radius in metres")).toHaveValue("");
+    await form.getByLabel("Latitude").fill("-33.8688");
+    await form.getByLabel("Longitude").fill("151.2093");
+    await form.getByLabel("Radius in metres").fill("150");
+    await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await expect(region).toContainText("-33.8688, 151.2093; 150 m");
+    await expect(region).toContainText(`User ${userIds[0]}`);
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const firstVenue = await admin.from("venues")
+      .select("geofence_latitude, geofence_longitude, geofence_radius_meters").eq("id", venueId).single();
+    expect(firstVenue.error).toBeNull();
+    expect(firstVenue.data).toEqual({
+      geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 150,
+    });
+    await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await form.getByLabel("Longitude").fill("");
+    await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("or clear all three");
+    const unchanged = await admin.from("venue_geofence_events").select("id").eq("venue_id", venueId);
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data).toHaveLength(1);
+    await expect(form.getByLabel("Longitude")).toHaveValue("151.2093");
+
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
+    await page.getByRole("button", { name: "Show venue" }).click();
+    await expect(form.getByLabel("Latitude")).toHaveValue("");
+    await expect(region).toContainText("No location changes yet.");
+    await form.getByLabel("Latitude").fill("12");
+    await form.getByLabel("Longitude").fill("20");
+    await form.getByLabel("Radius in metres").fill("50");
+    await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    const secondVenue = await admin.from("venues")
+      .select("geofence_latitude, geofence_longitude, geofence_radius_meters").eq("id", secondVenueId).single();
+    expect(secondVenue.error).toBeNull();
+    expect(secondVenue.data).toEqual({
+      geofence_latitude: 12, geofence_longitude: 20, geofence_radius_meters: 50,
+    });
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueId);
+    await page.getByRole("button", { name: "Show venue" }).click();
+    await expect(form.getByLabel("Latitude")).toHaveValue("-33.8688");
+    await form.getByLabel("Latitude").fill("");
+    await form.getByLabel("Longitude").fill("");
+    await form.getByLabel("Radius in metres").fill("");
+    await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await expect(region).toContainText("-33.8688, 151.2093; 150 m to Not configured");
+
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({ email: `geofence-owner-${suffix}@example.test`, password })).error).toBeNull();
+    const concurrent = await Promise.all([
+      ownerApi.rpc("save_venue_geofence", {
+        p_business_id: businessId, p_venue_id: venueId, p_latitude: 10, p_longitude: 20, p_radius_meters: 100,
+      }),
+      ownerApi.rpc("save_venue_geofence", {
+        p_business_id: businessId, p_venue_id: venueId, p_latitude: 30, p_longitude: 40, p_radius_meters: 200,
+      }),
+    ]);
+    expect(concurrent.every((result) => !result.error)).toBe(true);
+    const history = await admin.from("venue_geofence_events")
+      .select("actor_id, old_values, new_values, created_at").eq("venue_id", venueId)
+      .order("created_at", { ascending: true });
+    expect(history.error).toBeNull();
+    expect(history.data).toHaveLength(4);
+    expect(history.data.every((event) => event.actor_id === userIds[0])).toBe(true);
+    expect(history.data[2].old_values).toEqual({ latitude: null, longitude: null, radius_meters: null });
+    expect(history.data[3].old_values).toEqual(history.data[2].new_values);
+    expect(history.data.map((event) => event.new_values.radius_meters).slice(2).sort((a, b) => a - b)).toEqual([100, 200]);
+    expect((await ownerApi.from("venue_geofence_events").update({ actor_type: "fake" }).eq("venue_id", venueId)).error?.code).toBe("42501");
+    expect((await ownerApi.rpc("save_venue_geofence", {
+      p_business_id: businessId, p_venue_id: venueId, p_latitude: 90.000001, p_longitude: 0, p_radius_meters: 100,
+    })).error?.message).toBe("Invalid venue geofence");
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `geofence-manager-${suffix}@example.test`, password);
+    await managerPage.goto("/settings/organisation");
+    await expect(managerPage.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
+    await expect(managerPage.getByRole("form", { name: "Configure venue geofence" })).toHaveCount(0);
+    const managerApi = createClient(apiUrl, anonKey, options);
+    expect((await managerApi.auth.signInWithPassword({ email: `geofence-manager-${suffix}@example.test`, password })).error).toBeNull();
+    const managerHistory = await managerApi.from("venue_geofence_events").select("id").eq("venue_id", venueId);
+    expect(managerHistory.error).toBeNull();
+    expect(managerHistory.data).toEqual([]);
+    expect((await managerApi.rpc("save_venue_geofence", {
+      p_business_id: businessId, p_venue_id: venueId, p_latitude: 0, p_longitude: 0, p_radius_meters: 1,
+    })).error?.message).toBe("Permission denied");
+
+    const workerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `geofence-worker-${suffix}@example.test`, password);
+    await workerPage.goto("/settings/organisation");
+    await expect(workerPage).toHaveURL(/\/\?error=permission/);
+    const outsideApi = createClient(apiUrl, anonKey, options);
+    expect((await outsideApi.auth.signInWithPassword({ email: `geofence-outside-${suffix}@example.test`, password })).error).toBeNull();
+    expect((await outsideApi.rpc("save_venue_geofence", {
+      p_business_id: outsideBusinessId, p_venue_id: venueId, p_latitude: 0, p_longitude: 0, p_radius_meters: 1,
+    })).error?.message).toBe("Permission denied");
+    const outsideHistory = await outsideApi.from("venue_geofence_events").select("id").eq("venue_id", venueId);
+    expect(outsideHistory.error).toBeNull();
+    expect(outsideHistory.data).toEqual([]);
+  } finally {
+    try {
+      if (browser.isConnected()) {
+        for (const context of contexts) await context.close();
+      }
+    } finally {
+      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+      const remaining = await admin.from("businesses").select("id").in("id", [businessId, outsideBusinessId]);
+      expect(remaining.error).toBeNull();
+      expect(remaining.data).toEqual([]);
+    }
+  }
+});
+
+test("automatic assignment respects availability while manual warnings remain advisory", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const businessId = randomUUID();
+  const venueId = randomUUID();
+  const departmentId = randomUUID();
+  const [unavailableId, availableId, unknownId] = [randomUUID(), randomUUID(), randomUUID()];
+  const userIds = [];
+  try {
+    for (const name of ["owner", "available", "unknown"]) {
+      const user = await admin.auth.admin.createUser({
+        email: `auto-availability-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(user.error).toBeNull();
+      userIds.push(user.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Auto availability ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({ id: venueId, business_id: businessId, name: "Harbour", timezone: "UTC" })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: userIds[0], role: "owner" },
+      { business_id: businessId, user_id: userIds[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: userIds[2], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: unavailableId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "A Unavailable", role_title: "Server" },
+      { id: availableId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "B Available", role_title: "Server", auth_user_id: userIds[1] },
+      { id: unknownId, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "C Unknown", role_title: "Server", auth_user_id: userIds[2] },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_availability_patterns").insert({
+      employee_id: unavailableId, business_id: businessId, venue_id: venueId,
+    })).error).toBeNull();
+
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    const availableApi = createClient(apiUrl, anonKey, options);
+    const unknownApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({ email: `auto-availability-owner-${suffix}@example.test`, password })).error).toBeNull();
+    expect((await availableApi.auth.signInWithPassword({ email: `auto-availability-available-${suffix}@example.test`, password })).error).toBeNull();
+    expect((await unknownApi.auth.signInWithPassword({ email: `auto-availability-unknown-${suffix}@example.test`, password })).error).toBeNull();
+    expect((await availableApi.rpc("set_employee_recurring_availability", {
+      p_business_id: businessId, p_employee_id: availableId,
+      p_intervals: [{ weekday: 1, start: "09:00", end: "17:00" }],
+    })).error).toBeNull();
+    const leave = await availableApi.rpc("request_availability_exception", {
+      p_business_id: businessId, p_venue_id: venueId, p_employee_id: availableId,
+      p_starts_on: "2032-03-15", p_ends_on: "2032-03-15", p_exception_type: "leave",
+    });
+    expect(leave.error).toBeNull();
+
+    await signIn(page, `auto-availability-owner-${suffix}@example.test`, password);
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    const form = page.getByRole("form", { name: "Add draft shift" });
+    await expect(form).toContainText("Automatic selection checks qualifications, overlaps, submitted availability");
+    await form.getByLabel("Role").fill("First auto availability");
+    await form.getByLabel("Team member").selectOption("auto");
+    await form.getByLabel("Starts").fill("2032-03-15T09:00");
+    await form.getByLabel("Ends").fill("2032-03-15T10:00");
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/roster"),
+      form.getByRole("button", { name: "Save draft shift" }).click(),
+    ]);
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    const first = await admin.from("shifts").select("id, employee_id")
+      .eq("business_id", businessId).eq("role_title", "First auto availability").single();
+    expect(first.error).toBeNull();
+    expect(first.data.employee_id).toBe(availableId);
+    await expect(page).toHaveURL(new RegExp(`created=${first.data.id}`));
+
+    expect((await ownerApi.rpc("review_leave_request", {
+      p_business_id: businessId, p_venue_id: venueId, p_exception_id: leave.data, p_status: "approved",
+    })).error).toBeNull();
+    await form.getByLabel("Role").fill("Second auto availability");
+    await form.getByLabel("Team member").selectOption("auto");
+    await form.getByLabel("Starts").fill("2032-03-15T11:00");
+    await form.getByLabel("Ends").fill("2032-03-15T12:00");
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/roster"),
+      form.getByRole("button", { name: "Save draft shift" }).click(),
+    ]);
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    const second = await admin.from("shifts").select("id, employee_id")
+      .eq("business_id", businessId).eq("role_title", "Second auto availability").single();
+    expect(second.error).toBeNull();
+    expect(second.data.employee_id).toBe(unknownId);
+    await expect(page).toHaveURL(new RegExp(`created=${second.data.id}`));
+    await expect(page.locator("article", { hasText: "First auto availability" }).getByRole("note"))
+      .toContainText("Approved leave");
+
+    const blocked = await unknownApi.rpc("request_availability_exception", {
+      p_business_id: businessId, p_venue_id: venueId, p_employee_id: unknownId,
+      p_starts_on: "2032-03-15", p_ends_on: "2032-03-15", p_exception_type: "unavailable",
+    });
+    expect(blocked.error).toBeNull();
+    await form.getByLabel("Role").fill("No automatic candidate");
+    await form.getByLabel("Team member").selectOption("auto");
+    await form.getByLabel("Starts").fill("2032-03-15T13:00");
+    await form.getByLabel("Ends").fill("2032-03-15T14:00");
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/roster"),
+      form.getByRole("button", { name: "Save draft shift" }).click(),
+    ]);
+    await expect(form.getByRole("alert")).toContainText("No eligible worker is available");
+    const missing = await admin.from("shifts").select("id")
+      .eq("business_id", businessId).eq("role_title", "No automatic candidate");
+    expect(missing.error).toBeNull();
+    expect(missing.data).toEqual([]);
+
+    await form.getByLabel("Role").fill("Manual availability warning");
+    await form.getByLabel("Team member").selectOption(unavailableId);
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/roster"),
+      form.getByRole("button", { name: "Save draft shift" }).click(),
+    ]);
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await expect(page.locator("article", { hasText: "Manual availability warning" }).getByRole("note"))
+      .toContainText("Outside submitted availability");
+    await expect(page.getByText("Availability warnings do not block manual assignment or publication", { exact: false })).toBeVisible();
+  } finally {
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("departments and job roles can be created, deactivated and keep shift history", async ({ page, browser }) => {
       const suffix = randomUUID();
       const password = `${randomBytes(18).toString("base64url")}aA1!`;
@@ -762,7 +1057,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await page.goto(`/roster?department=${departmentId}`);
     await page.locator('input[name="role_title"]').fill("Barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
-    await expect(page.getByText("Automatic selection checks role qualifications and overlaps, not employee availability.")).toBeVisible();
+    await expect(page.getByText("Automatic selection checks qualifications, overlaps, submitted availability, date blocks and approved leave. Unsubmitted availability is unknown.")).toBeVisible();
     await page.getByRole("button", { name: "Save draft shift" }).click();
     await expect(page.locator('p[role="alert"]')).toContainText("No eligible worker");
     const none = await admin.from("shifts").select("id").eq("business_id", businessId);
@@ -944,6 +1239,8 @@ test("manual role restrictions protect open shifts without changing automatic-on
 
     await page.getByRole("link", { name: "Edit open shift" }).click();
     const edit = page.getByRole("form", { name: "Edit draft shift" });
+    await expect(edit.getByLabel("Role")).toHaveValue("barista");
+    await expect(edit.getByLabel("Starts")).toHaveValue("2032-03-16T08:00");
     await edit.getByLabel("Team member").selectOption(unqualifiedId);
     await edit.getByRole("button", { name: "Update draft shift" }).click();
     await expect(edit.getByText("Choose a worker qualified for this role, or leave the shift open.")).toBeVisible();
@@ -983,6 +1280,69 @@ test("manual role restrictions protect open shifts without changing automatic-on
       .gte("starts_at", "2032-03-16T21:00:00Z").single();
     expect(automatic.error).toBeNull();
     expect(automatic.data.employee_id).toBe(qualifiedId);
+  } finally {
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
+  }
+});
+
+test("new open shifts load their saved values when edited", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const businessId = randomUUID();
+  const venueId = randomUUID();
+  const departmentId = randomUUID();
+  const employeeId = randomUUID();
+  let ownerId;
+  try {
+    const owner = await admin.auth.admin.createUser({
+      email: `new-open-owner-${suffix}@example.test`, password, email_confirm: true,
+    });
+    expect(owner.error).toBeNull();
+    ownerId = owner.data.user.id;
+    expect((await admin.from("businesses").insert({ id: businessId, name: `New open ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: ownerId, role: "owner",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "New open worker", role_title: "Server",
+    })).error).toBeNull();
+
+    await signIn(page, `new-open-owner-${suffix}@example.test`, password);
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    const add = page.getByRole("form", { name: "Add draft shift" });
+    await add.getByLabel("Role").fill("New open");
+    await add.getByLabel("Starts").fill("2032-03-16T09:00");
+    await add.getByLabel("Ends").fill("2032-03-16T12:00");
+    await add.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
+    await expect(add.getByLabel("Role")).toHaveValue("");
+    await expect(page.locator("#open-shifts")).toContainText("1 to fill");
+
+    await page.getByRole("link", { name: "Edit open shift" }).click();
+    const edit = page.getByRole("form", { name: "Edit draft shift" });
+    await expect(edit.getByLabel("Role")).toHaveValue("New open");
+    await expect(edit.getByLabel("Starts")).toHaveValue("2032-03-16T09:00");
+    await expect(edit.getByLabel("Ends")).toHaveValue("2032-03-16T12:00");
+    await edit.getByLabel("Team member").selectOption(employeeId);
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    await expect(page.locator("#open-shifts")).toContainText("0 to fill");
+    const shift = await admin.from("shifts").select("employee_id, role_title, starts_at, ends_at")
+      .eq("business_id", businessId).single();
+    expect(shift.error).toBeNull();
+    expect(shift.data.employee_id).toBe(employeeId);
+    expect(shift.data.role_title).toBe("New open");
+    expect(new Date(shift.data.starts_at).toISOString()).toBe("2032-03-16T09:00:00.000Z");
+    expect(new Date(shift.data.ends_at).toISOString()).toBe("2032-03-16T12:00:00.000Z");
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
@@ -1204,6 +1564,144 @@ async function withAvailabilityExceptionFixtures(page, browser, run) {
   if (failures.length) throw new AggregateError(failures, "Availability exception scenario or cleanup failed");
 }
 
+test("employees save work preferences visible to eligible managers with change history", async ({ page, browser }) => {
+  await withAvailabilityExceptionFixtures(page, browser, async ({
+    workerPage, suffix, password, businessId, venueId, workerId,
+  }) => {
+    await signIn(page, `exceptions-owner-${suffix}@example.test`, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const managerView = page.getByRole("region", { name: "Work preferences for Exception worker" });
+    await expect(managerView).toContainText("No preferences submitted.");
+
+    await signIn(workerPage, `exceptions-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/availability?venue=${venueId}`);
+    const form = workerPage.getByRole("form", { name: "Work preferences for Exception worker" });
+    await expect(form.getByLabel("Preferred weekly hours (optional)")).toHaveValue("");
+    await expect(form.getByLabel("Email about schedule updates")).toHaveValue("");
+    await expect(form.getByLabel("Email about leave decisions")).toHaveValue("");
+    await expect(workerPage.getByText("Notification delivery is not yet available.", { exact: false })).toBeVisible();
+    await form.getByLabel("Preferred weekly hours (optional)").fill("24.75");
+    await form.getByLabel("Email about schedule updates").selectOption("true");
+    await form.getByLabel("Email about leave decisions").selectOption("false");
+    await form.getByRole("button", { name: "Save work preferences" }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Work preferences saved.");
+    await expect(form.getByLabel("Preferred weekly hours (optional)")).toHaveValue("24.75");
+    await expect(form.getByLabel("Email about schedule updates")).toHaveValue("true");
+    await expect(form.getByLabel("Email about leave decisions")).toHaveValue("false");
+    await workerPage.reload();
+    await expect(form.getByLabel("Preferred weekly hours (optional)")).toHaveValue("24.75");
+    await expect(form.getByLabel("Email about schedule updates")).toHaveValue("true");
+    await expect(form.getByLabel("Email about leave decisions")).toHaveValue("false");
+
+    const profile = await admin.from("employees").select("auth_user_id, employment_type").eq("id", workerId).single();
+    expect(profile.error).toBeNull();
+    expect(profile.data.employment_type).toBe("casual");
+    const stored = await admin.from("employee_preferences")
+      .select("preferred_weekly_hours, notify_schedule_email, notify_leave_email")
+      .eq("employee_id", workerId).single();
+    expect(stored.error).toBeNull();
+    expect(stored.data).toEqual({
+      preferred_weekly_hours: 24.75, notify_schedule_email: true, notify_leave_email: false,
+    });
+    const initialHistory = await admin.from("employee_preference_events")
+      .select("actor_id, old_values, new_values, created_at").eq("employee_id", workerId);
+    expect(initialHistory.error).toBeNull();
+    expect(initialHistory.data).toHaveLength(1);
+    expect(initialHistory.data[0].actor_id).toBe(profile.data.auth_user_id);
+    expect(initialHistory.data[0].old_values).toBeNull();
+    expect(initialHistory.data[0].new_values).toEqual(stored.data);
+    expect(initialHistory.data[0].created_at).toBeTruthy();
+
+    await page.reload();
+    await expect(managerView).toContainText("Preferred weekly hours: 24.75");
+    await expect(managerView).toContainText("Schedule emails: Yes");
+    await expect(managerView).toContainText("Leave decision emails: No");
+    await expect(managerView).toContainText("not contractual limits");
+
+    const workerApi = createClient(apiUrl, anonKey, options);
+    const otherManager = createClient(apiUrl, anonKey, options);
+    const outsider = createClient(apiUrl, anonKey, options);
+    expect((await workerApi.auth.signInWithPassword({
+      email: `exceptions-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await otherManager.auth.signInWithPassword({
+      email: `exceptions-boh-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await outsider.auth.signInWithPassword({
+      email: `exceptions-outsider-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    for (const client of [otherManager, outsider]) {
+      for (const table of ["employee_preferences", "employee_preference_events"]) {
+        const hidden = await client.from(table).select("employee_id").eq("employee_id", workerId);
+        expect(hidden.error).toBeNull();
+        expect(hidden.data).toEqual([]);
+      }
+      const denied = await client.rpc("save_employee_preferences", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+        p_preferred_weekly_hours: 8, p_notify_schedule_email: true, p_notify_leave_email: true,
+      });
+      expect(denied.error?.message).toBe("Permission denied");
+    }
+
+    await workerPage.goto(`/availability?venue=${venueId}`);
+    await form.getByLabel("Preferred weekly hours (optional)").fill("");
+    await form.getByLabel("Email about schedule updates").selectOption("false");
+    await form.getByLabel("Email about leave decisions").selectOption("true");
+    await form.getByRole("button", { name: "Save work preferences" }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Work preferences saved.");
+    await workerPage.reload();
+    await expect(form.getByLabel("Preferred weekly hours (optional)")).toHaveValue("");
+    await expect(form.getByLabel("Email about schedule updates")).toHaveValue("false");
+    await expect(form.getByLabel("Email about leave decisions")).toHaveValue("true");
+    await page.reload();
+    await expect(managerView).toContainText("Preferred weekly hours: Not specified");
+    await expect(managerView).toContainText("Schedule emails: No");
+    await expect(managerView).toContainText("Leave decision emails: Yes");
+
+    await workerPage.goto(`/availability?venue=${venueId}`);
+    await form.evaluate((element) => { element.noValidate = true; });
+    await form.getByLabel("Preferred weekly hours (optional)").fill("168.25");
+    await form.getByRole("button", { name: "Save work preferences" }).click();
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("weekly hours from 0 to 168");
+    const afterInvalid = await admin.from("employee_preference_events").select("id").eq("employee_id", workerId);
+    expect(afterInvalid.error).toBeNull();
+    expect(afterInvalid.data).toHaveLength(2);
+
+    const changes = await Promise.all([
+      workerApi.rpc("save_employee_preferences", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+        p_preferred_weekly_hours: 16, p_notify_schedule_email: true, p_notify_leave_email: true,
+      }),
+      workerApi.rpc("save_employee_preferences", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: workerId,
+        p_preferred_weekly_hours: 20.25, p_notify_schedule_email: false, p_notify_leave_email: false,
+      }),
+    ]);
+    for (const change of changes) expect(change.error).toBeNull();
+    const history = await admin.from("employee_preference_events")
+      .select("actor_id, old_values, new_values, created_at").eq("employee_id", workerId);
+    expect(history.error).toBeNull();
+    expect(history.data).toHaveLength(4);
+    const concurrent = history.data.filter((event) => [16, 20.25].includes(event.new_values.preferred_weekly_hours));
+    expect(concurrent).toHaveLength(2);
+    const first = concurrent.find((event) => event.old_values.preferred_weekly_hours === null);
+    const second = concurrent.find((event) => event !== first);
+    expect(first).toBeTruthy();
+    expect(second.old_values).toEqual(first.new_values);
+    expect(first.actor_id).toBe(profile.data.auth_user_id);
+    expect(second.actor_id).toBe(profile.data.auth_user_id);
+    expect(new Date(first.created_at).getTime()).toBeLessThanOrEqual(new Date(second.created_at).getTime());
+    const final = await admin.from("employee_preferences")
+      .select("preferred_weekly_hours, notify_schedule_email, notify_leave_email")
+      .eq("employee_id", workerId).single();
+    expect(final.error).toBeNull();
+    expect(final.data).toEqual(second.new_values);
+    const unchangedProfile = await admin.from("employees").select("employment_type").eq("id", workerId).single();
+    expect(unchangedProfile.error).toBeNull();
+    expect(unchangedProfile.data.employment_type).toBe("casual");
+  });
+});
+
 test("date blocks and approved leave override recurring availability", async ({ page, browser }) => {
   await withAvailabilityExceptionFixtures(page, browser, async ({
     workerPage, suffix, password, businessId, venueId, secondVenueId, fohId, workerId,
@@ -1246,6 +1744,55 @@ test("date blocks and approved leave override recurring availability", async ({ 
     await form.getByRole("button", { name: "Save date exception" }).click();
     await expect(workerPage.locator('p[role="alert"]')).toContainText("at most 366 days");
 
+    await form.getByLabel("Type").selectOption("unavailable");
+    await form.getByLabel("From").fill("2032-03-22");
+    await form.getByLabel("Through").fill("2032-03-22");
+    await form.getByRole("button", { name: "Save date exception" }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Dates marked unavailable.");
+
+    const shifts = [
+      { role_title: "Blocked shift", starts_at: "2032-03-14T22:00:00Z", ends_at: "2032-03-14T23:00:00Z" },
+      { role_title: "Outside hours", starts_at: "2032-03-15T21:00:00Z", ends_at: "2032-03-15T22:00:00Z" },
+      { role_title: "Pending leave shift", starts_at: "2032-03-15T22:00:00Z", ends_at: "2032-03-16T00:00:00Z" },
+      { role_title: "Legacy long shift", starts_at: "2032-03-16T22:00:00Z", ends_at: "2032-03-17T23:00:00Z" },
+      { role_title: "Overnight next week", starts_at: "2032-03-21T12:30:00Z", ends_at: "2032-03-21T13:30:00Z" },
+    ];
+    expect((await admin.from("shifts").insert(shifts.map((shift) => ({
+      ...shift, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+    })))).error).toBeNull();
+
+    const workerIntervals = await admin.from("employee_availability_intervals").select("id").eq("employee_id", workerId);
+    expect(workerIntervals.error).toBeNull();
+    expect(workerIntervals.data).toHaveLength(3);
+    for (const interval of workerIntervals.data) {
+      expect((await admin.from("employee_availability_intervals").update({
+        id: randomUUID().replace(/^[^-]+/, "ffffffff"),
+      }).eq("id", interval.id)).error).toBeNull();
+    }
+    const pagedEmployees = Array.from({ length: 18 }, (_, index) => ({
+      id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: fohId,
+      name: `Pagination fixture ${String(index + 1).padStart(2, "0")}`, role_title: "Server",
+    }));
+    expect((await admin.from("employees").insert(pagedEmployees)).error).toBeNull();
+    expect((await admin.from("employee_availability_patterns").insert(pagedEmployees.map((employee) => ({
+      employee_id: employee.id, business_id: businessId, venue_id: venueId,
+    })))).error).toBeNull();
+    const additionalIntervals = pagedEmployees.flatMap((employee) =>
+      Array.from({ length: 56 }, () => ({
+        id: randomUUID().replace(/^[^-]+/, "00000000"),
+        employee_id: employee.id, business_id: businessId, venue_id: venueId,
+        weekday: 1, start_minute: 540, end_minute: 1020,
+      })));
+    expect((await admin.from("employee_availability_intervals").insert(additionalIntervals)).error).toBeNull();
+    const firstPageBoundary = await admin.from("employee_availability_intervals").select("employee_id")
+      .eq("venue_id", venueId).order("id").range(999, 999);
+    expect(firstPageBoundary.error).toBeNull();
+    expect(firstPageBoundary.data[0].employee_id).not.toBe(workerId);
+    const laterIntervals = await admin.from("employee_availability_intervals").select("employee_id")
+      .eq("venue_id", venueId).order("id").range(1000, 1010);
+    expect(laterIntervals.error).toBeNull();
+    expect(laterIntervals.data.filter((interval) => interval.employee_id === workerId)).toHaveLength(3);
+
     const otherManager = createClient(apiUrl, anonKey, options);
     expect((await otherManager.auth.signInWithPassword({
       email: `exceptions-boh-${suffix}@example.test`, password,
@@ -1253,6 +1800,9 @@ test("date blocks and approved leave override recurring availability", async ({ 
     const otherVisible = await otherManager.from("employee_availability_exceptions").select("id").eq("id", pending.data.id);
     expect(otherVisible.error).toBeNull();
     expect(otherVisible.data).toEqual([]);
+    const otherShifts = await otherManager.from("shifts").select("id").eq("employee_id", workerId);
+    expect(otherShifts.error).toBeNull();
+    expect(otherShifts.data).toEqual([]);
     const deniedReview = await otherManager.rpc("review_leave_request", {
       p_business_id: businessId, p_venue_id: venueId, p_exception_id: pending.data.id, p_status: "approved",
     });
@@ -1264,6 +1814,9 @@ test("date blocks and approved leave override recurring availability", async ({ 
     const outsideVisible = await outsider.from("employee_availability_exceptions").select("id").eq("id", pending.data.id);
     expect(outsideVisible.error).toBeNull();
     expect(outsideVisible.data).toEqual([]);
+    const outsideShifts = await outsider.from("shifts").select("id").eq("employee_id", workerId);
+    expect(outsideShifts.error).toBeNull();
+    expect(outsideShifts.data).toEqual([]);
 
     await signIn(page, `exceptions-owner-${suffix}@example.test`, password);
     await page.goto(`/availability?venue=${venueId}`);
@@ -1279,6 +1832,12 @@ test("date blocks and approved leave override recurring availability", async ({ 
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 00:00–09:00");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 17:00–24:00");
+    await expect(page.getByText("Availability warnings do not block", { exact: false })).toBeVisible();
+    await expect(page.locator("article", { hasText: "Blocked shift" }).getByRole("note")).toContainText("Date blocked");
+    await expect(page.locator("article", { hasText: "Outside hours" }).getByRole("note")).toContainText("Outside submitted availability");
+    await expect(page.locator("article", { hasText: "Pending leave shift" }).getByRole("note")).toHaveCount(0);
+    await expect(page.locator("article", { hasText: "Legacy long shift" }).getByRole("note")).toContainText("review availability manually");
+    await expect(page.locator("article", { hasText: "Overnight next week" }).getByRole("note")).toContainText("Date blocked");
 
     await page.goto(`/availability?venue=${venueId}`);
     const review = page.getByRole("listitem", { name: "Leave request for Exception worker 2032-03-16" });
@@ -1293,6 +1852,7 @@ test("date blocks and approved leave override recurring availability", async ({ 
     await expect(page.getByLabel("Pending leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toHaveText("Unavailable all day");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-17")).toHaveText("Unavailable all day");
+    await expect(page.locator("article", { hasText: "Pending leave shift" }).getByRole("note")).toContainText("Approved leave");
   });
 });
 
@@ -1444,6 +2004,10 @@ test("weekly roster groups staff by department and preserves local dates on mobi
         role_title: "Server", starts_at: "2032-03-14T22:30:00Z", ends_at: "2032-03-15T02:00:00Z", is_published: true },
       { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: sharedId,
         role_title: "Prep", starts_at: "2032-03-16T00:00:00Z", ends_at: "2032-03-16T03:00:00Z", is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: sharedId,
+        role_title: "FOH overlap", starts_at: "2032-03-15T03:00:00Z", ends_at: "2032-03-15T05:00:00Z", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: sharedId,
+        role_title: "BOH overlap", starts_at: "2032-03-15T04:00:00Z", ends_at: "2032-03-15T06:00:00Z", is_published: false },
       { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: archivedId,
         role_title: "Former role", starts_at: "2032-03-16T23:00:00Z", ends_at: "2032-03-17T01:00:00Z", is_published: false },
       { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: managerId,
@@ -1465,6 +2029,8 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await expect(bohShared.locator("article", { hasText: "Prep" })).toContainText("11:00");
     await expect(bohShared.locator("article", { hasText: "Prep" })).toContainText("2:00");
     await expect(bohShared.locator("article", { hasText: "Server" })).toHaveCount(0);
+    await expect(fohShared.locator("article", { hasText: "FOH overlap" }).getByRole("note")).toContainText("Overlaps another shift");
+    await expect(bohShared.locator("article", { hasText: "BOH overlap" }).getByRole("note")).toContainText("Overlaps another shift");
     await expect(foh.getByRole("row", { name: /Archived worker \(Archived\)/ })).toContainText("Former role");
     await expect(page.getByRole("columnheader", { name: /15 Mar/ })).toBeVisible();
     await expect(page.getByRole("columnheader", { name: /16 Mar/ })).toBeVisible();
@@ -1523,6 +2089,9 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await expect(managerPage.getByRole("button", { name: "Publish this department" })).toHaveCount(0);
     await managerPage.goto(`/roster?week=2032-03-15&department=${fohId}`);
     await expect(managerPage.getByRole("button", { name: "Save draft shift" })).toBeVisible();
+    await expect(managerPage.locator("article", { hasText: "FOH overlap" }).getByRole("note"))
+      .toContainText("Overlaps another shift");
+    await expect(managerPage.getByText("BOH overlap", { exact: true })).toHaveCount(0);
     await managerPage.goto("/settings/organisation");
     await expect(managerPage.getByRole("region", { name: "Department Front of House" })).toBeVisible();
     await expect(managerPage.getByRole("region", { name: "Department Back of House" })).toHaveCount(0);

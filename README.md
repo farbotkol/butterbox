@@ -28,6 +28,15 @@ After confirming an account, first-time owners can save partial business and
 venue details and resume setup later. The first venue requires an address and
 timezone; completing setup creates the owner membership atomically.
 
+Owners can configure each venue's latitude, longitude and clocking radius on
+**Departments**. Coordinates accept up to six meaningful decimal places and
+the radius is 1–10,000 metres; clearing all three fields removes the
+configuration. Each change records the actor, time and previous/new values,
+and owners can see recent history. Staff may need to permit device or browser
+location access when location-based clocking is introduced. Clocking and
+geofence enforcement are not implemented yet. Apply the current migrations
+before configuring venue locations.
+
 Owners can open **Permissions** to assign roles to existing business members.
 Owners are business-wide; general managers have a venue; FOH/BOH managers and
 employees have a venue and department. A business must retain at least one
@@ -53,8 +62,13 @@ profile without changing historical shifts.
 On **Departments**, a manager can restrict a role's automatic assignments to
 qualified workers. On the roster, **Automatically choose an eligible worker**
 selects an active linked worker without an overlapping shift, respecting that
-restriction; if none qualifies, no shift is created. This opt-in selection
-does not yet check recurring availability, leave, preferred hours or fairness.
+restriction and submitted recurring availability, date blocks and approved
+leave; if none qualifies, no shift is created. An unsubmitted pattern is
+unknown and does not by itself disqualify a worker; pending leave does not
+block selection. This opt-in selection does not yet consider preferred hours
+or fairness.
+Apply the current database migrations before using the updated role settings,
+employee preferences and roster conflict warnings.
 Unless a manual restriction is enabled, existing open-shift and explicit
 manual assignment behaviour is unchanged.
 Managers can separately require qualified workers for manual assignment of a
@@ -74,7 +88,15 @@ week, while an unsubmitted pattern is unknown. The roster displays the
 complement of saved ranges as unavailable periods, including overnight ranges.
 Managers can view availability within their permitted departments but cannot
 edit a worker's self-reported pattern. These indicators do not yet block
-manual or automatic shift assignment.
+manual shift assignment.
+
+Linked active employees can also record an optional preferred number of weekly
+hours (0–168 in quarter-hour increments) and separate email choices for schedule
+updates and leave decisions on **Availability**. These preferences are not
+contractual limits and do not change roster eligibility. Eligible managers can
+view them on **People**, and changes record the actor, time and previous/new
+values. Notification delivery is not implemented yet, regardless of the
+choices saved.
 
 On **Availability**, a linked employee can block a date range immediately or
 request leave for manager review. Dates are inclusive venue-local days, with
@@ -85,7 +107,19 @@ own date blocks and pending requests and see pending, approved, rejected and
 cancelled statuses. A permitted manager can approve or reject pending leave,
 or explicitly cancel an approval. Leave and date blocks are displayed on the
 roster, but do **not** yet prevent a manager from assigning or publishing a
-conflicting shift. No leave or schedule notifications are sent yet.
+conflicting shift manually. Automatic selection excludes workers with date
+blocks or approved leave. No leave or schedule notifications are sent yet.
+
+Assigned shifts show advisory conflict labels when they overlap a submitted
+unavailable period, active date block or approved leave. Overnight shifts and
+daylight-saving clock changes use the actual venue-local dates and times.
+Unsubmitted availability remains unknown, and pending leave is not treated as
+approved. A legacy shift longer than 24 hours is flagged for manual review.
+Managers also see a generic overlap warning on their affected shifts, including
+conflicts with shifts in a department they cannot view; the other shift's
+details are not disclosed. New overlaps for the same venue profile are already
+rejected, but existing conflicts do not yet block publication. These labels do
+not yet cover cross-venue overlaps or enforce configurable blocking rules.
 
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its
@@ -143,6 +177,10 @@ another database: use an isolated test project, never a shared or production
 one. Without test settings, the normal `npm test` run explicitly skips this
 integration test. CI runs both the database suite and the HTTP test on a fresh
 local Supabase project.
+To also verify the ordering of concurrent leave approval and automatic
+assignment, set `BUTTERBOX_TEST_DB_CONTAINER` to that disposable project's
+`supabase_db_<project-id>` Docker container. The test verifies the container's
+project label and API port before using a temporary row lock.
 If the pinned CLI is already installed locally, set `BUTTERBOX_TEST_SUPABASE_CLI`
 to its executable path to avoid launching `npx` for the test status check.
 

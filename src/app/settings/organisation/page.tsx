@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import {
   saveDepartmentAction,
   saveJobRoleAction,
+  saveVenueGeofenceAction,
   setJobRoleAutoRestrictionAction,
   setJobRoleManualRestrictionAction,
 } from "@/app/actions";
@@ -18,6 +19,15 @@ type JobRole = {
   restrict_auto_assignment: boolean;
   restrict_manual_assignment: boolean;
 };
+type GeofenceValues = { latitude: number | null; longitude: number | null; radius_meters: number | null };
+type GeofenceEvent = {
+  id: string;
+  actor_id: string | null;
+  actor_type: string;
+  old_values: GeofenceValues;
+  new_values: GeofenceValues;
+  created_at: string;
+};
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const departmentManagerRoles = ["owner", "admin", "general_manager"];
@@ -27,10 +37,16 @@ const errorMessages: Record<string, string> = {
   permission: "You don't have permission to make that change.",
   inactive: "Reactivate the department before adding or reactivating its roles.",
   filter: "That venue is not available to you.",
+  geofence: "Enter latitude from -90 to 90, longitude from -180 to 180 (up to six decimal places), and a whole-number radius from 1 to 10,000 metres; or clear all three.",
   save: "We couldn't save that change. Check the name and try again.",
 };
 
 const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink";
+
+function formatGeofence(values: GeofenceValues) {
+  if (values.latitude === null) return "Not configured";
+  return `${values.latitude}, ${values.longitude}; ${values.radius_meters} m`;
+}
 
 function StatusSelect({ active, label }: { active: boolean; label: string }) {
   return (
@@ -54,22 +70,36 @@ export default async function OrganisationPage({
   if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
 
   const params = await searchParams;
-  const venues = await workspace.supabase.from("venues").select("id, name")
+  const venues = await workspace.supabase.from("venues")
+    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters")
     .eq("business_id", workspace.business.id).order("name");
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) redirect("/settings/organisation?error=filter");
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
-  const [departments, roles] = await Promise.all([
+  const canManageGeofence = workspace.membership.role === "owner";
+  const [departments, roles, geofenceHistory] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
     workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
       .eq("venue_id", venueId).order("name"),
+    canManageGeofence
+      ? workspace.supabase.from("venue_geofence_events")
+        .select("id, actor_id, actor_type, old_values, new_values, created_at")
+        .eq("business_id", workspace.business.id).eq("venue_id", venueId)
+        .order("created_at", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const loadError = venues.error || departments.error || roles.error;
   if (loadError) console.error("Could not load departments and roles.", { code: loadError.code, message: loadError.message });
+  if (geofenceHistory.error) {
+    console.error("Could not load venue geofence history.", {
+      code: geofenceHistory.error.code, message: geofenceHistory.error.message,
+    });
+  }
   const departmentRows: Department[] = departments.data ?? [];
   const roleRows: JobRole[] = roles.data ?? [];
+  const geofenceEvents: GeofenceEvent[] = geofenceHistory.data ?? [];
   const canManageDepartments = departmentManagerRoles.includes(workspace.membership.role);
 
   return (
@@ -105,6 +135,7 @@ export default async function OrganisationPage({
           {params.saved === "role" ? "Job role saved."
             : params.saved === "restriction" ? "Automatic assignment setting saved."
               : params.saved === "manual-restriction" ? "Manual assignment setting saved."
+                : params.saved === "geofence" ? "Venue location saved."
                 : "Department saved."}
         </p>
       )}
@@ -113,6 +144,54 @@ export default async function OrganisationPage({
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load departments. Try again.</p>
       ) : (
         <>
+          {canManageGeofence && selectedVenue && (
+            <section aria-label="Venue location and geofence" className="mt-6 rounded-xl border border-line bg-white p-5">
+              <h2 className="font-semibold">Venue location and geofence</h2>
+              <p id="geofence-help" className="mt-3 text-sm leading-6 text-muted">
+                Enter coordinates to six decimal places and a radius from 1 to 10,000 metres.
+                Clear all three fields to remove the location. When location-based clocking becomes
+                available, staff may need to allow location access in their device or browser;
+                denial or inaccurate GPS can prevent verification. Clocking and geofence enforcement
+                are not implemented yet.
+              </p>
+              <form action={saveVenueGeofenceAction} aria-label="Configure venue geofence"
+                aria-describedby="geofence-help" className="mt-4 grid gap-4 sm:grid-cols-3">
+                <input type="hidden" name="venue_id" value={venueId} />
+                <label className="text-sm">Latitude
+                  <input name="latitude" type="number" min="-90" max="90" step="0.000001"
+                    defaultValue={selectedVenue.geofence_latitude ?? ""} className={fieldClass} />
+                </label>
+                <label className="text-sm">Longitude
+                  <input name="longitude" type="number" min="-180" max="180" step="0.000001"
+                    defaultValue={selectedVenue.geofence_longitude ?? ""} className={fieldClass} />
+                </label>
+                <label className="text-sm">Radius in metres
+                  <input name="radius_meters" type="number" min="1" max="10000" step="1"
+                    defaultValue={selectedVenue.geofence_radius_meters ?? ""} className={fieldClass} />
+                </label>
+                <button type="submit" className="justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
+                  Save venue location
+                </button>
+              </form>
+              <h3 className="mt-5 text-sm font-semibold">Recent location changes</h3>
+              {geofenceHistory.error ? (
+                <p role="alert" className="mt-2 text-sm text-red-800">We could not load location history. Try again.</p>
+              ) : geofenceEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">No location changes yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-2 text-sm">
+                  {geofenceEvents.map((event) => (
+                    <li key={event.id} className="break-words">
+                      <time dateTime={event.created_at}>{new Date(event.created_at).toISOString()}</time>
+                      {" | "}{event.actor_id ? `User ${event.actor_id}` : event.actor_type}
+                      {" | "}{formatGeofence(event.old_values)} to {formatGeofence(event.new_values)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {geofenceEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
+            </section>
+          )}
           {canManageDepartments && (
             <section aria-label="Add department" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Add department</h2>
