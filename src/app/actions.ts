@@ -19,6 +19,9 @@ import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roste
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
+import {
+  parseBulkLockReceipt, parseBulkLockSelections, parseTimesheetEmployeeFilter, timesheetWeek,
+} from "@/lib/weekly-timesheet";
 import { getWorkspace } from "@/lib/workspace";
 
 function text(formData: FormData, key: string, maxLength: number) {
@@ -1137,6 +1140,65 @@ export async function setAttendanceEditLockAction(formData: FormData) {
   revalidatePath("/work-time");
   revalidatePath("/attendance");
   redirect(`${destination}&saved=${states[0] === "true" ? "locked" : "unlocked"}`);
+}
+
+export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid weekly attendance lock scope.");
+    redirect("/timesheets?error=bulk-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the weekly attendance lock workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const reasons = formData.getAll("reason");
+  const selections = parseBulkLockSelections(formData.getAll("selection"));
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  if (!week || weeks[0] !== week || employee === undefined || !selections ||
+    reasons.length !== 1 || typeof reasons[0] !== "string" ||
+    !reasons[0].trim() || reasons[0].trim().length > 500) {
+    console.error("Invalid weekly attendance lock request.");
+    redirect(`${destination}&error=bulk-invalid`);
+  }
+
+  const { data, error } = await workspace.supabase.rpc("bulk_lock_weekly_attendance", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+    p_employee_id: employee, p_request_id: requests[0], p_selections: selections, p_reason: reasons[0].trim(),
+  });
+  const receipt = parseBulkLockReceipt(data);
+  if (error || !receipt ||
+    receipt.lockedCount + receipt.invalidCount + receipt.alreadyLockedCount !== selections.length) {
+    console.error("Weekly attendance lock failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid bulk lock receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Invalid bulk attendance lock request": "bulk-invalid",
+      "Attendance changed; review again": "bulk-stale",
+      "Selected attendance changed week or is unavailable": "bulk-stale",
+      "Selected attendance not found or permission denied": "bulk-scope",
+      "Permission denied": "bulk-scope",
+      "Request identifier already used": "bulk-retry",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "bulk-save"}`);
+  }
+  revalidatePath("/timesheets");
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&receipt=${encodeURIComponent(receipt.batchId)}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

@@ -5066,6 +5066,63 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await expect(complete.getByRole("link", { name: "Open correction and edit-lock history" }))
       .toHaveAttribute("href", `/work-time?venue=${venueId}#attendance-session-${completeSession}`);
 
+    const incomplete = page.locator(`#timesheet-session-${openSession}`);
+    await expect(incomplete.getByRole("checkbox")).toBeDisabled();
+    await expect(incomplete).toContainText("Incomplete or invalid; cannot be locked");
+    await page.getByLabel("Reason for edit lock").fill("Reviewed weekly attendance");
+    await page.getByRole("button", { name: "Lock selected sessions" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("Select between 1 and 100");
+
+    await complete.getByRole("checkbox").check();
+    await page.getByLabel("Reason for edit lock").fill("Reviewed weekly attendance");
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: completeSession, p_event_id: clockInId,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-05T13:30:00.123456Z",
+      p_new_at: "2024-10-05T13:31:00.123456Z", p_reason: "Changed after review",
+    })).error).toBeNull();
+    await page.getByRole("button", { name: "Lock selected sessions" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("Attendance changed");
+    await expect(complete.getByRole("checkbox")).toBeEnabled();
+
+    await complete.getByRole("checkbox").check();
+    await incomplete.getByRole("checkbox").evaluate((input) => {
+      input.disabled = false;
+      input.checked = true;
+    });
+    await page.getByLabel("Reason for edit lock").fill("Reviewed weekly attendance");
+    await page.getByRole("button", { name: "Lock selected sessions" }).click();
+    await expect(page.locator("main").getByRole("status"))
+      .toContainText("1 locked, 1 incomplete or invalid excluded, 0 already locked");
+    await expect(page.locator("main").getByRole("status")).toContainText("not payroll approval");
+    await expect(complete.getByRole("checkbox")).toBeDisabled();
+    await expect(complete).toContainText("Already locked against corrections");
+    await expect(incomplete.getByRole("checkbox")).toBeDisabled();
+    const receiptUrl = page.url();
+    const receiptId = new URL(receiptUrl).searchParams.get("receipt");
+    expect(receiptId).toBeTruthy();
+    const locks = await ownerApi.rpc("list_attendance_edit_lock_history", {
+      p_business_id: businessId, p_venue_id: venueId,
+    });
+    expect(locks.error).toBeNull();
+    expect(locks.data.filter((row) => row.session_id === completeSession).map((row) => ({
+      locked: row.locked, reason: row.reason, actor_id: row.actor_id,
+    }))).toEqual([{ locked: true, reason: "Reviewed weekly attendance", actor_id: users[0] }]);
+    expect(locks.data.filter((row) => row.session_id === openSession)).toHaveLength(0);
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: completeSession, p_event_id: clockInId,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-05T13:31:00.123456Z",
+      p_new_at: "2024-10-05T13:32:00.123456Z", p_reason: "Attempt after lock",
+    })).error?.message).toBe("Attendance edits are locked");
+    await page.reload();
+    await expect(page.locator("main").getByRole("status")).toContainText("1 locked, 1 incomplete or invalid excluded");
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-10-07&receipt=${receiptId}`);
+    await expect(page.locator("main").getByRole("alert")).toContainText("couldn't verify the edit-lock result");
+    await expect(page.locator("main").getByRole("status")).toHaveCount(0);
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-09-30&receipt=${randomUUID()}&locked_count=99`);
+    await expect(page.locator("main").getByRole("alert")).toContainText("couldn't verify the edit-lock result");
+    await expect(page.locator("main").getByRole("status")).toHaveCount(0);
+    await page.goto(receiptUrl);
+
     await page.getByLabel("Employee", { exact: true }).selectOption(workerId);
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toBeVisible();
@@ -5093,6 +5150,9 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     const fohPage = await fohContext.newPage();
     fohPage.setDefaultTimeout(20_000);
     await signIn(fohPage, `weekly-review-foh-${suffix}@example.test`, password);
+    await fohPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30&receipt=${receiptId}`);
+    await expect(fohPage.locator("main").getByRole("alert")).toContainText("couldn't verify the edit-lock result");
+    await expect(fohPage.locator("main").getByRole("status")).toHaveCount(0);
     await fohPage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
     await expect(fohPage.getByRole("heading", { name: "Weekly Worker · FOH" })).toBeVisible();
     await expect(fohPage.getByRole("heading", { name: "Weekly Worker · BOH" })).toHaveCount(0);
@@ -5100,7 +5160,7 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await expect(fohPage.getByRole("heading", { name: "Historical Worker · FOH" })).toBeVisible();
     await fohPage.locator(`#timesheet-session-${completeSession}`).getByText("Inspect source events").click();
     await expect(fohPage.locator(`#timesheet-session-${completeSession}`))
-      .toContainText("Effective: 2024-10-05T13:30:00.123456");
+      .toContainText("Effective: 2024-10-05T13:31:00.123456");
     expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
     await expect(fohPage.getByLabel("Employee", { exact: true }).locator(`option[value="${historicId}"]`))
@@ -5109,6 +5169,11 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await fohPage.getByRole("button", { name: "Apply filters" }).click();
     await expect(fohPage.getByRole("heading", { name: "Historical Worker · FOH" })).toBeVisible();
     await expect(fohPage.getByRole("heading", { name: "Weekly Worker · FOH" })).toHaveCount(0);
+    await fohPage.locator(`#timesheet-session-${historicSession}`).getByRole("checkbox").check();
+    await fohPage.getByLabel("Reason for edit lock").fill("Historical attendance reviewed");
+    await fohPage.getByRole("button", { name: "Lock selected sessions" }).click();
+    await expect(fohPage.locator("main").getByRole("status"))
+      .toContainText("1 locked, 0 incomplete or invalid excluded, 0 already locked");
     expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
       .toBe(true);
 

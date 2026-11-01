@@ -240,7 +240,13 @@ paid time. Matching totals do not pair individual shifts with sessions or
 approve payroll. Incomplete attendance is excluded from recorded totals and
 flagged for review. Expand a session to inspect its original and effective
 event timestamps and source; corrections and edit-lock history are available
-from **Work time**. Bulk review actions and timesheet approvals are not yet
+from **Work time**. A manager can select up to 100 complete, unlocked sessions,
+enter a reason and lock them against corrections. Invalid sessions are excluded
+again on the server, already-locked sessions are skipped, and changed records
+must be reviewed again. Location and offline-source warnings still require
+attention; locking does not resolve them or approve payroll. The result is
+retrieved from an attributed, protected receipt, and individual lock history
+remains available under **Work time**. Timesheet approvals are not yet
 available. Apply the current migrations before using this screen.
 
 Linked active employees can also record an optional preferred number of weekly

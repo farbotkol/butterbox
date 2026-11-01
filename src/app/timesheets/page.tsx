@@ -1,19 +1,31 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { bulkLockWeeklyAttendanceAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
 import { addDays, formatDay } from "@/lib/dates";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
-  groupWeeklyTimesheets, parseTimesheetEmployeeFilter, parseTimesheetEmployees, parseTimesheetPlannedShifts,
-  parseTimesheetSourceEvents, timesheetEmployeeOptions, timesheetSourcesMatch, timesheetWeek, weeklyTimesheetNotices,
-  type TimesheetEmployee, type TimesheetPlannedShift, type TimesheetSourceEvent,
+  groupWeeklyTimesheets, parseStoredBulkLockReceipt, parseTimesheetEditEvents, parseTimesheetEditTime,
+  parseTimesheetEmployeeFilter, parseTimesheetEmployees, parseTimesheetPlannedShifts,
+  timesheetEditSourcesMatch, timesheetEmployeeOptions, timesheetWeek, weeklyTimesheetNotices,
+  type TimesheetEditEvent, type TimesheetEditTime, type TimesheetEmployee, type TimesheetPlannedShift,
+  type TimesheetSourceEvent,
 } from "@/lib/weekly-timesheet";
-import { formatWorkedDuration, parseWorkedTime, workTimeExceptionLabels, type WorkedTime } from "@/lib/worked-time";
+import { formatWorkedDuration, workTimeExceptionLabels } from "@/lib/worked-time";
 import { getWorkspace } from "@/lib/workspace";
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
+const errors: Record<string, string> = {
+  "bulk-invalid": "Select between 1 and 100 available sessions and enter a reason of up to 500 characters.",
+  "bulk-venue": "The selected venue is unavailable. Check your access and try again.",
+  "bulk-stale": "Attendance changed. Review the refreshed sessions before locking them.",
+  "bulk-scope": "Some selected attendance is unavailable or your access changed. Refresh and review your scope.",
+  "bulk-retry": "This request was already used for a different selection. Review the refreshed sessions and try again.",
+  "bulk-save": "We couldn't confirm the edit locks. Check their history before retrying.",
+};
 const sourceLabels: Record<TimesheetSourceEvent["source"], string> = {
   server_clock: "Server clock event",
   offline_claim: "Unverified offline claim",
@@ -33,7 +45,7 @@ function totalDuration(values: number[]): string {
 }
 
 export default async function TimesheetsPage({ searchParams }: {
-  searchParams: Promise<{ venue?: string; week?: string; employee?: string }>;
+  searchParams: Promise<{ venue?: string; week?: string; employee?: string; error?: string; receipt?: string }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
@@ -57,7 +69,9 @@ export default async function TimesheetsPage({ searchParams }: {
   const week = timesheetWeek(params.week, workspace.venue.timezone);
   const employee = parseTimesheetEmployeeFilter(params.employee);
   const validFilters = week !== null && employee !== undefined;
-  const [venuesResult, employeesResult, plannedResult, actualResult, eventsResult] = await Promise.all([
+  const receiptRequested = params.receipt !== undefined;
+  const receiptId = receiptRequested ? parseTimesheetEmployeeFilter(params.receipt) : null;
+  const [venuesResult, employeesResult, plannedResult, actualResult, eventsResult, receiptResult] = await Promise.all([
     readAllPages<TimesheetEmployee>((from, to) => workspace.supabase.from("venues")
       .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (row) => row && typeof row.id === "string" ? row.id : ""),
@@ -72,29 +86,37 @@ export default async function TimesheetsPage({ searchParams }: {
       (row) => row && typeof row.shift_id === "string" ? row.shift_id : "")
       : Promise.resolve({ data: [], error: null }),
     validFilters
-      ? readAllPages<WorkedTime>((from, to) => workspace.supabase.rpc("list_weekly_worked_time", {
+      ? readAllPages<TimesheetEditTime>((from, to) => workspace.supabase.rpc("list_weekly_worked_time_for_edit", {
         p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week, p_employee_id: employee,
       }, { count: "exact" }).order("clocked_in_at", { nullsFirst: true }).order("session_id").range(from, to),
       (row) => row && typeof row.session_id === "string" ? row.session_id : "")
       : Promise.resolve({ data: [], error: null }),
     validFilters
-      ? readAllPages<TimesheetSourceEvent>((from, to) => workspace.supabase.rpc("list_weekly_timesheet_events", {
+      ? readAllPages<TimesheetEditEvent>((from, to) => workspace.supabase.rpc("list_weekly_timesheet_events_for_edit", {
         p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week, p_employee_id: employee,
       }, { count: "exact" }).order("session_id").order("original_at").order("event_id").range(from, to),
       (row) => row && typeof row.event_id === "string" ? row.event_id : "")
       : Promise.resolve({ data: [], error: null }),
+    validFilters && receiptId
+      ? workspace.supabase.rpc("get_weekly_bulk_lock_receipt", {
+        p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_batch_id: receiptId,
+      })
+      : Promise.resolve({ data: null, error: null }),
   ]);
   const venues = parseTimesheetEmployees(venuesResult.data);
   const currentEmployees = parseTimesheetEmployees(employeesResult.data);
   const planned = parseTimesheetPlannedShifts(plannedResult.data);
-  const actual = parseWorkedTime(actualResult.data);
-  const events = parseTimesheetSourceEvents(eventsResult.data);
+  const actual = parseTimesheetEditTime(actualResult.data);
+  const events = parseTimesheetEditEvents(eventsResult.data);
+  const receipt = parseStoredBulkLockReceipt(receiptResult.data);
+  const receiptError = receiptRequested && (!receipt || receipt.weekStart !== week ||
+    receipt.employeeId?.toLowerCase() !== employee?.toLowerCase());
   const employees = currentEmployees && planned && actual
     ? timesheetEmployeeOptions(currentEmployees, planned, actual) : null;
   const employeeAvailable = employee === null || (employee !== undefined &&
     employees?.some((item) => item.id.toLowerCase() === employee.toLowerCase()));
   const groups = planned && actual ? groupWeeklyTimesheets(planned, actual) : null;
-  const eventsConsistent = actual && events && timesheetSourcesMatch(actual, events);
+  const eventsConsistent = actual && events && timesheetEditSourcesMatch(actual, events);
   const dataError = Boolean(venuesResult.error || employeesResult.error || plannedResult.error || actualResult.error ||
     eventsResult.error || !venues || !employees || !planned || !actual || !events || !groups || !eventsConsistent);
   if (dataError) {
@@ -105,6 +127,15 @@ export default async function TimesheetsPage({ searchParams }: {
         actualResult.error?.message ?? eventsResult.error?.message ?? "The server returned inconsistent timesheet data.",
     });
   }
+  if (receiptError) {
+    console.error("Could not verify the weekly attendance lock receipt.", {
+      code: receiptResult.error?.code,
+      message: receiptResult.error?.message ?? "The receipt or its filters are invalid.",
+    });
+  }
+  const actionError = typeof params.error === "string"
+    ? (Object.hasOwn(errors, params.error) ? errors[params.error] : "The attendance action could not be completed.")
+    : null;
 
   return <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
@@ -153,11 +184,39 @@ export default async function TimesheetsPage({ searchParams }: {
     {dataError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
       We couldn&apos;t load a consistent timesheet. Refresh and check your access before reviewing it.
     </p>}
+    {actionError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">{actionError}</p>}
+    {receiptError && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+      We couldn&apos;t verify the edit-lock result. Check the attendance history before retrying.
+    </p>}
+    {receiptRequested && !receiptError && receipt && <p role="status" className="mt-4 rounded-lg bg-green-50 p-4 text-sm text-green-900">
+      Edit-lock result: {receipt.lockedCount} locked, {receipt.invalidCount} incomplete or invalid excluded,{" "}
+      {receipt.alreadyLockedCount} already locked. This is not payroll approval.
+    </p>}
     {week && <h2 className="mt-6 text-lg font-semibold">
       {formatDay(week)} to {formatDay(addDays(week, 6))} · {workspace.venue.timezone}
     </h2>}
     {validFilters && employeeAvailable && !dataError && groups && (
-      <section aria-label="Weekly planned and actual time" className="mt-4">
+      <form action={bulkLockWeeklyAttendanceAction} className="mt-4">
+        <input type="hidden" name="venue_id" value={workspace.venue.id} />
+        <input type="hidden" name="week" value={week ?? ""} />
+        <input type="hidden" name="employee_id" value={employee ?? ""} />
+        <input type="hidden" name="request_id" value={randomUUID()} />
+        <div className="rounded-xl border border-line bg-white p-4 text-sm">
+          <h2 className="font-semibold">Lock selected sessions against corrections</h2>
+          <p className="mt-2 text-muted">
+            Select up to 100 complete, unlocked sessions and enter a reason. Incomplete or invalid sessions
+            cannot be selected and are checked again by the server. Review any location and source warnings
+            before locking. This action is not payroll approval.
+          </p>
+          <label htmlFor="bulk-lock-reason" className="mt-3 block font-medium">Reason for edit lock</label>
+          <input id="bulk-lock-reason" name="reason" required maxLength={500}
+            className="mt-1 block w-full rounded-lg border border-line p-2" />
+          <button type="submit" disabled={!actual?.some((row) => row.worked_seconds !== null && !row.edit_locked)}
+            className="mt-3 min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">
+            Lock selected sessions
+          </button>
+        </div>
+        <section aria-label="Weekly planned and actual time" className="mt-4">
         {groups.length === 0 ? <p className="rounded-xl border border-line bg-white p-5 text-sm text-muted">
           No published shifts or attendance sessions in your scope for these filters.
         </p> : <ul className="space-y-4">
@@ -198,6 +257,12 @@ export default async function TimesheetsPage({ searchParams }: {
                           `#attendance-session-${row.session_id}`;
                         return <li key={row.session_id} id={`timesheet-session-${row.session_id}`}
                           className="rounded-lg border border-line p-3">
+                          <label className="mb-3 flex items-start gap-2 font-semibold">
+                            <input type="checkbox" name="selection" value={`${row.session_id}:${row.edit_revision}`}
+                              disabled={row.worked_seconds === null || row.edit_locked} className="mt-1" />
+                            <span>{row.worked_seconds === null ? "Incomplete or invalid; cannot be locked"
+                              : row.edit_locked ? "Already locked against corrections" : "Select session for edit lock"}</span>
+                          </label>
                           <p>Clock in: {row.clocked_in_at
                             ? <time dateTime={row.clocked_in_at}>{formatClockTime(row.clocked_in_at, row.venue_timezone)}</time>
                             : "Missing"}</p>
@@ -234,7 +299,8 @@ export default async function TimesheetsPage({ searchParams }: {
             </li>;
           })}
         </ul>}
-      </section>
+        </section>
+      </form>
     )}
   </AppShell>;
 }

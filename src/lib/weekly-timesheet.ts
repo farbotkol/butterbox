@@ -1,7 +1,7 @@
 import { Temporal } from "@js-temporal/polyfill";
 import { parseCorrectionEvents, type CorrectionEvent } from "./attendance-corrections.ts";
 import { getWeekStart } from "./dates.ts";
-import type { WorkedTime } from "./worked-time.ts";
+import { parseWorkedTime, type WorkedTime } from "./worked-time.ts";
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,13 +18,23 @@ export type TimesheetPlannedShift = {
   scheduled_seconds: number;
 };
 export type TimesheetSourceEvent = CorrectionEvent & { source: "server_clock" | "offline_claim" | "manager_reported" };
-export type WeeklyTimesheetGroup = {
+export type TimesheetEditTime = WorkedTime & { edit_revision: string; edit_locked: boolean };
+export type TimesheetEditEvent = TimesheetSourceEvent & { edit_revision: string };
+export type BulkLockSelection = { session_id: string; revision: string };
+export type BulkLockReceipt = {
+  batchId: string;
+  lockedCount: number;
+  invalidCount: number;
+  alreadyLockedCount: number;
+};
+export type StoredBulkLockReceipt = BulkLockReceipt & { weekStart: string; employeeId: string | null };
+export type WeeklyTimesheetGroup<T extends WorkedTime = WorkedTime> = {
   employeeId: string;
   employeeName: string;
   departmentId: string;
   departmentName: string;
   planned: TimesheetPlannedShift[];
-  actual: WorkedTime[];
+  actual: T[];
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -33,6 +43,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isUuid(value: unknown): value is string {
   return typeof value === "string" && uuid.test(value);
+}
+
+function isEditRevision(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
 }
 
 function isText(value: unknown): value is string {
@@ -144,6 +158,71 @@ export function parseTimesheetSourceEvents(value: unknown): TimesheetSourceEvent
   return rows;
 }
 
+export function parseTimesheetEditTime(value: unknown): TimesheetEditTime[] | null {
+  const rows = parseWorkedTime(value);
+  if (!rows || !Array.isArray(value)) return null;
+  const result: TimesheetEditTime[] = [];
+  for (let index = 0; index < rows.length; index += 1) {
+    const raw: unknown = value[index];
+    if (!isRecord(raw) || !isEditRevision(raw.edit_revision) || typeof raw.edit_locked !== "boolean") return null;
+    result.push({ ...rows[index], edit_revision: raw.edit_revision, edit_locked: raw.edit_locked });
+  }
+  return result;
+}
+
+export function parseTimesheetEditEvents(value: unknown): TimesheetEditEvent[] | null {
+  const events = parseTimesheetSourceEvents(value);
+  if (!events || !Array.isArray(value)) return null;
+  const result: TimesheetEditEvent[] = [];
+  for (let index = 0; index < events.length; index += 1) {
+    const raw: unknown = value[index];
+    if (!isRecord(raw) || !isEditRevision(raw.edit_revision)) return null;
+    result.push({ ...events[index], edit_revision: raw.edit_revision });
+  }
+  return result;
+}
+
+export function parseBulkLockSelections(value: unknown): BulkLockSelection[] | null {
+  if (!Array.isArray(value) || value.length < 1 || value.length > 100) return null;
+  const selections: BulkLockSelection[] = [];
+  const seen = new Set<string>();
+  for (const entry of value) {
+    if (typeof entry !== "string") return null;
+    const parts = entry.split(":");
+    if (parts.length !== 2 || !isUuid(parts[0]) || !isEditRevision(parts[1])) return null;
+    const sessionId = parts[0].toLowerCase();
+    if (seen.has(sessionId)) return null;
+    seen.add(sessionId);
+    selections.push({ session_id: sessionId, revision: parts[1] });
+  }
+  return selections;
+}
+
+export function parseBulkLockReceipt(value: unknown): BulkLockReceipt | null {
+  if (!Array.isArray(value) || value.length !== 1 || !isRecord(value[0])) return null;
+  const row = value[0];
+  if (!isUuid(row.batch_id) ||
+    typeof row.locked_count !== "number" || !Number.isInteger(row.locked_count) || row.locked_count < 0 ||
+    typeof row.invalid_count !== "number" || !Number.isInteger(row.invalid_count) || row.invalid_count < 0 ||
+    typeof row.already_locked_count !== "number" || !Number.isInteger(row.already_locked_count) ||
+    row.already_locked_count < 0) return null;
+  const count = row.locked_count + row.invalid_count + row.already_locked_count;
+  if (count < 1 || count > 100) return null;
+  return {
+    batchId: row.batch_id, lockedCount: row.locked_count, invalidCount: row.invalid_count,
+    alreadyLockedCount: row.already_locked_count,
+  };
+}
+
+export function parseStoredBulkLockReceipt(value: unknown): StoredBulkLockReceipt | null {
+  const receipt = parseBulkLockReceipt(value);
+  if (!receipt || !Array.isArray(value) || !isRecord(value[0])) return null;
+  const row = value[0];
+  if (typeof row.week_start !== "string" || timesheetWeek(row.week_start, "UTC") !== row.week_start ||
+    (row.employee_id !== null && !isUuid(row.employee_id))) return null;
+  return { ...receipt, weekStart: row.week_start, employeeId: row.employee_id };
+}
+
 export function timesheetSourcesMatch(actual: WorkedTime[], events: TimesheetSourceEvent[]): boolean {
   const bySession = new Map(actual.map((row) => [row.session_id.toLowerCase(), row]));
   const clocks = new Map<string, { clock_in?: string; clock_out?: string }>();
@@ -177,23 +256,41 @@ export function timesheetSourcesMatch(actual: WorkedTime[], events: TimesheetSou
   return true;
 }
 
-export function groupWeeklyTimesheets(
-  planned: TimesheetPlannedShift[], actual: WorkedTime[],
-): WeeklyTimesheetGroup[] | null {
-  const groups = new Map<string, WeeklyTimesheetGroup>();
-  for (const row of [...planned, ...actual]) {
+export function timesheetEditSourcesMatch(actual: TimesheetEditTime[], events: TimesheetEditEvent[]): boolean {
+  if (!timesheetSourcesMatch(actual, events)) return false;
+  const bySession = new Map(actual.map((row) => [row.session_id.toLowerCase(), row]));
+  return events.every((event) => {
+    const row = bySession.get(event.session_id.toLowerCase());
+    return row && row.edit_revision === event.edit_revision && row.edit_locked === event.locked;
+  });
+}
+
+export function groupWeeklyTimesheets<T extends WorkedTime>(
+  planned: TimesheetPlannedShift[], actual: T[],
+): WeeklyTimesheetGroup<T>[] | null {
+  const groups = new Map<string, WeeklyTimesheetGroup<T>>();
+  function groupFor(row: TimesheetPlannedShift | T): WeeklyTimesheetGroup<T> | null {
     const key = `${row.employee_id}:${row.department_id}`.toLowerCase();
     const existing = groups.get(key);
     if (existing && (existing.employeeName !== row.employee_name || existing.departmentName !== row.department_name)) {
       return null;
     }
-    const group = existing ?? {
+    const group: WeeklyTimesheetGroup<T> = existing ?? {
       employeeId: row.employee_id, employeeName: row.employee_name,
       departmentId: row.department_id, departmentName: row.department_name, planned: [], actual: [],
     };
-    if ("shift_id" in row) group.planned.push(row);
-    else group.actual.push(row);
     groups.set(key, group);
+    return group;
+  }
+  for (const row of planned) {
+    const group = groupFor(row);
+    if (!group) return null;
+    group.planned.push(row);
+  }
+  for (const row of actual) {
+    const group = groupFor(row);
+    if (!group) return null;
+    group.actual.push(row);
   }
   return [...groups.values()].sort((a, b) =>
     a.employeeName.localeCompare(b.employeeName) || a.departmentName.localeCompare(b.departmentName) ||

@@ -96,7 +96,10 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
       event(sessions[2], "clock_out", "2024-10-02T02:00:00Z"),
     ])).error);
     const scope = { p_business_id: business, p_venue_id: venue, p_week_start: "2024-09-30" };
-    const rpcNames = ["list_weekly_planned_shifts", "list_weekly_worked_time", "list_weekly_timesheet_events"];
+    const rpcNames = [
+      "list_weekly_planned_shifts", "list_weekly_worked_time", "list_weekly_timesheet_events",
+      "list_weekly_worked_time_for_edit", "list_weekly_timesheet_events_for_edit",
+    ];
     for (const rpcName of rpcNames) {
       for (const role of ["worker", "outside"]) {
         const result = await clients.get(role).rpc(rpcName, scope);
