@@ -7,6 +7,7 @@ import {
   endAttendanceBreakAction,
   reviewAttendanceLocationAction,
   startAttendanceBreakAction,
+  submitAttendanceCorrectionRequestAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { AttendanceCorrectionHistory } from "@/components/attendance-correction-history";
@@ -68,6 +69,12 @@ const errors: Record<string, string> = {
   "claim-break-stale": "The matching open break is unavailable. Refresh and review the current attendance.",
   "claim-break-time": "The reported break end must follow the start and not exceed the claimed clock-out.",
   "claim-break-overlap": "Another break is open or overlaps the reported break. Investigate before completing it.",
+  "request-invalid": "Choose a clock, a valid local time and a reason of up to 500 characters.",
+  "request-nonexistent": "That local time did not exist when the clocks changed. Choose an actual time.",
+  "request-ambiguous": "That local time occurred twice. Choose its first or second occurrence.",
+  "request-time": "The proposed time must be a valid time in the past.",
+  "request-save": "We could not submit your request. Check your access and connection, then try again.",
+  "request-mismatch": "The recorded event does not match the proposed time. Apply the correction or reject the request.",
 };
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
@@ -250,6 +257,19 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     }).format(new Date(timestamp));
   const optionValue = (option: ClockOption) => `${option.employee_id}:${option.department_id}`;
   const requestId = randomUUID();
+  const claimDetailsUnavailable = offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews ||
+    matchResult.error || !matchEvents || openResult.error || !openSessions ||
+    openBreakResult.error || !openBreaks || breakResolutionResult.error || !breakResolutions;
+  const offlineOnly = offlineClaims?.filter((claim) => claim.claim_source === "offline") ?? [];
+  const correctionRequests = offlineClaims?.filter((claim) => claim.claim_source === "employee_request") ?? [];
+  const renderClaim = (claim: SubmittedOfflineClaim) => <OfflineClaimReview key={claim.id} claim={claim}
+    reviews={reviewsByClaim.get(claim.id) ?? []} events={eventsByWorker.get(offlineMatchKey(claim)) ?? []}
+    endClaims={pendingEndsByWorker.get(offlineWorkerKey(claim)) ?? []}
+    openSessions={openSessionsByWorker.get(offlineWorkerKey(claim)) ?? []}
+    openBreaks={openBreaksByWorker.get(offlineWorkerKey(claim)) ?? []}
+    breakResolutions={breakResolutionsByClaim.get(claim.id) ?? []}
+    venueId={workspace.venue.id} timezone={workspace.venue.timezone} canReview={canReview}
+    canReopen={["owner", "admin", "general_manager"].includes(workspace.membership.role)} />;
   const breakRequestId = randomUUID();
 
   return (
@@ -314,17 +334,22 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       )}
       {params.saved === "claim-created" && (
         <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-          Attendance created from unverified offline claims. Check any missing breaks before approval.
+          Attendance created from unverified reported times. Check any missing breaks before approval.
         </p>
       )}
       {params.saved === "claim-completed" && (
         <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-          Attendance completed with an unverified offline clock-out. Review recorded breaks before approval.
+          Attendance completed with an unverified reported clock-out. Review recorded breaks before approval.
         </p>
       )}
       {params.saved === "claim-break-resolved" && (
         <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
-          Manager-reported break end and unverified offline clock-out recorded with an audit trail.
+          Manager-reported break end and unverified reported clock-out recorded with an audit trail.
+        </p>
+      )}
+      {params.saved === "request-submitted" && (
+        <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
+          Your correction request was submitted for manager review. Recorded attendance has not changed.
         </p>
       )}
       {loadError || !venueResult.data || !options || !state || !validClockPolicy ? (
@@ -448,6 +473,86 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         actorId={workspace.user.id} businessId={workspace.business.id} venueId={workspace.venue.id}
         options={options}
       />}
+      <section aria-label="Request an attendance correction" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Request a missed clock time</h2>
+        <p className="mt-2 text-sm text-muted">
+          Propose a time and explain what happened. It is not a verified clock event and does not change
+          attendance unless a scoped manager approves it. Use the venue&apos;s local time in{" "}
+          {workspace.venue.timezone.replaceAll("_", " ")}.
+        </p>
+        {loadError || !options ? <p role="alert" className="mt-3 text-sm text-red-800">
+          We couldn&apos;t load your employee and department options. Refresh and try again.
+        </p> : options.length === 0 ? <p className="mt-3 text-sm text-muted">
+          No active employee profile is linked to your account at this venue. Ask an owner to check your access.
+        </p> : <form action={submitAttendanceCorrectionRequestAction}
+          aria-label="Submit correction request" className="mt-4 space-y-3 text-sm">
+          <input type="hidden" name="venue_id" value={workspace.venue.id} />
+          <input type="hidden" name="request_id" value={randomUUID()} />
+          {options.length === 1 ? <>
+            <input type="hidden" name="clock_option" value={optionValue(options[0])} />
+            <p className="text-muted">{options[0].employee_name} · {options[0].department_name}</p>
+          </> : <label className="block">
+            Employee and department
+            <select name="clock_option" required defaultValue=""
+              className="mt-1 block w-full max-w-md rounded-lg border border-line bg-white p-2">
+              <option value="" disabled>Choose your employee and department</option>
+              {options.map((option) => <option key={optionValue(option)} value={optionValue(option)}>
+                {option.employee_name} · {option.department_name}
+              </option>)}
+            </select>
+          </label>}
+          <label className="block">
+            Missed clock
+            <select name="event_type" required defaultValue=""
+              className="mt-1 block w-full max-w-md rounded-lg border border-line bg-white p-2">
+              <option value="" disabled>Choose clock in or clock out</option>
+              <option value="clock_in">Clock in</option>
+              <option value="clock_out">Clock out</option>
+            </select>
+          </label>
+          <label className="block">
+            Proposed time ({workspace.venue.timezone.replaceAll("_", " ")})
+            <input type="datetime-local" name="proposed_local" step="0.001" required
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2" />
+          </label>
+          <label className="block">
+            Additional microseconds (optional, 0 to 999)
+            <input type="number" name="additional_microseconds" min="0" max="999" step="1"
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2" />
+            <span className="mt-1 block text-muted">The final three digits after milliseconds.</span>
+          </label>
+          <label className="block">
+            If this time occurred twice
+            <select name="occurrence" defaultValue=""
+              className="mt-1 block w-full max-w-sm rounded-lg border border-line p-2">
+              <option value="">Not a repeated time / choose if needed</option>
+              <option value="earlier">First occurrence</option>
+              <option value="later">Second occurrence</option>
+            </select>
+          </label>
+          <label className="block">
+            Reason for the request
+            <textarea name="reason" required maxLength={500}
+              className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
+          </label>
+          <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
+            Submit correction request
+          </button>
+        </form>}
+      </section>
+      <section aria-label="Employee correction requests" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Employee correction requests</h2>
+        <p className="mt-2 text-sm text-muted">
+          Requests retain the employee&apos;s proposed time and reason. A manager can approve or reject with
+          an explanation; the original clock events remain unchanged. A missing clock-in and clock-out
+          can be paired with another reported time after both are checked.
+        </p>
+        {claimDetailsUnavailable ? <p role="alert" className="mt-3 text-sm text-red-800">
+          We couldn&apos;t load correction requests and review details. Refresh and try again.
+        </p> : correctionRequests.length === 0 ? <p className="mt-3 text-sm text-muted">
+          No correction requests in your scope for this venue.
+        </p> : <ul className="mt-4 space-y-3">{correctionRequests.map(renderClaim)}</ul>}
+      </section>
       <section aria-label="Submitted offline attendance claims" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="text-lg font-semibold">Submitted offline attendance claims</h2>
         <p className="mt-2 text-sm text-muted">
@@ -458,24 +563,14 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           Device times remain unverified and no breaks are assumed.
           Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
         </p>
-        {offlineResult.error || !offlineClaims || reviewResult.error || !claimReviews ||
-          matchResult.error || !matchEvents || openResult.error || !openSessions ||
-          openBreakResult.error || !openBreaks || breakResolutionResult.error || !breakResolutions ? (
+        {claimDetailsUnavailable ? (
           <p role="alert" className="mt-3 text-sm text-red-800">
             We couldn&apos;t load offline attendance claims and review details. Refresh and try again.
           </p>
-        ) : offlineClaims.length === 0 ? (
+        ) : offlineOnly.length === 0 ? (
           <p className="mt-3 text-sm text-muted">No submitted claims in your scope for this venue.</p>
         ) : <ul className="mt-4 space-y-3">
-          {offlineClaims.map((claim) => <OfflineClaimReview key={claim.id} claim={claim}
-            reviews={reviewsByClaim.get(claim.id) ?? []} events={eventsByWorker.get(offlineMatchKey(claim)) ?? []}
-            endClaims={pendingEndsByWorker.get(offlineWorkerKey(claim)) ?? []}
-            openSessions={openSessionsByWorker.get(offlineWorkerKey(claim)) ?? []}
-            openBreaks={openBreaksByWorker.get(offlineWorkerKey(claim)) ?? []}
-            breakResolutions={breakResolutionsByClaim.get(claim.id) ?? []}
-            venueId={workspace.venue.id}
-            timezone={workspace.venue.timezone} canReview={canReview}
-            canReopen={["owner", "admin", "general_manager"].includes(workspace.membership.role)} />)}
+          {offlineOnly.map(renderClaim)}
         </ul>}
       </section>
       <section aria-label="Attendance correction history" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">

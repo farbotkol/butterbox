@@ -14,7 +14,7 @@ import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
-import { parseOfflineMatchOption } from "@/lib/offline-attendance";
+import { parseOfflineClaimReceipt, parseOfflineMatchOption } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
@@ -824,6 +824,59 @@ export async function reviewAttendanceLocationAction(formData: FormData) {
   redirect(`${destination}&saved=location-reviewed`);
 }
 
+export async function submitAttendanceCorrectionRequestAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const options = formData.getAll("clock_option");
+  const eventTypes = formData.getAll("event_type");
+  const local = formData.getAll("proposed_local");
+  const microseconds = formData.getAll("additional_microseconds");
+  const occurrences = formData.getAll("occurrence");
+  const reasons = formData.getAll("reason");
+  const option = options.length === 1 ? parseClockOptionValue(options[0]) : null;
+  if (venues?.length !== 1 || requests?.length !== 1 || !option || eventTypes.length !== 1 ||
+    (eventTypes[0] !== "clock_in" && eventTypes[0] !== "clock_out") || local.length !== 1 ||
+    microseconds.length !== 1 || occurrences.length !== 1 || reasons.length !== 1 ||
+    typeof reasons[0] !== "string" || !reasons[0].trim() || reasons[0].trim().length > 500) {
+    console.error("Invalid employee attendance correction request.");
+    redirect("/attendance?error=request-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the correction request workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const target = correctionInstant(
+    correctionLocalWithMicroseconds(local[0], microseconds[0]), workspace.venue.timezone, occurrences[0],
+  );
+  if (target.status !== "ok") redirect(`${destination}&error=request-${target.status}`);
+  const { data, error } = await workspace.supabase.rpc("submit_attendance_correction_request", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    p_department_id: option.departmentId, p_employee_id: option.employeeId,
+    p_actor_id: workspace.user.id, p_request_id: requests[0], p_event_type: eventTypes[0],
+    p_proposed_at: target.value, p_reason: reasons[0].trim(),
+  });
+  if (error || !parseOfflineClaimReceipt(data)) {
+    console.error("Submitting an attendance correction request failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid request receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Invalid attendance correction request": "request-time",
+      "Request identifier already used": "reused",
+      "Employee not found or permission denied": "permission",
+      "Employee or department is unavailable": "unavailable",
+      "Permission denied": "permission",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "request-save"}`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=request-submitted`);
+}
+
 export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
   const venues = uuidList(formData, "venue_id", 1);
   const claims = uuidList(formData, "claim_id", 1);
@@ -874,6 +927,7 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
       "Attendance edits are locked": "claim-locked",
       "Corrected attendance overlaps another session": "claim-overlap",
       "Invalid attendance correction time": "claim-time",
+      "The event does not match the requested time": "request-mismatch",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);

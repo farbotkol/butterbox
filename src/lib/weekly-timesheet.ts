@@ -17,7 +17,9 @@ export type TimesheetPlannedShift = {
   break_minutes: number;
   scheduled_seconds: number;
 };
-export type TimesheetSourceEvent = CorrectionEvent & { source: "server_clock" | "offline_claim" | "manager_reported" };
+export type TimesheetSourceEvent = CorrectionEvent & {
+  source: "server_clock" | "offline_claim" | "manager_reported" | "employee_request";
+};
 export type TimesheetEditTime = WorkedTime & { edit_revision: string; edit_locked: boolean };
 export type TimesheetEditEvent = TimesheetSourceEvent & { edit_revision: string };
 export type BulkLockSelection = { session_id: string; revision: string };
@@ -150,7 +152,8 @@ export function parseTimesheetSourceEvents(value: unknown): TimesheetSourceEvent
   for (let index = 0; index < events.length; index += 1) {
     const raw: unknown = value[index];
     if (!isRecord(raw) ||
-      (raw.source !== "server_clock" && raw.source !== "offline_claim" && raw.source !== "manager_reported")) {
+      (raw.source !== "server_clock" && raw.source !== "offline_claim" && raw.source !== "manager_reported" &&
+        raw.source !== "employee_request")) {
       return null;
     }
     rows.push({ ...events[index], source: raw.source });

@@ -30,6 +30,7 @@ const sourceLabels: Record<TimesheetSourceEvent["source"], string> = {
   server_clock: "Server clock event",
   offline_claim: "Unverified offline claim",
   manager_reported: "Manager-reported break end",
+  employee_request: "Unverified employee-requested time",
 };
 
 function formatClockTime(timestamp: string, timezone: string): string {

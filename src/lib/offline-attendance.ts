@@ -23,6 +23,8 @@ export type SubmittedOfflineClaim = {
   event_type: OfflineEventType;
   claimed_at: string;
   received_at: string;
+  claim_source: "offline" | "employee_request";
+  request_reason: string | null;
 };
 export type OfflineClaimReview = {
   id: string;
@@ -113,7 +115,13 @@ export function parseSubmittedOfflineClaims(value: unknown): SubmittedOfflineCla
       !isUuid(row.department_id) || !isUuid(row.actor_id) || typeof row.employee_name !== "string" ||
       !row.employee_name.trim() || typeof row.department_name !== "string" ||
       !row.department_name.trim() || !isEventType(row.event_type) ||
-      !isTimestamp(row.claimed_at) || !isTimestamp(row.received_at)) return null;
+      !isTimestamp(row.claimed_at) || !isTimestamp(row.received_at) ||
+      (row.claim_source !== "offline" && row.claim_source !== "employee_request") ||
+      (row.request_reason !== null && typeof row.request_reason !== "string") ||
+      (row.claim_source === "offline" && row.request_reason !== null) ||
+      (row.claim_source === "employee_request" &&
+        (typeof row.request_reason !== "string" || !row.request_reason.trim() ||
+          row.request_reason.trim().length > 500))) return null;
     const key = row.id.toLowerCase();
     if (seen.has(key)) return null;
     seen.add(key);
@@ -121,6 +129,7 @@ export function parseSubmittedOfflineClaims(value: unknown): SubmittedOfflineCla
       id: row.id, employee_id: row.employee_id, employee_name: row.employee_name,
       department_id: row.department_id, department_name: row.department_name,
       actor_id: row.actor_id, event_type: row.event_type, claimed_at: row.claimed_at, received_at: row.received_at,
+      claim_source: row.claim_source, request_reason: row.request_reason,
     });
   }
   return rows;

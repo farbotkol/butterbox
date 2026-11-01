@@ -33,6 +33,8 @@ test("work-time results preserve exact durations and distinguish location except
   assert.deepEqual(parseWorkedTime([offline]), [offline]);
   const reportedBreak = { ...row, exceptions: ["offline_claim_unverified", "manager_reported_break"] };
   assert.deepEqual(parseWorkedTime([reportedBreak]), [reportedBreak]);
+  const employeeRequest = { ...row, exceptions: ["employee_request_unverified"] };
+  assert.deepEqual(parseWorkedTime([employeeRequest]), [employeeRequest]);
   const incomplete = {
     ...row, clocked_out_at: null, elapsed_seconds: null, worked_seconds: null,
     paid_seconds: null, paid_break_seconds: null, unpaid_break_seconds: null,

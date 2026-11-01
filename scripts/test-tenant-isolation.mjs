@@ -28,6 +28,7 @@ const result = spawnSync(
           "tests/staff-invitations.integration.test.mjs",
           "tests/attendance-concurrency.integration.test.mjs",
           "tests/attendance-corrections-concurrency.integration.test.mjs",
+          "tests/employee-correction-requests.integration.test.mjs",
           "tests/attendance-location-concurrency.integration.test.mjs",
           "tests/offline-attendance-concurrency.integration.test.mjs",
           "tests/offline-claim-reconciliation-concurrency.integration.test.mjs",

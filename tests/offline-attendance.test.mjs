@@ -31,10 +31,15 @@ test("submitted offline claim lists reject incomplete, duplicate or invalid rows
   const row = {
     id, employee_id: id, employee_name: "Worker", department_id: id, department_name: "FOH",
     actor_id: id, event_type: "clock_out", claimed_at: "2026-11-01T10:00:00Z", received_at: "2026-11-01T12:00:00Z",
+    claim_source: "offline", request_reason: null,
   };
   assert.deepEqual(parseSubmittedOfflineClaims([row]), [row]);
+  const request = { ...row, claim_source: "employee_request", request_reason: "Forgot to clock out" };
+  assert.deepEqual(parseSubmittedOfflineClaims([request]), [request]);
   for (const invalid of [null, [row, row], [{ ...row, employee_name: "" }],
-    [{ ...row, event_type: "other" }], [{ ...row, received_at: "invalid" }]]) {
+    [{ ...row, event_type: "other" }], [{ ...row, received_at: "invalid" }],
+    [{ ...row, claim_source: "unknown" }], [{ ...row, request_reason: "wrong source" }],
+    [{ ...request, request_reason: " " }], [{ ...request, request_reason: null }]]) {
     assert.equal(parseSubmittedOfflineClaims(invalid), null);
   }
 });

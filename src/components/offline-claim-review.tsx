@@ -13,8 +13,17 @@ const decisionLabels: Record<OfflineClaimReview["decision"], string> = {
   corrected: "Existing event corrected to the claimed time",
   rejected: "Rejected",
   reopened: "Reopened for review",
-  created: "Attendance created from unverified offline claims",
-  completed: "Open attendance completed with an unverified offline clock-out",
+  created: "Attendance created from unverified reported times",
+  completed: "Open attendance completed with an unverified reported clock-out",
+};
+
+const requestDecisionLabels: Record<OfflineClaimReview["decision"], string> = {
+  matched: "Approved; the existing event already matched the requested time",
+  corrected: "Approved; the requested time was applied as a correction",
+  rejected: "Rejected",
+  reopened: "Reopened for review",
+  created: "Approved; attendance created from unverified reported times",
+  completed: "Approved; open attendance completed with the requested clock-out",
 };
 
 function formatTime(timestamp: string, timezone: string): string {
@@ -38,23 +47,27 @@ export function OfflineClaimReview({
   const pending = !latest || latest.decision === "reopened";
   const alreadyLinked = hasPriorAttendanceLink(history);
   const candidates = events;
+  const isRequest = claim.claim_source === "employee_request";
+  const labels = isRequest ? requestDecisionLabels : decisionLabels;
 
-  return <li id={`offline-claim-${claim.id}`} className="rounded-lg border border-line p-4 text-sm">
+  return <li id={`${isRequest ? "correction-request" : "offline-claim"}-${claim.id}`}
+    className="rounded-lg border border-line p-4 text-sm">
     <p className="font-semibold">{claim.employee_name} · {claim.department_name}</p>
     <p className="mt-1 text-amber-900">
-      {pending ? "Manager review required" : decisionLabels[latest.decision]} ·{" "}
+      {pending ? "Manager review required" : labels[latest.decision]} ·{" "}
       {claim.event_type === "clock_in" ? "Clock in" : "Clock out"}
     </p>
-    <p className="mt-2">Claimed on device: <time dateTime={claim.claimed_at}>
+    <p className="mt-2">{isRequest ? "Proposed time" : "Claimed on device"}: <time dateTime={claim.claimed_at}>
       {formatTime(claim.claimed_at, timezone)} ({claim.claimed_at})
     </time></p>
+    {isRequest && <p className="mt-1">Employee&apos;s reason: {claim.request_reason}</p>}
     <p className="mt-1">Received by server: <time dateTime={claim.received_at}>
       {formatTime(claim.received_at, timezone)} ({claim.received_at})
     </time></p>
     {history.length > 0 && <div className="mt-3 space-y-2">
       <p className="font-semibold">Review history</p>
       {history.map((review) => <div key={review.id} className="rounded-lg border border-line p-3">
-        <p>{decisionLabels[review.decision]}: {review.reason}</p>
+        <p>{labels[review.decision]}: {review.reason}</p>
         {review.old_at && <p className="mt-1">Previous event time: {review.old_at}</p>}
         <p className="mt-1 text-muted">By user {review.actor_id} at{" "}
           <time dateTime={review.created_at}>{formatTime(review.created_at, timezone)}</time>
@@ -74,7 +87,7 @@ export function OfflineClaimReview({
     </div>)}
     {canReview && pending && <>
       {candidates.length > 0 ? <form action={reviewOfflineAttendanceClaimAction}
-        aria-label="Reconcile offline claim" className="mt-4 space-y-3">
+        aria-label={isRequest ? "Review correction request" : "Reconcile offline claim"} className="mt-4 space-y-3">
         <input type="hidden" name="venue_id" value={venueId} />
         <input type="hidden" name="claim_id" value={claim.id} />
         <input type="hidden" name="request_id" value={randomUUID()} />
@@ -98,15 +111,16 @@ export function OfflineClaimReview({
         <div className="flex flex-wrap gap-2">
           <button type="submit" name="decision" value="matched"
             className="min-h-11 rounded-lg border border-line px-4 py-2 font-semibold">
-            Match without changing time
+            {isRequest ? "Approve if time already matches" : "Match without changing time"}
           </button>
           <button type="submit" name="decision" value="corrected"
             className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-            Use claimed time as correction
+            {isRequest ? "Approve and apply proposed time" : "Use claimed time as correction"}
           </button>
         </div>
         <p className="text-muted">
-          Only use the claimed time after checking it. Device time is unverified; editing locks,
+          Only use the {isRequest ? "proposed" : "claimed"} time after checking it.{" "}
+          {isRequest ? "The employee-reported time is unverified" : "Device time is unverified"}; editing locks,
           overlap checks and correction audit rules still apply.
         </p>
       </form> : <p className="mt-3 text-muted">No matching finished clock event is available.</p>}
@@ -116,7 +130,8 @@ export function OfflineClaimReview({
         </p>
         : endClaims.length > 0
         ? <form action={createAttendanceFromOfflineClaimsAction}
-          aria-label="Create attendance from offline claims" className="mt-4 space-y-3 rounded-lg border border-line p-3">
+          aria-label={isRequest ? "Create attendance from correction requests" : "Create attendance from offline claims"}
+          className="mt-4 space-y-3 rounded-lg border border-line p-3">
           <input type="hidden" name="venue_id" value={venueId} />
           <input type="hidden" name="clock_in_claim_id" value={claim.id} />
           <input type="hidden" name="request_id" value={randomUUID()} />
@@ -126,7 +141,9 @@ export function OfflineClaimReview({
               className="mt-1 block w-full max-w-md rounded-lg border border-line bg-white p-2">
               <option value="" disabled>Choose a clock-out claim</option>
               {endClaims.map((end) => <option key={end.id} value={end.id}>
-                {formatTime(end.claimed_at, timezone)} ({end.claimed_at}) · received {end.received_at}
+                {formatTime(end.claimed_at, timezone)} ({end.claimed_at}) ·{" "}
+                {end.claim_source === "employee_request" ? "employee request" : "offline device claim"} ·{" "}
+                received {end.received_at}
               </option>)}
             </select>
           </label>
@@ -137,10 +154,10 @@ export function OfflineClaimReview({
           </label>
           <label className="flex items-start gap-2">
             <input type="checkbox" name="acknowledge_unverified" value="yes" required className="mt-1" />
-            <span>I checked both claimed times. They are unverified device times, and no breaks were captured.</span>
+            <span>I checked both claimed times. They are unverified reported times, and no breaks were captured.</span>
           </label>
           <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-            Create attendance from claims
+            {isRequest ? "Approve and create attendance" : "Create attendance from claims"}
           </button>
           <p className="text-muted">
             Only create a session after checking the times and breaks with the employee. The source remains
@@ -152,7 +169,8 @@ export function OfflineClaimReview({
         </p>)}
       {claim.event_type === "clock_out" && !alreadyLinked && openSessions.length > 0 &&
         <form action={completeAttendanceFromOfflineClaimAction}
-          aria-label="Complete attendance with offline clock-out" className="mt-4 space-y-3 rounded-lg border border-line p-3">
+          aria-label={isRequest ? "Approve requested clock-out" : "Complete attendance with offline clock-out"}
+          className="mt-4 space-y-3 rounded-lg border border-line p-3">
           <input type="hidden" name="venue_id" value={venueId} />
           <input type="hidden" name="claim_id" value={claim.id} />
           <input type="hidden" name="request_id" value={randomUUID()} />
@@ -178,7 +196,7 @@ export function OfflineClaimReview({
             <span>I checked the unverified clock-out time and reviewed recorded breaks.</span>
           </label>
           <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-            Complete attendance from claim
+            {isRequest ? "Approve and complete attendance" : "Complete attendance from claim"}
           </button>
           <p className="text-muted">
             Open breaks must be resolved first. The clock-out remains unverified, and existing break events
@@ -228,7 +246,7 @@ export function OfflineClaimReview({
             <span>I confirmed the reported break end and unverified clock-out with the employee.</span>
           </label>
           <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-            Record break end and complete attendance
+            {isRequest ? "Approve, record break end and complete attendance" : "Record break end and complete attendance"}
           </button>
           <p className="text-muted">
             The break end is recorded as manager-reported, not a server clock event. The existing
@@ -238,37 +256,38 @@ export function OfflineClaimReview({
       {claim.event_type === "clock_out" && alreadyLinked && <p className="mt-3 text-muted">
         This claim was already linked to attendance and cannot create another clock event.
       </p>}
-      <form action={reviewOfflineAttendanceClaimAction} aria-label="Reject offline claim" className="mt-4 space-y-3">
+      <form action={reviewOfflineAttendanceClaimAction}
+        aria-label={isRequest ? "Reject correction request" : "Reject offline claim"} className="mt-4 space-y-3">
         <input type="hidden" name="venue_id" value={venueId} />
         <input type="hidden" name="claim_id" value={claim.id} />
         <input type="hidden" name="request_id" value={randomUUID()} />
         <input type="hidden" name="decision" value="rejected" />
         <label className="block">
-          Reason for rejecting this claim
+          {isRequest ? "Reason for rejecting this request" : "Reason for rejecting this claim"}
           <textarea name="reason" required maxLength={500}
             className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
         </label>
         <button type="submit" className="min-h-11 rounded-lg border border-line px-4 py-2 font-semibold">
-          Reject claim
+          {isRequest ? "Reject request" : "Reject claim"}
         </button>
       </form>
     </>}
     {canReview && !pending && canReopen && <form action={reviewOfflineAttendanceClaimAction}
-      aria-label="Reopen offline claim" className="mt-4 space-y-3">
+      aria-label={isRequest ? "Reopen correction request" : "Reopen offline claim"} className="mt-4 space-y-3">
       <input type="hidden" name="venue_id" value={venueId} />
       <input type="hidden" name="claim_id" value={claim.id} />
       <input type="hidden" name="request_id" value={randomUUID()} />
       <input type="hidden" name="decision" value="reopened" />
       <label className="block">
-        Reason for reopening this claim
+        {isRequest ? "Reason for reopening this request" : "Reason for reopening this claim"}
         <textarea name="reason" required maxLength={500}
           className="mt-1 block w-full max-w-md rounded-lg border border-line p-2" />
       </label>
       <button type="submit" className="min-h-11 rounded-lg border border-line px-4 py-2 font-semibold">
-        Reopen claim
+        {isRequest ? "Reopen request" : "Reopen claim"}
       </button>
       <p className="text-muted">
-        Reopening the claim does not undo a previous correction or attendance created from claims.
+        Reopening does not undo a previous correction or attendance created from reported times.
       </p>
     </form>}
   </li>;

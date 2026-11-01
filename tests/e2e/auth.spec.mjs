@@ -4277,10 +4277,10 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     const create = claimCard(4).getByRole("form", { name: "Create attendance from offline claims" });
     await create.getByLabel("Matching clock-out claim").selectOption(claims[5].claim_id);
     await create.getByLabel("Reason for creating attendance").fill("Confirmed both times with employee");
-    await create.getByLabel("I checked both claimed times. They are unverified device times, and no breaks were captured.").check();
+    await create.getByLabel("I checked both claimed times. They are unverified reported times, and no breaks were captured.").check();
     await create.getByRole("button", { name: "Create attendance from claims" }).click();
-    await expect(page.getByRole("status")).toContainText("Attendance created from unverified offline claims");
-    await expect(claimCard(4)).toContainText("Attendance created from unverified offline claims");
+    await expect(page.getByRole("status")).toContainText("Attendance created from unverified reported times");
+    await expect(claimCard(4)).toContainText("Attendance created from unverified reported times");
     await expect(claimCard(5)).toContainText("Confirmed both times with employee");
     const createdPair = await ownerApi.from("attendance_offline_claim_sessions").select("session_id")
       .eq("clock_in_claim_id", claims[4].claim_id).single();
@@ -4330,7 +4330,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await resolveBreak().getByLabel("Reason for resolving the break").fill("Confirmed with colleague");
     await resolveBreak().getByLabel("I confirmed the reported break end and unverified clock-out with the employee.").check();
     await resolveBreak().getByRole("button", { name: "Record break end and complete attendance" }).click();
-    await expect(page.getByRole("status")).toContainText("Manager-reported break end and unverified offline clock-out");
+    await expect(page.getByRole("status")).toContainText("Manager-reported break end and unverified reported clock-out");
     await expect(claimCard(7)).toContainText("Manager-reported paid break end");
     await expect(claimCard(7)).toContainText("Confirmed with colleague");
     await expect(claimCard(7)).toContainText("2024-01-13T12:30:00.123456");
@@ -4357,7 +4357,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await completion.getByLabel("Reason for completing attendance").fill("Confirmed clock-out and recorded break");
     await completion.getByLabel("I checked the unverified clock-out time and reviewed recorded breaks.").check();
     await completion.getByRole("button", { name: "Complete attendance from claim" }).click();
-    await expect(page.getByRole("status")).toContainText("Attendance completed with an unverified offline clock-out");
+    await expect(page.getByRole("status")).toContainText("Attendance completed with an unverified reported clock-out");
     await expect(claimCard(6)).toContainText("Confirmed clock-out and recorded break");
     await page.goto(`/work-time?venue=${venueId}`);
     await expect(page.locator(`#attendance-session-${createdPair.data.session_id}`))
@@ -4379,8 +4379,8 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await expect(workerClaims).toContainText("Confirmed start from the claim");
     await expect(workerClaims).toContainText("Reopened for review");
     await expect(workerClaims).toContainText("Duplicate device claim");
-    await expect(workerClaims).toContainText("Attendance created from unverified offline claims");
-    await expect(workerClaims).toContainText("Open attendance completed with an unverified offline clock-out");
+    await expect(workerClaims).toContainText("Attendance created from unverified reported times");
+    await expect(workerClaims).toContainText("Open attendance completed with an unverified reported clock-out");
     await expect(workerPage.getByRole("region", { name: "Attendance correction history" }))
       .toContainText("Confirmed start from the claim");
     expect(await workerPage.locator("body")
@@ -4410,6 +4410,207 @@ test("managers reconcile offline claims with existing attendance and an auditabl
     await signIn(workerPage, `claim-review-outside-${suffix}@example.test`, password);
     await workerPage.goto(`/attendance?venue=${outsideVenue}`);
     await expect(workerClaims).not.toContainText("Claim Worker");
+  } finally {
+    for (const item of contexts) await item.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("employees request missed clocks and scoped managers decide without overwriting events", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, employeeId, colleagueId,
+    sessionId, openSessionId, clockInId, clockOutId, openClockInId] =
+    Array.from({ length: 13 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  const managerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["manager", "boh", "worker", "colleague", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `request-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Request cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside request cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[1], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[2], name: "Request Worker", role_title: "Server" },
+      { id: colleagueId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[3], name: "Request Colleague", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([
+      { id: sessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: employeeId, started_by: users[2] },
+      { id: openSessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: employeeId, started_by: users[2] },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_events").insert([
+      { id: clockInId, session_id: sessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[2], request_id: randomUUID(),
+        event_type: "clock_in", occurred_at: "2024-01-10T09:00:00Z" },
+      { id: clockOutId, session_id: sessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[2], request_id: randomUUID(),
+        event_type: "clock_out", occurred_at: "2024-01-10T17:00:00Z" },
+      { id: openClockInId, session_id: openSessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[2], request_id: randomUUID(),
+        event_type: "clock_in", occurred_at: "2024-01-11T09:00:00Z" },
+    ])).error).toBeNull();
+    expect((await workerApi.auth.signInWithPassword({
+      email: `request-browser-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await managerApi.auth.signInWithPassword({
+      email: `request-browser-manager-${suffix}@example.test`, password,
+    })).error).toBeNull();
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `request-browser-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    const requestForm = workerPage.getByRole("form", { name: "Submit correction request" });
+    const fillRequest = async (type, local, reason, occurrence = "", microseconds = "") => {
+      await requestForm.getByLabel("Missed clock").selectOption(type);
+      await requestForm.getByLabel("Proposed time", { exact: false }).fill(local);
+      await requestForm.getByLabel("Additional microseconds", { exact: false }).fill(microseconds);
+      await requestForm.getByLabel("If this time occurred twice").selectOption(occurrence);
+      await requestForm.getByLabel("Reason for the request").fill(reason);
+      await Promise.all([
+        workerPage.waitForResponse((response) =>
+          response.request().method() === "POST" && new URL(response.url()).pathname === "/attendance"),
+        requestForm.getByRole("button", { name: "Submit correction request" }).click(),
+      ]);
+    };
+    await fillRequest("clock_in", "2024-04-07T02:30", "Ambiguous time");
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("occurred twice");
+    await fillRequest("clock_in", "2024-10-06T02:30", "Missing local time");
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("did not exist");
+    await fillRequest("clock_in", "2099-01-10T19:00", "Future time");
+    await expect(workerPage.locator('p[role="alert"]')).toContainText("valid time in the past");
+
+    const submit = async (type, local, reason, occurrence = "", microseconds = "") => {
+      await fillRequest(type, local, reason, occurrence, microseconds);
+      await expect(workerPage.getByRole("status")).toContainText("submitted for manager review");
+      const result = await workerApi.rpc("list_attendance_offline_claims", {
+        p_business_id: businessId, p_venue_id: venueId,
+      });
+      expect(result.error).toBeNull();
+      const row = result.data.find((item) => item.request_reason === reason);
+      expect(row?.claim_source).toBe("employee_request");
+      return row;
+    };
+    const first = await submit("clock_in", "2024-01-10T19:45:00.123", "Forgot start", "", "456");
+    const rejected = await submit("clock_out", "2024-01-11T04:05", "Duplicate finish");
+    const open = await submit("clock_out", "2024-01-12T04:00", "Forgot finish");
+    const pairStart = await submit("clock_in", "2024-01-09T19:00", "Missed both: start");
+    const pairEnd = await submit("clock_out", "2024-01-10T04:00", "Missed both: finish");
+    const repeated = await submit("clock_in", "2024-04-07T02:30", "Second DST occurrence", "later");
+    expect(first.claimed_at).toContain("08:45:00.123456");
+    expect(new Date(repeated.claimed_at).toISOString()).toBe("2024-04-06T16:30:00.000Z");
+    const originalBefore = await workerApi.from("attendance_events").select("id, occurred_at");
+    expect(originalBefore.error).toBeNull();
+    expect(originalBefore.data).toHaveLength(3);
+    const ownRequests = workerPage.getByRole("region", { name: "Employee correction requests" });
+    await expect(ownRequests).toContainText("Forgot start");
+    await expect(ownRequests).toContainText("Proposed time");
+    await expect(ownRequests).not.toContainText("Claimed on device");
+
+    await signIn(page, `request-browser-manager-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const card = (request) => page.locator(`#correction-request-${request.id}`);
+    let review = card(first).getByRole("form", { name: "Review correction request" });
+    await review.getByLabel("Existing finished attendance event").selectOption({ index: 1 });
+    await review.getByLabel("Reason for review").fill("Cannot approve a different time");
+    await review.getByRole("button", { name: "Approve if time already matches" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("does not match the proposed time");
+    review = card(first).getByRole("form", { name: "Review correction request" });
+    await review.getByLabel("Existing finished attendance event").selectOption({ index: 1 });
+    await review.getByLabel("Reason for review").fill("Confirmed start with worker");
+    await review.getByRole("button", { name: "Approve and apply proposed time" }).click();
+    await expect(card(first)).toContainText("Approved; the requested time was applied as a correction");
+    await expect(card(first)).toContainText("Confirmed start with worker");
+    const reject = card(rejected).getByRole("form", { name: "Reject correction request" });
+    await reject.getByLabel("Reason for rejecting this request").fill("Already recorded correctly");
+    await reject.getByRole("button", { name: "Reject request" }).click();
+    await expect(card(rejected)).toContainText("Rejected: Already recorded correctly");
+    const complete = card(open).getByRole("form", { name: "Approve requested clock-out" });
+    await complete.getByLabel("Matching open attendance session").selectOption(openSessionId);
+    await complete.getByLabel("Reason for completing attendance").fill("Confirmed finish and breaks");
+    await complete.getByLabel("I checked the unverified clock-out time and reviewed recorded breaks.").check();
+    await complete.getByRole("button", { name: "Approve and complete attendance" }).click();
+    await expect(card(open)).toContainText("Approved; open attendance completed with the requested clock-out");
+    const create = card(pairStart).getByRole("form", { name: "Create attendance from correction requests" });
+    await create.getByLabel("Matching clock-out claim").selectOption(pairEnd.id);
+    await create.getByLabel("Reason for creating attendance").fill("Confirmed both missed clocks");
+    await create.getByLabel("I checked both claimed times. They are unverified reported times, and no breaks were captured.").check();
+    await create.getByRole("button", { name: "Approve and create attendance" }).click();
+    await expect(card(pairStart)).toContainText("Approved; attendance created from unverified reported times");
+    await expect(card(pairEnd)).toContainText("Confirmed both missed clocks");
+
+    const pair = await managerApi.from("attendance_offline_claim_sessions").select("session_id")
+      .eq("clock_in_claim_id", pairStart.id).single();
+    expect(pair.error).toBeNull();
+    const events = await workerApi.from("attendance_events").select("id, session_id, event_type, occurred_at, source");
+    expect(events.error).toBeNull();
+    expect(events.data.find((row) => row.id === clockInId).occurred_at)
+      .toBe(originalBefore.data.find((row) => row.id === clockInId).occurred_at);
+    expect(events.data.find((row) => row.id === openClockInId).occurred_at)
+      .toBe(originalBefore.data.find((row) => row.id === openClockInId).occurred_at);
+    expect(events.data.filter((row) => row.session_id === pair.data.session_id).map((row) => row.source))
+      .toEqual(["employee_request", "employee_request"]);
+    expect(events.data.find((row) => row.session_id === openSessionId && row.event_type === "clock_out").source)
+      .toBe("employee_request");
+
+    await page.goto(`/work-time?venue=${venueId}`);
+    await expect(page.locator(`#attendance-session-${pair.data.session_id}`))
+      .toContainText("Unverified employee-requested times; review recorded breaks");
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-01-08`);
+    const timesheet = page.locator(`#timesheet-session-${pair.data.session_id}`);
+    await timesheet.getByText("Inspect source events").click();
+    await expect(timesheet).toContainText("Unverified employee-requested time");
+    await expect(timesheet).not.toContainText("Unverified offline claim");
+
+    await workerPage.reload();
+    await expect(ownRequests).toContainText("Confirmed start with worker");
+    await expect(ownRequests).toContainText("Already recorded correctly");
+    await expect(ownRequests).toContainText("Confirmed both missed clocks");
+    expect(await workerPage.locator("body")
+      .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `request-browser-colleague-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(ownRequests).not.toContainText("Request Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `request-browser-boh-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(ownRequests).not.toContainText("Request Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `request-browser-outside-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${outsideVenue}`);
+    await expect(ownRequests).not.toContainText("Request Worker");
   } finally {
     for (const item of contexts) await item.close();
     for (const business of [businessId, outsideBusiness]) {

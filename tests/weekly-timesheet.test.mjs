@@ -64,6 +64,8 @@ test("source events retain original time, corrections and provenance", () => {
   assert.deepEqual(parseTimesheetSourceEvents([event]), [event]);
   const corrected = { ...event, effective_at: "2024-10-05T13:35:00Z", source: "offline_claim" };
   assert.deepEqual(parseTimesheetSourceEvents([corrected]), [corrected]);
+  const request = { ...event, source: "employee_request" };
+  assert.deepEqual(parseTimesheetSourceEvents([request]), [request]);
   assert.equal(parseTimesheetSourceEvents([{ ...event, source: "unknown" }]), null);
   assert.equal(parseTimesheetSourceEvents([{ ...event, event_type: "unknown" }]), null);
   assert.equal(parseTimesheetSourceEvents([event, event]), null);

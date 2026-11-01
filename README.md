@@ -189,12 +189,13 @@ the claim with a reason. The decision, actor and any correction are recorded;
 employees can see the history. An owner, admin or appropriately scoped general
 manager can reopen a decision with a reason, without undoing a prior correction
 or an attendance session already created from claims. If both clock-in and
-clock-out claims exist for the same employee, department and account, a scoped
-manager can explicitly create a finished session after checking the claims and
-acknowledging that the device times are unverified and no breaks were captured.
-The original claims, receipt times and attributed decision remain available.
-The resulting events are marked as offline-sourced, cannot overlap other
-attendance for the worker or a linked profile, and are flagged in **Work time**.
+clock-out reports exist for the same employee, department and account, a scoped
+manager can explicitly create a finished session after checking them and
+acknowledging that the reported times are unverified and no breaks were captured.
+The original reports, receipt times and attributed decision remain available.
+Each resulting event retains whether it came from an offline device claim or
+an employee correction request, cannot overlap other attendance for the worker
+or a linked profile, and is flagged in **Work time**.
 No breaks are fabricated or deducted; check missing breaks with the employee.
 A scoped manager can also complete a matching open server-clocked session
 with an offline clock-out claim after reviewing the recorded breaks. If a
@@ -212,6 +213,20 @@ browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the
 current migrations before using the clock.
+
+For a missed clock, a linked employee can submit an online **Request a missed
+clock time** with a past venue-local time and an explanation. The request is
+unverified and does not change attendance on submission. A scoped manager can
+reject it with an explanation, approve an already matching event, apply it as
+an auditable correction to a finished event, complete a matching open
+clock-out, or pair a reported clock-in and clock-out to create a finished
+session. The manager must check the reported time and any breaks; edit locks,
+stale-record and overlap safeguards still apply. The employee can see the
+decision and its explanation. Original events and the initial request remain
+unchanged. A local time skipped by a daylight-saving transition is rejected;
+one occurring twice requires selecting its first or second occurrence. New
+events from requests are labelled as employee-requested, not as offline device
+clocks, and remain flagged as unverified in work time and timesheet review.
 
 Managers can use **Work time** to inspect actual attendance sessions in their
 permitted departments and venue. Calculations use elapsed instants, including
@@ -255,7 +270,7 @@ event timestamps and source; corrections and edit-lock history are available
 from **Work time**. A manager can select up to 100 complete, unlocked sessions,
 enter a reason and lock them against corrections. Invalid sessions are excluded
 again on the server, already-locked sessions are skipped, and changed records
-must be reviewed again. Location and offline-source warnings still require
+must be reviewed again. Location and reported-time source warnings still require
 attention; locking does not resolve them or approve payroll. The result is
 retrieved from an attributed, protected receipt, and individual lock history
 remains available under **Work time**. Timesheet approvals are not yet
