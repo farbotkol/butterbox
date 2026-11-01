@@ -239,8 +239,8 @@ export default async function OrganisationPage({
                 Enter coordinates to six decimal places and a radius from 1 to 10,000 metres.
                 Clear all three fields to remove the location. When location-based clocking becomes
                 available, staff may need to allow location access in their device or browser;
-                denial or inaccurate GPS can prevent verification. Clocking and geofence enforcement
-                are not implemented yet.
+                denial or inaccurate GPS can prevent verification. Clock events are currently
+                unverified; location verification and geofence enforcement are not implemented yet.
               </p>
               <form action={saveVenueGeofenceAction} aria-label="Configure venue geofence"
                 aria-describedby="geofence-help" className="mt-4 grid gap-4 sm:grid-cols-3">

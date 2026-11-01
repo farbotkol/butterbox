@@ -2,6 +2,7 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
+import { parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
 import { authCallbackUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
@@ -500,7 +501,8 @@ export async function linkSharedWorkerAction(formData: FormData) {
     console.error("Shared-worker link failed.", { code: error.code, message: error.message });
     const code = error.message === "Permission denied" ? "permission"
       : error.message === "A profile from this venue is already linked" ? "shared-venue"
-        : error.message === "Profiles belong to different shared workers" ? "shared-groups" : "shared";
+        : error.message === "Profiles belong to different shared workers" ? "shared-groups"
+          : error.message === "Cannot link profiles while more than one has an open clock session" ? "shared-clock" : "shared";
     redirect(`${destination}&error=${code}`);
   }
   revalidatePath("/roster");
@@ -520,6 +522,82 @@ export async function unlinkSharedWorkerAction(formData: FormData) {
   }
   revalidatePath("/roster");
   redirect(`${destination}&saved=shared-unlink`);
+}
+
+async function attendanceActionContext(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const requestIds = uuidList(formData, "request_id", 1);
+  if (!venueIds || venueIds.length !== 1 || !requestIds || requestIds.length !== 1) {
+    console.error("Invalid attendance request.");
+    redirect("/attendance?error=invalid");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the attendance workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  return {
+    workspace,
+    requestId: requestIds[0],
+    destination: `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`,
+  };
+}
+
+export async function clockInAction(formData: FormData) {
+  const { workspace, requestId, destination } = await attendanceActionContext(formData);
+  const values = formData.getAll("clock_option");
+  const selection = values.length === 1 ? parseClockOptionValue(values[0]) : null;
+  if (!selection) {
+    console.error("Invalid attendance employee or department.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("clock_in_attendance", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_department_id: selection.departmentId,
+    p_employee_id: selection.employeeId,
+    p_request_id: requestId,
+  });
+  if (error || !parseClockReceipt(data)) {
+    console.error("Clock-in failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
+    });
+    const reason = error?.message === "Already clocked in" ? "already-in"
+      : error?.message === "Employee or department is unavailable" ? "unavailable"
+        : error?.message.toLowerCase().includes("permission denied") ? "permission"
+          : error?.message === "Request identifier already used" ? "reused" : "save";
+    redirect(`${destination}&error=${reason}`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=recorded`);
+}
+
+export async function clockOutAction(formData: FormData) {
+  const { workspace, requestId, destination } = await attendanceActionContext(formData);
+  const sessions = uuidList(formData, "session_id", 1);
+  if (!sessions || sessions.length !== 1) {
+    console.error("Invalid attendance session.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("clock_out_attendance", {
+    p_business_id: workspace.business.id,
+    p_session_id: sessions[0],
+    p_request_id: requestId,
+  });
+  const receipt = parseClockReceipt(data);
+  if (error || !receipt || receipt.sessionId.toLowerCase() !== sessions[0].toLowerCase()) {
+    console.error("Clock-out failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid clock receipt.",
+    });
+    const reason = error?.message === "Already clocked out" ? "already-out"
+      : error?.message.toLowerCase().includes("permission denied") ? "permission"
+        : error?.message === "Request identifier already used" ? "reused" : "save";
+    redirect(`${destination}&error=${reason}`);
+  }
+  revalidatePath("/attendance");
+  redirect(`${destination}&saved=recorded`);
 }
 
 async function availabilityActionContext(formData: FormData) {

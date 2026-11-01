@@ -548,7 +548,8 @@ test("owners configure venue geofences with protected audit and scoped access", 
     const region = page.getByRole("region", { name: "Venue location and geofence" });
     const form = page.getByRole("form", { name: "Configure venue geofence" });
     await expect(region).toContainText("staff may need to allow location access");
-    await expect(region).toContainText("Clocking and geofence enforcement are not implemented yet");
+    await expect(region).toContainText("Clock events are currently unverified");
+    await expect(region).toContainText("location verification and geofence enforcement are not implemented yet");
     await expect(form.getByLabel("Latitude")).toHaveValue("");
     await expect(form.getByLabel("Longitude")).toHaveValue("");
     await expect(form.getByLabel("Radius in metres")).toHaveValue("");
@@ -3296,6 +3297,7 @@ test("cross-venue roster conflicts remain visible beyond 1000 shifts", async ({ 
     const user = await admin.auth.admin.createUser({
       email: `shared-pagination-${suffix}@example.test`, password, email_confirm: true,
     });
+
     expect(user.error).toBeNull();
     userId = user.data.user.id;
     expect((await admin.from("businesses").insert({ id: businessId, name: `Large roster ${suffix}` })).error).toBeNull();
@@ -3347,6 +3349,262 @@ test("cross-venue roster conflicts remain visible beyond 1000 shifts", async ({ 
     await expect(page.locator("article", { hasText: "Beyond the first page" }).getByRole("note"))
       .toContainText("Overlaps another shift");
     await expect(page.getByText("Hidden paged conflict", { exact: true })).toHaveCount(0);
+  } finally {
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
+test("employees clock in and out with scoped immutable cross-venue events", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, firstVenue, secondVenue, outsideVenue, firstDepartment,
+    otherDepartment, secondDepartment, outsideDepartment, firstEmployee, secondEmployee] =
+    Array.from({ length: 11 }, () => randomUUID());
+  const users = [];
+  let workerContext;
+  const workerApi = createClient(apiUrl, anonKey, options);
+  const secondApi = createClient(apiUrl, anonKey, options);
+  const managerApi = createClient(apiUrl, anonKey, options);
+  const otherManagerApi = createClient(apiUrl, anonKey, options);
+  const outsideApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["owner", "worker", "second", "foh", "boh", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `clock-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Clock cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside clock cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: firstVenue, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+        geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 100 },
+      { id: secondVenue, business_id: businessId, name: "Riverside", timezone: "Australia/Perth" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: firstDepartment, business_id: businessId, venue_id: firstVenue, name: "FOH" },
+      { id: otherDepartment, business_id: businessId, venue_id: firstVenue, name: "BOH" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Kitchen" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: firstVenue, department_id: firstDepartment },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: secondVenue, department_id: secondDepartment },
+      { business_id: businessId, user_id: users[3], role: "foh_manager", venue_id: firstVenue, department_id: firstDepartment },
+      { business_id: businessId, user_id: users[4], role: "boh_manager", venue_id: firstVenue, department_id: otherDepartment },
+      { business_id: outsideBusiness, user_id: users[5], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: firstEmployee, business_id: businessId, venue_id: firstVenue, department_id: firstDepartment,
+        auth_user_id: users[1], name: "Alex Clock", role_title: "Server" },
+      { id: secondEmployee, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        auth_user_id: users[2], name: "Alex Clock", role_title: "Cook" },
+    ])).error).toBeNull();
+    for (const [client, role] of [[workerApi, "worker"], [secondApi, "second"],
+      [managerApi, "foh"], [otherManagerApi, "boh"], [outsideApi, "outside"]]) {
+      expect((await client.auth.signInWithPassword({
+        email: `clock-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+    }
+
+    await signIn(page, `clock-owner-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${firstVenue}`);
+    await expect(page.getByText("No active employee profile is linked to your account", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Clock in", exact: true })).toHaveCount(0);
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    let workerPage = await workerContext.newPage();
+    await signIn(workerPage, `clock-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${firstVenue}`);
+    const region = workerPage.getByRole("region", { name: "Current attendance" });
+    await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    await expect(workerPage.getByText("Clock events are unverified", { exact: false })).toBeVisible();
+    const requestId = await region.locator('input[name="request_id"]').inputValue();
+    const before = Date.now();
+    await region.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("status")).toHaveText("Clock request recorded. Your current state is shown below.");
+    await expect(region.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    await expect(region).toContainText("Harbour · FOH");
+    await expect(region).toContainText("Australia/Sydney");
+    expect(await workerPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const firstEvents = await admin.from("attendance_events")
+      .select("id, session_id, actor_id, venue_id, department_id, event_type, occurred_at, verification_status")
+      .eq("request_id", requestId).single();
+    expect(firstEvents.error).toBeNull();
+    expect(firstEvents.data).toMatchObject({
+      actor_id: users[1], venue_id: firstVenue, department_id: firstDepartment,
+      event_type: "clock_in", verification_status: "unverified",
+    });
+    expect(Date.parse(firstEvents.data.occurred_at)).toBeGreaterThanOrEqual(before - 5_000);
+    expect(Date.parse(firstEvents.data.occurred_at)).toBeLessThanOrEqual(Date.now() + 5_000);
+    const replay = await workerApi.rpc("clock_in_attendance", {
+      p_business_id: businessId, p_venue_id: firstVenue, p_department_id: firstDepartment,
+      p_employee_id: firstEmployee, p_request_id: requestId,
+    });
+    expect(replay.error).toBeNull();
+    expect(replay.data[0].event_id).toBe(firstEvents.data.id);
+    expect((await managerApi.from("attendance_events").select("id")).data).toEqual([{ id: firstEvents.data.id }]);
+    expect((await otherManagerApi.from("attendance_events").select("id")).data).toEqual([]);
+    expect((await outsideApi.from("attendance_events").select("id")).data).toEqual([]);
+    expect((await workerApi.from("attendance_events").update({ occurred_at: "2000-01-01" })
+      .eq("id", firstEvents.data.id)).error?.code).toBe("42501");
+    await workerContext.close();
+    workerContext = undefined;
+
+    const secondOpen = await secondApi.rpc("clock_in_attendance", {
+      p_business_id: businessId, p_venue_id: secondVenue, p_department_id: secondDepartment,
+      p_employee_id: secondEmployee, p_request_id: randomUUID(),
+    });
+    expect(secondOpen.error).toBeNull();
+    await page.goto(`/people?venue=${firstVenue}`);
+    let linkForm = page.getByRole("form", { name: "Link shared staff" });
+    await linkForm.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await linkForm.getByLabel("Profile at another venue").selectOption(secondEmployee);
+    await linkForm.getByLabel("I have confirmed that these profiles belong to the same person.").check();
+    await linkForm.getByRole("button", { name: "Link profiles" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Finish at least one open clock session" })).toBeVisible();
+    const secondClose = await secondApi.rpc("clock_out_attendance", {
+      p_business_id: businessId, p_session_id: secondOpen.data[0].session_id, p_request_id: randomUUID(),
+    });
+    expect(secondClose.error).toBeNull();
+    linkForm = page.getByRole("form", { name: "Link shared staff" });
+    await linkForm.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await linkForm.getByLabel("Profile at another venue").selectOption(secondEmployee);
+    await linkForm.getByLabel("I have confirmed that these profiles belong to the same person.").check();
+    await linkForm.getByRole("button", { name: "Link profiles" }).click();
+    await expect(page.getByRole("status")).toHaveText("Shared-worker profiles linked.");
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    workerPage = await workerContext.newPage();
+    await signIn(workerPage, `clock-second-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${secondVenue}`);
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("alert").filter({ hasText: "An attendance session is already open" })).toBeVisible();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    await workerContext.close();
+    workerContext = undefined;
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    workerPage = await workerContext.newPage();
+    await signIn(workerPage, `clock-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${firstVenue}`);
+    const firstCloseRequest = await workerPage.locator('input[name="request_id"]').inputValue();
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    const repeatedClose = await workerApi.rpc("clock_out_attendance", {
+      p_business_id: businessId, p_session_id: firstEvents.data.session_id, p_request_id: firstCloseRequest,
+    });
+    expect(repeatedClose.error).toBeNull();
+    const closedEvents = await admin.from("attendance_events").select("event_type, occurred_at")
+      .eq("session_id", firstEvents.data.session_id).order("event_type");
+    expect(closedEvents.error).toBeNull();
+    expect(closedEvents.data.map((event) => event.event_type)).toEqual(["clock_in", "clock_out"]);
+    expect(Date.parse(closedEvents.data[1].occurred_at)).toBeGreaterThanOrEqual(Date.parse(closedEvents.data[0].occurred_at));
+
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    const laterSession = await workerPage.locator('input[name="session_id"]').inputValue();
+    expect((await admin.from("employees").update({ auth_user_id: null }).eq("id", firstEmployee)).error).toBeNull();
+    await workerPage.reload();
+    await expect(workerPage.getByRole("heading", { name: "Attendance needs review" })).toBeVisible();
+    await expect(workerPage.getByRole("button", { name: "Clock out", exact: true })).toHaveCount(0);
+    const denied = await workerApi.rpc("clock_out_attendance", {
+      p_business_id: businessId, p_session_id: laterSession, p_request_id: randomUUID(),
+    });
+    expect(denied.error?.message).toBe("Session not found or permission denied");
+    expect((await admin.from("employees").update({ auth_user_id: users[1] }).eq("id", firstEmployee)).error).toBeNull();
+    await workerPage.reload();
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+    await workerContext.close();
+    workerContext = undefined;
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    workerPage = await workerContext.newPage();
+    await signIn(workerPage, `clock-second-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${secondVenue}`);
+    await workerPage.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    const secondSession = await workerPage.locator('input[name="session_id"]').inputValue();
+    const venueEvents = await admin.from("attendance_events").select("venue_id, department_id, verification_status")
+      .eq("session_id", secondSession);
+    expect(venueEvents.error).toBeNull();
+    expect(venueEvents.data).toEqual([{
+      venue_id: secondVenue, department_id: secondDepartment, verification_status: "unverified",
+    }]);
+    await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
+  } finally {
+    if (workerContext) await workerContext.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("multi-department workers explicitly select their clock-in department", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, venueId, fohId, bohId, employeeId] =
+    Array.from({ length: 5 }, () => randomUUID());
+  let userId;
+  try {
+    const user = await admin.auth.admin.createUser({
+      email: `clock-multidepartment-${suffix}@example.test`, password, email_confirm: true,
+    });
+    expect(user.error).toBeNull();
+    userId = user.data.user.id;
+    expect((await admin.from("businesses").insert({
+      id: businessId, name: `Multi-department cafe ${suffix}`,
+    })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: userId, role: "general_manager", venue_id: venueId,
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: userId, name: "Morgan Clock", role_title: "Manager",
+    })).error).toBeNull();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: employeeId, department_id: bohId,
+    })).error).toBeNull();
+
+    await signIn(page, `clock-multidepartment-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const region = page.getByRole("region", { name: "Current attendance" });
+    const department = region.getByLabel("Employee and department");
+    await expect(department).toHaveValue("");
+    await region.getByRole("button", { name: "Clock in", exact: true }).click();
+    expect(await department.evaluate((select) => select.validity.valueMissing)).toBe(true);
+    const before = await admin.from("attendance_events").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId);
+    expect(before.error).toBeNull();
+    expect(before.count).toBe(0);
+
+    await department.selectOption(`${employeeId}:${bohId}`);
+    await region.getByRole("button", { name: "Clock in", exact: true }).click();
+    await expect(region.getByRole("heading", { name: "Clocked in" })).toBeVisible();
+    await expect(region).toContainText("Harbour · BOH");
+    const event = await admin.from("attendance_events").select("employee_id, venue_id, department_id")
+      .eq("business_id", businessId).eq("event_type", "clock_in").single();
+    expect(event.error).toBeNull();
+    expect(event.data).toEqual({ employee_id: employeeId, venue_id: venueId, department_id: bohId });
+    await region.getByRole("button", { name: "Clock out", exact: true }).click();
+    await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
   } finally {
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();

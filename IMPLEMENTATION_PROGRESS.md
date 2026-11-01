@@ -2,25 +2,28 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **19**. In Progress: **5**.
-  Blocked: **1**. Not started (Backlog): **62**.
+- Total stories: **87**. Verified Done: **20**. In Progress: **5**.
+  Blocked: **1**. Not started (Backlog): **61**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-006,
-  BB-ROSTER-007 and BB-ROSTER-010.
-- The latest serialized Node run passed **55 tests**, with three integration
-  tests skipped in that invocation and subsequently passed against the isolated
-  project. The complete isolated pgTAP regression passed **953/953 assertions
-  across 23 files**, including 44 shared-profile and 26 cross-venue conflict
-  assertions. Authenticated two-tenant, linked-worker and ordered concurrency
-  tests passed, including simultaneous assignments, link/publication ordering
-  and membership revocation.
+  BB-ROSTER-007, BB-ROSTER-010 and BB-ATTEND-001.
+- The latest serialized Node run passed **59 tests**, with four integration
+  tests skipped in that invocation and subsequently passed separately against
+  the isolated project. The complete isolated pgTAP regression passed
+  **1,025/1,025 assertions across 24 files**, including 72 attendance
+  assertions. Authenticated two-tenant, linked-worker, attendance and ordered
+  concurrency tests passed, including duplicate clock requests, simultaneous
+  assignments, link/publication ordering and membership revocation.
 - Production compile, explicit TypeScript, generate and full ESLint passed.
-  All **29/29 production-browser scenarios** passed in serialized, low-memory
-  mode. These include scoped cross-venue warning and blocker workflows and a
-  real 1,001-shift roster; the temporary application server stopped.
-- The exact staged shared-worker checkpoint is checked with a network-disabled,
-  redacted Gitleaks scan before committing.
+  All **30/30 existing production-browser scenarios** passed in serialized,
+  low-memory mode before the multi-department clock-in safeguard was added.
+  The application was then rebuilt and both clock-specific browser scenarios,
+  including explicit department selection, passed. Coverage includes scoped
+  cross-venue workflows and a real 1,001-shift roster; the temporary application
+  server stopped.
+- Each exact staged checkpoint is checked with a network-disabled, redacted
+  Gitleaks scan before committing.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -83,15 +86,20 @@
 
 ## Current story
 
+- **BB-ATTEND-001 — Clock in and out** is Done. Employees record immutable,
+  server-timestamped, currently unverified clock events with scoped venue and
+  department attribution, safe retries and current-state feedback. The full
+  database and authenticated integration regressions, production build and
+  browser checks passed as detailed below.
 - **BB-ROSTER-007 — Conflict detection** is Done. Owner-confirmed links identify
   profiles for the same worker across venues without linking accounts or
   granting access. Scoped warnings identify affected shifts without disclosing
   hidden shifts; automatic assignment avoids cross-venue overlaps, and
   configurable publication blockers cover them. All three criteria and the
   complete regression checks passed.
-- **BB-ORG-005 — Multiple venues** remains In Progress: venue selection and
-  cross-venue overlap detection are verified, but timesheet venue attribution
-  requires the attendance and timesheet work.
+- **BB-ORG-005 — Multiple venues** remains In Progress: venue selection,
+  cross-venue overlap detection and attendance venue attribution are verified,
+  but the timesheet workflow is still needed.
 - **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
   and cross-venue blockers prevent publication atomically, and concurrent conflicting edits
   return an explicit retry. Numbered versions, complete protected snapshots and
@@ -110,20 +118,41 @@
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
 
+### BB-ATTEND-001 — Clock in and out (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ATTEND-001.1 Server assigns canonical timestamp | Clock RPCs use PostgreSQL `clock_timestamp()` and reject client-supplied event writes; original events are immutable and carry actual venue, department, employee and actor. | The 72-assertion attendance pgTAP suite verified server time bounds and mutation denial; the mobile browser scenario compared the persisted timestamp with the request time. Both passed. | Pass |
+| ATTEND-001.2 Valid state transitions are enforced | Scoped server RPCs require a linked employee, a permitted department and one open session per account or explicitly linked worker; archived workers can finish an existing session. | pgTAP verified valid, invalid, archived and cross-tenant/department paths. Authenticated integration verified concurrent clock requests, linked profiles and access revocation. Both passed. | Pass |
+| ATTEND-001.3 Repeated requests do not create duplicate events | Request IDs are unique per business and actor; matching retries return the original event, while conflicting reuse is rejected. | pgTAP checked clock-in/out replay and key misuse. Authenticated integration sent six simultaneous copies of each action and observed one event each. Both passed. | Pass |
+| ATTEND-001.4 Employee sees current state | The mobile attendance page shows clocked-out, clocked-in or access-review state. Workers with several permitted departments must explicitly select one. | Production Chromium verified clock-in/out, access removal and recovery, mobile layout and actual cross-venue attribution; a rebuilt scenario verified explicit multi-department selection and persisted attribution. Both passed. | Pass |
+
+Files: `supabase/migrations/20261102010000_attendance_clock_events.sql`,
+`supabase/tests/database/attendance_clock_events.test.sql`,
+`src/app/attendance/page.tsx`, `src/lib/attendance.ts`, `src/app/actions.ts`,
+`src/components/main-navigation.tsx`, `src/app/people/page.tsx`,
+`src/app/settings/organisation/page.tsx`, `tests/attendance.test.mjs`,
+`tests/attendance-concurrency.integration.test.mjs`,
+`tests/shared-worker-concurrency.integration.test.mjs`,
+`tests/helpers/disposable-database.mjs`, `tests/e2e/auth.spec.mjs`,
+`scripts/test-tenant-isolation.mjs` and `README.md`. The migration was applied
+only to the isolated project. Location verification, breaks, corrections and
+timesheets are not yet implemented; no break is silently deducted.
+
 ### BB-ORG-005 — Multiple venues (In Progress)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ORG-005.1 Venue selector scopes views | Roster and people views select only permitted venues; requests are checked server-side. | Scoped permission pgTAP and authenticated browser role/venue scenarios passed in the full 953-assertion and 29-scenario regressions. | Pass |
 | ORG-005.2 Detect shared-staff cross-venue overlap | Owners explicitly confirm profile links; generic overlap results contain only manageable shift IDs. Automatic assignment and configured publication blocking use the same linked-worker identity. | 44 shared-profile and 26 conflict pgTAP assertions, authenticated link/assignment/publication races, and the shared-worker and 1,001-shift browser scenarios passed. | Pass |
-| ORG-005.3 Timesheets retain actual venue attribution | No timesheet or attendance workflow exists yet. | No runtime acceptance test is possible until those prerequisites are implemented. | In Progress |
+| ORG-005.3 Timesheets retain actual venue attribution | Attendance events now preserve the actual venue, but the timesheet workflow is not yet implemented. | Attendance attribution passes pgTAP and browser tests; timesheet attribution cannot yet be tested. | In Progress |
 
 ### BB-ORG-002 — Configure venue and geofence (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ORG-002.1 Latitude, longitude and radius save with validation | Owners can configure or clear all three values per venue; coordinates are limited to six meaningful decimal places and radius to 1–10,000 metres. SQL constraints and an owner-only RPC enforce the same bounds. | Two parsing unit tests, 60 isolated pgTAP assertions and production Chromium verify valid saves, clear, no-op, boundaries, invalid/partial input, two venues and tenant/role isolation. | Pass |
-| ORG-002.2 Location permission implications are explained | The form explains that future location-based clocking may require device/browser permission and that denial or inaccurate GPS can prevent verification; it explicitly says clocking and enforcement are not implemented. | Production Chromium verifies both the permission guidance and the implementation limitation on the owner screen, including a 375px layout. | Pass |
+| ORG-002.2 Location permission implications are explained | The form explains that future location verification may require device/browser permission and that denial or inaccurate GPS can prevent verification; current clock events are explicitly unverified. | Production Chromium verifies both the permission guidance and the implementation limitation on the owner screen, including a 375px layout. | Pass |
 | ORG-002.3 All changes are audited | A protected trigger records actor or maintenance role, actual time, tenant, venue and old/new values for configured inserts, updates and clearing; unchanged values do not create events. Owners can see recent history. | pgTAP verifies actor/time/values, direct-write denial, privileged update/insert capture and tenant/role restrictions. Production Chromium verifies visible history and a serialized old/new chain under concurrent authenticated updates. | Pass |
 
 Files: `supabase/migrations/20261101180000_venue_geofence.sql`,
@@ -135,8 +164,8 @@ complete isolated database regression passed 617/617 assertions, the
 authenticated two-tenant/concurrency regression passed, all 45 serialized
 Node tests passed (one separately run integration skipped in that invocation),
 full lint and split production compile/typecheck/generate passed, and the
-geofence plus two organisation browser scenarios passed. Clock-in and location
-enforcement remain separate unfinished stories.
+geofence plus two organisation browser scenarios passed. Clock-in has since
+been implemented; location enforcement remains a separate unfinished story.
 
 ### BB-PEOPLE-004 — Submit availability exceptions (Done)
 
@@ -554,12 +583,11 @@ not yet run remotely.
 
 ## Next story
 
-- Checkpoint the verified shared-worker/conflict changes, then implement
-  **BB-ATTEND-001 — Clock in and out** with canonical server timestamps,
-  immutable original events, scoped permissions, valid transitions and
-  idempotent retries. Employee invitations and reliable email/push also remain
-  outstanding.
-- Migrations through `20261102000000` are applied only to the isolated stack.
+- Implement **BB-ATTEND-002 — Clock breaks** using immutable events, explicit
+  paid/unpaid classification, validated transitions and idempotent retries.
+  Never silently deduct an assumed break. Employee invitations and reliable
+  email/push also remain outstanding.
+- Migrations through `20261102010000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.

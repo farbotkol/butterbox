@@ -33,9 +33,9 @@ Owners can configure each venue's latitude, longitude and clocking radius on
 the radius is 1–10,000 metres; clearing all three fields removes the
 configuration. Each change records the actor, time and previous/new values,
 and owners can see recent history. Staff may need to permit device or browser
-location access when location-based clocking is introduced. Clocking and
-geofence enforcement are not implemented yet. Apply the current migrations
-before configuring venue locations.
+location access when location-based clocking is introduced. Clock events are
+currently unverified; location verification and geofence enforcement are not
+implemented yet. Apply the current migrations before configuring venue locations.
 
 Owners can open **Permissions** to assign roles to existing business members.
 Owners are business-wide; general managers have a venue; FOH/BOH managers and
@@ -88,6 +88,20 @@ week, while an unsubmitted pattern is unknown. The roster displays the
 complement of saved ranges as unavailable periods, including overnight ranges.
 Managers can view availability within their permitted departments but cannot
 edit a worker's self-reported pattern.
+
+Linked employees can use **Clock in / out** to start and finish attendance at
+their permitted venue and department. If more than one employee/department
+option is available, choose the correct one before clocking in. The server
+records the actual timestamp, employee, venue and department in immutable
+original events; retrying the same request does not duplicate it. A worker
+cannot start a second open session, including through an explicitly linked
+profile at another venue. An archived
+profile can finish an already-open session while its account and scope remain
+valid. Owners cannot link profiles while more than one has an open session.
+Events are currently unverified: location checks, breaks, corrections and
+timesheets are not yet implemented, and no break is automatically deducted.
+If account access is removed during a session, contact an owner for review.
+Apply the current migrations before using the clock.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule

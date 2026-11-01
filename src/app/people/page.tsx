@@ -391,6 +391,7 @@ export default async function PeoplePage({
           : params.error === "shared-confirm" ? "Confirm the shared-profile change before saving."
           : params.error === "shared-venue" ? "This worker already has a linked profile at that venue."
           : params.error === "shared-groups" ? "These profiles belong to different shared workers. Unlink the incorrect profiles before linking them."
+          : params.error === "shared-clock" ? "Finish at least one open clock session before linking these profiles."
           : params.error === "shared" ? "Could not change the shared-worker link. Check the profiles and try again."
           : params.error === "filter"
           ? "That directory filter is unavailable. Choose a permitted venue, department and role."
