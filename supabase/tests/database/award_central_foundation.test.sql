@@ -1,5 +1,5 @@
 begin;
-select plan(47);
+select plan(48);
 select has_table('public', 'award_central_instruments', 'shared central instrument table exists');
 select has_table('public', 'award_central_versions', 'shared version table exists');
 select has_column('public', 'award_central_versions', 'source_sha256', 'content provenance stored');
@@ -145,23 +145,32 @@ select throws_ok($$update public.award_central_versions
   'Award Central publication requires review state', 'drafts cannot bypass specialist review');
 update public.award_central_versions set status = 'pending_review'
   where id = 'a1700000-0000-4000-8000-000000000003';
-update public.award_central_versions
+select throws_ok($$update public.award_central_versions
   set status = 'active', reviewed_by = 'synthetic-specialist', reviewed_at = '2026-01-02 00:00:00+00',
       activated_at = '2026-01-03 00:00:00+00'
-  where id = 'a1700000-0000-4000-8000-000000000003';
-select is((select status from public.award_central_versions where id = 'a1700000-0000-4000-8000-000000000003'),
-  'active', 'reviewed versions can be activated through the controlled lifecycle');
-select throws_ok($$update public.award_central_versions set rule_proposal = '{"changed": true}'::jsonb
   where id = 'a1700000-0000-4000-8000-000000000003'$$, 'P0001',
-  'Active Award Central version can only be superseded', 'active rules cannot be rewritten in place');
+  'Award Central publication is disabled until independent validation and approval are implemented',
+  'review alone cannot activate a version without a governed validation workflow');
+select throws_ok($$update public.award_central_versions
+  set status = 'approved', reviewed_by = 'synthetic-specialist', reviewed_at = now()
+  where id = 'a1700000-0000-4000-8000-000000000003'$$, 'P0001',
+  'Award Central publication is disabled until independent validation and approval are implemented',
+  'review alone cannot approve a version without a governed validation workflow');
+select throws_ok($$update public.award_central_versions
+  set status = 'superseded', reviewed_by = 'synthetic-specialist', reviewed_at = now()
+  where id = 'a1700000-0000-4000-8000-000000000003'$$, 'P0001',
+  'Award Central publication is disabled until independent validation and approval are implemented',
+  'an unpublished version cannot be marked superseded to bypass publication');
+select is((select status from public.award_central_versions where id = 'a1700000-0000-4000-8000-000000000003'),
+  'pending_review', 'failed publication leaves the version unpublished');
 select throws_ok($$delete from public.award_central_versions
   where id = 'a1700000-0000-4000-8000-000000000003'$$, 'P0001',
-  'Award Central versions cannot be deleted', 'published versions cannot be deleted');
+  'Award Central versions cannot be deleted', 'unpublished versions cannot be deleted');
 
 set local role authenticated;
 select is((select count(*)::int from public.award_central_versions
-  where id = 'a1700000-0000-4000-8000-000000000003'), 1,
-  'authenticated customers can read the shared active version');
+  where id = 'a1700000-0000-4000-8000-000000000003'), 0,
+  'authenticated customers cannot read pending-review versions');
 select is((select count(*)::int from public.award_central_versions
   where id = 'a1700000-0000-4000-8000-000000000004'), 0,
   'authenticated customers cannot read unpublished drafts');
@@ -169,11 +178,5 @@ select throws_ok($$update public.award_central_versions set status = 'superseded
   where id = 'a1700000-0000-4000-8000-000000000003'$$, '42501', null,
   'customers cannot supersede or override shared award versions');
 reset role;
-
-update public.award_central_versions set status = 'superseded'
-  where id = 'a1700000-0000-4000-8000-000000000003';
-select throws_ok($$update public.award_central_versions set status = 'active'
-  where id = 'a1700000-0000-4000-8000-000000000003'$$, 'P0001',
-  'Approved Award Central versions are immutable', 'superseded versions remain immutable for historical reproduction');
 select * from finish();
 rollback;
