@@ -99,6 +99,19 @@
   The first expanded browser run exposed a test assumption about whether a
   disclosure remained open after navigation; the test was corrected to check
   its actual state and then passed without removing assertions.
+- BB-ATTEND-007 was committed as `911197e` and pushed to the requested
+  development branch; the remote SHA matched.
+- BB-ATTEND-005 now has a further verified reconciliation slice: managers can
+  match a claim to an existing finished event without changing it, explicitly
+  correct that event to the claimed time, or reject the claim with a reason.
+  An authorized owner/admin/general manager can reopen a decision without
+  undoing a prior correction. The complete isolated replay passed
+  **1,527/1,527 pgTAP assertions across 33 files**, including 44 new
+  reconciliation assertions; all 12 authenticated integrations, 86 serialized
+  Node tests, full ESLint, TypeScript, split production build and five focused
+  production-browser scenarios passed. The Node-only run skipped those 12
+  integrations, which passed separately. Claims with no matching finished event
+  still cannot create attendance, and the page cannot be reopened offline.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -166,10 +179,10 @@
   from payroll source events, with the original device time and server receipt
   time. The attendance page queues claims in device storage and retries
   idempotently after reconnecting as the same account. Scoped employees and
-  managers can see received claims. Manager reconciliation and reopening the
-  attendance page while offline remain unimplemented; accepted claims do not
-  alter attendance or worked time. The verified BB-ATTEND-007 correction
-  foundation preserves original events but does not itself reconcile claims.
+  managers can see received claims. A scoped manager can now match an existing
+  finished event, correct it to the claimed time, or reject the claim; decisions
+  and reopenings are immutable and employee-visible. Claims without a matching
+  event and reopening the attendance page while offline remain incomplete.
 - **BB-ATTEND-007 — Attendance corrections** is Done. Scoped corrections and
   edit-lock transitions are immutable, attributed and visible to permitted
   users; corrected work time, daylight-saving handling, precision, linked-worker
@@ -375,7 +388,7 @@ missing events and offline claims still need a separate reconciliation workflow.
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ATTEND-005.1 Pending or exception status | Location failures produce a recorded server event and visible review status. A page already open offline shows each queued claim and its pending state; submitted claims are labelled unverified and awaiting review. Storage and upload failures are explicit. | BB-ATTEND-003 location and no-JavaScript checks passed. Production Chromium verified two offline claims, a failed upload, storage denial, reconnect, scoped visibility and clear pending/review labels. | Pass |
-| ATTEND-005.2 Safe reconciliation | Device claims upload only for the verified original account and permitted scope, with idempotent request IDs. They remain separate from attendance and worked time until a dedicated manager reconciliation workflow is implemented; an offline page cannot yet be opened or reloaded. | The 48-assertion pgTAP suite passed, as did eight-way duplicate submission and membership-revocation/unlink races. Production Chromium passed failed upload, account switching and simultaneous retries in two tabs, without duplicate claims or attendance events. Manager reconciliation remains unimplemented. | Blocked |
+| ATTEND-005.2 Safe reconciliation | Device claims upload only for the verified original account and permitted scope. A manager can match a finished event, explicitly append a correction using the claimed time, or reject a claim; each decision is attributed and reopenable only by a senior scoped role. Claims with no matching event remain pending. | The 48 original offline-claim and 44 new reconciliation pgTAP assertions passed. Authenticated tests passed duplicate/competing reviews, edit-lock and permission races. Production Chromium verified correction, match, reject, reopen, employee visibility, cross-tenant scope and mobile layout. A claim without an existing event cannot yet be incorporated, and the page cannot be opened or reloaded offline. | Fail |
 | ATTEND-005.3 Claimed and confirmed times | The immutable claim retains the untrusted device time and a separate server-generated receipt time. The latter confirms receipt, not that the claimed attendance was true. | pgTAP verified original time, server time and immutable records. Production Chromium captured clock-in/out offline, compared both received rows to device storage, and checked both timestamps in the employee and scoped manager views. | Pass |
 
 Files: `supabase/migrations/20261102080000_attendance_offline_claims.sql`,
@@ -384,6 +397,10 @@ Files: `supabase/migrations/20261102080000_attendance_offline_claims.sql`,
 `src/components/offline-attendance.tsx`, `src/app/attendance/page.tsx`,
 `tests/offline-attendance.test.mjs`,
 `tests/offline-attendance-concurrency.integration.test.mjs`,
+`supabase/migrations/20261102100000_offline_claim_reconciliation.sql`,
+`supabase/tests/database/offline_claim_reconciliation.test.sql`,
+`src/components/offline-claim-review.tsx`,
+`tests/offline-claim-reconciliation-concurrency.integration.test.mjs`,
 `tests/e2e/auth.spec.mjs`, `scripts/test-tenant-isolation.mjs` and `README.md`.
 After a clean migration replay, an initial default pgTAP invocation failed
 because the disposable workdir contained outdated test copies, including a
@@ -831,7 +848,7 @@ not yet run remotely.
 - Supabase CLI 2.122.0 runs in a separate temporary project on ports
   55421/55422. The existing Butterbox stack was not modified. SQL fixtures are
   rolled back and HTTP fixtures are cleaned up. A clean local-only reset rebuilt
-  the isolated schema and migration history through `20261102090000`.
+  the isolated schema and migration history through `20261102100000`.
 - Serialized Node unit run: 45 passed, one HTTP integration explicitly
   skipped without disposable settings. The isolated database regression
   passed 655/655 pgTAP assertions and the separately configured two-tenant
@@ -887,10 +904,12 @@ not yet run remotely.
 
 ## Next story
 
-- Continue **BB-ATTEND-005 — Time capture fallback** by designing a scoped,
-  auditable manager decision for unverified offline claims, preserving both
-  device-claimed and server-received times without silently manufacturing
-  verified attendance. Evaluate safe offline page reopening.
+- Continue **BB-ATTEND-005 — Time capture fallback** for claims without an
+  existing clock event. Design an explicitly sourced, auditable way to create
+  missing attendance from manager-confirmed claims without representing device
+  time as a verified server clock or silently assuming breaks; retain both
+  claimed and received times, enforce overlap/lock rules, and test concurrent
+  decisions. Evaluate safe offline page reopening.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Continue toward corrections,
   timesheet review and approval. Revisit BB-SAAS-003 only after production

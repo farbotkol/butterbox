@@ -3811,6 +3811,175 @@ test("managers correct finished attendance with audit history, scoped locks and 
   }
 });
 
+test("managers reconcile offline claims with existing attendance and an auditable decision", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, employeeId, sessionId,
+    clockInId, clockOutId] = Array.from({ length: 10 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  const ownerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["owner", "foh", "boh", "worker", "colleague", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `claim-review-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Claim review cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside review cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[4], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[5], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[3], name: "Claim Worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert({
+      id: sessionId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: employeeId, started_by: users[3],
+    })).error).toBeNull();
+    expect((await admin.from("attendance_events").insert([
+      { id: clockInId, session_id: sessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
+        event_type: "clock_in", occurred_at: "2024-01-10T09:00:00Z" },
+      { id: clockOutId, session_id: sessionId, business_id: businessId, venue_id: venueId,
+        department_id: fohId, employee_id: employeeId, actor_id: users[3], request_id: randomUUID(),
+        event_type: "clock_out", occurred_at: "2024-01-10T17:00:00Z" },
+    ])).error).toBeNull();
+    expect((await workerApi.auth.signInWithPassword({
+      email: `claim-review-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `claim-review-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+
+    const claims = [];
+    for (const [eventType, claimedAt] of [
+      ["clock_in", "2024-01-10T08:45:00.123456Z"],
+      ["clock_out", "2024-01-10T17:00:00Z"],
+      ["clock_in", "2024-01-10T08:00:00Z"],
+      ["clock_out", "2024-01-10T17:20:00Z"],
+    ]) {
+      const result = await workerApi.rpc("submit_attendance_offline_claim", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId,
+        p_employee_id: employeeId, p_actor_id: users[3], p_request_id: randomUUID(),
+        p_event_type: eventType, p_claimed_at: claimedAt,
+      });
+      expect(result.error).toBeNull();
+      claims.push({ ...result.data[0], claimedAt });
+    }
+    await signIn(page, `claim-review-foh-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const claimCard = (index) => page.locator(`#offline-claim-${claims[index].claim_id}`);
+    let form = claimCard(0).getByRole("form", { name: "Reconcile offline claim" });
+    await form.getByLabel("Existing finished attendance event").selectOption({ index: 1 });
+    await form.getByLabel("Reason for review").fill("Confirmed start from the claim");
+    await form.getByRole("button", { name: "Use claimed time as correction" }).click();
+    await expect(claimCard(0)).toContainText("Existing event corrected to the claimed time");
+    await expect(claimCard(0)).toContainText("Confirmed start from the claim");
+    await expect(claimCard(0)).toContainText(users[1]);
+    const worked = await ownerApi.rpc("list_worked_time", { p_business_id: businessId, p_venue_id: venueId });
+    expect(worked.error).toBeNull();
+    expect(worked.data.find((row) => row.session_id === sessionId).worked_seconds).toBe(29699.876544);
+
+    form = claimCard(1).getByRole("form", { name: "Reconcile offline claim" });
+    await form.getByLabel("Existing finished attendance event").selectOption({ index: 1 });
+    await form.getByLabel("Reason for review").fill("Already recorded correctly");
+    await form.getByRole("button", { name: "Match without changing time" }).click();
+    await expect(claimCard(1)).toContainText("Matched to an existing event without changing its time");
+    const reject = claimCard(2).getByRole("form", { name: "Reject offline claim" });
+    await reject.getByLabel("Reason for rejecting this claim").fill("Duplicate device claim");
+    await reject.getByRole("button", { name: "Reject claim" }).click();
+    await expect(claimCard(2)).toContainText("Rejected: Duplicate device claim");
+
+    expect((await ownerApi.rpc("set_attendance_edit_lock", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: sessionId,
+      p_request_id: randomUUID(), p_locked: true, p_reason: "Reviewed",
+    })).error).toBeNull();
+    await page.reload();
+    form = claimCard(3).getByRole("form", { name: "Reconcile offline claim" });
+    await form.getByLabel("Existing finished attendance event").selectOption({ index: 1 });
+    await expect(form.locator("option").nth(1)).toContainText("editing locked");
+    await form.getByLabel("Reason for review").fill("Attempt while locked");
+    await form.getByRole("button", { name: "Use claimed time as correction" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Attendance edits are locked" })).toBeVisible();
+    await expect(claimCard(3)).toContainText("Manager review required");
+
+    const ownerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(ownerContext);
+    const ownerPage = await ownerContext.newPage();
+    await signIn(ownerPage, `claim-review-owner-${suffix}@example.test`, password);
+    await ownerPage.goto(`/attendance?venue=${venueId}`);
+    const ownerClaim = ownerPage.locator(`#offline-claim-${claims[0].claim_id}`);
+    const reopen = ownerClaim.getByRole("form", { name: "Reopen offline claim" });
+    await reopen.getByLabel("Reason for reopening this claim").fill("Review again with the employee");
+    await reopen.getByRole("button", { name: "Reopen claim" }).click();
+    await expect(ownerClaim).toContainText("Reopened for review");
+    await expect(ownerClaim).toContainText("Confirmed start from the claim");
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `claim-review-worker-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    const workerClaims = workerPage.getByRole("region", { name: "Submitted offline attendance claims" });
+    await expect(workerClaims).toContainText("Confirmed start from the claim");
+    await expect(workerClaims).toContainText("Reopened for review");
+    await expect(workerClaims).toContainText("Duplicate device claim");
+    await expect(workerPage.getByRole("region", { name: "Attendance correction history" }))
+      .toContainText("Confirmed start from the claim");
+    expect(await workerPage.locator("body")
+      .evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const received = await workerApi.from("attendance_offline_claims").select("id, claimed_at, received_at");
+    expect(received.error).toBeNull();
+    for (const claim of claims) {
+      const saved = received.data.find((row) => row.id === claim.claim_id);
+      expect(saved.received_at).toBe(claim.received_at);
+      expect(Date.parse(saved.claimed_at)).toBe(Date.parse(claim.claimedAt));
+    }
+    const original = await admin.from("attendance_events").select("occurred_at").eq("id", clockInId).single();
+    expect(original.error).toBeNull();
+    expect(new Date(original.data.occurred_at).toISOString()).toBe("2024-01-10T09:00:00.000Z");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `claim-review-colleague-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(workerClaims).not.toContainText("Claim Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `claim-review-boh-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(workerClaims).not.toContainText("Claim Worker");
+    await workerPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(workerPage, `claim-review-outside-${suffix}@example.test`, password);
+    await workerPage.goto(`/attendance?venue=${outsideVenue}`);
+    await expect(workerClaims).not.toContainText("Claim Worker");
+  } finally {
+    for (const item of contexts) await item.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("employees clock in and out with scoped immutable cross-venue events", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

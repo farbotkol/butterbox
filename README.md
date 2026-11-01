@@ -170,12 +170,16 @@ employee can save a clock-in or clock-out claim on that device. The device time
 is untrusted; the claim is queued in browser storage and submitted when the
 same account reconnects, retaining both that claimed time and the server's
 receipt time. Claims are visible within the employee's or manager's scope, but
-they do not automatically change attendance or worked time. Manager
-reconciliation of claims and timesheet approvals are not yet available;
-contact a manager to arrange an accurate record. Correcting an existing event
-does not reconcile an offline claim or create a missing clock event. The page
-cannot be opened offline, and clearing browser data or losing the device can
-lose unsent claims.
+they do not automatically change attendance or worked time. A scoped manager
+can review a claim against an existing finished clock event: match it without
+changing time, explicitly correct that event to the claimed time, or reject
+the claim with a reason. The decision, actor and any correction are recorded;
+employees can see the history. An owner, admin or appropriately scoped general
+manager can reopen a decision with a reason, without undoing a prior correction.
+Claims without a matching event cannot yet create missing clock events and
+should remain pending if further investigation is needed. Timesheet approvals
+are not yet available. The page cannot be opened offline, and clearing browser
+data or losing the device can lose unsent claims.
 Device storage is shared by accounts using the same browser profile, so use a
 private device or separate browser profiles for different users. If account
 access is removed during a session, contact an owner for review. Apply the

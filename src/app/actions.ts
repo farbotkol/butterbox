@@ -14,6 +14,7 @@ import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
+import { parseOfflineMatchOption } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
@@ -818,6 +819,65 @@ export async function reviewAttendanceLocationAction(formData: FormData) {
   }
   revalidatePath("/attendance");
   redirect(`${destination}&saved=location-reviewed`);
+}
+
+export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const claims = uuidList(formData, "claim_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const decisions = formData.getAll("decision");
+  const reasons = formData.getAll("reason");
+  const options = formData.getAll("event_option");
+  if (venues?.length !== 1 || claims?.length !== 1 || requests?.length !== 1 ||
+    decisions.length !== 1 || typeof decisions[0] !== "string" ||
+    !["matched", "corrected", "rejected", "reopened"].includes(decisions[0]) ||
+    reasons.length !== 1 || typeof reasons[0] !== "string" ||
+    !reasons[0].trim() || reasons[0].trim().length > 500) {
+    console.error("Invalid offline attendance review.");
+    redirect("/attendance?error=claim-invalid");
+  }
+  const workspace = await getWorkspace(venues[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the offline claim review workspace.", { message: workspace.message });
+    redirect("/attendance?error=venue");
+  }
+  const destination = `/attendance?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const needsEvent = decisions[0] === "matched" || decisions[0] === "corrected";
+  const option = needsEvent && options.length === 1 ? parseOfflineMatchOption(options[0]) : null;
+  if ((needsEvent && !option) || (!needsEvent && options.length !== 0)) {
+    console.error("Invalid offline attendance review event.");
+    redirect(`${destination}&error=claim-invalid`);
+  }
+  const { data, error } = await workspace.supabase.rpc("review_attendance_offline_claim", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_claim_id: claims[0],
+    p_request_id: requests[0], p_decision: decisions[0], p_event_id: option?.eventId ?? null,
+    p_expected_at: option?.expectedAt ?? null, p_reason: reasons[0].trim(),
+  });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Offline attendance review failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid review receipt.",
+    });
+    const failureReasons: Record<string, string> = {
+      "Claim has already been reviewed": "claim-reviewed",
+      "Claim is already awaiting review": "claim-pending",
+      "Only an owner or general manager can reopen a claim": "claim-permission",
+      "Matching attendance event not found": "claim-match",
+      "Only finished sessions can be reconciled": "claim-match",
+      "Attendance changed; refresh before reconciling": "claim-stale",
+      "Attendance changed; refresh before correcting": "claim-stale",
+      "Attendance edits are locked": "claim-locked",
+      "Corrected attendance overlaps another session": "claim-overlap",
+      "Invalid attendance correction time": "claim-time",
+    };
+    redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
+      ? failureReasons[error.message] : "claim-save"}`);
+  }
+  revalidatePath("/attendance");
+  revalidatePath("/work-time");
+  redirect(`${destination}&saved=claim-reviewed`);
 }
 
 async function correctionActionContext(formData: FormData) {
