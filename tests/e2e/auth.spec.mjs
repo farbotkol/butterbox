@@ -672,6 +672,274 @@ test("owners configure venue geofences with protected audit and scoped access", 
   }
 });
 
+test("owners configure venue conflict rules with protected history and scoped access", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId] = [randomUUID(), randomUUID()];
+  const [venueId, secondVenueId, outsideVenueId] = [randomUUID(), randomUUID(), randomUUID()];
+  const departmentId = randomUUID();
+  const userIds = [];
+  const contexts = [];
+  try {
+    for (const name of ["owner", "manager", "outside"]) {
+      const user = await admin.auth.admin.createUser({
+        email: `conflict-policy-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(user.error).toBeNull();
+      userIds.push(user.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Conflict rules ${suffix}` },
+      { id: outsideBusinessId, name: `Outside conflict rules ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "UTC" },
+      { id: secondVenueId, business_id: businessId, name: "Riverside", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: userIds[0], role: "owner" },
+      { business_id: businessId, user_id: userIds[1], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusinessId, user_id: userIds[2], role: "owner" },
+    ])).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `conflict-policy-owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/organisation?venue=${venueId}`);
+    const region = page.getByRole("region", { name: "Roster conflict rules" });
+    const form = page.getByRole("form", { name: "Configure roster conflict rules" });
+    const labels = [
+      "Manual assignment with unavailable worker", "Publish with unavailable worker",
+      "Publish with overlapping shifts", "Publish a shift longer than 24 hours",
+    ];
+    await expect(region).toContainText("Cross-venue worker overlaps are not yet detected");
+    await expect(region).toContainText("No rule changes yet.");
+    for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
+    for (const label of labels) await form.getByLabel(label).selectOption("true");
+    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+    await expect(region).toContainText(`User ${userIds[0]}`);
+    await expect(region).toContainText("Manual availability: warn");
+    await expect(region).toContainText("Manual availability: block");
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const saved = await admin.from("venues")
+      .select("block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
+      .eq("id", venueId).single();
+    expect(saved.error).toBeNull();
+    expect(saved.data).toEqual({
+      block_manual_unavailability: true, block_publish_unavailability: true,
+      block_publish_overlap: true, block_publish_long_shift: true,
+    });
+    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+    const unchangedHistory = await admin.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
+    expect(unchangedHistory.error).toBeNull();
+    expect(unchangedHistory.data).toHaveLength(1);
+
+    await form.getByLabel(labels[0]).evaluate((select) => {
+      select.add(new Option("Invalid", "invalid"));
+      select.value = "invalid";
+    });
+    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("Select a valid option for each roster conflict rule");
+    await expect(form.getByLabel(labels[0])).toHaveValue("true");
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
+    await page.getByRole("button", { name: "Show venue" }).click();
+    for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
+    await expect(region).toContainText("No rule changes yet.");
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueId);
+    await page.getByRole("button", { name: "Show venue" }).click();
+    for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("true");
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `conflict-policy-manager-${suffix}@example.test`, password);
+    await managerPage.goto(`/settings/organisation?venue=${venueId}`);
+    await expect(managerPage.getByRole("form", { name: "Configure roster conflict rules" })).toHaveCount(0);
+    const managerApi = createClient(apiUrl, anonKey, options);
+    expect((await managerApi.auth.signInWithPassword({
+      email: `conflict-policy-manager-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    const args = {
+      p_business_id: businessId, p_venue_id: venueId,
+      p_block_manual_unavailability: false, p_block_publish_unavailability: false,
+      p_block_publish_overlap: false, p_block_publish_long_shift: false,
+    };
+    expect((await managerApi.rpc("save_venue_conflict_policy", args)).error?.message).toBe("Permission denied");
+    const managerHistory = await managerApi.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
+    expect(managerHistory.error).toBeNull();
+    expect(managerHistory.data).toEqual([]);
+    const outsideApi = createClient(apiUrl, anonKey, options);
+    expect((await outsideApi.auth.signInWithPassword({
+      email: `conflict-policy-outside-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await outsideApi.rpc("save_venue_conflict_policy", args)).error?.message).toBe("Permission denied");
+    const outsideHistory = await outsideApi.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
+    expect(outsideHistory.error).toBeNull();
+    expect(outsideHistory.data).toEqual([]);
+  } finally {
+    try {
+      if (browser.isConnected()) {
+        for (const context of contexts) await context.close();
+      }
+    } finally {
+      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+    }
+  }
+});
+
+test("configured conflict rules block assignments and publication until warnings are resolved", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const businessId = randomUUID();
+  const venueId = randomUUID();
+  const [fohId, bohId] = [randomUUID(), randomUUID()];
+  const employeeId = randomUUID();
+  const [unavailableId, openId, overlapId, hiddenId] = [randomUUID(), randomUUID(), randomUUID(), randomUUID()];
+  const userIds = [];
+  const contexts = [];
+  try {
+    for (const name of ["owner", "manager"]) {
+      const user = await admin.auth.admin.createUser({
+        email: `conflict-enforce-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(user.error).toBeNull();
+      userIds.push(user.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Conflict enforcement ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({ id: venueId, business_id: businessId, name: "Harbour", timezone: "UTC" })).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: userIds[0], role: "owner" },
+      { business_id: businessId, user_id: userIds[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      name: "Policy worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: employeeId, department_id: bohId,
+    })).error).toBeNull();
+    expect((await admin.from("employee_availability_patterns").insert({
+      employee_id: employeeId, business_id: businessId, venue_id: venueId,
+    })).error).toBeNull();
+    expect((await admin.from("employee_availability_intervals").insert([
+      { employee_id: employeeId, business_id: businessId, venue_id: venueId, weekday: 1, start_minute: 540, end_minute: 1020 },
+      { employee_id: employeeId, business_id: businessId, venue_id: venueId, weekday: 4, start_minute: 540, end_minute: 1020 },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: unavailableId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: employeeId,
+        role_title: "Unavailable legacy", starts_at: "2032-03-15T18:00:00Z", ends_at: "2032-03-15T19:00:00Z" },
+      { id: openId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: null,
+        role_title: "Long open coverage", starts_at: "2032-03-16T09:00:00Z", ends_at: "2032-03-17T10:00:00Z" },
+      { id: overlapId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: employeeId,
+        role_title: "FOH conflict", starts_at: "2032-03-18T09:00:00Z", ends_at: "2032-03-18T12:00:00Z" },
+      { id: hiddenId, business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: employeeId,
+        role_title: "Private BOH conflict", starts_at: "2032-03-18T11:00:00Z", ends_at: "2032-03-18T13:00:00Z" },
+    ])).error).toBeNull();
+
+    await signIn(page, `conflict-enforce-owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/organisation?venue=${venueId}`);
+    const policy = page.getByRole("form", { name: "Configure roster conflict rules" });
+    for (const label of [
+      "Manual assignment with unavailable worker", "Publish with unavailable worker",
+      "Publish with overlapping shifts", "Publish a shift longer than 24 hours",
+    ]) await policy.getByLabel(label).selectOption("true");
+    await policy.getByRole("button", { name: "Save roster conflict rules" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`;
+    await page.goto(roster);
+    await expect(page.getByText("Manual assignment blocks unavailable workers", { exact: false })).toBeVisible();
+    await expect(page.locator("article", { hasText: "Unavailable legacy" }).getByRole("note"))
+      .toContainText("Outside submitted availability");
+    await expect(page.locator("#open-shifts").getByRole("note", { name: /Long open coverage/ }))
+      .toContainText("Shift exceeds 24 hours");
+    const create = page.getByRole("form", { name: "Add draft shift" });
+    await create.getByLabel("Role").fill("Rejected unavailable assignment");
+    await create.getByLabel("Team member").selectOption(employeeId);
+    await create.getByLabel("Starts").fill("2032-03-15T20:00");
+    await create.getByLabel("Ends").fill("2032-03-15T21:00");
+    await create.getByRole("button", { name: "Save draft shift" }).click();
+    await expect(create.getByRole("alert")).toContainText("That worker is unavailable");
+    await expect(create.getByLabel("Role")).toHaveValue("Rejected unavailable assignment");
+    await expect(create.getByLabel("Starts")).toHaveValue("2032-03-15T20:00");
+    const rejected = await admin.from("shifts").select("id")
+      .eq("business_id", businessId).eq("role_title", "Rejected unavailable assignment");
+    expect(rejected.error).toBeNull();
+    expect(rejected.data).toEqual([]);
+
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page).toHaveURL(/error=publish-duration/);
+    await expect(page.locator('p[role="alert"]')).toContainText("shifts longer than 24 hours");
+    await page.getByRole("link", { name: "Edit open shift" }).click();
+    const edit = page.getByRole("form", { name: "Edit draft shift" });
+    await edit.getByLabel("Ends").fill("2032-03-16T12:00");
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    await expect(page.locator("#open-shifts").getByRole("note", { name: /Long open coverage/ })).toHaveCount(0);
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `conflict-enforce-manager-${suffix}@example.test`, password);
+    await managerPage.goto(roster);
+    await expect(managerPage.locator("article", { hasText: "FOH conflict" }).getByRole("note"))
+      .toContainText("Overlaps another shift");
+    await expect(managerPage.getByText("Private BOH conflict", { exact: true })).toHaveCount(0);
+    await managerPage.getByRole("button", { name: "Publish this department" }).click();
+    await expect(managerPage).toHaveURL(/error=publish-overlap/);
+    await expect(managerPage.locator('p[role="alert"]')).toContainText("overlapping shifts");
+    await expect(managerPage.getByText("Private BOH conflict", { exact: true })).toHaveCount(0);
+    const before = await admin.from("shifts").select("id, is_published").eq("business_id", businessId);
+    expect(before.error).toBeNull();
+    expect(before.data.every((shift) => !shift.is_published)).toBe(true);
+
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${bohId}`);
+    await page.locator("article", { hasText: "Private BOH conflict" })
+      .getByRole("button", { name: "Delete Policy worker shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift removed.");
+    await page.goto(roster);
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page).toHaveURL(/error=publish-unavailable/);
+    await expect(page.locator('p[role="alert"]')).toContainText("unavailable workers");
+    await page.locator("article", { hasText: "Unavailable legacy" })
+      .getByRole("link", { name: "Edit Policy worker shift" }).click();
+    await edit.getByLabel("Starts").fill("2032-03-15T14:00");
+    await edit.getByLabel("Ends").fill("2032-03-15T15:00");
+    await edit.getByRole("button", { name: "Update draft shift" }).click();
+    await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    const published = await admin.from("shifts").select("id, is_published")
+      .in("id", [unavailableId, openId, overlapId]);
+    expect(published.error).toBeNull();
+    expect(published.data).toHaveLength(3);
+    expect(published.data.every((shift) => shift.is_published)).toBe(true);
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("There are no draft shifts to publish.");
+  } finally {
+    try {
+      if (browser.isConnected()) {
+        for (const context of contexts) await context.close();
+      }
+    } finally {
+      expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+      expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+      for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+    }
+  }
+});
+
 test("automatic assignment respects availability while manual warnings remain advisory", async ({ page }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

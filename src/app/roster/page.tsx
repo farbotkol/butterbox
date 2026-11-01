@@ -61,6 +61,11 @@ const errorMessages: Record<string, string> = {
   save: "We couldn't save that shift. Check the date, employee and role.",
   delete: "We couldn't delete that shift. Published shifts cannot be deleted.",
   publish: "We couldn't publish this roster. Check your permissions and try again.",
+  "publish-unavailable": "This roster has unavailable workers. Review the affected shifts before publishing.",
+  "publish-overlap": "This roster has overlapping shifts. Review the affected shifts before publishing.",
+  "publish-duration": "This roster has shifts longer than 24 hours. Review the affected shifts before publishing.",
+  "publish-busy": "The roster is being changed. Wait for the other change to finish, then try publishing again.",
+  "publish-unknown": "The server could not confirm the publication result. Reload the roster before trying again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
   "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
 };
@@ -72,6 +77,23 @@ const conflictMessages: Record<ShiftConflict, string> = {
   "approved-leave": "Approved leave",
   "recurring-availability": "Outside submitted availability",
 };
+
+function ConflictNotice({ label, conflicts, open = false }: {
+  label: string; conflicts: ShiftConflict[]; open?: boolean;
+}) {
+  if (conflicts.length === 0) return null;
+  return (
+    <div role="note" aria-label={label}
+      className="mt-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-medium text-rose-900">
+      <span className="block font-semibold">Conflict</span>
+      {conflicts.map((conflict) => (
+        <span key={conflict} className="block">
+          {open && conflict === "invalid-duration" ? "Shift exceeds 24 hours" : conflictMessages[conflict]}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 function isManager(role: string) {
   return ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"].includes(role);
@@ -113,7 +135,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
   const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, shiftResult] = await Promise.all([
-    workspace.supabase.from("venues").select("id, name")
+    workspace.supabase.from("venues").select("id, name, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
       .eq("business_id", workspace.business.id).order("created_at"),
     workspace.supabase
       .from("departments")
@@ -204,8 +226,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const loadError = venueResult.error || departmentResult.error || employeeResult.error || jobRoleResult.error ||
     linkResult.error || ownDepartmentsResult.error || patternResult.error || intervalResult.error ||
     exceptionResult.error || overlapResult.error || shiftResult.error;
-  if (loadError) {
-    console.error("Could not load the roster.", { code: loadError.code, message: loadError.message });
+  const currentVenue = venueResult.data?.find((venue) => venue.id === workspace.venue.id);
+  if (loadError || !currentVenue) {
+    console.error("Could not load the roster.", loadError
+      ? { code: loadError.code, message: loadError.message }
+      : { message: "The selected venue is no longer available." });
     return (
       <AppShell businessName={workspace.business.name} email={workspace.user.email ?? ""}
         role={workspace.membership.role} venueName={workspace.venue.name}>
@@ -240,17 +265,15 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const overlappingShifts = new Set(overlapRows.map((conflict) => conflict.shift_id));
   const conflictsByShift = new Map<string, ShiftConflict[]>();
   for (const shift of visibleShifts) {
-    if (shift.employee_id) {
-      const conflicts = shiftConflicts({
-        startsAt: shift.starts_at,
-        endsAt: shift.ends_at,
-        timezone: workspace.venue.timezone,
-        intervals: availabilityIntervals(shift.employee_id),
-        exceptions: employeeExceptions.get(shift.employee_id) ?? [],
-      });
-      if (overlappingShifts.has(shift.id)) conflicts.unshift("overlapping-shift");
-      conflictsByShift.set(shift.id, conflicts);
-    }
+    const conflicts = shiftConflicts({
+      startsAt: shift.starts_at,
+      endsAt: shift.ends_at,
+      timezone: workspace.venue.timezone,
+      intervals: shift.employee_id ? availabilityIntervals(shift.employee_id) : null,
+      exceptions: shift.employee_id ? employeeExceptions.get(shift.employee_id) ?? [] : [],
+    });
+    if (overlappingShifts.has(shift.id)) conflicts.unshift("overlapping-shift");
+    conflictsByShift.set(shift.id, conflicts);
   }
   const employees = (employeeRows ?? []).filter(
     (employee) =>
@@ -401,6 +424,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               ? params.saved === "edited" ? "Draft shift updated." : "Shift saved to the draft roster."
               : params.deleted
                 ? "Draft shift removed."
+                : params.published === "none"
+                  ? "There are no draft shifts to publish."
                 : `${selectedDepartment ? departments.find((item) => item.id === selectedDepartment)?.name : "Roster"} roster published.`)}
         </p>
       )}
@@ -491,9 +516,14 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               Shifts by team member and day · times shown in venue local time
             </p>
             <p className="mt-1 text-xs text-muted">
-              Availability warnings do not block manual assignment or publication. Automatic
-              selection checks submitted availability, date blocks and approved leave. New
-              overlaps for the same worker at this venue are rejected.
+              {!currentVenue.block_manual_unavailability && !currentVenue.block_publish_unavailability
+                ? "Availability warnings do not block manual assignment or publication."
+                : `Manual assignment ${currentVenue.block_manual_unavailability ? "blocks" : "warns about"} unavailable workers; publication ${currentVenue.block_publish_unavailability ? "blocks" : "warns about"} unavailable workers.`}
+              {" "}Automatic selection checks submitted availability, date blocks and approved leave.
+              New overlaps for the same worker at this venue are rejected.
+              {" "}Publication {currentVenue.block_publish_overlap ? "blocks" : "warns about"} overlapping shifts and
+              {" "}{currentVenue.block_publish_long_shift ? "blocks" : "warns about"} shifts longer than 24 hours.
+              {currentVenue.block_publish_unavailability && " Assigned shifts longer than 24 hours cannot be verified for availability."}
             </p>
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
@@ -619,16 +649,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                   {departments.find((department) => department.id === shift.department_id)?.name}
                                 </p>
                               )}
-                              {(conflictsByShift.get(shift.id) ?? []).length > 0 && (
-                                <div role="note"
-                                  aria-label={`Scheduling conflict for ${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}`}
-                                  className="mt-1 rounded border border-rose-200 bg-rose-50 px-1.5 py-1 text-[10px] font-medium text-rose-900">
-                                  <span className="block font-semibold">Conflict</span>
-                                  {conflictsByShift.get(shift.id)?.map((conflict) => (
-                                    <span key={conflict} className="block">{conflictMessages[conflict]}</span>
-                                  ))}
-                                </div>
-                              )}
+                              <ConflictNotice
+                                label={`Scheduling conflict for ${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}`}
+                                conflicts={conflictsByShift.get(shift.id) ?? []} />
                               <div className="mt-1 flex items-center justify-between gap-1">
                                 <span className={`text-[9px] font-semibold ${shift.is_published ? "text-teal-800" : "text-sky-800"}`}>
                                   {shift.is_published ? "Published" : "Draft"}
@@ -713,6 +736,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       {" · "}{formatTime(shift.starts_at, workspace.venue.timezone)} –{" "}
                       {formatTime(shift.ends_at, workspace.venue.timezone)}
                     </p>
+                    <ConflictNotice open
+                      label={`Scheduling conflict for open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)}`}
+                      conflicts={conflictsByShift.get(shift.id) ?? []} />
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-amber-800">Needs cover</span>

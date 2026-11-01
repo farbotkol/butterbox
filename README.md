@@ -87,8 +87,7 @@ times represent 24 hours. An explicitly empty pattern means unavailable all
 week, while an unsubmitted pattern is unknown. The roster displays the
 complement of saved ranges as unavailable periods, including overnight ranges.
 Managers can view availability within their permitted departments but cannot
-edit a worker's self-reported pattern. These indicators do not yet block
-manual shift assignment.
+edit a worker's self-reported pattern.
 
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
@@ -106,9 +105,8 @@ and does not change the pattern until approved. Employees can cancel their
 own date blocks and pending requests and see pending, approved, rejected and
 cancelled statuses. A permitted manager can approve or reject pending leave,
 or explicitly cancel an approval. Leave and date blocks are displayed on the
-roster, but do **not** yet prevent a manager from assigning or publishing a
-conflicting shift manually. Automatic selection excludes workers with date
-blocks or approved leave. No leave or schedule notifications are sent yet.
+roster. Automatic selection excludes workers with date blocks or approved
+leave. No leave or schedule notifications are sent yet.
 
 Assigned shifts show advisory conflict labels when they overlap a submitted
 unavailable period, active date block or approved leave. Overnight shifts and
@@ -118,8 +116,16 @@ approved. A legacy shift longer than 24 hours is flagged for manual review.
 Managers also see a generic overlap warning on their affected shifts, including
 conflicts with shifts in a department they cannot view; the other shift's
 details are not disclosed. New overlaps for the same venue profile are already
-rejected, but existing conflicts do not yet block publication. These labels do
-not yet cover cross-venue overlaps or enforce configurable blocking rules.
+rejected. Owners can configure venue-specific rules on **Departments and
+roles** to block manual assignment of unavailable workers and, separately,
+publication of unavailable workers, overlaps or shifts longer than 24 hours.
+Each rule defaults to a warning, preserving existing behaviour, and real changes
+are recorded in owner-only history. Existing assignments are not changed by
+enabling a rule, although publication can be blocked. Availability cannot be
+verified for legacy assigned shifts longer than 24 hours, so the unavailable
+worker publication rule also blocks them. If a simultaneous edit is in progress,
+publication asks the manager to retry instead of publishing unchecked data.
+These warnings and rules do not yet cover cross-venue worker overlaps.
 
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its

@@ -2,11 +2,13 @@ import { redirect } from "next/navigation";
 import {
   saveDepartmentAction,
   saveJobRoleAction,
+  saveVenueConflictPolicyAction,
   saveVenueGeofenceAction,
   setJobRoleAutoRestrictionAction,
   setJobRoleManualRestrictionAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import type { ConflictPolicyValues } from "@/lib/conflict-policy";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
@@ -28,6 +30,14 @@ type GeofenceEvent = {
   new_values: GeofenceValues;
   created_at: string;
 };
+type ConflictPolicyEvent = {
+  id: string;
+  actor_id: string | null;
+  actor_type: string;
+  old_values: ConflictPolicyValues;
+  new_values: ConflictPolicyValues;
+  created_at: string;
+};
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const departmentManagerRoles = ["owner", "admin", "general_manager"];
@@ -38,6 +48,7 @@ const errorMessages: Record<string, string> = {
   inactive: "Reactivate the department before adding or reactivating its roles.",
   filter: "That venue is not available to you.",
   geofence: "Enter latitude from -90 to 90, longitude from -180 to 180 (up to six decimal places), and a whole-number radius from 1 to 10,000 metres; or clear all three.",
+  "conflict-policy": "Select a valid option for each roster conflict rule and try again.",
   save: "We couldn't save that change. Check the name and try again.",
 };
 
@@ -46,6 +57,24 @@ const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3
 function formatGeofence(values: GeofenceValues) {
   if (values.latitude === null) return "Not configured";
   return `${values.latitude}, ${values.longitude}; ${values.radius_meters} m`;
+}
+
+function formatConflictPolicy(values: ConflictPolicyValues) {
+  const setting = (blocked: boolean) => blocked ? "block" : "warn";
+  return `Manual availability: ${setting(values.manual_unavailability)}; publication availability: ${setting(values.publish_unavailability)}; overlaps: ${setting(values.publish_overlap)}; long shifts: ${setting(values.publish_long_shift)}`;
+}
+
+function ConflictPolicySelect({ name, label, blocked, blockLabel }: {
+  name: keyof ConflictPolicyValues; label: string; blocked: boolean; blockLabel: string;
+}) {
+  return (
+    <label className="text-sm">{label}
+      <select name={name} defaultValue={String(blocked)} className={fieldClass}>
+        <option value="false">Warn only</option>
+        <option value="true">{blockLabel}</option>
+      </select>
+    </label>
+  );
 }
 
 function StatusSelect({ active, label }: { active: boolean; label: string }) {
@@ -71,20 +100,26 @@ export default async function OrganisationPage({
 
   const params = await searchParams;
   const venues = await workspace.supabase.from("venues")
-    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters")
+    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
     .eq("business_id", workspace.business.id).order("name");
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) redirect("/settings/organisation?error=filter");
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
   const canManageGeofence = workspace.membership.role === "owner";
-  const [departments, roles, geofenceHistory] = await Promise.all([
+  const [departments, roles, geofenceHistory, conflictHistory] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
     workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
       .eq("venue_id", venueId).order("name"),
     canManageGeofence
       ? workspace.supabase.from("venue_geofence_events")
+        .select("id, actor_id, actor_type, old_values, new_values, created_at")
+        .eq("business_id", workspace.business.id).eq("venue_id", venueId)
+        .order("created_at", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [], error: null }),
+    canManageGeofence
+      ? workspace.supabase.from("venue_conflict_policy_events")
         .select("id, actor_id, actor_type, old_values, new_values, created_at")
         .eq("business_id", workspace.business.id).eq("venue_id", venueId)
         .order("created_at", { ascending: false }).limit(10)
@@ -97,9 +132,15 @@ export default async function OrganisationPage({
       code: geofenceHistory.error.code, message: geofenceHistory.error.message,
     });
   }
+  if (conflictHistory.error) {
+    console.error("Could not load roster conflict policy history.", {
+      code: conflictHistory.error.code, message: conflictHistory.error.message,
+    });
+  }
   const departmentRows: Department[] = departments.data ?? [];
   const roleRows: JobRole[] = roles.data ?? [];
   const geofenceEvents: GeofenceEvent[] = geofenceHistory.data ?? [];
+  const conflictEvents: ConflictPolicyEvent[] = conflictHistory.data ?? [];
   const canManageDepartments = departmentManagerRoles.includes(workspace.membership.role);
 
   return (
@@ -136,6 +177,7 @@ export default async function OrganisationPage({
             : params.saved === "restriction" ? "Automatic assignment setting saved."
               : params.saved === "manual-restriction" ? "Manual assignment setting saved."
                 : params.saved === "geofence" ? "Venue location saved."
+                : params.saved === "conflict-policy" ? "Roster conflict rules saved."
                 : "Department saved."}
         </p>
       )}
@@ -144,6 +186,50 @@ export default async function OrganisationPage({
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load departments. Try again.</p>
       ) : (
         <>
+          {canManageGeofence && selectedVenue && (
+            <section aria-label="Roster conflict rules" className="mt-6 rounded-xl border border-line bg-white p-5">
+              <h2 className="font-semibold">Roster conflict rules</h2>
+              <p id="conflict-policy-help" className="mt-3 text-sm leading-6 text-muted">
+                Rules apply to this venue. New assignments always reject overlaps for the same worker.
+                Unsubmitted availability is unknown; pending leave does not block a shift. Existing
+                assignments are not changed when a rule is enabled. Availability for assigned shifts
+                longer than 24 hours cannot be verified and is blocked when publication requires
+                available workers. Cross-venue worker overlaps are not yet detected.
+              </p>
+              <form action={saveVenueConflictPolicyAction} aria-label="Configure roster conflict rules"
+                aria-describedby="conflict-policy-help" className="mt-4 grid gap-4 sm:grid-cols-2">
+                <input type="hidden" name="venue_id" value={venueId} />
+                <ConflictPolicySelect name="manual_unavailability" label="Manual assignment with unavailable worker"
+                  blocked={selectedVenue.block_manual_unavailability} blockLabel="Block assignment" />
+                <ConflictPolicySelect name="publish_unavailability" label="Publish with unavailable worker"
+                  blocked={selectedVenue.block_publish_unavailability} blockLabel="Block publication" />
+                <ConflictPolicySelect name="publish_overlap" label="Publish with overlapping shifts"
+                  blocked={selectedVenue.block_publish_overlap} blockLabel="Block publication" />
+                <ConflictPolicySelect name="publish_long_shift" label="Publish a shift longer than 24 hours"
+                  blocked={selectedVenue.block_publish_long_shift} blockLabel="Block publication" />
+                <button type="submit" className="justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
+                  Save roster conflict rules
+                </button>
+              </form>
+              <h3 className="mt-5 text-sm font-semibold">Recent rule changes</h3>
+              {conflictHistory.error ? (
+                <p role="alert" className="mt-2 text-sm text-red-800">We could not load rule history. Try again.</p>
+              ) : conflictEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">No rule changes yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-2 text-sm">
+                  {conflictEvents.map((event) => (
+                    <li key={event.id} className="break-words">
+                      <time dateTime={event.created_at}>{new Date(event.created_at).toISOString()}</time>
+                      {" | "}{event.actor_id ? `User ${event.actor_id}` : event.actor_type}
+                      {" | "}{formatConflictPolicy(event.old_values)} to {formatConflictPolicy(event.new_values)}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {conflictEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
+            </section>
+          )}
           {canManageGeofence && selectedVenue && (
             <section aria-label="Venue location and geofence" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Venue location and geofence</h2>

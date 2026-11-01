@@ -13,7 +13,7 @@ const serviceKey = process.env.BUTTERBOX_TEST_SUPABASE_SERVICE_KEY;
 const execFileAsync = promisify(execFile);
 
 test(
-  "leave approval and automatic assignment serialize against the same employee",
+  "availability, conflict policies and roster writes serialize against concurrent changes",
   {
     skip: container ? false : "requires an explicitly configured disposable database container",
     timeout: 90_000,
@@ -75,7 +75,7 @@ test(
       throw new Error(`Timed out waiting for ${functionName} to block on the employee lock.`);
     }
 
-    async function holdEmployeeLock() {
+    async function holdLock(statement, expectedOutput) {
       const process = spawn("docker", [
         "exec", "-i", container, "psql", "-X", "-qAt", "-v", "ON_ERROR_STOP=1",
         "-U", "postgres", "-d", "postgres",
@@ -94,9 +94,7 @@ test(
         process.once("error", (error) => resolve({ error }));
         process.once("exit", (code, signal) => resolve({ code, signal }));
       });
-      process.stdin.write(
-        `begin;\nselect id from public.employees where id = '${employeeId}'::uuid for update;\n\\echo LOCK_READY\n`,
-      );
+      process.stdin.write(`begin;\n${statement};\n\\echo LOCK_READY\n`);
       try {
         await Promise.race([
           marker,
@@ -105,7 +103,7 @@ test(
             throw new Error("Timed out acquiring the test employee lock.");
           }),
         ]);
-        assert.ok(output.includes(employeeId), "The test employee must exist before locking");
+        if (expectedOutput) assert.ok(output.includes(expectedOutput), "The test row must exist before locking");
       } catch (error) {
         if (!process.stdin.destroyed) process.stdin.end("rollback;\n\\q\n");
         const result = await Promise.race([closed, delay(5_000, undefined, { ref: false }).then(() => null)]);
@@ -131,6 +129,10 @@ test(
           assert.equal(result.code, 0, `The test lock session failed: ${errors}`);
         },
       };
+    }
+
+    function holdEmployeeLock() {
+      return holdLock(`select id from public.employees where id = '${employeeId}'::uuid for update`, employeeId);
     }
 
     async function runOrderedRace(day, reviewFirst) {
@@ -184,6 +186,236 @@ test(
       }
     }
 
+    async function savePolicy(manual, unavailable, overlap = false) {
+      const result = await owner.rpc("save_venue_conflict_policy", {
+        p_business_id: businessId, p_venue_id: venueId,
+        p_block_manual_unavailability: manual, p_block_publish_unavailability: unavailable,
+        p_block_publish_overlap: overlap, p_block_publish_long_shift: false,
+      });
+      assert.ifError(result.error);
+    }
+
+    async function requestLeave(day) {
+      const result = await worker.rpc("request_availability_exception", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: employeeId,
+        p_starts_on: day, p_ends_on: day, p_exception_type: "leave",
+      });
+      assert.ifError(result.error);
+      return result.data;
+    }
+
+    function reviewLeave(exceptionId) {
+      return Promise.resolve(owner.rpc("review_leave_request", {
+        p_business_id: businessId, p_venue_id: venueId,
+        p_exception_id: exceptionId, p_status: "approved",
+      }));
+    }
+
+    function createShift(day, title) {
+      return Promise.resolve(owner.rpc("save_shift", {
+        p_business_id: businessId, p_venue_id: venueId, p_department_id: departmentId,
+        p_employee_id: employeeId, p_role_title: title,
+        p_start_local: `${day} 09:00`, p_end_local: `${day} 10:00`, p_break_minutes: 0,
+      }));
+    }
+
+    function publish(day) {
+      return Promise.resolve(owner.rpc("publish_roster", {
+        p_business_id: businessId, p_venue_id: venueId,
+        p_department_id: departmentId, p_week_start: day,
+      }));
+    }
+
+    async function runPublicationLeaveRace(day, reviewFirst) {
+      await savePolicy(false, true, true);
+      const shift = await createShift(day, `Publish leave ${day}`);
+      assert.ifError(shift.error);
+      const exceptionId = await requestLeave(day);
+      const lock = await holdEmployeeLock();
+      let review;
+      let publication;
+      try {
+        if (reviewFirst) {
+          review = reviewLeave(exceptionId);
+          await waitForLock("review_leave_request");
+          publication = publish(day);
+          await waitForLock("publish_roster");
+        } else {
+          publication = publish(day);
+          await waitForLock("publish_roster");
+          review = reviewLeave(exceptionId);
+          await waitForLock("review_leave_request");
+        }
+        await lock.release(true);
+        const [reviewResult, publicationResult] = await Promise.all([review, publication]);
+        assert.ifError(reviewResult.error);
+        if (reviewFirst) {
+          assert.equal(publicationResult.error?.message, "Roster has unavailable employees");
+        } else {
+          assert.ifError(publicationResult.error);
+          assert.equal(publicationResult.data, 1);
+        }
+        const stored = await admin.from("shifts").select("is_published").eq("id", shift.data).single();
+        assert.ifError(stored.error);
+        assert.equal(stored.data.is_published, !reviewFirst);
+      } finally {
+        try {
+          await lock.release(false);
+        } finally {
+          await Promise.allSettled([review, publication].filter(Boolean));
+        }
+      }
+    }
+
+    async function runManualLeaveRace(day, reviewFirst) {
+      await savePolicy(true, false);
+      const exceptionId = await requestLeave(day);
+      const lock = await holdEmployeeLock();
+      let review;
+      let assignment;
+      try {
+        if (reviewFirst) {
+          review = reviewLeave(exceptionId);
+          await waitForLock("review_leave_request");
+          assignment = createShift(day, `Manual leave ${day}`);
+          await waitForLock("save_shift");
+        } else {
+          assignment = createShift(day, `Manual leave ${day}`);
+          await waitForLock("save_shift");
+          review = reviewLeave(exceptionId);
+          await waitForLock("review_leave_request");
+        }
+        await lock.release(true);
+        const [reviewResult, assignmentResult] = await Promise.all([review, assignment]);
+        assert.ifError(reviewResult.error);
+        if (reviewFirst) {
+          assert.equal(assignmentResult.error?.message, "Employee is unavailable for this shift");
+        } else {
+          assert.ifError(assignmentResult.error);
+          assert.ok(assignmentResult.data);
+        }
+        const stored = await admin.from("shifts").select("id")
+          .eq("business_id", businessId).eq("role_title", `Manual leave ${day}`);
+        assert.ifError(stored.error);
+        assert.equal(stored.data.length, reviewFirst ? 0 : 1);
+      } finally {
+        try {
+          await lock.release(false);
+        } finally {
+          await Promise.allSettled([review, assignment].filter(Boolean));
+        }
+      }
+    }
+
+    async function runPolicyPublicationRace(day, policyFirst) {
+      await savePolicy(false, false);
+      const blocked = await worker.rpc("request_availability_exception", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: employeeId,
+        p_starts_on: day, p_ends_on: day, p_exception_type: "unavailable",
+      });
+      assert.ifError(blocked.error);
+      const shift = await createShift(day, `Policy race ${day}`);
+      assert.ifError(shift.error);
+      const lock = await holdLock(`select id from public.venues where id = '${venueId}'::uuid for update`, venueId);
+      let policy;
+      let publication;
+      try {
+        if (policyFirst) {
+          policy = savePolicy(false, true);
+          await waitForLock("save_venue_conflict_policy");
+          publication = publish(day);
+          await waitForLock("publish_roster");
+        } else {
+          publication = publish(day);
+          await waitForLock("publish_roster");
+          policy = savePolicy(false, true);
+          await waitForLock("save_venue_conflict_policy");
+        }
+        await lock.release(true);
+        const [, publicationResult] = await Promise.all([policy, publication]);
+        if (policyFirst) {
+          assert.equal(publicationResult.error?.message, "Roster has unavailable employees");
+        } else {
+          assert.ifError(publicationResult.error);
+          assert.equal(publicationResult.data, 1);
+        }
+        const stored = await admin.from("shifts").select("is_published").eq("id", shift.data).single();
+        assert.ifError(stored.error);
+        assert.equal(stored.data.is_published, !policyFirst);
+      } finally {
+        try {
+          await lock.release(false);
+        } finally {
+          await Promise.allSettled([policy, publication].filter(Boolean));
+        }
+      }
+    }
+
+    async function runPolicyManualRace(day, policyFirst) {
+      await savePolicy(false, false);
+      const blocked = await worker.rpc("request_availability_exception", {
+        p_business_id: businessId, p_venue_id: venueId, p_employee_id: employeeId,
+        p_starts_on: day, p_ends_on: day, p_exception_type: "unavailable",
+      });
+      assert.ifError(blocked.error);
+      const lock = await holdLock(`select id from public.venues where id = '${venueId}'::uuid for update`, venueId);
+      let policy;
+      let assignment;
+      try {
+        if (policyFirst) {
+          policy = savePolicy(true, false);
+          await waitForLock("save_venue_conflict_policy");
+          assignment = createShift(day, `Manual policy race ${day}`);
+          await waitForLock("save_shift");
+        } else {
+          assignment = createShift(day, `Manual policy race ${day}`);
+          await waitForLock("save_shift");
+          policy = savePolicy(true, false);
+          await waitForLock("save_venue_conflict_policy");
+        }
+        await lock.release(true);
+        const [, assignmentResult] = await Promise.all([policy, assignment]);
+        if (policyFirst) {
+          assert.equal(assignmentResult.error?.message, "Employee is unavailable for this shift");
+        } else {
+          assert.ifError(assignmentResult.error);
+          assert.ok(assignmentResult.data);
+        }
+        const stored = await admin.from("shifts").select("id")
+          .eq("business_id", businessId).eq("role_title", `Manual policy race ${day}`);
+        assert.ifError(stored.error);
+        assert.equal(stored.data.length, policyFirst ? 0 : 1);
+      } finally {
+        try {
+          await lock.release(false);
+        } finally {
+          await Promise.allSettled([policy, assignment].filter(Boolean));
+        }
+      }
+    }
+
+    async function runBusyPublication(day, lockEmployee) {
+      await savePolicy(false, true, true);
+      const shift = await createShift(day, `Busy publication ${day}`);
+      assert.ifError(shift.error);
+      const lock = lockEmployee
+        ? await holdLock(`select pg_advisory_xact_lock(hashtextextended('${employeeId}', 0))`)
+        : await holdLock(`select id from public.shifts where id = '${shift.data}'::uuid for update`, shift.data);
+      try {
+        const blocked = await publish(day);
+        assert.equal(blocked.error?.message, "Roster changed while publishing; please try again");
+        const before = await admin.from("shifts").select("is_published").eq("id", shift.data).single();
+        assert.ifError(before.error);
+        assert.equal(before.data.is_published, false);
+        await lock.release(true);
+        const retried = await publish(day);
+        assert.ifError(retried.error);
+        assert.equal(retried.data, 1);
+      } finally {
+        await lock.release(false);
+      }
+    }
+
     try {
       for (const name of ["owner", "worker"]) {
         const result = await admin.auth.admin.createUser({
@@ -215,6 +447,16 @@ test(
       })).error);
       await runOrderedRace("2032-03-15", true);
       await runOrderedRace("2032-03-22", false);
+      await runPublicationLeaveRace("2032-03-29", true);
+      await runPublicationLeaveRace("2032-04-05", false);
+      await runManualLeaveRace("2032-04-12", true);
+      await runManualLeaveRace("2032-04-19", false);
+      await runPolicyPublicationRace("2032-04-26", true);
+      await runPolicyPublicationRace("2032-05-03", false);
+      await runBusyPublication("2032-05-10", false);
+      await runBusyPublication("2032-05-17", true);
+      await runPolicyManualRace("2032-05-24", true);
+      await runPolicyManualRace("2032-05-31", false);
     } finally {
       assert.ifError((await admin.from("shifts").delete().eq("business_id", businessId)).error);
       assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);

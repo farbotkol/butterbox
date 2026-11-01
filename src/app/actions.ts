@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { authCallbackUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
+import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
@@ -238,6 +239,45 @@ export async function saveVenueGeofenceAction(formData: FormData) {
   }
   revalidatePath("/settings/organisation");
   redirect(`${destination}&saved=geofence`);
+}
+
+export async function saveVenueConflictPolicyAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid venue submitted for conflict policy.");
+    redirect("/settings/organisation?error=conflict-policy");
+  }
+  const workspace = await getWorkspace(venueIds[0]);
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the conflict policy workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  const destination = `/settings/organisation?venue=${encodeURIComponent(workspace.venue.id)}`;
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+  const policy = parseConflictPolicy(formData);
+  if (!policy) {
+    console.error("Invalid venue conflict policy submitted.");
+    redirect(`${destination}&error=conflict-policy`);
+  }
+  const { error } = await workspace.supabase.rpc("save_venue_conflict_policy", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_block_manual_unavailability: policy.manual_unavailability,
+    p_block_publish_unavailability: policy.publish_unavailability,
+    p_block_publish_overlap: policy.publish_overlap,
+    p_block_publish_long_shift: policy.publish_long_shift,
+  });
+  if (error) {
+    console.error("Venue conflict policy save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Invalid conflict policy" ? "conflict-policy" : "save";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/settings/organisation");
+  revalidatePath("/roster");
+  redirect(`${destination}&saved=conflict-policy`);
 }
 
 export async function saveDepartmentAction(formData: FormData) {
@@ -703,6 +743,8 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
       state.errors.employee = "Choose an active team member linked to this department, or an open shift.";
     } else if (message.includes("employee is not qualified")) {
       state.errors.employee = "Choose a worker qualified for this role, or leave the shift open.";
+    } else if (message.includes("employee is unavailable")) {
+      state.errors.employee = "That worker is unavailable. Choose another team member or leave the shift open.";
     } else if (message.includes("start time does not exist")) {
       state.errors.start = "This local time does not exist because the clocks change. Choose another start time.";
     } else if (message.includes("end time does not exist")) {
@@ -772,13 +814,25 @@ export async function publishRosterAction(formData: FormData) {
   const week = text(formData, "week", 10);
   if (!departmentId || !/^\d{4}-\d{2}-\d{2}$/.test(week)) redirect("/roster");
 
-  const { error } = await workspace.supabase.rpc("publish_roster", {
+  const { data, error } = await workspace.supabase.rpc("publish_roster", {
     p_business_id: workspace.business.id,
     p_venue_id: workspace.venue.id,
     p_department_id: departmentId,
     p_week_start: week,
   });
-  redirect(
-    `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}&department=${encodeURIComponent(departmentId)}${collapsedRosterQuery(formData)}&${error ? "error=publish" : "published=1"}`,
-  );
+  const destination = `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}&department=${encodeURIComponent(departmentId)}${collapsedRosterQuery(formData)}`;
+  if (error) {
+    console.error("Roster publication failed.", { code: error.code, message: error.message });
+    const code = error.message === "Roster has unavailable employees" ? "publish-unavailable"
+      : error.message === "Roster has overlapping shifts" ? "publish-overlap"
+        : error.message === "Roster has shifts longer than 24 hours" ? "publish-duration"
+          : error.message === "Roster changed while publishing; please try again" ? "publish-busy"
+            : "publish";
+    redirect(`${destination}&error=${code}`);
+  }
+  if (typeof data !== "number" || !Number.isInteger(data) || data < 0) {
+    console.error("Roster publication returned an invalid result.");
+    redirect(`${destination}&error=publish-unknown`);
+  }
+  redirect(`${destination}&published=${data === 0 ? "none" : "1"}`);
 }

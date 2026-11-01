@@ -2,26 +2,26 @@
 
 ## Execution summary
 
-- Total stories: **87**. Verified Done: **16**. In Progress: **7**.
+- Total stories: **87**. Verified Done: **17**. In Progress: **6**.
   Blocked: **1**. Not started (Backlog): **63**.
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
-  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002 and BB-ROSTER-006.
-- The latest serialized Node unit run passed 45 tests; the HTTP integration
-  was explicitly skipped without disposable-project settings. The isolated
-  Supabase pgTAP regression passed **655/655 assertions** across 17 files,
-  including 51 availability-exception, 57 employee-preference, 78 draft-editing,
-  37 manual assignment and 28 linked-roster authorization assertions. The authenticated
-  two-tenant HTTP regression and concurrent edit/edit, edit/create,
-  edit/automatic-assignment and qualification-removal checks passed with the
-  new manual role restriction enabled.
-- Production compile, explicit TypeScript, generate and `npm run lint` passed.
-  Unit tests: 45 passed, 2 skipped (they need the disposable project).
-  After a clean isolated `db reset` the pgTAP suite passed 655/655 and the
-  two-tenant HTTP regression passed. The **complete production Chromium
-  regression passed 23/23 scenarios** (one process per scenario, low-memory mode).
-- Redacted Gitleaks scan: current branch and pending tracked diff have no
-  findings. The older local checkpoint-ref blocker described below remains
+  BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003 and BB-ROSTER-006.
+- The latest serialized Node run passed **47 tests**, with two integration
+  tests skipped in that invocation and subsequently passed against the isolated
+  project. After a clean isolated database reset, the full pgTAP regression
+  passed **708/708 assertions across 18 files**, including 53 conflict-policy,
+  51 availability-exception, 57 employee-preference, 78 draft-editing,
+  37 manual-assignment and 28 linked-roster authorization assertions. The
+  authenticated two-tenant integration and ordered leave, assignment,
+  publication and policy-change races passed.
+- Production compile, explicit TypeScript, generate and full ESLint passed.
+  The **complete production Chromium regression passed 25/25 scenarios**
+  (one process per scenario, low-memory mode). Its temporary app servers stopped,
+  and the new disposable browser fixtures were removed.
+- An offline, network-disabled, redacted Gitleaks scan of the pending feature
+  changes and new files found no leaks.
+- The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
   were observed under host memory pressure. Both full Chromium and headless
@@ -66,7 +66,7 @@
   acceptance scenario pass, including concurrent preference updates. The
   complete 21-scenario browser regression also passed, and its temporary app
   servers have stopped.
-- Latest fix-up validation: the complete current production-browser regression
+- Previous fix-up validation: the complete then-current production-browser regression
   passed **23/23 scenarios**, including automatic availability selection,
   rejected-form input retention, immediate open-shift editing, live permission
   transitions, leave decisions, conflict warnings and mobile schedules.
@@ -83,33 +83,23 @@
 
 ## Current story
 
-- **BB-ROSTER-007 — Conflict detection** remains In Progress. Advisory
-  per-shift availability and excessive-duration labels are wired into the
-  roster, using a transition-aware Temporal helper and paginated availability
-  reads. The dependency is installed and lockfile updated; 19 focused
-  availability, conflict and pagination unit tests, targeted lint and the
-  project TypeScript check pass. Focused production-browser checks pass,
-  including a 1,011-interval fixture that crosses the API's 1,000-row limit,
-  followed by all 21 production-browser regression scenarios. A new scoped
-  same-worker overlap-reporting migration is applied only to the isolated
-  database and passes 24 focused assertions plus the full 557-assertion SQL
-  regression. Four focused production-browser scenarios now pass with the
-  overlap integration, including owner and scoped-manager warnings and
-  hidden-department privacy. Cross-venue identity, complete overlap reporting,
-  configurable blocking and publication enforcement remain outstanding.
+- **BB-ROSTER-007 — Conflict detection** remains In Progress. Owner-configured
+  venue rules now control manual unavailable assignments and publication of
+  unavailable, overlapping or over-24-hour shifts. Changes are audited, default
+  to warnings, and are validated server-side; generic scoped overlap messages
+  do not reveal another department's shifts. The focused 53-assertion SQL
+  test, ordered concurrency cases and production-browser scenarios pass.
+  Explicit shared-worker identity and cross-venue overlap detection remain.
+- **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
+  blockers prevent publication atomically, and concurrent conflicting edits
+  return an explicit retry. Published version history and employee
+  notifications remain unimplemented.
 - **BB-ROSTER-010 — Simple employee roster** now has a personal mobile schedule;
   it remains In Progress because required shift acknowledgements depend on the
   unfinished publication/versioning workflow.
-- **BB-ROSTER-003 — Unassigned open shift** now has opt-in manual role
-  qualification controls without changing the existing automatic-only policy.
-  Automatic selection now excludes submitted unavailable intervals, active
-  date blocks and approved leave, while unsubmitted availability stays
-  unknown and pending leave is allowed. The new isolated migration and
-  38 focused pgTAP assertions pass, including DST, skipped dates, historical
-  second-level offsets and microsecond boundaries. Production-browser
-  acceptance passes, as do deterministic concurrent leave-approval and
-  automatic-assignment tests in both lock orders. Manual availability and
-  leave remain advisory.
+- **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
+  covered below. Role and availability restrictions are opt-in to preserve
+  existing venue behaviour; active membership and overlap checks always apply.
 
 ### BB-ORG-002 — Configure venue and geofence (Done)
 
@@ -168,19 +158,21 @@ disposable database. Preferences are not yet connected to notifications, which
 remain an unfinished story. All 21 complete production-browser regression
 scenarios passed after the focused acceptance tests.
 
-### BB-ROSTER-003 — Unassigned open shift (In Progress)
+### BB-ROSTER-003 — Unassigned open shift (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ROSTER-003.1 Employee is optional | Draft creation and editing support an unassigned worker. | Existing production-browser draft-editing scenario creates and edits open shifts; focused manual-policy SQL also creates open shifts. Pass. | Pass |
 | ROSTER-003.2 Open shifts are clearly styled | The roster has a separate amber open-shifts section and needs-cover labels. | Existing production-browser roster scenario checks the open-shifts section and label. Pass. | Pass |
 | ROSTER-003.3 Count updates | The roster counts assigned and open shifts and shows an open-to-fill total. | Existing production-browser roster/draft-editing scenarios and manual-policy SQL verify the count changes. Pass. | Pass |
-| ROSTER-003.4 Eligibility rules apply when assigning | Active, linked staff and non-overlap are enforced; managers may separately enable manual role-qualification restrictions. Automatic selection now checks submitted availability, date blocks and approved leave. | 37 manual-policy assertions, 38 automatic-availability assertions, focused production-browser acceptance and both ordered leave-approval/assignment races pass. Manual availability and leave remain advisory. | In Progress |
+| ROSTER-003.4 Eligibility rules apply when assigning | Active, linked staff and non-overlap are always enforced; configured manual role and venue availability restrictions also apply to filling open shifts. Automatic selection checks submitted availability, date blocks and approved leave. Unknown availability and pending leave are not treated as unavailable. | 37 manual-role, 38 automatic-availability and 53 conflict-policy assertions pass, including a rejected open-shift assignment and unchanged open count. Production Chromium verifies retained input and rejected unavailable assignments; authenticated ordered leave/assignment and policy/assignment races pass in both orders. | Pass |
 
 Files: `supabase/migrations/20261101150000_manual_assignment_eligibility.sql`,
 `supabase/tests/database/manual_assignment_eligibility.test.sql`,
 `supabase/migrations/20261101190000_auto_assignment_availability.sql`,
 `supabase/tests/database/auto_assignment_availability.test.sql`,
+`supabase/migrations/20261101200000_roster_conflict_policies.sql`,
+`supabase/tests/database/roster_conflict_policies.test.sql`,
 `tests/auto-assignment-concurrency.integration.test.mjs`,
 `src/app/settings/organisation/page.tsx`, `src/app/actions.ts`,
 `src/components/shift-editor.tsx`, `tests/tenant-isolation.integration.test.mjs`,
@@ -194,16 +186,27 @@ unrelated free-text shift titles do not inherit its restriction.
 | --- | --- | --- | --- |
 | ROSTER-007.1 Detect cross-department/cross-venue overlap, unavailable dates and invalid times | Existing database checks reject overlapping assignments to one venue-bound employee and invalid new shift times. Roster labels identify submitted unavailable periods, active date blocks, approved leave, legacy shifts exceeding 24 hours and same-worker overlap across departments. | Database and concurrency tests cover assignment rejection; transition-aware unit tests cover DST and boundaries. A 24-assertion database test and focused production-browser scenario verify scoped overlap detection and warning labels. Cross-venue identity/overlap is not implemented. | In Progress |
 | ROSTER-007.2 Issues identify affected shifts | Availability and duration warnings are attached to each visible affected shift. The overlap lookup returns only shift IDs the viewer can manage and does not disclose a hidden conflicting shift's details. | Availability labels pass unit and production-browser checks, including pending versus approved leave, an overnight next-week block, unrelated-manager/tenant isolation and 1,011 availability intervals. The overlap SQL test and focused owner/scoped-manager browser scenario pass. | In Progress |
-| ROSTER-007.3 Blocking rules are configurable | No configurable conflict-blocking policy exists yet. | Not tested; not implemented. | In Progress |
+| ROSTER-007.3 Blocking rules are configurable | Owners can independently choose venue rules for manual unavailability and publication unavailability, overlap and excessive duration. Real changes are protected and audited; defaults are advisory. | 53 focused pgTAP assertions cover defaults, independent settings, audit, cross-tenant/role denial, affected shifts and atomic publication; production Chromium verifies owner configuration, mobile layout, denied managers, errors and resolving blockers; ordered policy races pass. | Pass |
 
 Current files: `src/lib/shift-conflicts.ts`, `src/lib/paginated-rows.ts`,
 `src/app/roster/page.tsx`, `tests/shift-conflicts.test.mjs`,
 `tests/paginated-rows.test.mjs`, `tests/e2e/auth.spec.mjs`,
 `supabase/migrations/20261101170000_roster_overlap_conflicts.sql`,
-`supabase/tests/database/roster_overlap_conflicts.test.sql`, the dependency
-manifest/lockfile and README. Availability warnings do not block manual
-assignment or publication; new same-profile overlaps remain blocked by
-existing rules.
+`supabase/tests/database/roster_overlap_conflicts.test.sql`,
+`supabase/migrations/20261101200000_roster_conflict_policies.sql`,
+`supabase/tests/database/roster_conflict_policies.test.sql`,
+`src/lib/conflict-policy.ts`, `tests/conflict-policy.test.mjs`, the dependency
+manifest/lockfile and README. Enforcement is opt-in; new same-profile overlaps
+remain blocked by existing rules.
+
+### BB-ROSTER-008 — Publish and notify (In Progress)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-008.1 Draft changes stay private until publication | RLS restricts drafts to authorized managers and the personal schedule reads only published assignments. | Existing two-tenant/scoped SQL and production-browser schedule tests passed in the 708-assertion and 25-scenario regressions. | Pass |
+| ROSTER-008.2 Published version is recorded | Publication currently updates shift state and timestamp only. | No version history has been implemented or verified. | In Progress |
+| ROSTER-008.3 Impacted employees are notified once | Notification delivery is not implemented. | Not tested; not implemented. | In Progress |
+| ROSTER-008.4 Unresolved blockers prevent publishing | Configured venue availability, overlap and duration blockers atomically reject publication; concurrent roster changes return a retry. | 53 focused SQL assertions, authenticated ordered races and production-browser resolution of each local blocker pass. Cross-venue conflicts remain unsupported. | In Progress |
 
 ### BB-ROSTER-001 — Weekly people-by-day roster (Done)
 
@@ -484,23 +487,21 @@ not yet run remotely.
 - Build separate images per environment: Next.js embeds `NEXT_PUBLIC_` values
   at build time. Never use a secret/service-role key in those values.
 - Stories are marked Done only after every acceptance criterion is verified.
-- Concurrent branch activity captured the then-current work and integrated
-  remote commit `563e026`. At the latest check, the feature branch matched its
-  upstream at `1867ce2`, with current backlog, progress, application, migration
-  and test work uncommitted. This session did not rewrite history or push.
+- The repository instructions checkpoint `08fac01` was pushed to the requested
+  feature branch. This conflict-policy checkpoint builds on it; inspect Git
+  status and the remote SHA during recovery rather than relying on older notes.
+- Cross-venue identity/overlap, publication versioning, employee notification
+  and acknowledgement remain incomplete. The historical credential findings
+  still require owner assessment and any approved rotation/history handling.
 
 ## Next story
 
-- The complete current production-browser regression is verified (23/23);
-  lint, TypeScript, 45 unit tests, 655 SQL assertions and both separately
-  configured integration/concurrency tests pass. Final security checks and
-  delivery of the pending implementation diff remain.
-  Continue BB-ROSTER-003/007/008,
-  including manual eligibility, configurable enforcement and cross-venue
-  shared-worker identity, and add the
-  publication version and acknowledgement mechanism needed to complete
-  BB-ROSTER-010.
-- Migrations through `20261101190000` are applied only to the isolated stack.
+- Continue **BB-ROSTER-008** with an immutable published-version record and
+  exactly-once employee notification workflow, preserving draft privacy,
+  tenant/department authorization and atomic blocker checks. Then implement
+  acknowledgements for BB-ROSTER-010 and explicit shared-worker identity and
+  cross-venue overlap detection for BB-ORG-005/BB-ROSTER-007.
+- Migrations through `20261101200000` are applied only to the isolated stack.
   The pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.
