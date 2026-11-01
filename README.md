@@ -84,11 +84,24 @@ session is verified and its refresh token exchanged before matching it to the
 invitation. Before replacing an existing session, the recipient is asked for
 confirmation and shown the invited account.
 
-An account already belonging to another business cannot accept an invitation
-until safe business switching is implemented. Accounts with multiple existing
-memberships currently see a workspace-unavailable message rather than silently
-entering an arbitrary business. Contact an administrator; do not remove a
-membership merely to bypass this safeguard.
+An account already belonging to another business cannot yet accept an
+invitation (BB-FOUND-005 follow-up); do not remove a membership merely to
+bypass this safeguard.
+
+### Switching businesses
+
+An account with more than one business membership chooses a business at
+`/choose-business`, which lists only the account's current memberships. The
+sidebar shows **Switch business** and keeps navigation links pinned to the
+business shown in that tab (`?business=`). Every page, form submission and
+payroll download re-reads the caller's current memberships and resolves the
+business from explicit request context: the `business` URL parameter, a form's
+`business_id`, or a requested venue. Conflicting, invalid, revoked or outside
+businesses fail closed. A per-browser, HTTP-only preference cookie only
+chooses the default business for pages opened without context; mutations never
+use it, so a form submitted from another tab still acts on the business it was
+rendered for. Authenticated pages are dynamic and `no-store`; sign-out clears
+the preference.
 
 Managers can record each worker's eligible job roles in their linked
 departments and choose a qualified primary role. An existing free-text job

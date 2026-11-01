@@ -101,14 +101,14 @@ function totalDuration(values: number[]): string {
 }
 
 export default async function TimesheetsPage({ searchParams }: {
-  searchParams: Promise<{
+  searchParams: Promise<{ business?: string;
     venue?: string; week?: string; employee?: string; error?: string; receipt?: string; decided?: string;
     period?: string; export_batch?: string; export_reconciliation?: string;
   }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(params.venue);
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -367,7 +367,7 @@ export default async function TimesheetsPage({ searchParams }: {
     <input type="hidden" name="decision" value={decision} />
   </>;
 
-  return <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
+  return <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <div>
       <p className="text-sm font-medium text-muted">Attendance</p>

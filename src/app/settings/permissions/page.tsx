@@ -7,16 +7,16 @@ import { getWorkspace, type BusinessMember } from "@/lib/workspace";
 export default async function PermissionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; saved?: string }>;
+  searchParams: Promise<{ error?: string; saved?: string; business?: string }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace();
+  const params = await searchParams;
+  const workspace = await getWorkspace(undefined, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
   if (workspace.membership.role !== "owner") redirect("/?error=permission");
 
-  const params = await searchParams;
   const [members, venues, departments] = await Promise.all([
     workspace.supabase.rpc("list_business_members", { p_business_id: workspace.business.id }),
     workspace.supabase.from("venues").select("id, name").eq("business_id", workspace.business.id).order("name"),
@@ -27,7 +27,7 @@ export default async function PermissionsPage({
   const memberRows: BusinessMember[] = members.data ?? [];
 
   return (
-    <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-3xl font-semibold">Business permissions</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
@@ -53,6 +53,7 @@ export default async function PermissionsPage({
               className="rounded-xl border border-line bg-white p-5">
               <h2 className="break-all font-semibold">{member.email}</h2>
               <form action={assignMemberRoleAction} className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+                <input type="hidden" name="business_id" value={workspace.business.id} />
                 <input type="hidden" name="user_id" value={member.user_id} />
                 <label className="text-sm">Role
                   <select name="role" defaultValue={member.role} className="mt-2 block w-full rounded-lg border border-line p-3">

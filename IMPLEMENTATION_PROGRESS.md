@@ -3,9 +3,16 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **35**. In Progress: **5**.
+  BB-PAYRULES stories). Verified Done: **36**. In Progress: **4**.
   Blocked: **3**. Not started (Backlog): **66**.
-- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
+- BB-FOUND-006 (business switching) is Done: explicit per-request business
+  selection, a membership-only chooser and per-tab pinning. Regressions:
+  **136** Node tests (19 integration tests skipped in that invocation),
+  **19/19** authenticated integrations including the new per-business
+  authorisation/revocation test, **50/50** serialized production-browser
+  scenarios, ESLint, TypeScript and the split production build. No SQL changed,
+  so pgTAP was not rerun for this checkpoint.
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
@@ -309,6 +316,9 @@
 
 ## Current story
 
+- **BB-FOUND-006 — Switch between business memberships** is Done (evidence
+  below). Next: finish **BB-FOUND-005** by allowing existing members of another
+  business to accept a scoped invitation now that selection is per-request.
 - **BB-ORG-005 — Multiple venues** is Done. All three criteria are verified:
   scoped venue selection, shared-worker overlap detection and actual venue
   attribution through timesheet approval, finalisation and CSV export.
@@ -384,10 +394,6 @@
   business switching is safe. A local Supabase proof confirmed that an
   implicit-flow email redirect reaches a separate recipient browser with
   session tokens in the URL fragment; no tokens were printed.
-- **BB-FOUND-006 — Switch between business memberships** is In Progress. The
-  application now fails closed instead of silently choosing the first of
-  multiple memberships; a stale-form and cross-page browser scenario passed.
-  Actual selection, independent request context and switching remain unimplemented.
 - **BB-SAAS-003 — Tenant onboarding and support** is Blocked. The owner
   checklist, contextual help and default-off protected sample policy are
   implemented and tested in the disposable environment. Production isolation
@@ -442,6 +448,26 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-FOUND-006 — Switch between business memberships (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| FOUND-006.1 Switch shows only active memberships | `/choose-business` and `switchBusinessAction` list and accept only businesses with a current `business_memberships` row for the caller (RLS-scoped); the sidebar link appears only with more than one membership. | Browser: chooser listed exactly the two member businesses, never the outside business; after revocation it listed one and hid the revoked business. Integration: RLS returns only member businesses and memberships. | Pass |
+| FOUND-006.2 API checks each request independently of UI selection | `getWorkspace` re-reads memberships per request and resolves the business only from explicit context (URL `business`, form `business_id`, requested venue); conflicting, invalid, revoked and outside values fail closed. Mutations never read the preference cookie. RPCs authorise the role held in the targeted business. | Unit: 5 selection tests. Integration: owner rights in one business were denied in an employee-only and an outside business, and with mismatched venues; revocation took effect for the same token. Browser: a stale form submitted after revocation created no employee; conflicting, invalid and outside business URLs showed "Workspace unavailable". | Pass |
+| FOUND-006.3 No data leaks across tabs or cached pages | Navigation and post-action redirects stay pinned to the tab's business; forms carry their venue/business; pages are dynamic and `no-store`; sign-out deletes the preference cookie. | Browser: tab 1 stayed on business A after tab 2 switched to B, and its form created the employee only in A; `/people` returned `Cache-Control` containing `no-store`; the preference cookie was absent after sign-out. | Pass |
+
+Files: `src/lib/business-selection.ts`, `src/lib/workspace.ts`,
+`src/app/choose-business/page.tsx`, `src/app/actions.ts`,
+`src/components/app-shell.tsx`, `src/components/main-navigation.tsx`, all
+workspace pages (business parameter), `tests/business-selection.test.mjs`,
+`tests/business-switching.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs` (the former
+fail-closed scenario was replaced by a stricter switching scenario covering
+the same stale-form and cross-page protections) and `README.md`.
+Decision: the HTTP-only `bb_business` preference cookie is only a default for
+pages opened without context; it is never authorisation and never used by
+mutations.
 
 ### BB-FOUND-005 — Invite and onboard users (In Progress)
 
@@ -1358,13 +1384,10 @@ not yet run remotely.
 
 ## Next story
 
-- Next ready implementation: **BB-FOUND-006 — Switch between business
-  memberships**. Read its complete criteria and current `getWorkspace`,
-  membership guard, navigation and stale-form tests. Implement explicit
-  per-request business selection; never silently pick the first membership
-  or use shared browser state as an action's authorisation context. Verify
-  independent tabs, stale forms, revoked membership and cross-business
-  isolation before enabling existing-other-business invitations.
+- Next ready implementation: finish **BB-FOUND-005** — allow verified
+  existing members of another business to accept a scoped invitation (new
+  migration replacing `accept_staff_invitation`'s cross-business rejection),
+  then verify the new membership is scoped and the existing one unchanged.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.

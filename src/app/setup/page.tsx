@@ -11,11 +11,10 @@ type SetupPageProps = {
 
 export default async function SetupPage({ searchParams }: SetupPageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, { page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "ready") redirect("/");
-  if (workspace.status === "error" && "reason" in workspace &&
-    workspace.reason === "multiple_memberships") redirect("/");
+  if (workspace.status === "error" && "reason" in workspace) redirect("/");
   const params = await searchParams;
   const [draftResult, demoResult] =
     workspace.status === "needs_setup"

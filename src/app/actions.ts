@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient as createAuthClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
@@ -30,7 +31,8 @@ import { parseVenueGeofence } from "@/lib/venue-geofence";
 import {
   parseBulkLockReceipt, parseBulkLockSelections, parseTimesheetEmployeeFilter, timesheetWeek,
 } from "@/lib/weekly-timesheet";
-import { getWorkspace } from "@/lib/workspace";
+import { BUSINESS_PREFERENCE_COOKIE, parseBusinessId, withBusiness } from "@/lib/business-selection";
+import { getWorkspace, listBusinessMemberships } from "@/lib/workspace";
 
 function text(formData: FormData, key: string, maxLength: number) {
   const value = formData.get(key);
@@ -54,6 +56,17 @@ function uuidList(formData: FormData, key: string, maxCount: number) {
     result.push(value);
   }
   return result;
+}
+
+function businessContext(formData: FormData) {
+  const values = formData.getAll("business_id");
+  return { businessId: values.length > 1 ? "invalid" : values[0] };
+}
+
+function contextVenue(formData: FormData) {
+  const values = formData.getAll("venue_id");
+  if (values.length === 0 || (values.length === 1 && values[0] === "")) return undefined;
+  return values.length === 1 && typeof values[0] === "string" ? values[0] : "invalid";
 }
 
 function collapsedRosterQuery(formData: FormData) {
@@ -146,8 +159,31 @@ export async function signOutAction() {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
+  (await cookies()).delete(BUSINESS_PREFERENCE_COOKIE);
   if (error) redirect("/login?error=signout");
   redirect("/login?message=signed-out");
+}
+
+export async function switchBusinessAction(formData: FormData) {
+  const values = formData.getAll("business_id");
+  const businessId = values.length === 1 ? parseBusinessId(values[0]) : null;
+  if (!businessId) {
+    console.error("Invalid business selection submitted.");
+    redirect("/choose-business?error=business");
+  }
+  const result = await listBusinessMemberships();
+  if (result.status === "anonymous") redirect("/login?message=session-ended");
+  if (result.status !== "ready") redirect("/choose-business?error=load");
+  // The preference is only a page default; every later request re-validates membership.
+  if (!result.businesses.some((business) => business.id === businessId)) {
+    console.error("Business selection is not an active membership.");
+    redirect("/choose-business?error=business");
+  }
+  (await cookies()).set(BUSINESS_PREFERENCE_COOKIE, businessId, {
+    httpOnly: true, sameSite: "lax", secure: (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://"),
+    path: "/", maxAge: 60 * 60 * 24 * 30,
+  });
+  redirect(withBusiness("/", businessId));
 }
 
 async function sendInvitationEmail(email: string, invitationId: string): Promise<boolean> {
@@ -180,7 +216,7 @@ export async function createStaffInvitationAction(formData: FormData) {
     redirect("/people?error=invite");
   }
   const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const rawEmail = formData.get("email");
@@ -210,7 +246,7 @@ async function findManageableInvitation(formData: FormData) {
     redirect("/people?error=invite");
   }
   const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const { data, error } = await workspace.supabase.rpc("list_pending_staff_invitations", {
@@ -269,10 +305,10 @@ export async function acceptStaffInvitationAction(formData: FormData) {
 }
 
 export async function assignMemberRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
-  if (workspace.membership.role !== "owner") redirect("/?error=permission");
+  if (workspace.membership.role !== "owner") redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const { error } = await workspace.supabase.rpc("assign_business_member_role", {
     p_business_id: workspace.business.id,
@@ -284,13 +320,13 @@ export async function assignMemberRoleAction(formData: FormData) {
   if (error) {
     console.error("Role assignment failed.", { code: error.code, message: error.message });
     const code = error.message === "A business must retain an owner" ? "last-owner" : "scope";
-    redirect(`/settings/permissions?error=${code}`);
+    redirect(withBusiness(`/settings/permissions?error=${code}`, workspace.business.id));
   }
-  redirect("/settings/permissions?saved=1");
+  redirect(withBusiness("/settings/permissions?saved=1", workspace.business.id));
 }
 
 export async function saveEmployeeAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36);
@@ -336,7 +372,7 @@ export async function saveVenueGeofenceAction(formData: FormData) {
     console.error("Invalid venue submitted for geofence configuration.");
     redirect("/settings/organisation?error=geofence");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -388,7 +424,7 @@ export async function setVenueClockGeofenceAction(formData: FormData) {
     console.error("Invalid clock location policy submitted.");
     redirect("/settings/organisation?error=location-policy");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -419,7 +455,7 @@ export async function saveVenueConflictPolicyAction(formData: FormData) {
     console.error("Invalid venue submitted for conflict policy.");
     redirect("/settings/organisation?error=conflict-policy");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -453,7 +489,7 @@ export async function saveVenueConflictPolicyAction(formData: FormData) {
 }
 
 export async function saveDepartmentAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -476,7 +512,7 @@ export async function saveDepartmentAction(formData: FormData) {
 }
 
 export async function saveJobRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -499,7 +535,7 @@ export async function saveJobRoleAction(formData: FormData) {
 }
 
 async function setJobRoleRestriction(formData: FormData, mode: "automatic" | "manual") {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -531,7 +567,7 @@ export async function setJobRoleManualRestrictionAction(formData: FormData) {
 }
 
 export async function setEmployeeDepartmentsAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -558,7 +594,7 @@ export async function setEmployeeDepartmentsAction(formData: FormData) {
 }
 
 export async function setEmployeeEligibleRolesAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -584,7 +620,7 @@ export async function setEmployeeEligibleRolesAction(formData: FormData) {
 }
 
 export async function setEmployeePrimaryRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -602,7 +638,7 @@ export async function setEmployeePrimaryRoleAction(formData: FormData) {
 }
 
 export async function setEmployeeAuthUserAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -636,7 +672,7 @@ async function sharedWorkerActionContext(formData: FormData) {
     console.error("Invalid shared-worker venue submitted.");
     redirect("/people?error=shared");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -702,7 +738,7 @@ async function attendanceActionContext(formData: FormData) {
     console.error("Invalid attendance request.");
     redirect("/attendance?error=invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -811,7 +847,7 @@ export async function reviewAttendanceLocationAction(formData: FormData) {
     console.error("Invalid attendance location review.");
     redirect("/attendance?error=review-invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -850,7 +886,7 @@ export async function submitAttendanceCorrectionRequestAction(formData: FormData
     console.error("Invalid employee attendance correction request.");
     redirect("/attendance?error=request-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -902,7 +938,7 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
     console.error("Invalid offline attendance review.");
     redirect("/attendance?error=claim-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -963,7 +999,7 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
     console.error("Invalid offline attendance creation request.");
     redirect("/attendance?error=claim-pair-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1013,7 +1049,7 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
     console.error("Invalid offline clock-out completion request.");
     redirect("/attendance?error=claim-open-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1071,7 +1107,7 @@ export async function completeAttendanceWithOfflineBreakAction(formData: FormDat
     console.error("Invalid offline break resolution request.");
     redirect("/attendance?error=claim-break-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1124,7 +1160,7 @@ async function correctionActionContext(formData: FormData) {
     console.error("Invalid attendance correction scope.");
     redirect("/work-time?error=correction-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1222,7 +1258,7 @@ export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
     console.error("Invalid weekly attendance lock scope.");
     redirect("/timesheets?error=bulk-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1283,7 +1319,7 @@ export async function decideTimesheetAction(formData: FormData) {
     console.error("Invalid timesheet decision scope.");
     redirect("/timesheets?error=decision-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1348,7 +1384,7 @@ export async function decidePayrollPeriodAction(formData: FormData) {
     console.error("Invalid payroll period scope.");
     redirect("/timesheets?error=period-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1403,7 +1439,7 @@ async function payrollExportActionContext(formData: FormData) {
     console.error("Invalid payroll export scope.");
     redirect("/timesheets?error=export-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1495,7 +1531,7 @@ export async function savePayrollMappingAction(formData: FormData) {
     console.error("Invalid payroll mapping scope.");
     redirect("/settings/payroll?error=invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1610,7 +1646,7 @@ async function availabilityActionContext(formData: FormData) {
     console.error("Invalid availability venue submitted.");
     redirect("/availability?error=invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1786,7 +1822,7 @@ export async function reviewLeaveRequestAction(formData: FormData) {
 }
 
 export async function saveBusinessDraftAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
 
@@ -1806,7 +1842,7 @@ export async function saveBusinessDraftAction(formData: FormData) {
 }
 
 export async function createBusinessAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
 
@@ -1849,7 +1885,7 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
     break: text(formData, "break_minutes", 100),
   };
   const state = { ...validateShiftForm(values, editing), values };
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1951,7 +1987,7 @@ export async function copyRosterWeekAction(_previous: RosterCopyState, formData:
     state.errors.sourceWeek = "Choose a different source week.";
     return state;
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1979,7 +2015,7 @@ export async function copyRosterWeekAction(_previous: RosterCopyState, formData:
 
 export async function deleteShiftAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -2014,7 +2050,7 @@ export async function setShiftAcknowledgementRequirementAction(formData: FormDat
     console.error("Invalid shift acknowledgement requirement request.");
     redirect("/roster?error=acknowledgement");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -2043,7 +2079,7 @@ export async function setShiftAcknowledgementRequirementAction(formData: FormDat
 
 export async function publishRosterAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -2089,7 +2125,7 @@ export async function acknowledgeShiftAction(formData: FormData) {
     console.error("Invalid shift acknowledgement request.");
     redirect("/my-schedule?error=acknowledgement");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -2127,7 +2163,7 @@ export async function markRosterNotificationReadAction(formData: FormData) {
     console.error("Invalid notification read request.");
     redirect("/notifications?error=read");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {

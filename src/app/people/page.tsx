@@ -15,6 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import type { PendingStaffInvitation } from "@/lib/invitations";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace, type BusinessMember } from "@/lib/workspace";
 
 type Employee = {
@@ -336,23 +337,23 @@ function SharedWorkersSection({ employees, otherEmployees, sharedProfiles, venue
 
 export default async function PeoplePage({
   searchParams,
-}: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; department?: string; role?: string; q?: string; status?: string }> }) {
+}: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; business?: string; department?: string; role?: string; q?: string; status?: string }> }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace();
+  const params = await searchParams;
+  const workspace = await getWorkspace(undefined, { businessId: params.business, venueHint: params.venue, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
   if (!["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"].includes(workspace.membership.role)) {
     redirect("/?error=permission");
   }
-  const params = await searchParams;
   const venues = await readAllPages((from, to) => workspace.supabase.from("venues")
     .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)
     .order("name").order("id").range(from, to), (venue) => venue.id);
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) {
     console.error("Directory requested an unavailable venue.");
-    redirect("/people?error=filter");
+    redirect(withBusiness("/people?error=filter", workspace.business.id));
   }
   const venueId = selectedVenue?.id ?? workspace.venue.id;
   const [departments, profileRoles, jobRoles, qualifications, preferences, members, invitations] = await Promise.all([
@@ -379,7 +380,7 @@ export default async function PeoplePage({
     (!profileRoles.error && !jobRoles.error && params.role && !roleTitles.includes(params.role)) ||
     (params.status && !["all", "active", "archived"].includes(params.status))) {
     console.error("Directory requested an unavailable filter.");
-    redirect("/people?error=filter");
+    redirect(withBusiness("/people?error=filter", workspace.business.id));
   }
   const query = (params.q ?? "").trim().slice(0, 100);
   let employeesQuery = workspace.supabase.from("employees")
@@ -432,7 +433,7 @@ export default async function PeoplePage({
     otherEmployees.error || sharedProfiles.error || invitations.error;
   if (loadError) console.error("Could not load employee profiles.", { code: loadError.code, message: loadError.message });
   return (
-    <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={selectedVenue?.name ?? workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-3xl font-semibold">Employee profiles</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
@@ -474,6 +475,7 @@ export default async function PeoplePage({
       </p>}
       {loadError ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-800">Could not load employee profiles. Try again.</p> : <>
         <form action="/people" aria-label="Directory filters" className="mt-6 grid gap-4 rounded-xl border border-line bg-white p-5 sm:grid-cols-2 xl:grid-cols-3">
+          <input type="hidden" name="business" value={workspace.business.id} />
           <label className="text-sm">Search team
             <input type="search" name="q" maxLength={100} defaultValue={query} className="mt-2 block w-full rounded-lg border border-line p-3" />
           </label>

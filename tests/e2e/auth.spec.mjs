@@ -6851,60 +6851,128 @@ test("staff invitations reject revocation and expiry and require consent before 
   }
 });
 
-test("ambiguous business memberships fail closed in stale forms and workspace pages", async ({ page }) => {
+test("multi-business members switch explicitly with per-tab isolation, revocation and private pages", async ({ page }) => {
+  page.setDefaultTimeout(20_000);
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const email = `multiple-businesses-${suffix}@example.test`;
-  const [businessId, otherBusiness, venueId, otherVenue, departmentId, otherDepartment] =
-    Array.from({ length: 6 }, () => randomUUID());
-  let userId;
+  const outsideEmail = `multiple-businesses-outside-${suffix}@example.test`;
+  const [businessId, otherBusiness, outsideBusiness, venueId, otherVenue, outsideVenue,
+    departmentId, otherDepartment, outsideDepartment] = Array.from({ length: 9 }, () => randomUUID());
+  const users = [];
   try {
-    const user = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-    expect(user.error).toBeNull();
-    userId = user.data.user.id;
+    for (const address of [email, outsideEmail]) {
+      const user = await admin.auth.admin.createUser({ email: address, password, email_confirm: true });
+      expect(user.error).toBeNull();
+      users.push(user.data.user.id);
+    }
     expect((await admin.from("businesses").insert([
       { id: businessId, name: "First private business" }, { id: otherBusiness, name: "Second private business" },
+      { id: outsideBusiness, name: "Outside private business" },
     ])).error).toBeNull();
     expect((await admin.from("venues").insert([
       { id: venueId, business_id: businessId, name: "First", timezone: "UTC" },
       { id: otherVenue, business_id: otherBusiness, name: "Second", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
     ])).error).toBeNull();
     expect((await admin.from("departments").insert([
       { id: departmentId, business_id: businessId, venue_id: venueId, name: "First FOH" },
       { id: otherDepartment, business_id: otherBusiness, venue_id: otherVenue, name: "Second FOH" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside FOH" },
     ])).error).toBeNull();
-    expect((await admin.from("business_memberships").insert({
-      business_id: businessId, user_id: userId, role: "owner",
-    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: otherBusiness, user_id: users[1], role: "owner" },
+      { business_id: otherBusiness, user_id: users[0], role: "admin" },
+      { business_id: outsideBusiness, user_id: users[1], role: "owner" },
+    ])).error).toBeNull();
+
     await signIn(page, email, password);
-    await page.goto(`/people?venue=${venueId}`);
-    const newEmployee = page.getByRole("region", { name: "New employee" });
-    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Stale staff");
+    await expect(page).toHaveURL(/\/choose-business$/);
+    const choices = page.getByRole("list", { name: "Your businesses" });
+    await expect(choices.getByRole("listitem")).toHaveCount(2);
+    await expect(choices).toContainText("First private business");
+    await expect(choices).toContainText("Second private business");
+    await expect(page.getByText("Outside private business")).toHaveCount(0);
+    await page.getByRole("button", { name: "Open First private business" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${businessId}$`));
+    const shell = page.locator("aside");
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(shell.getByRole("link", { name: "Switch business" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "People" })).toHaveAttribute("href", `/people?business=${businessId}`);
+
+    const secondTab = await page.context().newPage();
+    secondTab.setDefaultTimeout(20_000);
+    await secondTab.goto("/choose-business");
+    await secondTab.getByRole("button", { name: "Open Second private business" }).click();
+    await expect(secondTab).toHaveURL(new RegExp(`/\\?business=${otherBusiness}$`));
+    await expect(secondTab.locator("aside").getByText("Second private business", { exact: true })).toBeVisible();
+
+    await page.getByRole("link", { name: "People" }).click();
+    await expect(page).toHaveURL(new RegExp(`/people\\?business=${businessId}$`));
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+    let newEmployee = page.getByRole("region", { name: "New employee", exact: true });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("First tab staff");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
-    expect((await admin.from("business_memberships").insert({
-      business_id: otherBusiness, user_id: userId, role: "employee",
-      venue_id: otherVenue, department_id: otherDepartment,
-    })).error).toBeNull();
     await newEmployee.getByRole("button", { name: "Add employee" }).click();
-    await expect(page.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
-    await expect(page.getByText(/Safe business switching is not available yet/)).toBeVisible();
-    await expect(page.getByText("First private business", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
-    const stale = await admin.from("employees").select("id").eq("business_id", businessId).eq("name", "Stale staff");
-    expect(stale.error).toBeNull();
-    expect(stale.data).toEqual([]);
-    await page.goto(`/roster?venue=${otherVenue}`);
+    await expect(page.locator("main").getByRole("status")).toBeVisible();
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    const placed = await admin.from("employees").select("business_id").eq("name", "First tab staff")
+      .in("business_id", [businessId, otherBusiness, outsideBusiness]);
+    expect(placed.error).toBeNull();
+    expect(placed.data).toEqual([{ business_id: businessId }]);
+
+    const privateResponse = await page.goto(`/people?business=${businessId}`);
+    expect(privateResponse?.headers()["cache-control"] ?? "").toContain("no-store");
+    for (const path of [`/?business=${outsideBusiness}`, `/?business=${businessId}&business=${otherBusiness}`,
+      "/?business=not-a-business"]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
+      await expect(page.getByText("Outside private business", { exact: true })).toHaveCount(0);
+    }
+    await page.goto(`/roster?venue=${outsideVenue}`);
+    await expect(page.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
+    await expect(page.getByText("Outside private business", { exact: true })).toHaveCount(0);
+    await page.goto(`/roster?business=${businessId}&venue=${otherVenue}`);
     await expect(page.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
     await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+
+    await secondTab.getByRole("link", { name: "People" }).click();
+    await expect(secondTab).toHaveURL(new RegExp(`/people\\?business=${otherBusiness}$`));
+    newEmployee = secondTab.getByRole("region", { name: "New employee", exact: true });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Revoked tab staff");
+    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
+    await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(otherDepartment);
+    expect((await admin.from("business_memberships").delete()
+      .eq("business_id", otherBusiness).eq("user_id", users[0])).error).toBeNull();
+    await newEmployee.getByRole("button", { name: "Add employee" }).click();
+    await expect(secondTab.locator("aside").getByText("First private business", { exact: true })).toBeVisible();
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    const revoked = await admin.from("employees").select("id").eq("name", "Revoked tab staff");
+    expect(revoked.error).toBeNull();
+    expect(revoked.data).toEqual([]);
+    await secondTab.goto(`/people?business=${otherBusiness}`);
+    await expect(secondTab).toHaveURL(/\/\?error=workspace$/);
+    await expect(secondTab.locator("aside").getByText("First private business", { exact: true })).toBeVisible();
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await secondTab.goto("/choose-business");
+    await expect(secondTab.getByRole("list", { name: "Your businesses" }).getByRole("listitem")).toHaveCount(1);
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await secondTab.close();
+
     await page.goto("/");
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(shell.getByRole("link", { name: "Switch business" })).toHaveCount(0);
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login\?message=signed-out/);
+    expect((await page.context().cookies()).some((cookie) => cookie.name === "bb_business")).toBe(false);
   } finally {
-    for (const business of [businessId, otherBusiness]) {
+    for (const business of [businessId, otherBusiness, outsideBusiness]) {
       expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
     }
-    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
 

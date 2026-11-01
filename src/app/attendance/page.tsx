@@ -32,7 +32,7 @@ import {
 import { getWorkspace } from "@/lib/workspace";
 
 type AttendancePageProps = {
-  searchParams: Promise<{ venue?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ business?: string; venue?: string; error?: string; saved?: string }>;
 };
 
 const errors: Record<string, string> = {
@@ -88,7 +88,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(params.venue);
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -289,7 +289,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const breakRequestId = randomUUID();
 
   return (
-    <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>

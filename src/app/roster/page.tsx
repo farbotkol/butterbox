@@ -45,7 +45,7 @@ import {
 } from "@/lib/workspace";
 
 type RosterPageProps = {
-  searchParams: Promise<{
+  searchParams: Promise<{ business?: string;
     week?: string;
     venue?: string;
     department?: string;
@@ -151,7 +151,7 @@ function AcknowledgementRequirementControl({
 export default async function RosterPage({ searchParams }: RosterPageProps) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(params.venue);
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -267,7 +267,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       ? { code: loadError.code, message: loadError.message }
       : { message: "The selected venue is no longer available." });
     return (
-      <AppShell businessName={workspace.business.name} email={workspace.user.email ?? ""}
+      <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} email={workspace.user.email ?? ""}
         role={workspace.membership.role} venueName={workspace.venue.name}>
         <h1 className="text-3xl font-semibold">Weekly roster</h1>
         <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-red-800">
@@ -405,7 +405,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
 
   return (
     <AppShell
-      businessName={workspace.business.name}
+      businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length}
       email={workspace.user.email ?? ""}
       role={workspace.membership.role}
       venueName={workspace.venue.name}

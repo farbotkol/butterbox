@@ -13,7 +13,7 @@ const links = [
   { href: "/availability", label: "Availability", icon: Clock },
 ];
 
-export function MainNavigation({ role }: { role: string }) {
+export function MainNavigation({ role, businessId }: { role: string; businessId?: string }) {
   const pathname = usePathname();
 
   return (
@@ -29,7 +29,7 @@ export function MainNavigation({ role }: { role: string }) {
         return (
           <Link
             key={href}
-            href={href}
+            href={businessId ? `${href}?business=${encodeURIComponent(businessId)}` : href}
             aria-current={active ? "page" : undefined}
             className={`flex min-h-11 shrink-0 items-center gap-3 rounded-lg px-4 py-2.5 text-sm font-medium transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean md:w-full ${
               active
