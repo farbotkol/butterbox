@@ -73,6 +73,20 @@
   subsequently passed against that final change, including deliberately
   mismatched access and refresh tokens. Disposable users and businesses were
   removed, sample policy remained disabled and the temporary app server stopped.
+- The invitation checkpoint was committed as `05f001b` and pushed to the
+  requested development branch; the remote SHA matched.
+- BB-ATTEND-005's offline-claim slice replayed on the isolated stack. All
+  **1,400/1,400 pgTAP assertions across 31 files**, including 48 focused
+  offline-claim checks, passed. Ten authenticated tenant/concurrency tests
+  and 77 serialized Node tests passed; the ten integrations skipped in the
+  Node-only run passed separately. Full ESLint, TypeScript and split production
+  compile/generate passed. Four focused production-browser scenarios passed,
+  including offline capture, upload failure, sign-out/account switch,
+  concurrent tab retries, scoped manager visibility and storage failure.
+  The offline scenario was rebuilt and passed again after the final UI changes.
+  Claims are not reconciled into attendance or payroll; this story remains
+  In Progress. The browser test server stopped and disposable fixtures were
+  removed.
 - The historical local checkpoint-ref credential blocker described below remains
   unresolved; no credential values or checkpoint refs were modified.
 - Earlier browser renderer/context failures and a signup runner process exit
@@ -135,7 +149,16 @@
 
 ## Current story
 
-- **BB-FOUND-005 — Invite and onboard users** is In Progress. An uncommitted
+- **BB-ATTEND-005 — Time capture fallback** is In Progress. An additive
+  migration stores immutable, explicitly unverified offline claims separately
+  from payroll source events, with the original device time and server receipt
+  time. The attendance page queues claims in device storage and retries
+  idempotently after reconnecting as the same account. Scoped employees and
+  managers can see received claims. Manager reconciliation and reopening the
+  attendance page while offline remain unimplemented; accepted claims do not
+  alter attendance or worked time. Next implement **BB-ATTEND-007** as the
+  correction foundation, without overwriting original events.
+- **BB-FOUND-005 — Invite and onboard users** is In Progress. The committed
   database migration implements scoped, seven-day invitations, verified-email
   acceptance, duplicate and revocation handling, and protected event history.
   A clean isolated replay of all 30 migrations passed **1,352/1,352** pgTAP
@@ -166,9 +189,6 @@
   matched.
 - **BB-TIME-001 — Compute worked time** is Done. Scoped calculations and the
   manager work-time page passed all four criteria and the regression checks.
-- **BB-ATTEND-005 — Time capture fallback** is In Progress: location failures
-  record a reviewable server event, but offline capture, safe reconciliation
-  and claimed-versus-confirmed time are not implemented.
 - **BB-ATTEND-003 — Location verification** is Done. Optional per-venue
   verification, event-time capture and scoped exception review passed all
   three criteria and the final regression checks below.
@@ -317,9 +337,22 @@ interpretation, correction or export workflow.
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| ATTEND-005.1 Pending or exception status | Location permission failures produce a recorded server event and visible review status. Offline capture is not implemented. | Location failure and no-JavaScript fallback passed the BB-ATTEND-003 database and browser checks; offline status has not been tested. | Pending |
-| ATTEND-005.2 Safe reconciliation | No offline queue or manager reconciliation exists. | Not implemented or tested. | Pending |
-| ATTEND-005.3 Claimed and confirmed times | Original server clock events are retained, but a separate offline claimed time is not captured. | Not implemented or tested. | Pending |
+| ATTEND-005.1 Pending or exception status | Location failures produce a recorded server event and visible review status. A page already open offline shows each queued claim and its pending state; submitted claims are labelled unverified and awaiting review. Storage and upload failures are explicit. | BB-ATTEND-003 location and no-JavaScript checks passed. Production Chromium verified two offline claims, a failed upload, storage denial, reconnect, scoped visibility and clear pending/review labels. | Pass |
+| ATTEND-005.2 Safe reconciliation | Device claims upload only for the verified original account and permitted scope, with idempotent request IDs. They remain separate from attendance and worked time until a manager correction workflow exists; an offline page cannot yet be opened or reloaded. | The 48-assertion pgTAP suite passed, as did eight-way duplicate submission and membership-revocation/unlink races. Production Chromium passed failed upload, account switching and simultaneous retries in two tabs, without duplicate claims or attendance events. Manager reconciliation remains unimplemented. | Blocked |
+| ATTEND-005.3 Claimed and confirmed times | The immutable claim retains the untrusted device time and a separate server-generated receipt time. The latter confirms receipt, not that the claimed attendance was true. | pgTAP verified original time, server time and immutable records. Production Chromium captured clock-in/out offline, compared both received rows to device storage, and checked both timestamps in the employee and scoped manager views. | Pass |
+
+Files: `supabase/migrations/20261102080000_attendance_offline_claims.sql`,
+`supabase/tests/database/attendance_offline_claims.test.sql`,
+`src/lib/offline-attendance.ts`, `src/lib/offline-attendance-queue.ts`,
+`src/components/offline-attendance.tsx`, `src/app/attendance/page.tsx`,
+`tests/offline-attendance.test.mjs`,
+`tests/offline-attendance-concurrency.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `scripts/test-tenant-isolation.mjs` and `README.md`.
+After a clean migration replay, an initial default pgTAP invocation failed
+because the disposable workdir contained outdated test copies, including a
+test predating the default-off demo policy. The current repository suite passed;
+the disposable copies were then synchronized and the standard command also
+passed all 1,400 assertions. No tests were removed or weakened.
 
 ### BB-ATTEND-003 — Location verification (Done)
 
@@ -813,9 +846,11 @@ not yet run remotely.
 
 ## Next story
 
-- Finish the full regression and checkpoint the invitation workflow. Continue
-  with **BB-ATTEND-005 — Time capture fallback**, preserving claimed and
-  server-confirmed times without overwriting original attendance events.
+- Implement **BB-ATTEND-007 — Attendance corrections** as a prerequisite to
+  reconciling **BB-ATTEND-005** claims. Design attributed, auditable additions
+  that preserve original events, are visible to employees, respect approval
+  or locks, and recalculate consistently. Then support a scoped manager
+  decision for offline claims and evaluate safe offline page reopening.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Continue toward corrections,
   timesheet review and approval. Revisit BB-SAAS-003 only after production

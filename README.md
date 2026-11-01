@@ -165,10 +165,19 @@ time. Checks retain derived distance, accuracy and the radius, not raw device
 coordinates. Device-reported location can be spoofed and is not proof of
 physical presence. Verification results are separate records: original events
 retain their original unverified status, and older events are not retroactively
-checked. Network-offline clock capture, time corrections and timesheet
-approvals are not yet implemented. If account access is removed during a
-session, contact an owner for review. Apply the current migrations before
-using the clock.
+checked. If the network fails while the attendance page is already open, an
+employee can save a clock-in or clock-out claim on that device. The device time
+is untrusted; the claim is queued in browser storage and submitted when the
+same account reconnects, retaining both that claimed time and the server's
+receipt time. Claims are visible within the employee's or manager's scope, but
+they do not automatically change attendance or worked time. Manager
+reconciliation, time corrections and timesheet approvals are not yet available;
+contact a manager to arrange an accurate record. The page cannot be opened
+offline, and clearing browser data or losing the device can lose unsent claims.
+Device storage is shared by accounts using the same browser profile, so use a
+private device or separate browser profiles for different users. If account
+access is removed during a session, contact an owner for review. Apply the
+current migrations before using the clock.
 
 Managers can use **Work time** to inspect actual attendance sessions in their
 permitted departments and venue. Calculations use elapsed instants, including

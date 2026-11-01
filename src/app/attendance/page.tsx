@@ -10,12 +10,13 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { ClockLocationForm } from "@/components/clock-location-form";
+import { OfflineAttendance } from "@/components/offline-attendance";
 import { parseAttendanceState, parseClockOptions, type ClockOption } from "@/lib/attendance";
 import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
+import { parseSubmittedOfflineClaims, type SubmittedOfflineClaim } from "@/lib/offline-attendance";
 import { readAllPages } from "@/lib/paginated-rows";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
 type AttendancePageProps = {
@@ -40,7 +41,9 @@ const errors: Record<string, string> = {
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 
 export default async function AttendancePage({ searchParams }: AttendancePageProps) {
-  if (!isSupabaseConfigured()) redirect("/login?error=setup");
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!supabaseUrl || !supabaseAnonKey) redirect("/login?error=setup");
   const params = await searchParams;
   const workspace = await getWorkspace(params.venue);
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
@@ -61,7 +64,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   }
 
   const canReview = managerRoles.includes(workspace.membership.role);
-  const [venueResult, optionResult, stateResult, exceptionResult] = await Promise.all([
+  const [venueResult, optionResult, stateResult, exceptionResult, offlineResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
       .select("id, name, clock_geofence_enabled", { count: "exact" }).eq("business_id", workspace.business.id)
       .order("name").order("id").range(from, to), (venue) => venue.id),
@@ -80,10 +83,15 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       }, { count: "exact" }).order("occurred_at", { ascending: false }).order("check_id").range(from, to),
       (row) => row && typeof row.check_id === "string" ? row.check_id : "")
       : Promise.resolve({ data: [], error: null }),
+    readAllPages<SubmittedOfflineClaim>((from, to) => workspace.supabase.rpc("list_attendance_offline_claims", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("received_at", { ascending: false }).order("id").range(from, to),
+    (row) => row && typeof row.id === "string" ? row.id : ""),
   ]);
   const options = parseClockOptions(optionResult.data);
   const state = parseAttendanceState(stateResult.data);
   const exceptions = parseLocationExceptions(exceptionResult.data);
+  const offlineClaims = parseSubmittedOfflineClaims(offlineResult.data);
   const clockVenueId = state?.state === "clocked_in" ? state.venue_id : workspace.venue.id;
   const clockVenue = venueResult.data?.find((venue) => venue.id === clockVenueId);
   const validClockPolicy = clockVenue && typeof clockVenue.clock_geofence_enabled === "boolean";
@@ -98,6 +106,12 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     console.error("Could not load attendance location exceptions.", {
       code: exceptionResult.error?.code,
       message: exceptionResult.error?.message ?? "The server returned invalid location exceptions.",
+    });
+  }
+  if (offlineResult.error || !offlineClaims) {
+    console.error("Could not load offline attendance claims.", {
+      code: offlineResult.error?.code,
+      message: offlineResult.error?.message ?? "The server returned invalid offline attendance claims.",
     });
   }
 
@@ -279,6 +293,39 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           )}
         </section>
       )}
+      {!loadError && options && <OfflineAttendance
+        key={`${workspace.user.id}:${workspace.business.id}:${workspace.venue.id}`}
+        url={supabaseUrl}
+        anonKey={supabaseAnonKey}
+        actorId={workspace.user.id} businessId={workspace.business.id} venueId={workspace.venue.id}
+        options={options}
+      />}
+      <section aria-label="Submitted offline attendance claims" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Submitted offline attendance claims</h2>
+        <p className="mt-2 text-sm text-muted">
+          These device-reported times are unverified and require manager review. They do not automatically
+          change recorded attendance or calculated work time; corrections are not yet available in the app.
+          Times are shown in {workspace.venue.timezone.replaceAll("_", " ")}.
+        </p>
+        {offlineResult.error || !offlineClaims ? (
+          <p role="alert" className="mt-3 text-sm text-red-800">
+            We couldn&apos;t load offline attendance claims. Refresh and try again.
+          </p>
+        ) : offlineClaims.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">No submitted claims in your scope for this venue.</p>
+        ) : <ul className="mt-4 space-y-3">
+          {offlineClaims.map((claim) => <li key={claim.id} className="rounded-lg border border-line p-4 text-sm">
+            <p className="font-semibold">{claim.employee_name} · {claim.department_name}</p>
+            <p className="mt-1 text-amber-900">Manager review required · {claim.event_type === "clock_in" ? "Clock in" : "Clock out"}</p>
+            <p className="mt-2">Claimed on device: <time dateTime={claim.claimed_at}>
+              {formatClockTime(claim.claimed_at, workspace.venue.timezone)}
+            </time></p>
+            <p className="mt-1">Received by server: <time dateTime={claim.received_at}>
+              {formatClockTime(claim.received_at, workspace.venue.timezone)}
+            </time></p>
+          </li>)}
+        </ul>}
+      </section>
       <p className="mt-5 text-sm leading-6 text-muted">
         When enabled by the venue owner, location is requested only when clocking in or out.
         A failed location check is reviewed without removing the time recorded. Break events

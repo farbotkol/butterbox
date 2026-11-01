@@ -320,6 +320,196 @@ test("a recovered session expires across signed-in tabs", async ({ page, context
   }
 });
 
+test("offline attendance claims survive reconnect failures and stay scoped to the signed-in account", async ({
+  page, context, browser,
+}) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, fohId, bohId, workerId, colleagueId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["worker", "colleague", "foh", "boh", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `offline-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Offline cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside offline cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[0], name: "Offline Worker", role_title: "Server" },
+      { id: colleagueId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[1], name: "Offline Colleague", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await workerApi.auth.signInWithPassword({
+      email: `offline-worker-${suffix}@example.test`, password,
+    })).error).toBeNull();
+
+    await signIn(page, `offline-worker-${suffix}@example.test`, password);
+    await page.goto(`/attendance?venue=${venueId}`);
+    const recoveryPage = await context.newPage();
+    await recoveryPage.goto(`/attendance?venue=${venueId}`);
+    const fallback = page.getByRole("region", { name: "Offline attendance fallback" });
+    await expect(fallback).toContainText("Offline Worker");
+    await context.setOffline(true);
+    await expect.poll(() => page.evaluate(() => navigator.onLine)).toBe(false);
+    await fallback.getByRole("button", { name: "Save offline clock in" }).click();
+    await expect(fallback.getByRole("status")).toContainText("1 claim pending on this device while offline");
+    await fallback.getByRole("button", { name: "Save offline clock out" }).click();
+    await expect(fallback.getByRole("status")).toContainText("2 claims pending on this device while offline");
+    const pending = fallback.getByRole("list", { name: "Claims pending on this device" });
+    await expect(pending.getByRole("listitem")).toHaveCount(2);
+    await expect(pending).toContainText("Clock in");
+    await expect(pending).toContainText("Clock out");
+    const stored = await page.evaluate(() => new Promise((resolve, reject) => {
+      const open = indexedDB.open("butterbox-offline-attendance", 1);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const database = open.result;
+        const transaction = database.transaction("claims", "readonly");
+        const request = transaction.objectStore("claims").getAll();
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => resolve(request.result);
+        transaction.oncomplete = () => database.close();
+      };
+    }));
+    expect(stored).toHaveLength(2);
+    expect(stored.map((claim) => claim.eventType).sort()).toEqual(["clock_in", "clock_out"]);
+    expect(stored.every((claim) => claim.actorId === users[0] && claim.businessId === businessId)).toBe(true);
+
+    await page.close();
+    await context.route("**/rest/v1/rpc/submit_attendance_offline_claim", (route) => route.abort());
+    await context.setOffline(false);
+    const recovered = recoveryPage.getByRole("region", { name: "Offline attendance fallback" });
+    await expect(recovered.getByRole("alert")).toContainText("Some claims could not be uploaded");
+    await expect(recovered.getByRole("status")).toContainText("2 claims pending on this device");
+    let rows = await workerApi.from("attendance_offline_claims").select("id");
+    expect(rows.error).toBeNull();
+    expect(rows.data).toEqual([]);
+
+    await recoveryPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(recoveryPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(recoveryPage, `offline-colleague-${suffix}@example.test`, password);
+    await recoveryPage.goto(`/attendance?venue=${venueId}`);
+    await expect(recovered).toContainText("No claims are waiting on this device");
+    await expect(recovered.getByRole("list", { name: "Claims pending on this device" })).toHaveCount(0);
+    rows = await workerApi.from("attendance_offline_claims").select("id");
+    expect(rows.error).toBeNull();
+    expect(rows.data).toEqual([]);
+
+    await recoveryPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(recoveryPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(recoveryPage, `offline-worker-${suffix}@example.test`, password);
+    await recoveryPage.goto(`/attendance?venue=${venueId}`);
+    await expect(recovered.getByRole("alert")).toContainText("Some claims could not be uploaded");
+    const competingPage = await context.newPage();
+    await competingPage.goto(`/attendance?venue=${venueId}`);
+    const competing = competingPage.getByRole("region", { name: "Offline attendance fallback" });
+    await expect(competing.getByRole("alert")).toContainText("Some claims could not be uploaded");
+    await context.unroute("**/rest/v1/rpc/submit_attendance_offline_claim");
+    await Promise.all([
+      recovered.getByRole("button", { name: "Retry upload" }).click(),
+      competing.getByRole("button", { name: "Retry upload" }).click(),
+    ]);
+    const submitted = recoveryPage.getByRole("region", { name: "Submitted offline attendance claims" });
+    await expect(submitted.getByRole("listitem")).toHaveCount(2);
+    await expect(submitted).toContainText("Manager review required");
+    await expect(submitted).toContainText("do not automatically change recorded attendance");
+    await expect(recovered.getByRole("list", { name: "Claims pending on this device" })).toHaveCount(0);
+    rows = await workerApi.from("attendance_offline_claims")
+      .select("id, request_id, event_type, claimed_at, received_at").eq("business_id", businessId);
+    expect(rows.error).toBeNull();
+    expect(rows.data).toHaveLength(2);
+    for (const claim of stored) {
+      const received = rows.data.find((row) => row.request_id === claim.requestId);
+      expect(received).toBeDefined();
+      expect(received.event_type).toBe(claim.eventType);
+      expect(new Date(received.claimed_at).toISOString()).toBe(claim.claimedAt);
+      expect(Date.parse(received.received_at)).toBeGreaterThanOrEqual(Date.parse(claim.claimedAt));
+      expect(Date.parse(received.received_at)).toBeLessThanOrEqual(Date.now() + 5_000);
+      await expect(submitted.locator(`time[datetime="${received.claimed_at}"]`)).toHaveCount(1);
+      await expect(submitted.locator(`time[datetime="${received.received_at}"]`)).toHaveCount(1);
+    }
+    const events = await admin.from("attendance_events").select("id").eq("business_id", businessId);
+    expect(events.error).toBeNull();
+    expect(events.data).toEqual([]);
+    await competingPage.close();
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `offline-foh-${suffix}@example.test`, password);
+    await managerPage.goto(`/attendance?venue=${venueId}`);
+    const managerClaims = managerPage.getByRole("region", { name: "Submitted offline attendance claims" });
+    await expect(managerClaims.getByRole("listitem")).toHaveCount(2);
+    await expect(managerClaims).toContainText("Offline Worker");
+    for (const row of rows.data) {
+      await expect(managerClaims.locator(`time[datetime="${row.claimed_at}"]`)).toHaveCount(1);
+      await expect(managerClaims.locator(`time[datetime="${row.received_at}"]`)).toHaveCount(1);
+    }
+    await managerPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(managerPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(managerPage, `offline-boh-${suffix}@example.test`, password);
+    await managerPage.goto(`/attendance?venue=${venueId}`);
+    await expect(managerClaims).toContainText("No submitted claims in your scope");
+    await expect(managerClaims).not.toContainText("Offline Worker");
+    await managerPage.getByRole("button", { name: "Sign out" }).click();
+    await expect(managerPage).toHaveURL(/\/login\?message=signed-out/);
+    await signIn(managerPage, `offline-outside-${suffix}@example.test`, password);
+    await managerPage.goto(`/attendance?venue=${outsideVenue}`);
+    await expect(managerClaims).toContainText("No submitted claims in your scope");
+    await expect(managerClaims).not.toContainText("Offline Worker");
+
+    const storageContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(storageContext);
+    await storageContext.addInitScript(() => {
+      Object.defineProperty(window, "indexedDB", {
+        configurable: true,
+        get() { throw new DOMException("Storage unavailable", "SecurityError"); },
+      });
+    });
+    const storagePage = await storageContext.newPage();
+    await signIn(storagePage, `offline-worker-${suffix}@example.test`, password);
+    await storagePage.goto(`/attendance?venue=${venueId}`);
+    const storageFallback = storagePage.getByRole("region", { name: "Offline attendance fallback" });
+    await expect(storageFallback.getByRole("alert")).toContainText("Device storage or the connection is unavailable");
+    await storageFallback.getByRole("button", { name: "Save offline clock in" }).click();
+    await expect(storageFallback.getByRole("alert")).toContainText("The claim was not saved");
+    const afterFailure = await workerApi.from("attendance_offline_claims").select("id");
+    expect(afterFailure.error).toBeNull();
+    expect(afterFailure.data).toHaveLength(2);
+  } finally {
+    await context.setOffline(false);
+    for (const item of contexts) await item.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 async function withPermissionFixtures(initialRole, run) {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
