@@ -437,7 +437,13 @@
   acceptance database, a rolled-back migration/test transaction passed
   **47/47** metadata assertions and a separate rolled-back transaction passed
   the existing employee-profile suite **18/18**. No schema change was retained
-  by those runs; UI, authenticated concurrency and browser verification remain.
+  by those runs. The migration was subsequently applied only to the verified
+  disposable acceptance project. Seven focused pgTAP files then produced
+  **249 passing assertions** across six files; `sensitive_action_audit`
+  aborted when deleting a profile because the new immutable history cascaded
+  from the employee. Fix the underlying deletion/history interaction with a
+  forward migration, then rerun the affected tests. UI, authenticated
+  concurrency and browser verification remain.
   The separate Award Central workstream remains isolated. No criterion has
   been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
