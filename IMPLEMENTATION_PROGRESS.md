@@ -3,16 +3,17 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **46**. In Progress: **0**.
-  Blocked: **4**. Not started (Backlog): **59**.
+  BB-PAYRULES stories). Verified Done: **46**. In Progress: **1**.
+  Blocked: **4**. Not started (Backlog): **58**.
 - BB-RULES-001 (employment rule metadata) is Done. Scoped dated history
   preserves unknown classifications and independently maintained award and
   contract references. Focused database tests passed **282/282** on acceptance,
   **98/98** on replay and **5/5** on an upgrade fixture; the authenticated
   race/tenant integration, **13/13** Node tests and four production-browser
   scenarios passed. Changed-file lint, TypeScript and the split production
-  build passed. Full suites were intentionally deferred. See criterion evidence
-  below; the feature checkpoint has not yet been committed or pushed.
+  build passed. Full suites were intentionally deferred. Feature commit
+  `43ab17e9b03927f83db530a30f97df20cd58efd6` was pushed and its remote SHA
+  matched. See criterion evidence below.
 - BB-SHIFTS-004 (shift swaps) is Done. Both employees consent, scoped managers
   review, and approval rechecks eligibility and conflicts before recording
   new publication snapshots and in-app outcomes. The affected pgTAP files
@@ -472,9 +473,14 @@
 
 ## Current story
 
-- **BB-RULES-001 — Employment rule metadata** is Done; the tested feature
-  checkpoint is awaiting commit and push. The next selected P0 story is
-  **BB-RULES-005 — Privacy and retention policy**.
+- **BB-RULES-005 — Privacy and retention policy** is In Progress, in planning.
+  The four criteria cover point-in-time location, documented visibility and
+  retention, employee access and correction, and preservation of required
+  employment records. Inspect existing attendance, correction, export and
+  deletion behavior before choosing changes; do not assume a legally approved
+  retention period or alter live records.
+- **BB-RULES-001 — Employment rule metadata** is Done and pushed as
+  `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
   `de39307dcfed4b121ee8417d93622b408c0a86c9` was pushed and the remote SHA
   matched. The recovered migration and initial test had
