@@ -232,3 +232,62 @@ Record what was *not* assessed (unavailable refs, private infra, unknown key val
 ### Record provenance
 
 Recorded after owner instruction: *“For Butterbox DEC-004 / BB-FOUND-001, I choose assessment and classification first, with separate approval before any credential rotation. Record this decision in the Main Roadmap GitHub decision log, specify the agent's safety boundaries and next steps.”*
+
+---
+
+## DEC-005 — Backup retention and disaster recovery release gate
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-FOUND-008 — Resilience and operations`
+- **Decision owner:** Butterbox product owner
+- **Status:** Recovery and retention targets approved as objectives; hosted validation deferred to pre-production; story remains Blocked
+
+### Confirmed decision and targets
+
+The owner elects to **defer a hosted backup-restoration/disaster-recovery rehearsal until pre-production**, rather than provisioning and paying for an isolated staging restore target immediately. This postpones verification; it is **not** an exception to the production release gate.
+
+Proposed operational objectives, **not measured capabilities or contractual commitments**:
+
+- **RPO: 15 minutes** — target maximum recoverable data-loss window.
+- **RTO: 4 hours** — target time to restore usable service.
+- **PITR recovery window: 7 days**.
+- **Daily backup retention: 30 days**.
+
+All targets require validation of the selected Supabase plan, backup/PITR availability, retention implementation, cost, restore permissions and actual measured recovery performance. Do not claim a 15-minute RPO from daily backups alone; determine whether supported continuous recovery/PITR and operational procedures can meet it. If plan capabilities or costs do not support the targets, escalate with alternatives and obtain a revised owner decision. Never describe targets as already achieved.
+
+Database backups are operational recovery artifacts, **not substitutes for employee-record retention or customer exit exports** under DEC-001. Apply least privilege, encryption, monitored job failures, lifecycle expiration, tenant/privacy safeguards and evidence of backup integrity. Coordinate backup expiry and retention exceptions with the separately reviewed privacy/legal schedule.
+
+### Permitted agent work during development
+
+1. Maintain the existing health/readiness, protected metrics, idempotent retry and backup/recovery runbook work.
+2. Document the target restore architecture, prerequisites, environment separation, access roles, dependency configuration, plan cost assumptions, recovery ordering, verification queries and incident escalation.
+3. Execute **non-destructive local/disposable** clean migration replay and synthetic fixture backup/restore checks, including tenant/RLS authorization, audit history, timestamp/timezone consistency, attendance/timesheet integrity and prevention of duplicate payroll exports after retry.
+4. Add risk-based automated tests and instrumentation to measure restore steps, detect backup failures and validate recovery-state integrity. Clearly label local and mocked evidence as *not a hosted disaster recovery rehearsal*.
+5. Record what remains unverified without waiting to continue independently ready Roadmap stories.
+
+Do **not** create or incur costs for hosted staging, activate/alter production backup plans, copy production customer data, restore into production, rotate credentials, remove retention safeguards or run destructive recovery operations without separate explicit owner authorization. Never restore onto a shared or unidentified database. All destructive local testing must verify an explicitly disposable target.
+
+### Mandatory pre-production release gate
+
+Before production activation or declaring disaster recovery ready, an authorized operator must:
+
+1. Identify and authorize an **isolated hosted staging restore destination** and a genuine configured backup/PITR source. Verify project identity, environment, permissions and whether data is synthetic or adequately protected.
+2. Verify actual backup scheduling, PITR window, daily retention period, storage/provider charges, encryption, access restrictions, alerts and backup expiration behavior.
+3. Rehearse restoring an actual backup/PITR point to the isolated destination **without overwriting production or another tenant's environment**.
+4. Measure achieved **RPO and RTO** end to end and compare with the 15-minute / 4-hour objectives. Document restore-point timestamps, incident start, restoration milestones, total elapsed time, integrity checks and any deviations.
+5. Confirm application restart/connectivity, authentication, tenant isolation, RLS, audit history, employee records, attendance, finalized payroll periods, reconciled exports and idempotency after recovery.
+6. Validate operational runbook reproducibility, monitoring/alerting, failure handling and independent review of evidence.
+7. Obtain owner approval of the tested recovery model and any residual risks; if objectives are not met, remediate/retest or explicitly revise the decision before launch.
+
+**Release status:** `BB-FOUND-008` remains **Blocked / Partially Complete** until hosted rehearsal and all acceptance evidence pass. A local database replay alone cannot close the story. A production go-live must not be represented as meeting these RPO/RTO or retention targets without the verification above.
+
+### Dependencies and future authorization
+
+- Supabase plan/pricing and hosted backup/PITR support (to be checked near pre-production).
+- Owner-approved staging project, backup source and suitably protected restore target.
+- Credential/access provision and observability for test operations.
+- Legal/privacy review of backup retention/expiration relative to employee record retention and DEC-001.
+
+### Record provenance
+
+Recorded after explicit owner instruction: *“Finalize Butterbox DEC-005: Hosted disaster recovery rehearsal is deferred until pre-production. Recovery objectives: 15-minute RPO and 4-hour RTO. Backup retention target: 7 days PITR plus 30 days daily backups. These are targets subject to Supabase plan capability, cost and verification.”*
