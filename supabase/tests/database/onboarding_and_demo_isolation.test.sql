@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon;
 grant execute on all functions in schema extensions to authenticated, anon;
-select extensions.plan(29);
+select extensions.plan(42);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a3000000-0000-4000-8000-000000000001', 'onboarding-owner@example.test', '{}'::jsonb),
@@ -152,25 +152,78 @@ select extensions.is(
   'a recorded publication completes the checklist');
 
 reset role;
-update public.demo_seed_policy set enabled = true where singleton;
+select extensions.throws_ok(
+  $$update public.demo_seed_policy set enabled = true where singleton$$,
+  'P0001', 'Sample data is not enabled in this environment',
+  'a database operator cannot enable the old sample policy');
+select extensions.throws_ok(
+  $$insert into public.demo_seed_policy (singleton, enabled) values (true, true)
+    on conflict (singleton) do update set enabled = excluded.enabled$$,
+  'P0001', 'Sample data is not enabled in this environment',
+  'an upsert cannot enable the old sample policy');
+select extensions.is(
+  (select enabled from public.demo_seed_policy where singleton), false,
+  'rejected operator changes leave the policy disabled');
+select extensions.throws_ok(
+  $$select public.handle_demo_seed(
+    'b3000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000001', 'UTC')$$,
+  'P0001', 'Sample data is not enabled in this environment',
+  'a database operator cannot invoke the guarded seed helper');
+select extensions.throws_ok(
+  $$select public.handle_demo_seed_unchecked(
+    'b3000000-0000-4000-8000-000000000001', 'c3000000-0000-4000-8000-000000000001', 'UTC')$$,
+  'P0001', 'Sample data is not enabled in this environment',
+  'a database operator cannot invoke the historical seed helper');
+select extensions.is(
+  (select count(*)::integer from public.employees
+    where business_id = 'b3000000-0000-4000-8000-000000000001'),
+  1, 'privileged seed attempts do not add staff to an existing business');
+
 set local role authenticated;
 select set_config('request.jwt.claim.sub', 'a3000000-0000-4000-8000-000000000004', true);
-select extensions.is(public.demo_seed_enabled(), true, 'an isolated operator can explicitly enable sample data');
+select extensions.is(public.demo_seed_enabled(), false, 'sample creation remains unavailable');
+select extensions.lives_ok(
+  $$insert into public.business_setup_drafts (user_id, business_name)
+    values (auth.uid(), 'Clean draft')$$,
+  'a user can save a draft without requesting sample data');
+select extensions.is(
+  (select include_sample_data from public.business_setup_drafts where user_id = auth.uid()), false,
+  'new setup drafts default to a clean workspace');
+select extensions.throws_ok(
+  $$select public.complete_initial_setup('Demo only', 'Test venue', '20 Test Street', 'UTC', true)$$,
+  'P0001', 'Sample data is not enabled in this environment',
+  'setup rejects a sample request after privileged enable attempts');
+select extensions.is(
+  (select count(*)::integer from public.business_setup_drafts where user_id = auth.uid()), 1,
+  'rejected setup retains the draft');
+select extensions.is(
+  (select count(*)::integer from public.business_memberships where user_id = auth.uid()), 0,
+  'rejected setup does not leave a business membership');
 select extensions.ok(
-  public.complete_initial_setup('Demo only', 'Test venue', '20 Test Street', 'UTC', true) is not null,
-  'sample setup succeeds when explicitly enabled');
+  public.complete_initial_setup('Clean cafe', 'Test venue', '20 Test Street', 'UTC', false) is not null,
+  'clean setup still creates a workspace');
 select extensions.is(
   (select count(*)::integer from public.employees where business_id = (
     select business_id from public.business_memberships where user_id = auth.uid()
-  )), 24, 'the isolated demo workspace receives 24 fictional staff');
+  )), 0, 'the clean workspace has no sample staff');
 select extensions.is(
   (select count(*)::integer from public.shifts where business_id = (
     select business_id from public.business_memberships where user_id = auth.uid()
-  ) and not is_published), 48, 'the isolated demo workspace receives 48 private drafts');
+  )), 0, 'the clean workspace has no sample shifts');
+select extensions.is(
+  (select count(*)::integer from public.job_roles where business_id = (
+    select business_id from public.business_memberships where user_id = auth.uid()
+  )), 0, 'the clean workspace has no sample job roles');
 select extensions.is(
   (select publication_ready from public.get_onboarding_progress((
     select business_id from public.business_memberships where user_id = auth.uid()
-  ))), false, 'demo drafts do not pretend a roster has been published');
+  ))), false, 'a clean workspace does not pretend a roster has been published');
+select extensions.is(
+  (select to_jsonb(p) from public.get_onboarding_progress((
+    select business_id from public.business_memberships where user_id = auth.uid()
+  )) p),
+  '{"business_ready":true,"venue_ready":true,"staff_ready":false,"shift_ready":false,"publication_ready":false}'::jsonb,
+  'the clean workspace starts at the correct onboarding step');
 
 select * from extensions.finish();
 rollback;

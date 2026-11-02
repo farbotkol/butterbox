@@ -16,22 +16,15 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   if (workspace.status === "ready") redirect("/");
   if (workspace.status === "error" && "reason" in workspace) redirect("/");
   const params = await searchParams;
-  const [draftResult, demoResult] =
+  const draftResult =
     workspace.status === "needs_setup"
-      ? await Promise.all([workspace.supabase
+      ? await workspace.supabase
           .from("business_setup_drafts")
           .select("business_name, venue_name, venue_address, timezone, include_sample_data")
           .eq("user_id", workspace.user.id)
-          .maybeSingle(), workspace.supabase.rpc("demo_seed_enabled")])
-      : [null, null];
+          .maybeSingle()
+      : null;
   const draft = draftResult?.data;
-  const demoEnabled = demoResult?.data === true;
-  if (demoResult && (demoResult.error || typeof demoResult.data !== "boolean")) {
-    console.error("Could not load the sample-data policy.", {
-      code: demoResult.error?.code,
-      message: demoResult.error?.message ?? "The server returned an invalid sample-data policy.",
-    });
-  }
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-cloud px-5 py-12">
@@ -74,11 +67,6 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
         {draftResult?.error && (
           <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
             We couldn&apos;t load your saved setup progress. Please try again.
-          </p>
-        )}
-        {demoResult && (demoResult.error || typeof demoResult.data !== "boolean") && (
-          <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
-            We couldn&apos;t check whether sample data is available. You can create a clean workspace.
           </p>
         )}
         <form action={createBusinessAction} className="mt-7 space-y-5">
@@ -137,20 +125,24 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="flex items-start gap-3 rounded-xl border border-line bg-cloud p-4">
             <input
               className="mt-1 accent-ocean"
-              defaultChecked={demoEnabled && (draft?.include_sample_data ?? false)}
-              disabled={!demoEnabled}
+              disabled
               name="sample_data"
               type="checkbox"
             />
             <span>
               <span className="block text-sm font-semibold">Add a sample team</span>
               <span className="mt-1 block text-xs leading-5 text-muted">
-                {demoEnabled
-                  ? "Adds 24 fictional staff and a draft FOH/BOH roster for this week. Use only in an isolated test environment."
-                  : "Fictional samples are available only in explicitly enabled, isolated test environments."}
+                Sample teams are unavailable until a separately isolated demo environment
+                is available. Your new workspace starts without sample staff or shifts.
               </span>
             </span>
           </label>
+          {draft?.include_sample_data && (
+            <p role="status" className="rounded-xl bg-soft-sea px-4 py-3 text-sm text-ocean">
+              Your previously saved sample-team selection is no longer available.
+              Creating a workspace will start without sample staff or shifts.
+            </p>
+          )}
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               className="w-full rounded-xl bg-ocean px-5 py-3.5 text-sm font-semibold text-white transition hover:bg-ocean/90"

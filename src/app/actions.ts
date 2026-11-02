@@ -1923,6 +1923,7 @@ export async function saveBusinessDraftAction(formData: FormData) {
   const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
+  if (formData.has("sample_data")) redirect("/setup?error=sample-disabled");
 
   const timezone = text(formData, "timezone", 64);
   if (!timezone) redirect("/setup?error=draft");
@@ -1933,7 +1934,7 @@ export async function saveBusinessDraftAction(formData: FormData) {
     venue_name: text(formData, "venue_name", 100),
     venue_address: text(formData, "venue_address", 200),
     timezone,
-    include_sample_data: formData.get("sample_data") === "on",
+    include_sample_data: false,
   });
   if (error) redirect("/setup?error=draft");
   redirect("/setup?saved=1");
@@ -1943,13 +1944,12 @@ export async function createBusinessAction(formData: FormData) {
   const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
+  if (formData.has("sample_data")) redirect("/setup?error=sample-disabled");
 
   const businessName = text(formData, "business_name", 100);
   const venueName = text(formData, "venue_name", 100);
   const venueAddress = text(formData, "venue_address", 200);
   const timezone = text(formData, "timezone", 64);
-  const includeSampleData = formData.get("sample_data") === "on";
-
   if (!businessName || !venueName || !venueAddress || !timezone) {
     redirect("/setup?error=required");
   }
@@ -1959,7 +1959,7 @@ export async function createBusinessAction(formData: FormData) {
     p_venue_name: venueName,
     p_venue_address: venueAddress,
     p_timezone: timezone,
-    p_include_sample_data: includeSampleData,
+    p_include_sample_data: false,
   });
   if (error) {
     console.error("Workspace setup failed.", { code: error.code, message: error.message });

@@ -5,6 +5,18 @@
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
   BB-PAYRULES stories). Verified Done: **48**. In Progress: **0**.
   Blocked: **6**. Not started (Backlog): **55**.
+- BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
+  safeguard now fails closed for sample setup and the historical seed helpers,
+  even after attempts to enable the old policy. An upgrade from an enabled
+  policy preserved the existing synthetic records in rollback-only tests.
+  The migration is applied only to `butterbox-acceptance`; a real isolated
+  demo, outbound controls, historical production assessment and clean demo
+  conversion remain unverified. Focused pgTAP passed **102/102**, upgrade
+  rehearsals **16/16** on each of two disposable projects, authenticated
+  integrations **3/3**, and three targeted production-browser scenarios
+  passed. Changed-file lint, TypeScript and split production build passed.
+  Full Node, pgTAP, integration and browser suites were intentionally deferred;
+  broader migration and cross-tenant regression is required at release.
 - BB-ROSTER-005 (drag and drop roster changes) is Done. Managers can preview
   and apply scoped moves or draft duplicates by drag or keyboard, with guarded
   undo. Quick-change pgTAP passed **56/56** on the disposable acceptance
@@ -586,10 +598,11 @@
   connection are unverified. Assessment is paused for private owner/security
   review under DEC-004. No credential was used, changed or reproduced.
 - **BB-SAAS-003 — Tenant onboarding and support** remains Blocked for full
-  acceptance. Following the user's subsequent instruction to continue,
-  investigate the independent DEC-003 fail-closed safeguard using only the
-  isolated disposable project; do not treat that instruction as credential
-  remediation approval or evidence that security review occurred.
+  acceptance. The independent DEC-003 fail-closed safeguard is implemented
+  and verified only in the isolated disposable project. This work does not
+  imply credential-remediation approval or evidence that security review
+  occurred. Finish the partial checkpoint and then continue with the
+  independent prospective venue-week slice of BB-ORG-006.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
@@ -674,6 +687,16 @@
   DEC-003 demo-safety work resumed in the verified disposable environment.
   Credential assessment remains paused pending owner/security review, and
   no credential access, rotation or history changes are authorized.
+- At 11:53 UTC the forward migration `20261103140000` had been applied and
+  recorded only in `butterbox-acceptance` (API 55421, DB 55422). The old
+  policy, guarded helper and historical unchecked helper reject sample
+  generation, and setup explicitly rejects submitted sample fields. Existing
+  saved preferences are disclosed instead of silently applied. The targeted
+  results are recorded in the SAAS-003 criterion table below. An initial
+  replay role-switch error and an ambiguous browser alert locator were fixed
+  and their affected tests passed on rerun. No Auth users remained; synthetic
+  protected businesses remain in the disposable project and the sample
+  policy was disabled. Disk remained above 28 GiB.
 
 ## Recently completed story
 
@@ -896,11 +919,12 @@
   implicit-flow email redirect reaches a separate recipient browser with
   session tokens in the URL fragment; no tokens were printed.
 - **BB-SAAS-003 — Tenant onboarding and support** is Blocked. The owner
-  checklist, contextual help and default-off protected sample policy are
-  implemented and tested in the disposable environment. Production isolation
-  and whether historical production sample records exist have not been
-  verified; the policy can still be enabled deliberately by a database
-  operator and does not meet the hard-isolation requirements of DEC-003.
+  checklist, contextual help and fail-closed sample safeguard are implemented
+  and tested in the disposable environment. Production isolation and
+  historical sample records have not been assessed, and no separate demo
+  deployment or conversion has been verified. Privileged direct table writes
+  or schema changes can bypass this partial safeguard; it does not establish
+  the hard-isolation requirements of DEC-003.
 - Supabase PKCE links initiated in a manager's browser cannot be assumed to
   work in a recipient's separate browser.
 - **BB-ROSTER-004 — Copy week and roster template** is Done. A scoped manager
@@ -1106,11 +1130,25 @@ in each deployed environment.
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| SAAS-003.1 Checklist progresses business, venue, staff, shift and publication | Owner-only progress RPC and dashboard checklist use real records, with tenant and role checks. | The 29-assertion onboarding pgTAP suite and production Chromium scenario verified successive steps, archived staff, owner-only access and cross-tenant isolation. Both passed. | Pass |
-| SAAS-003.2 Seeded demo data is isolated from production | A database policy defaults to disabled; application accounts and the Supabase service role cannot enable it or call the unchecked helper. The operator opt-in does not establish the separate environment now required by DEC-003. | Earlier pgTAP, eight authenticated integrations and Chromium verified default denial, rollback, scoped opt-in and a concurrent disable race in the disposable project. Actual production configuration, historical data, hard demo isolation and clean paid conversion have not been verified. | Blocked |
-| SAAS-003.3 Inline help covers common tasks | The checklist explains business and venue setup, staff, draft shifts and publishing, with links to the relevant pages. | Production Chromium followed the departments help link and exercised the staff, shift and publication workflow; the 37-scenario regression passed. | Pass |
+| SAAS-003.1 Checklist progresses business, venue, staff, shift and publication | Owner-only progress RPC and dashboard checklist use real records, with tenant and role checks. | The updated **42/42** onboarding pgTAP assertions and targeted production Chromium checklist scenario passed, including successive steps, archived staff, owner-only access and cross-tenant isolation. | Pass |
+| SAAS-003.2 Seeded demo data is isolated from production | Migration `20261103140000` disables the old policy, rejects operator policy enablement and both seed helpers, and preserves existing records. Setup and server actions reject sample requests; previously saved preferences are disclosed. The safeguard is applied only in the disposable test project. | Four affected pgTAP files passed **102/102**, including authorization and tenant checks. An enabled-policy upgrade preserved synthetic business, venue, department, employee, role and shift records **16/16** on each of two rolled-back projects. Three authenticated setup, tenant and invitation-race integrations passed. The mobile browser scenario passed forged form requests, clean setup and WCAG checks. Actual production configuration, historical data, separate demo infrastructure, outbound controls and clean conversion remain unverified. | Blocked |
+| SAAS-003.3 Inline help covers common tasks | The checklist explains business and venue setup, staff, draft shifts and publishing, with links to the relevant pages. | Targeted production Chromium followed the departments help link and exercised the staff, shift and publication workflow. The earlier 37-scenario regression also passed. | Pass |
+
+**Selected verification:** The onboarding, workspace RLS, business setup
+and tenant-isolation pgTAP files cover the changed policy and its direct
+dependencies. The upgrade fixture checks migration compatibility and legacy
+record preservation. Authenticated integrations cover privileged enablement,
+concurrent setup, invitations and two-tenant isolation. Serialized production
+Chromium covered signup/recovery, the owner checklist/help and the mobile
+sample-disabled flow; the signup and mobile scenarios were rebuilt and rerun
+after the final server-action refinement. Changed-file ESLint, TypeScript and
+the split production build passed. Full pgTAP, Node, integration and browser
+suites were intentionally deferred. Broader migration and cross-tenant
+regression is required at release or when the demo architecture is implemented.
 
 Files: `supabase/migrations/20261102060000_onboarding_and_demo_isolation.sql`,
+`supabase/migrations/20261103140000_disable_unisolated_demo_seed.sql`,
+`supabase/tests/migration-upgrade/demo_seed_fail_closed.test.sql`,
 `supabase/tests/database/onboarding_and_demo_isolation.test.sql`,
 `supabase/tests/database/workspace_rls.test.sql`, `src/app/page.tsx`,
 `src/app/setup/page.tsx`, `src/app/actions.ts`,
@@ -2056,12 +2094,11 @@ but has not yet run remotely.
 - Await private owner/security review before resuming the **BB-FOUND-001**
   credential assessment. Do not use a candidate credential for access, rotate
   it or alter history without the required separate authorization.
-- Independently inspect **BB-SAAS-003 — Tenant
-  onboarding and support** for a fail-closed response to DEC-003. The
-  operator-enabled sample path does not establish a separate demonstration
-  environment. Keep the story Blocked until production isolation, historical
-  data and clean conversion are actually verified; do not alter live records.
-- Then inspect the now-directed prospective venue-week portion of
+- Keep **BB-SAAS-003 — Tenant onboarding and support** Blocked until separate
+  demo infrastructure, safe outbound controls, a production historical-data
+  assessment and clean conversion are actually verified; do not alter live
+  records or bypass the fail-closed safeguard.
+- Next inspect the directed prospective venue-week portion of
   **BB-ORG-006** under DEC-002, followed by
   **BB-ATTEND-004 — Rotating QR kiosk**. Keep ORG-006 Blocked until its
   complete criteria and external-channel dependencies are verified. Preserve

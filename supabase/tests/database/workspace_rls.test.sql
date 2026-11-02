@@ -5,7 +5,6 @@ create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated;
 grant execute on all functions in schema extensions to authenticated;
 select extensions.plan(9);
-update public.demo_seed_policy set enabled = true where singleton;
 
 insert into auth.users (id, email, raw_user_meta_data)
 values
@@ -37,19 +36,55 @@ select extensions.lives_ok(
     'Integration Sample Cafe',
     'Test Venue',
     'Australia/Sydney',
-    true
+    false
   )$$,
-  'an authenticated user can create a sample venue'
+  'an authenticated user can create a clean venue'
 );
+
+reset role;
+do $$
+declare
+  v_business_id uuid;
+  v_venue_id uuid;
+begin
+  select business_id into v_business_id from public.business_memberships
+  where user_id = '11111111-1111-4111-8111-111111111111';
+  select id into v_venue_id from public.venues where business_id = v_business_id;
+
+  insert into public.employees (business_id, venue_id, department_id, name, role_title)
+  select v_business_id, v_venue_id, d.id,
+    case when n = 1 then 'Mia Chen' else format('Fixture worker %s', n) end,
+    case when n <= 12 then 'Barista' else 'Cook' end
+  from generate_series(1, 24) n
+  join public.departments d on d.business_id = v_business_id
+    and d.name = case when n <= 12 then 'Front of House' else 'Back of House' end;
+
+  insert into public.job_roles (business_id, venue_id, department_id, name)
+  select distinct business_id, venue_id, department_id, role_title
+  from public.employees where business_id = v_business_id;
+
+  insert into public.shifts (
+    business_id, venue_id, department_id, employee_id, role_title, starts_at, ends_at
+  )
+  select e.business_id, e.venue_id, e.department_id, e.id, e.role_title,
+    current_date + occurrence + time '08:00',
+    current_date + occurrence + time '12:00'
+  from public.employees e
+  cross join generate_series(1, 2) occurrence
+  where e.business_id = v_business_id;
+end;
+$$;
+set local role authenticated;
+
 select extensions.is(
   (select count(*)::integer from public.employees),
   24,
-  'sample setup creates fictional employees'
+  'the synthetic fixture contains 24 employees'
 );
 select extensions.is(
   (select count(*)::integer from public.shifts),
   48,
-  'sample setup creates draft shifts'
+  'the synthetic fixture contains 48 draft shifts'
 );
 select extensions.lives_ok(
   $$select public.save_shift(

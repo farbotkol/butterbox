@@ -54,21 +54,16 @@ timezone; completing setup creates the owner membership atomically.
 The owner's dashboard includes a business, venue, staff, draft-shift and
 publication checklist, with links and brief guidance for the next steps.
 
-Fictional sample staff and shifts are disabled by default in every database.
-Only a database operator can enable them; ordinary application accounts and
-the Supabase service role cannot change the policy. To use samples, first
-verify that the connected database is an isolated local test instance with no
-live data, then, as its database owner only, run:
-
-```sql
-update public.demo_seed_policy set enabled = true where singleton;
-```
-
-Never enable this policy in production or any environment containing real
-customer data. Enabling it allows new test workspaces to opt into fictional
-staff and private draft shifts; it does not seed existing workspaces. Set
-`enabled = false` again when finished. Applying the onboarding migration does
-not remove sample data that was created before this safeguard.
+Fictional sample staff and shifts are unavailable until a separately isolated
+demo environment and its operational safeguards are implemented. The setup
+form, server actions and database seed functions reject sample requests;
+ordinary accounts, the service role and an operator updating the old policy
+cannot enable them. New customer workspaces start without sample staff or
+shifts. Applying the safeguard disables a previously enabled policy but does
+not delete or establish the provenance of any historical sample records.
+Privileged direct table writes or schema changes can bypass this safeguard and
+must be governed separately. See `docs/DECISION_LOG.md` (DEC-003) for the
+remaining isolation, historical-data assessment and clean-conversion requirements.
 
 Owners can configure each venue's latitude, longitude and clocking radius on
 **Departments**. Coordinates accept up to six meaningful decimal places and
@@ -654,6 +649,21 @@ project label and API port before using temporary row locks.
 If the pinned CLI is already installed locally, set `BUTTERBOX_TEST_SUPABASE_CLI`
 to its executable path to avoid launching `npx` for the test status check.
 
+The sample-policy upgrade rehearsal requires a verified disposable database
+with migrations through `20261103130000` and without the later safeguard.
+After verifying its project label and database port, stream the migration into
+the rolled-back test (replace `<project-id>` with the verified project ID):
+
+```sh
+sed '/^-- APPLY_DEMO_SAFEGUARD_MIGRATION$/r supabase/migrations/20261103140000_disable_unisolated_demo_seed.sql' \
+  supabase/tests/migration-upgrade/demo_seed_fail_closed.test.sql |
+  docker exec -i supabase_db_<project-id> psql -X -qAt -v ON_ERROR_STOP=1 -U postgres -d postgres
+```
+
+Check the TAP plan and every assertion, including `not ok` lines; a successful
+`psql` exit alone does not mean the assertions passed. The rehearsal creates
+sample records only inside its rolled-back transaction.
+
 To exercise authentication/recovery, resumable setup, permission assignment,
 employee profiles and directory filters in a real browser, install Chromium and its
 platform dependencies, then run against a **disposable** local project:
@@ -671,8 +681,8 @@ running and the application callback origin on its redirect allowlist. It
 creates and removes test users. Protected synthetic businesses remain until a
 separately verified disposable project reset; never use a shared database or a
 loopback tunnel to a non-disposable project. The sample-data browser test
-requires the policy to be disabled initially, verifies the Docker project label
-and API port, temporarily enables the policy and restores it afterward.
+verifies that setup remains clean and sample creation is unavailable, including
+for a previously saved sample preference.
 Set `BUTTERBOX_TEST_APP_URL` to
 another loopback origin if needed, and allow that origin in Supabase first.
 For a lower-memory local functional run, append `--dev` to use a disposable

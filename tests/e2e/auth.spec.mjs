@@ -7541,7 +7541,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
   }
 });
 
-test("sample teams are opt-in only after an isolated database operator enables them", async ({ page }) => {
+test("sample teams remain unavailable and saved preferences cannot seed a customer workspace", async ({ page }) => {
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
   expect(await sql("select enabled from public.demo_seed_policy where singleton")).toBe("f");
   const suffix = randomUUID();
@@ -7549,42 +7549,68 @@ test("sample teams are opt-in only after an isolated database operator enables t
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   let userId;
   try {
-    await sql("update public.demo_seed_policy set enabled = true where singleton");
     const user = await admin.auth.admin.createUser({ email, password, email_confirm: true });
     expect(user.error).toBeNull();
     userId = user.data.user.id;
+    expect((await admin.from("business_setup_drafts").insert({
+      user_id: userId, business_name: "Clean customer cafe", venue_name: "Test venue",
+      venue_address: "10 Test Street", timezone: "Australia/Sydney", include_sample_data: true,
+    })).error).toBeNull();
+    await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, email, password);
     await expect(page).toHaveURL(/\/setup/);
     const sample = page.getByRole("checkbox", { name: /Add a sample team/ });
-    await expect(sample).toBeEnabled();
+    await expect(sample).toBeDisabled();
     await expect(sample).not.toBeChecked();
-    await sample.check();
-    await page.getByLabel("Business name").fill("Isolated sample cafe");
-    await page.getByLabel("First venue").fill("Test venue");
-    await page.getByLabel("Venue address").fill("10 Test Street");
+    await expect(page.getByRole("status")).toContainText("previously saved sample-team selection");
+    await expect(page.getByText(/Sample teams are unavailable/)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile clean setup"));
+
+    const tamperWithSampleControl = (value) => page.evaluate((inputValue) => {
+      const control = document.querySelector('input[name="sample_data"]');
+      if (!(control instanceof HTMLInputElement)) throw new Error("Sample control is missing");
+      control.disabled = false;
+      control.value = inputValue;
+      control.checked = true;
+    }, value);
+    await tamperWithSampleControl("unexpected");
     await page.getByRole("button", { name: "Save progress" }).click();
-    await expect(page.getByRole("status")).toContainText("Setup progress saved");
-    await expect(sample).toBeChecked();
+    await expect(page.locator('p[role="alert"]')).toContainText("Sample data is unavailable");
+    const retainedDraft = await admin.from("business_setup_drafts")
+      .select("include_sample_data").eq("user_id", userId).single();
+    expect(retainedDraft.error).toBeNull();
+    expect(retainedDraft.data.include_sample_data).toBe(true);
+    await expect(sample).toBeDisabled();
+    await tamperWithSampleControl("on");
+    await page.getByRole("button", { name: "Create workspace" }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("Sample data is unavailable");
+    const deniedMemberships = await admin.from("business_memberships").select("id").eq("user_id", userId);
+    expect(deniedMemberships.error).toBeNull();
+    expect(deniedMemberships.data).toHaveLength(0);
+
+    await expect(sample).toBeDisabled();
     await page.getByRole("button", { name: "Create workspace" }).click();
     const checklist = page.getByRole("region", { name: "Get your first roster ready" });
-    await expect(checklist).toContainText("4 of 5 steps complete");
+    await expect(checklist).toContainText("2 of 5 steps complete");
     const membership = await admin.from("business_memberships").select("business_id")
       .eq("user_id", userId).single();
     expect(membership.error).toBeNull();
-    const [staff, shifts, publications] = await Promise.all([
+    const [staff, shifts, roles, publications] = await Promise.all([
       admin.from("employees").select("id").eq("business_id", membership.data.business_id),
       admin.from("shifts").select("is_published").eq("business_id", membership.data.business_id),
+      admin.from("job_roles").select("id").eq("business_id", membership.data.business_id),
       admin.from("roster_publications").select("id").eq("business_id", membership.data.business_id),
     ]);
     expect(staff.error).toBeNull();
     expect(shifts.error).toBeNull();
+    expect(roles.error).toBeNull();
     expect(publications.error).toBeNull();
-    expect(staff.data).toHaveLength(24);
-    expect(shifts.data).toHaveLength(48);
-    expect(shifts.data.every((shift) => shift.is_published === false)).toBe(true);
+    expect(staff.data).toHaveLength(0);
+    expect(shifts.data).toHaveLength(0);
+    expect(roles.data).toHaveLength(0);
     expect(publications.data).toHaveLength(0);
   } finally {
-    await sql("update public.demo_seed_policy set enabled = false where singleton");
     if (userId) {
       const memberships = await admin.from("business_memberships").select("business_id").eq("user_id", userId);
       expect(memberships.error).toBeNull();
