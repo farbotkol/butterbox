@@ -1,13 +1,13 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 20:16 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-02 21:55 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
 - **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
 - **Agent execution state:** Active at this checkpoint. The timestamp does not prove later execution; no background scheduling is configured.
 - **Current story:** `BB-DOC-002 — Searchable in-app HTML help center` (In Progress)
 - **Acceptance criteria:** Accessible responsive Markdown-backed HTML; role/task categories and keyword search; authorized content/routes and clear empty states; controlled rendering, keyboard/mobile acceptance and accurate unavailable-feature labels.
-- **Phase:** Planning
-- **Current activity:** Reusing maintained guide sections with server-resolved role visibility, safe Markdown rendering and native accessible search; no database or shared authorization change.
+- **Phase:** Testing
+- **Current activity:** Recovered the uncommitted role-scoped help route, Markdown dependencies, navigation, guide changes and four browser scenarios. Five focused Node tests and TypeScript passed; production/browser verification next. No database or shared authorization change.
 - **Progress since previous report:** Added tested read-only baseline journeys to the existing User Guide and four production-browser scenarios. Actual owner login/checklist/setup redirect, departments/14 staff, publication/open shifts, approved sample download and correction page passed. Both managers see only their seven staff/approved groups and cannot export/reopen; mobile employee schedule/availability/history and direct timesheet denial passed. Repeated journeys preserved the fixture; 29 GiB free disk.
 - **Testing policy in effect:** Targeted verification.
 - **Tests selected and actual results:** Four guided production journeys passed (owner 1/1, both managers 2/2, mobile employee 1/1), including actual login/navigation, seeded counts, real sample download, scope/denials and mobile axe/overflow. Post-walkthrough HTTP baseline integrity 1/1; test ESLint zero warnings, TypeScript and split production build passed. Initial owner failures were test selectors/filter assumptions; fixed and rerun. DEMO-001's 31 focused tests, 74 pgTAP, labelled browser and ordinary report/CSV 2/2 remain its prior evidence, not a new full regression.
