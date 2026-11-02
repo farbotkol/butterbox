@@ -60,3 +60,55 @@ Add a manifest containing schema version, date coverage, counts and SHA-256 chec
 ### Record provenance
 
 Recorded following the product owner's explicit request: *“For Butterbox BB-RULES-005, I prefer café-owned exported records with a defined retrieval period and controlled deletion after cancellation.”* The 60/90-day timeline and detailed implementation safeguards were recommended afterward but have not yet been separately approved by the owner.
+
+---
+
+## DEC-002 — Venue roster week start and notification channel defaults
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-ORG-006 — Business configuration`
+- **Related dependency:** `BB-COMMS-003 — Email and push delivery` (plus future SMS and WhatsApp channel delivery/integration work)
+- **Decision owner:** Butterbox product owner
+- **Status:** Product direction confirmed; delivery integrations and channel-specific governance pending
+
+### Confirmed product decisions
+
+1. **Roster week start is configurable per venue**, defaulting to **Monday**. A business with multiple venues may choose different roster display starts for each venue.
+2. **Changes are prospective only.** Never rewrite immutable published roster versions, historic timesheets, payroll periods or already finalized calculations merely because the venue changes its preferred week start. Roster display-week configuration is distinct from payroll-period boundaries.
+3. **Essential operational notifications are enabled in-app by default**, with tenant and user permissions enforced. Essential events include relevant roster publication/changes, shift offer/swap outcomes, approval decisions and attendance correction outcomes, where supported.
+4. **Email, push, SMS and WhatsApp are additional OPTIONAL delivery channels**, not mandatory or automatically enabled by the venue's essential in-app default. Make the channel architecture extensible without falsely claiming a channel is available before its provider and workflow are implemented.
+5. Optional channels require explicit, appropriately recorded recipient choices and consent or other verified lawful basis where relevant; honor opt-outs, verified contact/address ownership, per-channel delivery preferences, safety/privacy, message sensitivity, quiet hours where applicable, local messaging rules and provider policies. Do not assume WhatsApp/SMS can be sent solely because a mobile phone is on file.
+
+### Implementation instructions — Main Roadmap Agent
+
+**Venue week-start controls:**
+
+- Add an owner-authorized, audited week-start setting to each venue (ISO day-of-week 1–7, Monday default) with clear help text distinguishing the display week from payroll week/period definitions.
+- Apply the setting to future roster navigation, week labels, date-range selection and appropriate venue-specific planning displays. Preserve stable dates and timezone behavior (including DST); never silently alter historic shift timestamps, published snapshots or payroll boundary semantics.
+- A change should take effect prospectively using a documented effective-date or equivalent versioned configuration, and should not re-interpret historic documents. If an existing workflow cannot honor the chosen start safely, clearly prevent that action or retain the prior semantics with an explanation rather than silently migrating history.
+- Use one canonical, server-validated definition of display-week calculation; tenant and venue scope must be enforced in database/API operations, not just UI.
+
+**Notification settings and delivery:**
+
+- Define a channel-neutral event taxonomy and a durable notification/outbox model with in-app delivery as the default for essential events. Distinguish essential operational notices from optional reminders and marketing/promotional messages.
+- Retain required in-app notices even when a recipient disables optional external channels. Expose understandable per-channel employee preferences and venue defaults without allowing a venue to override a recipient's legally required opt-out or consent choice.
+- Prepare optional provider adapters for email, push, SMS and WhatsApp with separate feature flags/capabilities, delivery state, deduplication/idempotency, retries, auditable event history and safe redaction. Do not activate a channel until credentials, provider contracts, consent and deliverability tests have been approved.
+- For SMS and WhatsApp, explicitly consider Australian Spam Act / ACMA and Privacy Act requirements where applicable, sender identification, unsubscribe rules for commercial messages, WhatsApp Business opt-in and approved template/conversation rules, international number formats, costs and messaging-provider rate limits. Classify each event correctly rather than treating every notification as marketing.
+- Preserve tenant isolation and authorized recipient scope; avoid putting sensitive employment/pay information in lock-screen, SMS or WhatsApp message bodies. Prefer a short, privacy-conscious notice linking to authenticated Butterbox detail.
+
+**Verification:**
+
+- Test default Monday, alternate per-venue starts, multi-venue timezone isolation, week navigation across year boundaries/DST, prospective config change and unchanged historical published rosters/timesheets/payroll periods.
+- Test authorization, audit, tenant separation, employee preferences and opt-outs, channel eligibility, required in-app delivery, external-provider disabled/unavailable states, idempotency, retries and race conditions. Use targeted pgTAP, Node, authenticated integration and browser checks; broader regression before release.
+- Keep `BB-ORG-006` **Blocked / Partially Complete** until accepted week-start transition semantics and notification criteria are implemented and tested; do not mark email, push, SMS or WhatsApp delivered without live end-to-end evidence.
+
+### Remaining dependencies and open questions
+
+1. **`BB-COMMS-003`:** External email/push delivery not yet completed; decide whether week-start controls and essential in-app defaults can be accepted independently before the full story is closed.
+2. **SMS/WhatsApp integrations:** Provider selection, budgets, onboarding, credentials, sender registrations, verified opt-in/opt-out and end-to-end test identities are not yet approved. Track these as separately estimated follow-on work, not silently folded into completed COMMS-003.
+3. **Business/product details:** Confirm whether venue defaults for optional channels are exposed in the initial release, what optional notification categories can be configured, and desired quiet-hour policy. The choice of optional channel does not itself authorize sending.
+4. **Payroll periods:** Keep existing Monday-aligned payroll-period behavior unless separately approved for change; any future adjustable payroll periods need dedicated impact assessment and migration design.
+
+### Record provenance
+
+Recorded after the product owner's explicit instruction: *“For Butterbox DEC-002 / BB-ORG-006, my roster week configuration choice is configurable by venue, Monday default, prospective changes. My notification choice is essential in-app on by default and optional email/push. Additional requirements: SMS AND WhatsApp Are additional options.”*
