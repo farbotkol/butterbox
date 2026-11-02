@@ -657,6 +657,14 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
+- **Recovery, 2026-11-02 17:50 UTC:** Branch and fetched remote both point to
+  `025ec1f166fd3814087c47ec0736f365c06ada4d`; uncommitted QR code and user
+  guidance survived. The disposable acceptance project is healthy and its
+  migration ledger includes `20261103160000`. Previous test results below
+  are historical; final review, the latest invalid-link browser assertion,
+  lint, TypeScript and focused unit tests remain to be rerun. No development
+  files were overwritten. The owner-requested BRAND epic is not yet present;
+  add planning stories without inventing approved assets after the QR checkpoint.
 - **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
   `20261103160000_attendance_qr_kiosks.sql` and
   `attendance_qr_kiosks.test.sql` passed **62/62** assertions both against the
