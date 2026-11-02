@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **58**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **63**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **62**.
 - BB-COMMS-001 is **Done**: immutable permission-scoped in-app announcements,
   frozen recipient history and explicit acknowledgement receipts. Focused
   pgTAP **36/36**, direct regressions **158/158**, Node **15/15**, final
@@ -704,11 +704,18 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**Selecting the next ready operational story after verified COMMS-001.**
-Remaining Showcase P0 identity work requires owner approval. Scenario-driven
-SHIFTS-005 needs absent employment/change-warning safeguards; do not treat
-blank Dependencies as proof of readiness. Inspect the next independent
-P1 showcase story and preserve all approval/workstream boundaries.
+**BB-ROSTER-011 — Roster keyboard productivity: In Progress (Planning).**
+COMMS-001 `8cd468ebae5368d0e08569caf9184a21b617dbe8` pushed with exact remote
+SHA verified. Select ready Showcase P1 keyboard productivity, reusing Done
+ROSTER-005/006 quick-change undo and scoped grouping. Original priority P2
+is preserved. Remaining P0 identity work requires approval; staffing scenarios
+and overtime/restriction warnings lack necessary employment-change definitions.
+Add optional shortcuts that never intercept editing, scoped employee-name
+display search and deliberate draft deletion confirmation. Preserve existing
+server authorization and publication semantics; search must not narrow totals
+or publish only a hidden subset. Focused Node, relevant production browser,
+changed-code lint/types/build and actual guide update planned.
+**Documentation: pending** verified new behavior; no criterion marked Pass yet.
 
 ## Latest completed announcement story
 
