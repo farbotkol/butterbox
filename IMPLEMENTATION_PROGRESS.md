@@ -6,9 +6,10 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:57 UTC, the uncommitted device and employee UI and transaction
+  2026-11-02 12:59 UTC, the uncommitted device and employee UI and transaction
   migration are implemented but not runtime-verified end to end. On the
-  isolated applied schema, QR pgTAP passed **62/62** and seven neighboring
+  isolated applied schema and rolled-back migration replay, QR pgTAP each passed
+  **62/62**; seven neighboring
   attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
   preflight also passed **62/62**; five authenticated QR/attendance/location/
   tenant concurrency integrations and **8/8** focused kiosk/audit Node tests
@@ -658,9 +659,13 @@ settings/delivery still require their own implementation and verification.
 
 - **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
   `20261103160000_attendance_qr_kiosks.sql` and
-  `attendance_qr_kiosks.test.sql` passed **62/62** assertions both in a
-  rolled-back preflight and against the applied migration on the verified
-  disposable acceptance project. Neighboring clock (**72/72**), break
+  `attendance_qr_kiosks.test.sql` passed **62/62** assertions both against the
+  applied migration on the verified disposable acceptance project and in an
+  ordered rolled-back migration replay on `butterbox-fresh-migration-check`
+  (DB 56422). The replay left its ledger and temporary Auth helper unchanged.
+  An initial replay attempt failed to assume the administrative role; connecting
+  as the verified local administrative role fixed it and the retry passed.
+  Neighboring clock (**72/72**), break
   (**79/79**), location (**71/71**), geofence (**60/60**), personal history
   (**22/22**), audit (**31/31**) and tenant isolation (**32/32**) pgTAP
   assertions passed on the applied schema. Five authenticated integrations
