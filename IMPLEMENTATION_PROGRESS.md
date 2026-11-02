@@ -3,8 +3,12 @@
 ## Execution summary
 
 - Total stories: **122** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **0**.
-  Blocked: **6**. Not started (Backlog): **67**.
+  BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
+  Blocked: **6**. Not started (Backlog): **66**.
+- BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
+  2026-11-02 17:58 UTC. Existing published roster, immutable attendance and
+  scoped manager authorization foundations are being investigated. All four
+  acceptance criteria remain unverified; no alert implementation is claimed.
 - The requested **BRAND** epic and ten P2 planning stories now cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
@@ -654,6 +658,17 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
+- **BB-ATTEND-006 — Late, missing and no-show alerts: In Progress.** Started
+  2026-11-02 17:58 UTC after the QR checkpoint and BRAND planning checkpoint
+  were pushed. The criteria are configurable thresholds, duplicate suppression,
+  auditable acknowledgement and resolution, and exclusion of unpublished
+  shifts. Existing attendance sessions/events and roster publication flags are
+  present; no alert workflow was found. The disposable database has pg_cron
+  available and preloaded but not installed. No scheduler or extension has
+  been changed. Next, inspect publication revisions, correction behavior and
+  notification conventions before choosing and implementing the secure
+  detection workflow. No story tests have run; documentation will be updated
+  only for implemented user-visible behavior.
 - **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
   implementation and guide survived, and the disposable acceptance project
   remained healthy. The recovery status checkpoint `d8e9229` was pushed
@@ -2221,8 +2236,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Assess the highest-priority ready core story, including **BB-ATTEND-006**.
-  Keep the new BRAND stories in Backlog until their assets and approvals
+- Continue **BB-ATTEND-006** by designing and implementing scoped, auditable
+  alert detection and targeted tests. Keep the new BRAND stories in Backlog
+  until their assets and approvals
   exist. Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable
   periods and do not silently reinterpret history.
