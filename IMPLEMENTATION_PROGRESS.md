@@ -378,13 +378,18 @@
   publication and acknowledgement assertions fail. A new uncommitted
   forward-only migration now follows the existing shared-worker and employee
   lock order. With that replacement applied only inside a rolled-back
-  transaction, the complete swap pgTAP file passed **53/53** on the
-  identified isolated acceptance database. The committed migration was not
-  changed, and the correction has not yet been permanently applied to the test
-  project. No swap UI is present. Next: implement employee, manager and
-  notification interfaces; test cross-tenant and cross-workflow concurrency;
-  apply the correction safely and rerun targeted acceptance and neighbouring
-  publication/acknowledgement checks. No full regression was run and no swap
+  transaction, the expanded swap pgTAP file passed **58/58** on the
+  identified isolated acceptance database, including response-profile
+  authorisation. The committed migration was not changed, and the correction
+  has not yet been permanently applied to the test project. Employee and
+  manager interfaces, selected-business notification links and validated
+  response parsing are implemented but uncommitted and not browser-tested.
+  Four targeted Node test files passed **14/14**, changed-file ESLint and
+  TypeScript passed. The tracked lint cache removed by ESLint was restored to
+  its unchanged original state. Next: safely apply the migration to the
+  disposable project; add authenticated cross-workflow concurrency and mobile
+  browser tests; run neighbouring publication, acknowledgement and
+  notification checks. Full suites were intentionally deferred. No swap
   criterion is yet marked Pass end-to-end.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
