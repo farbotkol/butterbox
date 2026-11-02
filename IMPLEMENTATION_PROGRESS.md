@@ -516,13 +516,27 @@
 
 ## Current story
 
-- **BB-ROSTER-009 — Roster approval workflow** is In Progress, in planning.
+- **BB-ROSTER-009 — Roster approval workflow** is In Progress, in coding.
   Its criteria are owner-selectable direct/approval publication, a reviewer
   view of changes, and scoped audited approval/rejection. Existing publication
   is direct, snapshots published shifts and sends recipient notifications.
   Preserve that default and its conflict checks; prevent bypass and stale
   approval server-side. This supplies the approval workflow needed for the
-  broader `BB-ORG-006` configuration story.
+  broader `BB-ORG-006` configuration story. The uncommitted migration and
+  focused fixture passed **67/67** assertions in a rolled-back transaction
+  on the isolated acceptance database; neither is applied to a migration
+  ledger yet. The first fixture run stopped after 50 passes due to an
+  unauthorized direct recipient-table query; the corrected employee-scoped
+  notification check passed. A different scoped manager must decide;
+  requesters may withdraw. UI, authenticated concurrency, neighbouring
+  publication and notification regressions, Node, browser, lint, TypeScript
+  and production build remain to be implemented or run.
+
+  | Criterion | Current evidence and next test | Status |
+  | --- | --- | --- |
+  | ROSTER-009.1 — owner selects direct or approval | Database mode, scoped owner RPC and bypass checks: focused pgTAP 67/67; owner UI/browser test outstanding | Blocked pending UI verification |
+  | ROSTER-009.2 — reviewer sees changes | Immutable shift snapshot and scoped listing: focused pgTAP 67/67; reviewer UI/browser test outstanding | Blocked pending UI verification |
+  | ROSTER-009.3 — approval/rejection is scoped and audited | Scope, decisions, audit and conflict recheck: focused pgTAP 67/67; concurrency, integration and browser tests outstanding | Blocked pending remaining verification |
 - **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
   above; the verified access and visibility changes have been pushed. Week
   boundaries are currently baked into roster publications and payroll
