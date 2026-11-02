@@ -23,6 +23,9 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { CopyRosterForm } from "@/components/copy-roster-form";
+import {
+  QuickShiftDropTarget, QuickShiftHandle, RosterQuickChangeProvider, type QuickShiftWorker,
+} from "@/components/roster-quick-changes";
 import { RosterReviewPanel } from "@/components/roster-review-panel";
 import { ShiftEditor } from "@/components/shift-editor";
 import {
@@ -364,7 +367,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       .eq("venue_id", workspace.venue.id).order("id").range(from, to),
       (interval) => interval.id),
     readAllPages((from, to) => workspace.supabase.from("shifts")
-      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement", { count: "exact" })
+      .select("id, department_id, employee_id, role_title, starts_at, ends_at, break_minutes, is_published, requires_acknowledgement, updated_at", { count: "exact" })
       .eq("venue_id", workspace.venue.id).eq("status", "scheduled")
       .gte("starts_at", startAt).lt("starts_at", endAt).order("starts_at").order("id").range(from, to),
     (shift) => shift.id),
@@ -495,6 +498,20 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   };
   const canManageSelectedDepartment = selectedDepartment
     ? canManageDepartment(selectedDepartment) : false;
+  const quickWorkers: QuickShiftWorker[] = [];
+  const quickWorkerIds = new Set<string>();
+  const employeesById = new Map((employeeRows ?? []).map((employee) => [employee.id, employee]));
+  for (const link of linkRows) {
+    const employee = employeesById.get(link.employee_id);
+    const department = departmentMap.get(link.department_id);
+    const key = `${link.department_id}:${link.employee_id}`;
+    if (employee?.active && department?.active && canManageDepartment(department.id) &&
+      !quickWorkerIds.has(key)) {
+      quickWorkerIds.add(key);
+      quickWorkers.push({ id: employee.id, name: employee.name, departmentId: department.id });
+    }
+  }
+  quickWorkers.sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
   const acknowledgementStatuses = await shiftAcknowledgements(
     workspace.supabase, workspace.business.id, workspace.venue.id,
     visibleShifts.filter((shift) => shift.is_published && shift.requires_acknowledgement)
@@ -877,6 +894,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </section>
       )}
 
+      <RosterQuickChangeProvider key={`${workspace.business.id}:${workspace.venue.id}:${week}`}
+        businessId={workspace.business.id} venueId={workspace.venue.id} week={week}
+        timezone={workspace.venue.timezone} days={days} workers={quickWorkers}>
       <section className="mt-6 overflow-hidden rounded-lg border border-line bg-white shadow-[0_4px_18px_rgba(18,63,74,0.04)]">
         <div className="flex items-center justify-between border-b border-line bg-white px-5 py-4">
           <div>
@@ -896,6 +916,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               {currentVenue.block_publish_unavailability && " Assigned shifts longer than 24 hours cannot be verified for availability."}
               {" "}Managers can require acknowledgement for an assigned draft before publishing.
             </p>
+            {canManage && (
+              <p className="mt-1 text-xs text-muted">
+                Drag a shift&apos;s Move or duplicate control onto a team member and day, or activate it to choose
+                a destination. Preview and confirm before applying.
+              </p>
+            )}
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
         </div>
@@ -968,7 +994,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                     const unavailable = availability.unavailable;
                     return (
                       <td key={date} className="border-r border-line/60 px-2 py-2 align-top last:border-r-0">
-                        <div className="space-y-1.5">
+                        <QuickShiftDropTarget departmentId={department.id} employeeId={employee.id} date={date}
+                          enabled={canManageDepartment(department.id) && department.active &&
+                            employee.active && !employee.profileUnavailable}>
                           {availability.pendingLeave && (
                             <span aria-label={`Pending leave ${employee.name} ${date} in ${department.name}`}
                               className="block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-900">
@@ -1031,6 +1059,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                         ? "Awaiting acknowledgement" : "Acknowledged"}
                                 </p>
                               )}
+                              {canManageDepartment(shift.department_id) &&
+                                departments.find((item) => item.id === shift.department_id)?.active && (
+                                <div className="mt-1">
+                                  <QuickShiftHandle source={{
+                                    id: shift.id, departmentId: shift.department_id, employeeId: shift.employee_id,
+                                    date, updatedAt: shift.updated_at, isPublished: shift.is_published,
+                                    label: `${employee.name}, ${shift.role_title}, ${date} ${formatTime(shift.starts_at, workspace.venue.timezone)}${shift.is_published ? " (published)" : ""}`,
+                                  }} />
+                                </div>
+                              )}
                               {canManageDepartment(shift.department_id) && !shift.is_published &&
                                 departments.find((item) => item.id === shift.department_id)?.active && (
                                 <AcknowledgementRequirementControl shiftId={shift.id} departmentId={shift.department_id}
@@ -1076,7 +1114,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                               —
                             </span>
                           )}
-                        </div>
+                        </QuickShiftDropTarget>
                       </td>
                     );
                   })}
@@ -1144,6 +1182,15 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-amber-800">Needs cover</span>
+                    {canManageDepartment(shift.department_id) &&
+                      departments.find((item) => item.id === shift.department_id)?.active && (
+                      <QuickShiftHandle source={{
+                        id: shift.id, departmentId: shift.department_id, employeeId: null,
+                        date: getVenueDate(shift.starts_at, workspace.venue.timezone),
+                        updatedAt: shift.updated_at, isPublished: shift.is_published,
+                        label: `open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)} ${formatTime(shift.starts_at, workspace.venue.timezone)}${shift.is_published ? " (published)" : ""}`,
+                      }} />
+                    )}
                     {shift.requires_acknowledgement && canManageDepartment(shift.department_id) && !shift.is_published &&
                       departments.find((item) => item.id === shift.department_id)?.active && (
                       <AcknowledgementRequirementControl shiftId={shift.id} departmentId={shift.department_id}
@@ -1166,6 +1213,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           <p className="px-5 py-5 text-sm text-muted">No unassigned shifts this week.</p>
         )}
       </section>
+      </RosterQuickChangeProvider>
     </AppShell>
   );
 }

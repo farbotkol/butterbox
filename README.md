@@ -555,6 +555,15 @@ When clocks repeat a local time, newly entered values use the later occurrence;
 editing an unchanged time preserves its original instant, including any
 historical seconds not displayed by the minute-precision form.
 
+For a quick roster change, a manager can drag **Move or duplicate** to a team
+member and day, or activate the control and select the target using a keyboard.
+The preview identifies the destination and shows conflicts or warnings before
+confirmation. Moves change drafts only; published shifts can be duplicated as
+private drafts. The most recent quick change can be undone while its result
+remains unchanged and unpublished. The server rechecks permissions, the preview
+and scheduling rules when applying or undoing, and rejects unsafe clock-change
+times. Changes remain private until the normal publication workflow succeeds.
+
 **My schedule** shows a linked team member their next published shift and a
 mobile-friendly weekly list, including overnight shifts that overlap the
 week. It displays the selected venue's local time and address and never

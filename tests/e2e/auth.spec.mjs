@@ -136,6 +136,144 @@ test("operational probes report database readiness and protect process metrics",
   expect(JSON.stringify(body)).not.toContain(token);
 });
 
+test("quick roster changes preview drag targets, support keyboard and undo on mobile", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const users = [];
+  const contexts = [];
+  const [businessId, venueId, fohId, bohId, alexId, samId, sourceId, overlapId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const roster = `/roster?business=${businessId}&venue=${venueId}&department=${fohId}&week=2032-03-29`;
+  async function sourceShift() {
+    const result = await admin.from("shifts").select("id, employee_id, starts_at, is_published, requires_acknowledgement")
+      .eq("id", sourceId).single();
+    expect(result.error).toBeNull();
+    return result.data;
+  }
+  try {
+    for (const role of ["manager", "worker", "boh"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `quick-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: "Quick change UI cafe" })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Quick venue", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: alexId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[1], name: "Alex Quick", role_title: "Server" },
+      { id: samId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        name: "Sam Quick", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: sourceId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: alexId, role_title: "Quick service",
+        starts_at: "2032-03-29T09:00:00Z", ends_at: "2032-03-29T11:00:00Z",
+        requires_acknowledgement: true },
+      { id: overlapId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: samId, role_title: "Existing service",
+        starts_at: "2032-03-30T09:00:00Z", ends_at: "2032-03-30T11:00:00Z",
+        requires_acknowledgement: false },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_availability_exceptions").insert({
+      business_id: businessId, venue_id: venueId, employee_id: samId,
+      starts_on: "2032-04-01", ends_on: "2032-04-01", exception_type: "leave", status: "approved",
+    })).error).toBeNull();
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await signIn(page, `quick-browser-manager-${suffix}@example.test`, password);
+    await page.goto(roster);
+    const source = page.getByRole("button", { name: /Move or duplicate Alex Quick, Quick service/ });
+    const target = page.locator(`#roster-row-${fohId}-${samId} td`).nth(3).locator("div").first();
+    await source.dragTo(target);
+    const panel = page.getByRole("region", { name: "Quick shift change" });
+    const preview = panel.locator('[aria-label="Shift change preview"]');
+    await expect(preview).toContainText("Sam Quick");
+    await expect(panel.getByLabel("Target day")).toHaveValue("2032-04-01");
+    await expect(preview).toContainText("unavailable or has approved leave");
+    expect((await sourceShift()).starts_at).toBe("2032-03-29T09:00:00+00:00");
+    await preview.getByRole("button", { name: "Apply move" }).click();
+    await expect(panel.getByRole("status")).toContainText("Draft shift moved");
+    expect(await sourceShift()).toMatchObject({
+      employee_id: samId, starts_at: "2032-04-01T09:00:00+00:00",
+      is_published: false, requires_acknowledgement: true,
+    });
+    await panel.getByRole("button", { name: "Undo last quick change" }).click();
+    await expect(panel.getByRole("status")).toHaveText("Draft shift move undone.");
+    expect(await sourceShift()).toMatchObject({
+      employee_id: alexId, starts_at: "2032-03-29T09:00:00+00:00", is_published: false,
+    });
+
+    await source.focus();
+    await page.keyboard.press("Enter");
+    await expect(panel.getByRole("heading", { name: "Quick shift change" })).toBeFocused();
+    await panel.getByLabel("Action").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(panel.getByLabel("Action")).toHaveValue("duplicate");
+    await panel.getByLabel("Target day").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(panel.getByLabel("Target day")).toHaveValue("2032-03-30");
+    await panel.getByLabel("Target team member").focus();
+    await page.keyboard.press("End");
+    await expect(panel.getByLabel("Target team member")).toHaveValue(samId);
+    await panel.getByRole("button", { name: "Preview change" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(preview.getByRole("alert")).toContainText("already has a shift");
+    await expect(preview.getByRole("button", { name: "Create draft duplicate" })).toBeDisabled();
+    await panel.getByLabel("Target day").focus();
+    await page.keyboard.press("ArrowDown");
+    await expect(panel.getByLabel("Target day")).toHaveValue("2032-03-31");
+    await panel.getByRole("button", { name: "Preview change" }).click();
+    await expect(preview).toContainText("Sam Quick");
+    await preview.getByRole("button", { name: "Create draft duplicate" }).click();
+    await expect(panel.getByRole("status")).toContainText("Draft duplicate created");
+    const duplicated = await admin.from("shifts").select("id, is_published, requires_acknowledgement")
+      .eq("business_id", businessId).eq("employee_id", samId).eq("role_title", "Quick service");
+    expect(duplicated.error).toBeNull();
+    expect(duplicated.data).toHaveLength(1);
+    expect(duplicated.data[0]).toMatchObject({ is_published: false, requires_acknowledgement: true });
+    await panel.getByRole("button", { name: "Undo last quick change" }).click();
+    await expect(panel.getByRole("status")).toHaveText("Draft duplicate removed.");
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await source.click();
+    await expect(panel.getByRole("heading", { name: "Quick shift change" })).toBeFocused();
+    expect((await panel.boundingBox()).width).toBeLessThanOrEqual(375);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile quick shift change"));
+    await panel.getByRole("button", { name: "Cancel" }).click();
+    const workerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(workerContext);
+    const worker = await workerContext.newPage();
+    await signIn(worker, `quick-browser-worker-${suffix}@example.test`, password);
+    await worker.goto(roster);
+    await expect(worker.getByRole("button", { name: /Move or duplicate/ })).toHaveCount(0);
+    const bohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(bohContext);
+    const boh = await bohContext.newPage();
+    await signIn(boh, `quick-browser-boh-${suffix}@example.test`, password);
+    await boh.goto(roster);
+    await expect(boh.getByRole("button", { name: /Move or duplicate Alex Quick/ })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 async function navigateDuringSessionChange(page, path) {
   await page.goto(path).catch((error) => {
     if (!error.message.includes("net::ERR_ABORTED")) throw error;

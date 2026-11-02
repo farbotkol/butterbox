@@ -3,8 +3,16 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **47**. In Progress: **1**.
+  BB-PAYRULES stories). Verified Done: **48**. In Progress: **0**.
   Blocked: **6**. Not started (Backlog): **55**.
+- BB-ROSTER-005 (drag and drop roster changes) is Done. Managers can preview
+  and apply scoped moves or draft duplicates by drag or keyboard, with guarded
+  undo. Quick-change pgTAP passed **56/56** on the disposable acceptance
+  project and **56/56** in a rolled-back fresh replay; six neighbouring files
+  passed **300/300**. Two authenticated concurrency integrations, **10/10**
+  Node tests and **5/5** targeted production-browser scenarios passed.
+  Changed-file ESLint, TypeScript and the split production build passed.
+  Full suites were intentionally deferred. See the criterion evidence below.
 - BB-ROSTER-009 (roster approval) is Done. A venue owner can retain direct
   publication or require a different scoped owner, administrator or general
   manager to review an immutable snapshot. The requester can withdraw;
@@ -537,39 +545,57 @@
 
 ## Current story
 
-- **BB-ROSTER-005 — Drag and drop roster changes** is In Progress, in testing.
-  An uncommitted migration, test fixture, server actions and roster controls
-  implement a target preview, scoped move/duplicate, keyboard selection and
-  guarded undo. The source and preview are rechecked when applying; new
-  warnings require another preview. Published shifts can be duplicated as
-  drafts but not moved. Undo refuses changed or published results. The pending
-  review workflow still rechecks its immutable snapshot. The implementation is
-  local and uncommitted as of 2026-11-02 10:52 UTC; a loss of this workspace
-  before a code checkpoint would lose these changes.
+- The verified `BB-ROSTER-005` feature is awaiting its commit and push.
+  Next, inspect the existing attendance and QR foundations for
+  **BB-ATTEND-004 — Rotating QR kiosk**.
 
-  Focused results so far: **51/51** quick-change pgTAP assertions passed on
-  the disposable acceptance project, **2/2** authenticated quick-change and
-  review concurrency integrations passed, and **10/10** related Node tests,
-  changed-file ESLint and TypeScript passed before the accessible-label change.
-  The first database run exposed an immutable undo-trigger error, which was
-  corrected and rerun. A later review identified that warnings could change
-  after preview; the mutation now requires an unchanged preview and the
-  corresponding database assertion passes. The additive migration is applied
-  and recorded only in the verified disposable acceptance project. The split
-  production build and **1/1** focused production-browser scenario passed.
-  Earlier browser attempts exposed a missing fixture boolean and a serious
-  accessible-name mismatch; both were fixed before the successful rerun.
-  Affected database regressions and a final lint/TypeScript rerun are outstanding.
-  Full suites remain deferred under the targeted testing policy.
+## Recently completed story
+
+- **BB-ROSTER-005 — Drag and drop roster changes** is Done. The source and
+  preview are rechecked when applying; new warnings require another preview.
+  Published shifts can be duplicated as drafts but not moved. Actor-scoped,
+  idempotent undo refuses changed or published results. Review still checks its
+  immutable snapshot. The additive migration was applied and recorded only in
+  the verified disposable acceptance project.
 
   | Criterion | Implementation evidence | Test and actual result | Status |
   | --- | --- | --- | --- |
-  | ROSTER-005.1 — preview shows target date and worker | Scoped preview RPC and roster quick-change panel | Relevant pgTAP and parser assertions and the focused browser drag/preview scenario passed | Pass |
-  | ROSTER-005.2 — conflicts block or warn appropriately | Preview and apply recheck overlap, eligibility, availability and venue policy | Relevant pgTAP, Node and authenticated race assertions and browser warning/block scenarios passed | Pass; neighbouring regressions pending |
-  | ROSTER-005.3 — keyboard-accessible alternative | Selectable action, target day and worker in the quick-change panel | Focused browser keyboard, mobile and axe checks passed after fixing the accessible name | Pass; final lint/TypeScript rerun pending |
-  | ROSTER-005.4 — undo is offered | Actor-scoped, idempotent undo rejects changed snapshots | Relevant pgTAP and race assertions, including publication safety, and browser move/duplicate undo passed | Pass; neighbouring regressions pending |
+  | ROSTER-005.1 — preview shows target date and worker | Scoped preview RPC and roster quick-change panel | Focused pgTAP and parser assertions plus browser drag/preview passed | Pass |
+  | ROSTER-005.2 — conflicts block or warn appropriately | Preview and apply recheck overlaps, eligibility, availability and venue policy | Focused pgTAP, authenticated races and browser warning/block scenarios passed; six neighbouring database files passed 300/300 | Pass |
+  | ROSTER-005.3 — keyboard-accessible alternative | Selectable action, target day and worker in the quick-change panel | Keyboard, mobile and axe browser checks passed; changed-file lint and TypeScript passed | Pass |
+  | ROSTER-005.4 — undo is offered | Actor-scoped, idempotent undo rejects changed snapshots | Focused pgTAP and race assertions, including publication safety, and browser move/duplicate undo passed | Pass |
 
-## Recently completed story
+  - **Changed files:** `supabase/migrations/20261103120000_roster_quick_changes.sql`,
+    `supabase/tests/database/roster_quick_changes.test.sql`,
+    `src/lib/roster-quick-changes.ts`, `src/app/roster/quick-change-actions.ts`,
+    `src/components/roster-quick-changes.tsx`, `src/app/roster/page.tsx`,
+    `tests/roster-quick-changes.test.mjs`,
+    `tests/roster-quick-changes-concurrency.integration.test.mjs`,
+    `tests/e2e/auth.spec.mjs`, `README.md` and the tracking files.
+  - **Selected tests and rationale:** **56/56** quick-change pgTAP assertions
+    on the applied acceptance migration cover authorisation, tenant scope,
+    stale previews, conflicts, idempotency, undo and clock transitions;
+    **300/300** assertions across approval, publication, overlap, conflict
+    policy and tenant-isolation files cover direct dependencies. A separate
+    disposable replay passed **56/56** with the migration and a temporary Auth
+    helper inside a rolled-back transaction. Two authenticated concurrency
+    integrations and **10/10** related Node tests passed. The focused browser
+    scenario plus four neighbouring approval, mobile roster, acknowledgement
+    and copy scenarios passed **5/5**. Changed-file ESLint, TypeScript and
+    the split production compile/generate passed. The built-in test discovery
+    did not identify Node's test format; the repository's Node runner passed.
+  - **Failures resolved:** The first pgTAP attempt exposed an immutable undo
+    trigger error. Browser attempts exposed a missing fixture boolean and a
+    serious accessible-name mismatch. All were fixed and rerun. The first
+    replay attempt lacked permission to create the temporary Auth helper;
+    the helper was created by the disposable project's administrative role
+    before switching to the normal migration role, and rollback was verified.
+  - **Deferred and risks:** Full database, Node, integration and browser
+    suites were intentionally not run. Broader regression remains required at
+    workstream merge or release. At 2026-11-02 10:58 UTC the verified feature
+    changes were not yet committed or pushed.
+
+## Earlier completed story
 
 - **BB-ROSTER-009 — Roster approval workflow** is Done. Direct publication
   remains the default. Owners can require review per venue; scoped managers
@@ -1901,9 +1927,8 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Continue **BB-ROSTER-005** by running affected publication/review/conflict
-  database regressions and rerunning changed-file lint and TypeScript after
-  the accessible-label fix. Checkpoint only after required tests pass.
+- Commit and push the verified **BB-ROSTER-005** feature, then inspect
+  **BB-ATTEND-004 — Rotating QR kiosk** and its attendance prerequisites.
 - Resume **BB-ORG-006** only after owner-approved roster/payroll transition
   and notification-default semantics and the necessary delivery capability
   are available. Preserve existing immutable periods and do not silently
