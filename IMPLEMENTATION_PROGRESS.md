@@ -2,9 +2,9 @@
 
 ## Execution summary
 
-- Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **48**. In Progress: **1**.
-  Blocked: **6**. Not started (Backlog): **54**.
+- Total stories: **112** (including 22 Award Central BB-PAYRULES stories and
+  three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
+  Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
   2026-11-02 12:29 UTC, an uncommitted migration and focused test implement
   the initial device and clock transactions; a rollback-only database
@@ -663,6 +663,8 @@ settings/delivery still require their own implementation and verification.
     preflight passed; **Blocked** on integration and employee UI verification.
   A short-lived code can still be photographed and relayed; this does not
   establish physical presence or replace configured geofence review.
+  **Documentation:** pending; update the role-based user guide after the
+  implemented UI and its tested wording are verified.
   Next implement device activation/display and authenticated employee clocking,
   then test races, authorization and browser/mobile failure paths. Full
   repository suites are deferred; affected attendance and tenant suites will
