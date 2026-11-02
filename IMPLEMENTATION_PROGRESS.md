@@ -46,8 +46,16 @@
 - BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
   works per venue. Owner decision DEC-002 confirms prospective per-venue
   display-week starts, Monday payroll boundaries and essential in-app
-  defaults, but these settings and their transition safeguards are not yet
-  implemented or verified. Optional external channels require the undelivered
+  defaults. As of 2026-11-02 12:07 UTC, an **uncommitted and incompletely
+  verified** prospective planning-week slice contains a versioned database
+  setting, a canonical venue-local period resolver, an owner settings form
+  and a separate read-only planning view. It deliberately keeps the existing
+  editable roster and publication/payroll boundaries Monday-based. A rolled-back
+  database preflight passed **55/55** assertions, focused Node tests passed
+  **5/5**, and changed-file ESLint and TypeScript passed. The migration is not
+  applied; authenticated concurrency, applied-migration regressions, production
+  build and browser/accessibility verification remain outstanding. Optional
+  external channels require the undelivered
   BB-COMMS-003 capability, consent and provider approval. Final DEC-002
   directs employee opt-outs, essential in-app notices and timezone-aware
   external quiet hours; the initial hours and urgent event list remain open.
@@ -606,10 +614,13 @@
   work does not imply credential-remediation approval or evidence that
   security review occurred.
 - **BB-ORG-006 — Business configuration** is the current independent work:
-  inspect prospective per-venue roster display-week configuration under
+  verify the uncommitted prospective per-venue planning-week slice under
   DEC-002. Approval mode already exists; external notification dependencies
-  remain Blocked and must not be activated. Preserve historical publication,
-  payroll and timesheet boundaries, and use audited owner-authorized changes.
+  remain Blocked and must not be activated. The new database migration has
+  only been tested in rollback; preserve historical publication, payroll and
+  timesheet boundaries. Next verify disposable project identity and disk,
+  apply the migration there, then run focused database, authenticated race
+  and production-browser tests.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
