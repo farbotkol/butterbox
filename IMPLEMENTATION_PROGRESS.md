@@ -774,6 +774,35 @@ complete fixtures, scoped live account assertions, approved CSV, repeatable
 reset, UI simulation labeling/browser and active egress. Disk guard remained
 29 GiB free. Last development milestone `c61725d` pushed with exact remote SHA.
 
+**Synthetic workflow milestone — 2026-11-02 19:45 UTC:** Existing email login
+enabled while global public signup remains disabled; live negative signup test
+returns `signup_disabled` without creating a user or mail. Verified exact-volume
+stop/restart and repeated explicit reset/reseed. Reset archives previous private
+inventories and CSV; it never resets another project or enables production
+sample functions. Expected short post-reset readiness is retried with bounded
+logged checks, without bypassing identity, credential or health requirements.
+
+The real isolated fixture now has 14 fictional employees split 7 FOH / 7 BOH,
+16 scoped test identities including an outside control owner, 30 shifts (two
+open), 98 availability intervals and four normal publication receipts. Original
+56 clock/break events remain immutable; an owner-attributed correction is added,
+then 14 current timesheets approved, finalised and snapshotted through existing
+RPCs. CSV is explicitly `SIMULATION_ONLY` with a notice column on every row,
+no provider mapping/pay codes and no provider transmission.
+
+Focused environment/fixture/integration/simulation/canonical/CSV Node tests:
+**29/29 passed**, including real FOH/BOH/employee/outside-tenant scope,
+read-only original/correction provenance, complete 14-record CSV, denied repeat
+seed, public signup denial, zero Mailpit messages and active network egress
+denial. Corrected the OS wording assertion to accept `Network unreachable` or
+`Network is unreachable`; no success/timeout bypass allowed. Changed-code lint,
+zero warnings, and TypeScript passed. Prior pgTAP 74/74 remains valid.
+No full unrelated regression run. New gated app notice/export labeling and
+browser-runner selection still require production build and targeted browser
+acceptance; story remains In Progress. Updated font-container source inventory
+hash only: existing fonts/artwork and unapproved brand status unchanged.
+Documentation: operator/user updates pending final tested behavior.
+
 ## Latest completed documentation story
 
 **BB-DOC-001 — Validate and expand role-based user guide: Done.**
