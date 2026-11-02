@@ -665,14 +665,20 @@ settings/delivery still require their own implementation and verification.
   shifts. Existing attendance sessions/events and roster publication flags are
   present; no previous alert workflow was found. The disposable database has
   pg_cron available and preloaded but not installed. No scheduler or extension
-  has been changed. No acceptance tests have yet run; documentation will be
-  updated only for implemented user-visible behavior.
+  has been changed. User guidance will be updated only for implemented and
+  tested user-visible behavior.
   At 18:04 UTC, a new uncommitted migration passed a rollback-only DDL
   preflight on the verified acceptance project; the ledger remained at
   `20261103160000` and pg_cron remained uninstalled. The proposed worker
   handles published assigned shifts, configurable venue thresholds and
-  append-only review events. This is not acceptance verification. Next write
-  and run focused database tests before applying the migration.
+  append-only review events. At 18:08 UTC, the expanded migration plus
+  focused pgTAP replay passed **55/55** in a rolled-back transaction. It
+  exercises threshold boundaries, deduplication, audit, department/tenant
+  authorization, corrections, draft exclusion and notification counts.
+  The migration and tests remain uncommitted; the scheduler has not yet been
+  installed or observed running. Next apply only to the verified disposable
+  project, verify actual scheduled execution and add authenticated/browser
+  coverage before judging the four criteria.
 - **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
   implementation and guide survived, and the disposable acceptance project
   remained healthy. The recovery status checkpoint `d8e9229` was pushed
