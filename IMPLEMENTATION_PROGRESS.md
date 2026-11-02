@@ -701,6 +701,28 @@ broader SAAS-003 production assessment/conversion gates.
 Documentation: operational guidance pending implemented and tested setup.
 No DEMO-001 criterion is Pass yet.
 
+**Environment checkpoint — 2026-11-02 19:19 UTC:** New
+`scripts/showcase-environment.mjs` and six focused Node tests implement
+private, exclusive preparation outside the checkout; generated signing/API
+keys; immutable migration snapshots; no automatic seed/signup; owned internal
+Docker network; dedicated storage/port checks and fixed-target localhost
+proxies. Tests 6/6, changed-file ESLint and TypeScript passed.
+Docker internal networks suppress port publication in this environment;
+the first startup failed closed. Disposable probes established direct
+host-to-internal TCP, and proxy-backed startup applied every migration through
+`20261103190000`. Auth then failed health with `no signing key found`;
+correct key metadata and rerun before claiming any environment acceptance.
+The CLI removed its failed containers; no existing project was reset, removed
+or reconfigured. Private generated configuration and failure diagnostics remain
+under the session's `files/butterbox-showcase`, not in Git.
+Disk guard held at 29 GiB free. No fixtures, users, messages or payroll created.
+The standard CLI database password is local-development only, not a claim of
+production-grade or hostile shared-host isolation.
+GitHub port-visibility lookup returned 403 because the token lacks codespace
+scope; no remote reviewer-access claim. Fixture, browser, reset, outbound and
+cross-project checks deferred until the new stack is healthy. Documentation:
+operator guidance pending verified behavior; no new user-facing workflow yet.
+
 ## Latest completed documentation story
 
 **BB-DOC-001 — Validate and expand role-based user guide: Done.**
