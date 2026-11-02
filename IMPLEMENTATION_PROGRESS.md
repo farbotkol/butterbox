@@ -749,6 +749,31 @@ Documentation: updated operator README; user guidance not applicable yet
 (no new app workflow). DEMO-001 remains In Progress: no fictional cafe/accounts,
 reset, approved CSV or simulation UI has been delivered.
 
+**Fixture debugging checkpoint — 2026-11-02 19:35 UTC:** Added
+`scripts/showcase-fixtures.mjs` and five fixture tests: 14 clearly fictional
+FOH/BOH employees, scoped owners/managers/workers, reserved `example.test`
+accounts, venue-local current/prior weeks, availability, role eligibility,
+rosters and original time/break events. Environment + fixture tests **12/12**
+and changed-file ESLint passed before the latest restart-support edits.
+First actual seed failed on a nonexistent attendance `shift_id` column; removed
+that unsupported association. Explicit reset verified project/JWT/network/
+storage/account/business provenance before resetting only the disposable
+showcase. CLI reset completed, but immediate API verification raced readiness.
+Confirmed empty Auth/business data and privately archived the previous state
+without deleting it; added bounded, logged retries only for readiness errors.
+Second seed created fictional people/roster/time but owner login failed:
+CLI's `auth.email.enable_signup=false` disables email login. Correct provider
+enablement while preserving `auth.enable_signup=false`, then rerun the known
+synthetic reset/seed. No correction/approval/finalised CSV success claimed.
+
+The showcase alone is currently stopped, with volumes preserved and exact
+volume identity snapshot recorded for safe restart. Existing stacks untouched.
+Source changes are uncommitted until runtime checks pass. No app changes yet;
+operator documentation update pending final behavior. Tests still deferred:
+complete fixtures, scoped live account assertions, approved CSV, repeatable
+reset, UI simulation labeling/browser and active egress. Disk guard remained
+29 GiB free. Last development milestone `c61725d` pushed with exact remote SHA.
+
 ## Latest completed documentation story
 
 **BB-DOC-001 — Validate and expand role-based user guide: Done.**
