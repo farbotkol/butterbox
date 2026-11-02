@@ -3,8 +3,13 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **48**. In Progress: **0**.
-  Blocked: **6**. Not started (Backlog): **55**.
+  BB-PAYRULES stories). Verified Done: **48**. In Progress: **1**.
+  Blocked: **6**. Not started (Backlog): **54**.
+- BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
+  2026-11-02 12:22 UTC, work has started with a trace of existing attendance,
+  authorization, geofence and idempotency paths. The criteria for a signed,
+  venue-bound expiring code, replay denial, controlled display access and
+  server-validated clocks have not yet been implemented or verified.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -46,8 +51,9 @@
 - BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
   works per venue. Owner decision DEC-002 confirms prospective per-venue
   display-week starts, Monday payroll boundaries and essential in-app
-  defaults. As of 2026-11-02 12:19 UTC, a verified prospective planning-week
-  slice contains a versioned database
+  defaults. A verified prospective planning-week slice was committed as
+  `306efc428b01e9e69fcb2da78302352c383b041d` and pushed with matching remote
+  SHA. It contains a versioned database
   setting, a canonical venue-local period resolver, an owner settings form
   and a separate read-only planning view. It deliberately keeps the existing
   editable roster and publication/payroll boundaries Monday-based. A rolled-back
@@ -637,6 +643,11 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
+- **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. First inspect the
+  existing clock-event, geofence, venue authorization and idempotency paths,
+  then design a controlled kiosk and one-use venue-bound code without
+  weakening canonical attendance or immutable timekeeping records. No QR tests
+  or changes have been made yet.
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
   historical credential findings. DEC-004 authorizes a read-only, redacted
   assessment and classification; no credential rotation, privileged access
@@ -2152,10 +2163,10 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Next inspect the highest-priority ready independent story,
-  **BB-ATTEND-004 — Rotating QR kiosk**. Keep **BB-ORG-006** Blocked until
-  its full criteria and external-channel dependencies are verified. Preserve
-  existing immutable periods and do not silently reinterpret history.
+- Continue **BB-ATTEND-004 — Rotating QR kiosk** by tracing attendance and
+  authorization. Keep **BB-ORG-006** Blocked until its full criteria and
+  external-channel dependencies are verified. Preserve existing immutable
+  periods and do not silently reinterpret history.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Rehearse the DEC-005 recovery targets using the README procedure and
