@@ -544,27 +544,30 @@
   warnings require another preview. Published shifts can be duplicated as
   drafts but not moved. Undo refuses changed or published results. The pending
   review workflow still rechecks its immutable snapshot. The implementation is
-  local and uncommitted as of 2026-11-02 10:49 UTC; a loss of this workspace
+  local and uncommitted as of 2026-11-02 10:52 UTC; a loss of this workspace
   before a code checkpoint would lose these changes.
 
   Focused results so far: **51/51** quick-change pgTAP assertions passed on
   the disposable acceptance project, **2/2** authenticated quick-change and
   review concurrency integrations passed, and **10/10** related Node tests,
-  changed-file ESLint and TypeScript passed.
+  changed-file ESLint and TypeScript passed before the accessible-label change.
   The first database run exposed an immutable undo-trigger error, which was
   corrected and rerun. A later review identified that warnings could change
   after preview; the mutation now requires an unchanged preview and the
   corresponding database assertion passes. The additive migration is applied
-  and recorded only in the verified disposable acceptance project. Browser,
-  affected database regression and production build checks are outstanding.
+  and recorded only in the verified disposable acceptance project. The split
+  production build and **1/1** focused production-browser scenario passed.
+  Earlier browser attempts exposed a missing fixture boolean and a serious
+  accessible-name mismatch; both were fixed before the successful rerun.
+  Affected database regressions and a final lint/TypeScript rerun are outstanding.
   Full suites remain deferred under the targeted testing policy.
 
   | Criterion | Implementation evidence | Test and actual result | Status |
   | --- | --- | --- | --- |
-  | ROSTER-005.1 — preview shows target date and worker | Scoped preview RPC and roster quick-change panel | Relevant pgTAP and parser assertions passed; browser drag/preview pending | Blocked pending browser verification |
-  | ROSTER-005.2 — conflicts block or warn appropriately | Preview and apply recheck overlap, eligibility, availability and venue policy | Relevant pgTAP, Node and authenticated race assertions passed; UI pending | Blocked pending browser verification |
-  | ROSTER-005.3 — keyboard-accessible alternative | Selectable action, target day and worker in the quick-change panel | TypeScript and lint passed; keyboard, mobile and axe checks pending | Blocked pending browser verification |
-  | ROSTER-005.4 — undo is offered | Actor-scoped, idempotent undo rejects changed snapshots | Relevant pgTAP and race assertions, including publication safety, passed; UI pending | Blocked pending browser verification |
+  | ROSTER-005.1 — preview shows target date and worker | Scoped preview RPC and roster quick-change panel | Relevant pgTAP and parser assertions and the focused browser drag/preview scenario passed | Pass |
+  | ROSTER-005.2 — conflicts block or warn appropriately | Preview and apply recheck overlap, eligibility, availability and venue policy | Relevant pgTAP, Node and authenticated race assertions and browser warning/block scenarios passed | Pass; neighbouring regressions pending |
+  | ROSTER-005.3 — keyboard-accessible alternative | Selectable action, target day and worker in the quick-change panel | Focused browser keyboard, mobile and axe checks passed after fixing the accessible name | Pass; final lint/TypeScript rerun pending |
+  | ROSTER-005.4 — undo is offered | Actor-scoped, idempotent undo rejects changed snapshots | Relevant pgTAP and race assertions, including publication safety, and browser move/duplicate undo passed | Pass; neighbouring regressions pending |
 
 ## Recently completed story
 
@@ -1898,10 +1901,9 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Continue **BB-ROSTER-005** by running the focused production-browser
-  drag/keyboard/undo scenario and affected publication/review database
-  regressions, and completing the production build. Do not mark the story Done
-  before all criteria pass.
+- Continue **BB-ROSTER-005** by running affected publication/review/conflict
+  database regressions and rerunning changed-file lint and TypeScript after
+  the accessible-label fix. Checkpoint only after required tests pass.
 - Resume **BB-ORG-006** only after owner-approved roster/payroll transition
   and notification-default semantics and the necessary delivery capability
   are available. Preserve existing immutable periods and do not silently
