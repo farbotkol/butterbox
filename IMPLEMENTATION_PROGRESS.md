@@ -6,14 +6,16 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:40 UTC, the uncommitted device and employee UI and transaction
-  migration are implemented but not runtime-verified end to end. A rollback-only
-  database preflight passed **62/62**, focused kiosk/audit Node tests **8/8**,
+  2026-11-02 12:42 UTC, the uncommitted device and employee UI and transaction
+  migration are implemented but not runtime-verified end to end. On the
+  isolated applied schema, QR pgTAP passed **62/62** and seven neighboring
+  attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
+  preflight also passed **62/62**, focused kiosk/audit Node tests **8/8**,
   changed-file ESLint and TypeScript passed. Migration `20261103160000` is
   applied and recorded only in `butterbox-acceptance` (API 55421, DB 55422);
-  do not edit the applied migration in place. Applied-schema tests,
-  authenticated concurrency, browser acceptance and final verification remain
-  outstanding. No full criterion is yet Passed.
+  do not edit the applied migration in place. Authenticated concurrency,
+  browser acceptance and final verification remain outstanding. No full
+  criterion is yet Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -649,8 +651,12 @@ settings/delivery still require their own implementation and verification.
 
 - **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
   `20261103160000_attendance_qr_kiosks.sql` and
-  `attendance_qr_kiosks.test.sql` passed **62/62** assertions in a rolled-back
-  preflight on the verified disposable acceptance project. Owners create a
+  `attendance_qr_kiosks.test.sql` passed **62/62** assertions both in a
+  rolled-back preflight and against the applied migration on the verified
+  disposable acceptance project. Neighboring clock (**72/72**), break
+  (**79/79**), location (**71/71**), geofence (**60/60**), personal history
+  (**22/22**), audit (**31/31**) and tenant isolation (**32/32**) pgTAP
+  assertions passed on the applied schema. Owners create a
   device-specific, one-use 15-minute activation credential; the device gets a
   separate 30-day credential, not an owner session. Codes are HMAC-signed,
   venue-bound, expire within 45 seconds and are consumed atomically with the
@@ -676,7 +682,7 @@ settings/delivery still require their own implementation and verification.
   passed. Next test races, authorization and browser/mobile failure paths. The
   migration was applied only to the verified isolated acceptance project;
   any schema fix now requires a forward migration. Full repository suites are
-  deferred; affected attendance and tenant suites will run next.
+  deferred; concurrency and browser verification are next.
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
   historical credential findings. DEC-004 authorizes a read-only, redacted
   assessment and classification; no credential rotation, privileged access
