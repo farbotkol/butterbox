@@ -3,11 +3,11 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **43**. In Progress: **1**.
-  Blocked: **4**. Not started (Backlog): **61**.
+  BB-PAYRULES stories). Verified Done: **44**. In Progress: **1**.
+  Blocked: **4**. Not started (Backlog): **60**.
 - BB-SHIFTS-001/002/003 (open-shift offers, responses and transactional
-  confirmation) are Done under the targeted testing policy: 58 new pgTAP
-  assertions plus five neighbouring rostering suites, one lock-gated
+  confirmation) are Done under the targeted testing policy: 78 open-offer
+  pgTAP assertions plus five neighbouring rostering suites, one lock-gated
   concurrency/tenant integration, five Node tests, and four production-browser
   scenarios (one new, three neighbouring) with a production build. No full
   regression was run for this story; see the story section for deferred suites.
@@ -367,20 +367,24 @@
 
 ## Current story
 
+- **BB-COMMS-002 — In-app notification centre** is Done. It now combines
+  roster-publication updates with per-recipient shift-offer and claim-outcome
+  notifications. The targeted checks passed; see the criterion evidence below.
+  Next: **BB-SHIFTS-004 — Request shift swap** (now In Progress).
 - **BB-SHIFTS-001/002/003 — Open-shift offers** are Done (evidence below).
-  Next: BB-COMMS-002 offer/approval notifications, then BB-SHIFTS-004 swaps.
+  The offer workflow is the source for BB-COMMS-002's offer and claim-outcome
+  notifications.
 - **BB-FOUND-007 — Audit sensitive actions** is Done (evidence below).
   Commit `012e07ccb54cd99331d0b861b6a2e9fb40288390` was pushed and its remote
   SHA matched.
 - **BB-FOUND-008 — Resilience and operations** has verified monitoring
   implementation and is Blocked on authorised hosted staging restore/backup
   access. See the criterion table and exact recovery steps below.
-  Next independent operational workflow: **BB-SHIFTS-001 — Offer open shift**,
-  followed by response/transactional confirmation (BB-SHIFTS-002/003), which
-  unblock the offer-notification part of BB-COMMS-002.
-- **BB-SAAS-004 — Performance and accessibility** is Done. BB-COMMS-002's
-  remaining offer notifications require an offer workflow first; do not mark
-  it Done based only on roster publication updates.
+  The offer open/response/confirmation workflow (BB-SHIFTS-001/002/003) is
+  complete and supplied the prerequisite for BB-COMMS-002 notifications.
+- **BB-SAAS-004 — Performance and accessibility** is Done. BB-COMMS-002 now
+  covers roster-publication updates and shift-offer/claim-outcome notifications;
+  email and push remain deferred to BB-COMMS-003.
 - **BB-FOUND-005 — Invite and onboard users** is Done (evidence below). The
   former cross-business rejection was removed by a new migration now that
   BB-FOUND-006 resolves the business per request. Manager-page permission
@@ -514,9 +518,9 @@
   linked employees once per account/version; profiles without a linked account,
   eligible membership or department link remain pending and managers are
   warned. Email/push delivery and onboarding remain unfinished.
-- **BB-COMMS-002 — In-app notification centre** is In Progress. Roster
-  publication updates have unread/read state, authorized schedule links and
-  deduplication; offers and approval events are not yet supported.
+- **BB-COMMS-002 — In-app notification centre** is Done. Roster publications,
+  shift offers and manager claim outcomes have scoped unread/read state,
+  authorised deep links and deduplicated events.
 - **BB-ROSTER-010 — Simple employee roster** is Done. Authorised managers can
   require acknowledgement for assigned drafts, and the linked employee can
   acknowledge the published snapshot from their mobile schedule. All three
@@ -555,8 +559,9 @@ Files: `supabase/migrations/20261103030000_open_shift_offers.sql`,
 
 Tests selected (targeted policy) and actual results, all on the isolated
 `butterbox-acceptance` project (API 55421, DB 55422):
-- pgTAP `open_shift_offers` **68/68** (58 original, plus 10 added after review for
-  late responses on a filled offer and newly ineligible recipients); neighbouring rostering suites
+- pgTAP `open_shift_offers` **78/78** (58 original, 10 filled-offer/
+  re-evaluated-eligibility assertions, and 10 notification, read-scope and
+  repeated-event assertions); neighbouring rostering suites
   `shift_acknowledgements` 59, `roster_publication_versions` 47,
   `manual_assignment_eligibility` 37, `roster_conflict_policies` 53,
   `shared_worker_conflicts` 26 — all pass (shared shift/eligibility objects).
@@ -569,11 +574,9 @@ Tests selected (targeted policy) and actual results, all on the isolated
   copy, WCAG/keyboard smoke) **3/3**.
 
 Intentionally deferred: full pgTAP suite, other integrations, other Node tests
-and the remaining browser scenarios (no shared authorization, identity or
-tenant-context helpers changed). Remaining risks: offers do not yet produce
-notification-centre items (BB-COMMS-002); a confirmed assignment after
-publication does not create a new roster publication version; offers are not
-automatically expired by a job (expiry is enforced at read/response time).
+and remaining browser scenarios. This change adds a narrow recipient-scoped
+notification RPC and does not change shared authorization helpers. A fresh
+replay of all migrations and the directly affected notification suites passed.
 Broader regression is recommended at the next release-candidate checkpoint.
 
 ### BB-FOUND-007 — Audit sensitive actions (Done)
@@ -1247,13 +1250,27 @@ and publication, so linking a second affected profile after a read does not
 re-send that publication. Pre-feature versions are explicitly identified rather
 than falsely claiming notification delivery.
 
-### BB-COMMS-002 — In-app notification centre (In Progress)
+### BB-COMMS-002 — In-app notification centre (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| COMMS-002.1 Shift changes, offers and approvals show unread/read state | New roster publications generate unread notices and idempotent account-scoped reads. Other event types are not yet integrated. | 69 notification SQL assertions and production Chromium pass for publication updates, read state and delayed linking; no offer/approval implementation exists. | In Progress |
-| COMMS-002.2 Deep links open the correct authorised item | Publication notices open the linked employee's venue-local weekly schedule; server-side authorization is rechecked when reading and opening. | Production Chromium verifies the correct week and own shifts; SQL and authenticated API tests deny other employees and tenants. Other event types remain unimplemented. | In Progress |
-| COMMS-002.3 Repeated events deduplicate | One publication creates one notice per account even for multiple shifts or profiles; late profile links preserve read state. | SQL covers repeated publication, late links and separate accounts; a concurrent two-request read test creates one read record. Other event types remain unimplemented. | In Progress |
+| COMMS-002.1 Shift changes, offers and approvals show unread/read state | Existing roster-publication notifications remain intact. New recipient-scoped notifications are created for each shift offer and each manager-recorded claim outcome (confirmed, unavailable, not selected or closed); reads are account-scoped. | Isolated `open_shift_offers` pgTAP passed **78/78** on both the acceptance database and a clean migration replay. `roster_publication_notifications` passed **77/77** on the acceptance database. Production Chromium verified the offer and approved-claim unread states. | Pass |
+| COMMS-002.2 Deep links open the correct authorised item | Roster notices open the employee's venue-local schedule; offer/outcome notices open the offer section for the employee's venue-local week. Both read RPCs re-check the linked employee and venue scope. | Two targeted production Chromium scenarios passed: offer/approval notification links on mobile and the existing publication-notification flow. pgTAP verified uninvited and cross-tenant list/read denial. | Pass |
+| COMMS-002.3 Repeated events deduplicate | Unique offer/employee/event keys and `ON CONFLICT DO NOTHING` prevent duplicate offer or outcome notices; read records are unique per notification/account. | pgTAP replays an offer event and confirms the recipient event count remains unchanged; the full 78-assertion offer suite passed. Publication deduplication remains covered by its existing SQL suite. | Pass |
+
+Targeted files changed for this checkpoint: `supabase/migrations/20261103040000_shift_offer_notifications.sql`,
+`supabase/tests/database/open_shift_offers.test.sql`, `src/app/actions.ts`,
+`src/app/notifications/page.tsx`, `src/components/roster-notification-banner.tsx`,
+`src/lib/roster-notifications.ts`, `tests/e2e/auth.spec.mjs` and `README.md`,
+plus backlog/status tracking. Validation: `open_shift_offers` 78/78 on the
+acceptance and clean-replay databases; `roster_publication_notifications` 77/77
+on the acceptance database; two targeted production-browser scenarios and
+`tests/roster-notifications.test.mjs` 2/2 passed; `npx tsc --noEmit`,
+changed-file ESLint, production build and `git diff --check` passed. The
+clean-replay roster notification test was not compatible with that
+test container's older `auth.users` fixture (`email_confirmed_at` is absent);
+the same suite passed on the established acceptance database. Full Node,
+integration, pgTAP and browser suites were deferred.
 
 ### BB-ROSTER-001 — Weekly people-by-day roster (Done)
 
@@ -1613,18 +1630,16 @@ not yet run remotely.
 
 ## Next story
 
-- Next: complete **BB-COMMS-002** by adding shift-offer (and outcome) and
-  approval notifications to the notification centre with read state, deep
-  links to `/my-schedule#shift-offers` and deduplication. Then
-  **BB-SHIFTS-004 — Shift swaps**, reusing the offer eligibility function.
+- Next: implement **BB-SHIFTS-004 — Request shift swap**. Reuse the shared
+  shift eligibility/conflict helpers and add both employee confirmations,
+  manager rejection with a reason, and scoped notifications before marking any
+  acceptance criterion Done.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
   README procedure and record actual results. Do not run destructive tests
   against shared development or production and do not claim local replay as
   a successful staging restore.
-  BB-COMMS-002 remains In Progress until offer and approval notifications are
-  implemented and tested, with their workflow prerequisites completed first.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.

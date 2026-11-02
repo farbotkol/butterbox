@@ -10,7 +10,7 @@ export async function unreadRosterNotificationCount(
     p_venue_id: venueId,
   });
   if (error || typeof data !== "number" || !Number.isSafeInteger(data) || data < 0) {
-    console.error("Could not load unread roster notifications.", {
+    console.error("Could not load unread work notifications.", {
       code: error?.code,
       message: error?.message ?? "The server returned an invalid unread count.",
     });

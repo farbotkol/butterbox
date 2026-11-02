@@ -3436,7 +3436,7 @@ test("published roster updates reach the right employees once and retain pending
     const workerPage = await workerContext.newPage();
     await signIn(workerPage, `roster-notice-worker-${suffix}@example.test`, password);
     await workerPage.goto(`/notifications?venue=${venueId}`);
-    await expect(workerPage.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    await expect(workerPage.getByText("No work updates yet.", { exact: false })).toBeVisible();
     await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
     await expect(workerPage.getByText("Worker morning", { exact: true })).toHaveCount(0);
 
@@ -3454,8 +3454,8 @@ test("published roster updates reach the right employees once and retain pending
     expect(versions.data).toHaveLength(1);
     const firstPublication = versions.data[0].id;
     await workerPage.goto("/");
-    const banner = workerPage.getByRole("region", { name: "Unread roster updates" });
-    await expect(banner).toContainText("1 unread roster update");
+    const banner = workerPage.getByRole("region", { name: "Unread work updates" });
+    await expect(banner).toContainText("1 unread work update");
     await banner.getByRole("link", { name: "View notifications" }).click();
     const firstNotice = workerPage.getByRole("article", { name: "Roster update for week starting 2032-03-15" });
     await expect(firstNotice).toHaveCount(1);
@@ -3478,7 +3478,7 @@ test("published roster updates reach the right employees once and retain pending
     await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
     await expect(history.getByRole("listitem")).toHaveCount(2);
     await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
-    await expect(banner).toContainText("1 unread roster update");
+    await expect(banner).toContainText("1 unread work update");
     await banner.getByRole("link", { name: "View notifications" }).click();
     await expect(workerPage.getByRole("article")).toHaveCount(2);
     const unread = workerPage.getByRole("article").filter({
@@ -3500,7 +3500,7 @@ test("published roster updates reach the right employees once and retain pending
     const pendingPage = await pendingContext.newPage();
     await signIn(pendingPage, `roster-notice-pending-${suffix}@example.test`, password);
     await pendingPage.goto(`/notifications?venue=${venueId}`);
-    await expect(pendingPage.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    await expect(pendingPage.getByText("No work updates yet.", { exact: false })).toBeVisible();
     const ownerApi = createClient(apiUrl, anonKey, options);
     expect((await ownerApi.auth.signInWithPassword({
       email: `roster-notice-owner-${suffix}@example.test`, password,
@@ -3750,6 +3750,12 @@ test("managers offer published open shifts to eligible staff and confirm one tim
     workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
     const annPage = await workerContext.newPage();
     await signIn(annPage, `offer-ann-${suffix}@example.test`, password);
+    await annPage.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    const offerNotification = annPage.getByRole("article", { name: "Shift offer for Cover service" });
+    await expect(offerNotification).toContainText("A shift was offered to you");
+    await expect(offerNotification.getByText("Unread", { exact: true })).toBeVisible();
+    await offerNotification.getByRole("button", { name: "View shift offer" }).click();
+    await expect(annPage).toHaveURL(new RegExp(`/my-schedule\\?business=${businessId}&week=2032-04-05&venue=${venueId}#shift-offers`));
     await annPage.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
     const offers = annPage.getByRole("region", { name: "Shift offers" });
     await expect(offers).toContainText("Cover service · Front of House");
@@ -3778,6 +3784,13 @@ test("managers offer published open shifts to eligible staff and confirm one tim
     await annPage.reload();
     await expect(offers).toContainText("Confirmed — this shift is yours");
     await expect(annPage.getByRole("region", { name: "Weekly schedule" })).toContainText("Cover service");
+    await annPage.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    const approvalNotification = annPage.getByRole("article", { name: "Shift offer outcome for Cover service" });
+    await expect(approvalNotification).toContainText("Your shift claim was approved.");
+    await expect(approvalNotification.getByText("Unread", { exact: true })).toBeVisible();
+    await approvalNotification.getByRole("button", { name: "View shift offer" }).click();
+    await expect(annPage).toHaveURL(new RegExp(`/my-schedule\\?business=${businessId}&week=2032-04-05&venue=${venueId}#shift-offers`));
+    await expect(annPage.getByRole("region", { name: "Shift offers" })).toContainText("Confirmed — this shift is yours");
   } finally {
     if (workerContext) await workerContext.close();
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
@@ -6415,7 +6428,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
     const worker = await workerContext.newPage();
     await signIn(worker, `copy-browser-worker-${suffix}@example.test`, password);
     await worker.goto(`/notifications?venue=${venueId}`);
-    await expect(worker.getByText("No roster updates yet.", { exact: false })).toBeVisible();
+    await expect(worker.getByText("No work updates yet.", { exact: false })).toBeVisible();
     await worker.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
     await expect(worker.getByRole("region", { name: "Weekly schedule" })
       .getByText("Copy server", { exact: true })).toHaveCount(0);
@@ -7355,8 +7368,8 @@ test("published roster updates reach uninvited staff once after they accept an i
     await recipientPage.getByRole("button", { name: "Accept invitation" }).click();
     await expect(recipientPage.getByRole("status")).toContainText("invitation has been accepted");
     await recipientPage.getByRole("link", { name: "Open workspace" }).click();
-    const banner = recipientPage.getByRole("region", { name: "Unread roster updates" });
-    await expect(banner).toContainText("1 unread roster update");
+    const banner = recipientPage.getByRole("region", { name: "Unread work updates" });
+    await expect(banner).toContainText("1 unread work update");
     await banner.getByRole("link", { name: "View notifications" }).click();
     const notice = recipientPage.getByRole("article");
     await expect(notice).toHaveCount(1);

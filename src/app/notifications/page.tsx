@@ -1,16 +1,44 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { markRosterNotificationReadAction } from "@/app/actions";
+import {
+  markRosterNotificationReadAction,
+  markShiftOfferNotificationReadAction,
+} from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { addDays, formatDay, getWorkspace } from "@/lib/workspace";
 
-type Notice = {
+type RosterNotice = {
+  kind: "roster";
   publication_id: string;
   week_start: string;
   published_at: string;
   unread: boolean;
+};
+
+type OfferNotice = {
+  kind: "offer";
+  notification_id: string;
+  event_type: "offer" | "outcome";
+  offer_id: string;
+  shift_id: string;
+  role_title: string;
+  department_name: string;
+  starts_at: string;
+  ends_at: string;
+  created_at: string;
+  outcome: "confirmed" | "not_selected" | "unavailable" | "closed" | null;
+  unread: boolean;
+};
+
+type Notice = RosterNotice | OfferNotice;
+
+const offerOutcomeMessages: Record<NonNullable<OfferNotice["outcome"]>, string> = {
+  confirmed: "Your shift claim was approved.",
+  not_selected: "Another team member was assigned this shift.",
+  unavailable: "Your claim could not be approved because you are no longer available.",
+  closed: "This shift offer is closed.",
 };
 
 export default async function NotificationsPage({
@@ -38,23 +66,37 @@ export default async function NotificationsPage({
     );
   }
 
-  const [venueResult, notifications] = await Promise.all([
+  const [venueResult, rosterNotifications, offerNotifications] = await Promise.all([
     workspace.supabase.from("venues").select("id, name")
       .eq("business_id", workspace.business.id).order("created_at"),
-    readAllPages<Notice>((from, to) => workspace.supabase.rpc("list_roster_notifications", {
+    readAllPages<Omit<RosterNotice, "kind">>((from, to) => workspace.supabase.rpc("list_roster_notifications", {
       p_business_id: workspace.business.id,
       p_venue_id: workspace.venue.id,
     }, { count: "exact" }).order("published_at", { ascending: false })
       .order("publication_id", { ascending: false }).range(from, to),
     (notice) => notice.publication_id),
+    readAllPages<Omit<OfferNotice, "kind">>((from, to) => workspace.supabase.rpc("list_shift_offer_notifications", {
+      p_business_id: workspace.business.id,
+      p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("created_at", { ascending: false })
+      .order("notification_id", { ascending: false }).range(from, to),
+    (notice) => notice.notification_id),
   ]);
-  const loadError = venueResult.error || notifications.error;
+  const loadError = venueResult.error || rosterNotifications.error || offerNotifications.error;
   if (loadError) {
-    console.error("Could not load roster notifications.", {
+    console.error("Could not load notifications.", {
       code: loadError.code,
       message: loadError.message,
     });
   }
+  const notifications: Notice[] = [
+    ...(rosterNotifications.data ?? []).map((notice) => ({ ...notice, kind: "roster" as const })),
+    ...(offerNotifications.data ?? []).map((notice) => ({ ...notice, kind: "offer" as const })),
+  ].sort((a, b) => {
+    const first = a.kind === "roster" ? a.published_at : a.created_at;
+    const second = b.kind === "roster" ? b.published_at : b.created_at;
+    return Date.parse(second) - Date.parse(first);
+  });
 
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
@@ -64,7 +106,7 @@ export default async function NotificationsPage({
           <p className="text-sm font-medium text-muted">Your updates</p>
           <h1 className="mt-2 text-3xl font-semibold">Notifications</h1>
           <p className="mt-2 text-sm text-muted">
-            Roster updates for {workspace.venue.name}. Email and push delivery are not available yet.
+            Work updates for {workspace.venue.name}. Email and push delivery are not available yet.
           </p>
         </div>
         {(venueResult.data ?? []).length > 1 && (
@@ -95,28 +137,44 @@ export default async function NotificationsPage({
         <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your notifications. Check your connection and try again.
         </p>
-      ) : notifications.data?.length === 0 ? (
+      ) : notifications.length === 0 ? (
         <p className="mt-5 rounded-xl border border-line bg-white p-5 text-sm text-muted">
-          No roster updates yet. Newly published assigned shifts will appear here.
+          No work updates yet. New roster changes and shift offers will appear here.
         </p>
       ) : (
         <ol className="mt-5 space-y-3">
-          {notifications.data?.map((notice) => (
-            <li key={notice.publication_id}>
-              <article aria-label={`Roster update for week starting ${notice.week_start}`}
+          {notifications.map((notice) => (
+            <li key={`${notice.kind}-${notice.kind === "roster" ? notice.publication_id : notice.notification_id}`}>
+              <article aria-label={notice.kind === "roster"
+                ? `Roster update for week starting ${notice.week_start}`
+                : `${notice.event_type === "offer" ? "Shift offer" : "Shift offer outcome"} for ${notice.role_title}`}
                 className="rounded-xl border border-line bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h2 className="font-semibold">Your roster was updated</h2>
-                    <p className="mt-1 text-sm text-muted">
-                      {formatDay(notice.week_start)} – {formatDay(addDays(notice.week_start, 6))}
-                      {" · "}{notice.week_start.slice(0, 4)}
-                    </p>
+                    <h2 className="font-semibold">
+                      {notice.kind === "roster" ? "Your roster was updated"
+                        : notice.event_type === "offer" ? "A shift was offered to you"
+                          : offerOutcomeMessages[notice.outcome ?? "closed"]}
+                    </h2>
+                    {notice.kind === "roster" ? (
+                      <p className="mt-1 text-sm text-muted">
+                        {formatDay(notice.week_start)} – {formatDay(addDays(notice.week_start, 6))}
+                        {" · "}{notice.week_start.slice(0, 4)}
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted">
+                        {notice.role_title} · {notice.department_name} ·{" "}
+                        {new Intl.DateTimeFormat("en-AU", {
+                          timeZone: workspace.venue.timezone, day: "numeric", month: "short", year: "numeric",
+                          hour: "numeric", minute: "2-digit",
+                        }).format(new Date(notice.starts_at))}
+                      </p>
+                    )}
                     <p className="mt-1 text-xs text-muted">
-                      Published {new Intl.DateTimeFormat("en-AU", {
+                      {notice.kind === "roster" ? "Published" : "Received"} {new Intl.DateTimeFormat("en-AU", {
                         timeZone: workspace.venue.timezone, day: "numeric", month: "short", year: "numeric",
                         hour: "numeric", minute: "2-digit",
-                      }).format(new Date(notice.published_at))}
+                      }).format(new Date(notice.kind === "roster" ? notice.published_at : notice.created_at))}
                     </p>
                   </div>
                   <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
@@ -125,27 +183,45 @@ export default async function NotificationsPage({
                     {notice.unread ? "Unread" : "Read"}
                   </span>
                 </div>
-                <form action={markRosterNotificationReadAction} className="mt-4 flex flex-wrap gap-2">
-                  <input type="hidden" name="publication_id" value={notice.publication_id} />
-                  <input type="hidden" name="venue_id" value={workspace.venue.id} />
-                  <button type="submit" name="operation" value="open"
-                    className="rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
-                    View schedule
-                  </button>
-                  {notice.unread && (
-                    <button type="submit" name="operation" value="read"
-                      className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ocean">
-                      Mark as read
+                {notice.kind === "roster" ? (
+                  <form action={markRosterNotificationReadAction} className="mt-4 flex flex-wrap gap-2">
+                    <input type="hidden" name="publication_id" value={notice.publication_id} />
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <button type="submit" name="operation" value="open"
+                      className="rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
+                      View schedule
                     </button>
-                  )}
-                </form>
+                    {notice.unread && (
+                      <button type="submit" name="operation" value="read"
+                        className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ocean">
+                        Mark as read
+                      </button>
+                    )}
+                  </form>
+                ) : (
+                  <form action={markShiftOfferNotificationReadAction} className="mt-4 flex flex-wrap gap-2">
+                    <input type="hidden" name="notification_id" value={notice.notification_id} />
+                    <input type="hidden" name="business_id" value={workspace.business.id} />
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <button type="submit" name="operation" value="open"
+                      className="rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
+                      View shift offer
+                    </button>
+                    {notice.unread && (
+                      <button type="submit" name="operation" value="read"
+                        className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ocean">
+                        Mark as read
+                      </button>
+                    )}
+                  </form>
+                )}
               </article>
             </li>
           ))}
         </ol>
       )}
       <p className="mt-4 text-xs text-muted">
-        Only publications made after in-app notifications were introduced appear here.
+        Only work events recorded after their notification support was introduced appear here.
       </p>
     </AppShell>
   );

@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon;
 grant execute on all functions in schema extensions to authenticated, anon;
-select extensions.plan(68);
+select extensions.plan(78);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a5700000-0000-4000-8000-000000000001', 'offer-owner@example.test', '{}'::jsonb),
@@ -126,6 +126,59 @@ select extensions.throws_ok(
   $$delete from public.shift_offers where id = current_setting('test.offer')::uuid$$,
   '42501', null, 'clients cannot delete offer history');
 reset role;
+select set_config('test.offer_notification', (
+  select id::text from public.shift_offer_notifications
+  where offer_id = current_setting('test.offer')::uuid and employee_id = 'e5700000-0000-4000-8000-000000000001'
+    and event_type = 'offer'), true);
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.results_eq(
+  $$select event_type, role_title, department_name, starts_at, unread
+    from public.list_shift_offer_notifications('b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001')
+    where offer_id = current_setting('test.offer')::uuid$$,
+  $$values ('offer'::text, 'Barista'::text, 'FOH'::text, '2032-04-05 09:00+00'::timestamptz, true)$$,
+  'an invited employee receives one unread offer notification with its shift details');
+select extensions.results_eq(
+  $$select venue_id, week_start from public.mark_shift_offer_notification_read(
+    (select notification_id from public.list_shift_offer_notifications(
+      'b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001')
+      where offer_id = current_setting('test.offer')::uuid))$$,
+  $$values ('c5700000-0000-4000-8000-000000000001'::uuid, '2032-04-05'::date)$$,
+  'marking an offer notification read returns the authorised venue-local week');
+select extensions.is(
+  (select count(*)::integer from public.list_shift_offer_notifications(
+    'b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001')
+    where offer_id = current_setting('test.offer')::uuid and unread),
+  0, 'reading an offer notification clears its unread state');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000006', true);
+set local role authenticated;
+select extensions.is(
+  (select count(*)::integer from public.list_shift_offer_notifications(
+    'b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001')),
+  0, 'an uninvited employee sees no offer notifications');
+select extensions.throws_ok(
+  $$select * from public.mark_shift_offer_notification_read(current_setting('test.offer_notification')::uuid)$$,
+  'P0001', 'Permission denied', 'an uninvited employee cannot mark another employee notification read');
+select extensions.throws_ok(
+  $$select * from public.list_shift_offer_notifications('b5700000-0000-4000-8000-000000000002', 'c5700000-0000-4000-8000-000000000002')$$,
+  'P0001', 'Permission denied', 'another tenant cannot list shift-offer notifications');
+reset role;
+select extensions.is(
+  (select count(*)::integer from public.shift_offer_notifications
+    where offer_id = current_setting('test.offer')::uuid and event_type = 'offer'),
+  3, 'one offer notification is recorded for each recipient without duplicate events');
+insert into public.shift_offer_notifications (
+  business_id, venue_id, department_id, offer_id, employee_id, event_type
+)
+select business_id, venue_id, department_id, offer_id, employee_id, event_type
+from public.shift_offer_notifications
+where offer_id = current_setting('test.offer')::uuid and event_type = 'offer'
+on conflict (offer_id, employee_id, event_type) do nothing;
+select extensions.is(
+  (select count(*)::integer from public.shift_offer_notifications
+    where offer_id = current_setting('test.offer')::uuid and event_type = 'offer'),
+  3, 'replaying the same offer event does not create duplicate notifications');
 select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000003', true);
 set local role authenticated;
 select extensions.throws_ok(
@@ -213,6 +266,23 @@ select extensions.results_eq(
   $$select employee_id, outcome from public.shift_offer_recipients where offer_id = current_setting('test.offer')::uuid order by employee_id$$,
   $$values ('e5700000-0000-4000-8000-000000000001'::uuid, 'confirmed'::text), ('e5700000-0000-4000-8000-000000000002', 'unavailable'), ('e5700000-0000-4000-8000-000000000007', 'not_selected')$$,
   'every claimant receives a clear outcome');
+reset role;
+select extensions.is(
+  (select count(*)::integer from public.shift_offer_notifications
+    where offer_id = current_setting('test.offer')::uuid and event_type = 'outcome'),
+  3, 'approval and offer-closure outcomes each create one deduplicated notification');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.results_eq(
+  $$select event_type, outcome, unread from public.list_shift_offer_notifications(
+    'b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001')
+    where offer_id = current_setting('test.offer')::uuid order by event_type$$,
+  $$values ('offer'::text, null::text, false), ('outcome'::text, 'confirmed'::text, true)$$,
+  'the confirmed employee sees their read offer and unread approval outcome');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000002', true);
+set local role authenticated;
 select extensions.throws_ok(
   $$select public.confirm_shift_offer_claim(current_setting('test.offer')::uuid, 'e5700000-0000-4000-8000-000000000007')$$,
   'P0001', 'Shift offer has already been filled', 'a second confirmation cannot assign another employee');

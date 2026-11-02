@@ -13,9 +13,9 @@ export function RosterNotificationBanner({ count, venueId }: {
   }
   if (count === 0) return null;
   return (
-    <section aria-label="Unread roster updates"
+    <section aria-label="Unread work updates"
       className="mt-5 rounded-xl border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ink">
-      You have {count} unread roster {count === 1 ? "update" : "updates"}.{" "}
+      You have {count} unread work {count === 1 ? "update" : "updates"}.{" "}
       <Link href={`/notifications?${new URLSearchParams({ venue: venueId })}`}
         className="font-semibold text-ocean underline">
         View notifications

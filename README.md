@@ -483,11 +483,15 @@ published before version history was introduced are not retroactively logged.
 New publications create one in-app roster update per affected account, even
 when several shifts or linked profiles are involved. Employees can review and
 mark updates read in **Notifications**, or open their own schedule directly.
+Each newly sent open-shift offer also creates an unread update for its
+invited employees. Manager claim decisions create an outcome update for each
+recipient, including the employee whose claim was approved. These notices open
+the employee's own venue-local schedule at the shift-offer section.
 Unlinked profiles retain their update until linked; managers are warned when
 affected profiles lack a linked account, eligible membership or department
 link, and the warning links to **People** to send a staff invitation. An in-app update is visible when the employee next signs in; this does
 not verify external delivery. Updates are not retroactively generated for
-older publications, and email and push delivery are not yet available.
+older publications or offers, and email and push delivery are not yet available.
 
 The weekly roster groups workers by department. Staff linked to multiple
 departments appear in each group, with that department's shifts shown in its
