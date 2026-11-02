@@ -30,13 +30,12 @@
   deferred. Feature commit `6fbdde15f41131ce15236bf20468b6ede23cd372`
   was pushed and its remote SHA matched; see the criterion evidence below.
 - BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
-  now works per venue, but existing roster publications, weekly reviews and
-  immutable payroll periods assume Monday. The owner must decide whether
-  roster and payroll weeks change together, whether transition periods are
-  short or long, and how already scheduled future shifts are handled.
-  Notification defaults also need defined event/channel/consent behavior and
-  the undelivered BB-COMMS-003 email/push capability. No historical periods
-  have been reinterpreted.
+  works per venue. Owner decision DEC-002 confirms prospective per-venue
+  display-week starts, Monday payroll boundaries and essential in-app
+  defaults, but these settings and their transition safeguards are not yet
+  implemented or verified. Optional external channels require the undelivered
+  BB-COMMS-003 capability, consent and provider approval; optional categories
+  and quiet hours remain open. No historical periods have been reinterpreted.
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
@@ -566,6 +565,13 @@
   pretending retained synthetic fixtures were deleted. Then run affected
   broader regression in the verified disposable project. The guard alone does
   not prove complete record preservation, approved retention or hosted recovery.
+- At 11:10 UTC the draft guard and affected assertions passed **557/557**
+  pgTAP checks across 11 files in individually rolled-back transactions.
+  One initial break-count expectation was corrected from two to three
+  business-wide records and rerun. Test teardown now checks that synthetic
+  businesses are preserved rather than bypassing the guard; authenticated
+  and browser cleanup still require runtime verification. Changed-file lint
+  and TypeScript passed. The migration remains unapplied and uncommitted.
 
 ## Recently completed story
 
@@ -1948,12 +1954,11 @@ not yet run remotely.
   non-destructive preservation safeguard under DEC-001. Keep the story Blocked
   until the required legal, duration and operational approvals and all
   acceptance evidence exist; do not alter live records.
-- After safe preservation work, inspect **BB-ATTEND-004 — Rotating QR kiosk**
-  and its attendance prerequisites.
-- Resume **BB-ORG-006** only after owner-approved roster/payroll transition
-  and notification-default semantics and the necessary delivery capability
-  are available. Preserve existing immutable periods and do not silently
-  reinterpret historical records.
+- After safe preservation work, inspect the now-directed prospective
+  venue-week portion of **BB-ORG-006** under DEC-002, then
+  **BB-ATTEND-004 — Rotating QR kiosk**. Keep ORG-006 Blocked until its
+  complete criteria and external-channel dependencies are verified. Preserve
+  existing immutable periods and do not silently reinterpret history.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
