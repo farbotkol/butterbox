@@ -3,15 +3,17 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **46**. In Progress: **0**.
-  Blocked: **5**. Not started (Backlog): **58**.
+  BB-PAYRULES stories). Verified Done: **46**. In Progress: **1**.
+  Blocked: **5**. Not started (Backlog): **57**.
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
   Privileged business deletion can cascade employment records; an approved
   live-record retention/deletion policy and hosted recovery are not verified.
   The owner must specify and approve the preservation policy before the last
-  criterion can be implemented and verified. See the criterion table below.
+  criterion can be implemented and verified. Partial feature commit
+  `a98b1ad18abc69cf12f442e9a38db26028b46a58` was pushed and its remote SHA
+  matched. See the criterion table below.
 - BB-RULES-001 (employment rule metadata) is Done. Scoped dated history
   preserves unknown classifications and independently maintained award and
   contract references. Focused database tests passed **282/282** on acceptance,
@@ -514,11 +516,17 @@
 
 ## Current story
 
+- **BB-ROSTER-009 — Roster approval workflow** is In Progress, in planning.
+  Its criteria are owner-selectable direct/approval publication, a reviewer
+  view of changes, and scoped audited approval/rejection. Existing publication
+  is direct, snapshots published shifts and sends recipient notifications.
+  Preserve that default and its conflict checks; prevent bypass and stale
+  approval server-side. This supplies the approval workflow needed for the
+  broader `BB-ORG-006` configuration story.
 - **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
-  above; the verified access and visibility changes are being checkpointed.
-  Next, investigate `BB-ORG-006` prerequisites and select an independent
-  ready core story. Week boundaries are currently baked into roster
-  publications and payroll snapshots; do not silently reinterpret history.
+  above; the verified access and visibility changes have been pushed. Week
+  boundaries are currently baked into roster publications and payroll
+  snapshots; do not silently reinterpret history.
 - **BB-RULES-001 — Employment rule metadata** is Done and pushed as
   `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
@@ -1799,10 +1807,11 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Investigate **BB-ORG-006 — Business configuration** prerequisites before
-  changing week boundaries, approval or notification defaults. Existing roster
-  publications and payroll snapshots assume Monday-based weeks, so prospective
-  semantics and dependent approval/notification workflows must be preserved.
+- Implement **BB-ROSTER-009 — Roster approval workflow**, then revisit
+  **BB-ORG-006 — Business configuration** prerequisites before changing week
+  boundaries or notification defaults. Existing roster publications and
+  payroll snapshots assume Monday-based weeks, so prospective semantics and
+  dependent workflows must be preserved.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
