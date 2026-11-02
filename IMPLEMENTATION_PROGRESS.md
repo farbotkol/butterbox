@@ -6,7 +6,7 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:55 UTC, the uncommitted device and employee UI and transaction
+  2026-11-02 12:57 UTC, the uncommitted device and employee UI and transaction
   migration are implemented but not runtime-verified end to end. On the
   isolated applied schema, QR pgTAP passed **62/62** and seven neighboring
   attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
@@ -19,10 +19,10 @@
   Browser testing exposed and fixed an unrelated account-session announcement
   redirecting the independently activated kiosk to login. The decoded-QR mobile
   scenario and both existing cross-tab session regressions passed (**3/3**).
-  An additional negative-path browser check then failed because an unsigned-in
-  scan's short-lived code remained in the login URL fragment. Correct fragment
-  removal for redirected and denied pages, rerun browser tests, and complete
-  final documentation and verification; no full criterion is yet marked Passed.
+  An additional negative-path browser check exposed an unsigned-in scan's
+  short-lived code remaining in the login URL fragment. Redirect and denied-page
+  cleanup were fixed and the expanded QR browser scenario passed. Final
+  documentation and verification remain; no full criterion is yet marked Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -699,7 +699,8 @@ settings/delivery still require their own implementation and verification.
   updated after location verification. The selector and expectation were
   corrected, the session-sync defect was fixed, and the affected kiosk and
   cross-tab scenarios passed. A later negative-path test exposed fragment
-  retention on the login redirect and currently fails. The
+  retention on the login redirect; redirect and denied-page cleanup were fixed,
+  and the expanded QR scenario passed. The
   test-only Apache-2.0 `jsqr` decoder was added because this Chromium build
   does not expose a native barcode decoder; browser tests must decode the
   rendered SVG rather than merely reading the generated URL.
