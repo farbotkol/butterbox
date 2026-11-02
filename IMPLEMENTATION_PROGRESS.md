@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **50**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **70**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **51**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **70**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -680,7 +680,7 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-REPORT-001 — Hours and labour dashboard: In Progress.** Selected ready
+**BB-REPORT-001 — Hours and labour dashboard: Done.** Selected ready
 Showcase P0 after verified ATTEND-006 (`6c67d10`, remote SHA matched).
 Plan: an owner-only, read-only reporting RPC reuses the weekly published
 planned-shift, worked-time and current approval helpers. Group by venue and
@@ -694,7 +694,43 @@ tenant/role denial and approval changes with focused pgTAP, Node and browser
 tests, plus changed-file lint, TypeScript and a route production build.
 No existing features will be rebuilt. The dedicated showcase deployment
 remains an independent DEMO gate, not the acceptance test environment.
-Documentation: pending implementation; no report criterion is yet Pass.
+Implementation: `20261103190000_hours_labour_report.sql`, `src/lib/hours-labour.ts`,
+`src/app/reports/hours/{page,loading}.tsx` and owner navigation. One read-only
+RPC aggregates a consistent statement snapshot, without pagination-truncated
+totals. It does not modify attendance, approvals or payroll. Costs are optional
+uniform-rate illustrations, not employee wages or Award Central calculations.
+
+Verification on 2026-11-02: focused pgTAP **39/39**, adjacent weekly review,
+department approval and tenant-isolation assertions **129/129**; focused report,
+weekly, approval and pagination Node tests **25/25**; authenticated production
+mobile/desktop browser **1/1** including axe, source reconciliation, filter and
+role/tenant denial, estimates and outdated approval refresh. Changed-file
+ESLint, TypeScript and split production build passed. Browser setup first
+failed because the bulk fixture omitted break_minutes in some rows; corrected
+explicit zeros. Runtime then exposed missing exact-count options for the
+existing pagination helper; corrected the report queries, retaining the
+fail-closed helper. The implicit-label test locator was replaced with the
+actual accessible combobox name. Final complete scenario passed.
+
+The migration passed rollback syntax preflight and was applied only to the
+verified disposable `butterbox-acceptance` project (API 55421/DB 55422).
+The CLI initially refused a missing local copy of already-applied migration
+03180000; copied the committed file into the disposable workdir, with no ledger
+repair or applied-migration edits. Disk guard remained at **29 GiB** free.
+Full suites intentionally deferred: this adds a read-only owner surface, not
+shared authorization or pay calculation changes. Revisit broader regression
+at workstream merge/release; hosted rollout and large-tenant performance have
+not been verified. No production readiness or compliance claim.
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| REPORT-001.1 — filtering | Validated week, business, venue and matching department; one owner-only aggregate RPC | pgTAP valid/invalid filters, DST boundaries, role/revocation/two-tenant checks and browser filters/empty/errors passed | Pass |
+| REPORT-001.2 — definitions | Metric definitions beside report; explicit gross scheduled vs net worked/paid distinction and timezone/week treatment | Node duration cases and mobile/desktop browser checked displayed definitions and known totals | Pass |
+| REPORT-001.3 — reconciliation | Existing weekly shift/worked-time and current approval helpers; excludes outdated/invalid entries | pgTAP exact approved-source sum, paid/unpaid break fixtures and approval changes passed; authenticated browser verified source link, known values and unlock refresh | Pass |
+| REPORT-001.4 — costs vs payroll | Optional bounded uniform AUD rate, exact microsecond/cents calculation and conspicuous exclusions | Node boundaries/rounding and browser $195 business/$105 filtered/$90 after unlock passed; no-rate state says Not estimated | Pass |
+
+Documentation: updated — `docs/USER_GUIDE.md` owner reporting workflow,
+permissions, metric definitions, errors and limitations.
 
 ## Latest completed attendance story
 

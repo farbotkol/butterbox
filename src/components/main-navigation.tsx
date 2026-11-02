@@ -39,6 +39,7 @@ export function MainNavigation({ role, businessId }: { role: string; businessId?
             { href: "/people", label: "People", icon: UsersRound },
             { href: "/settings/organisation", label: "Departments", icon: Building2 }] : []),
         ...(role === "owner" ? [
+          { href: "/reports/hours", label: "Hours and labour", icon: ClipboardList },
           { href: "/settings/permissions", label: "Permissions", icon: ShieldCheck },
           { href: "/settings/audit", label: "Audit history", icon: ClipboardList },
         ] : [])].map(({ href, label, icon: Icon }) => {

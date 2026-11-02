@@ -126,6 +126,44 @@ The usual attendance screen remains available when scanning is not possible.
 
 **Important:** Butterbox's generic payroll records and CSV workflow do not mean Xero, MYOB, Employment Hero or QuickBooks integrations are live. Xero integration is intentionally deferred. Award Central's gross-pay interpretation is not yet independently approved for production calculations.
 
+### Hours and labour — owners
+
+1. Select **Hours and labour** in the main navigation. Only a business owner
+   can view the page or request the report; manager, admin and employee access
+   to timesheets does not confer access to this owner report.
+2. Set **Week containing**, **Venue** and **Department**, then select **Apply
+   filters**. Leave venue/department at **All venues**/**All departments** for
+   business-wide totals. A selected department must belong to the selected
+   venue; otherwise the page shows an error rather than different totals.
+3. Read the summary and each venue/department card:
+   - **Scheduled hours** are the full elapsed duration of assigned, scheduled,
+     published shifts, without deducting planned breaks. Draft, cancelled and
+     unassigned shifts are excluded.
+   - **Approved worked hours** subtract all recorded breaks from effective
+     clock duration and include only current approved, valid entries.
+   - **Approved paid hours** add paid recorded breaks back to approved worked
+     time; unpaid breaks remain excluded. Pending, returned, resubmitted,
+     outdated and invalid entries are excluded and counted separately.
+4. Choose **Review source timesheets** on a card to reconcile entries in the
+   same venue and week. Department attribution follows the recorded session,
+   not the employee's home department. Refresh the report after corrections,
+   approvals or unlocks; outdated approval no longer contributes to totals.
+5. Optionally enter an **Illustrative hourly rate (AUD)** from 0 to 10,000,
+   with at most two decimal places. Costs multiply approved paid hours by
+   that one uniform rate. Without it, the page says **Not estimated**.
+
+The report uses Monday-based timesheet weeks in each venue's timezone, including
+daylight-saving changes, independently of roster display settings. Shifts and
+sessions starting inside the week are counted in full, even if they end outside
+it. An empty week is explicitly identified. Duplicate or invalid filters and
+unavailable/incomplete data show errors instead of a partial-success report.
+
+**Estimates are not actual payroll.** Employee rates, awards, penalties,
+overtime, minimum engagements, allowances, superannuation and tax are not
+calculated. Each displayed estimate rounds once to cents, so rounded department
+figures may differ from the rounded business total. The report is read-only;
+it does not approve hours, export payroll or transmit data to a provider.
+
 ### Audit history
 
 Business owners can review sensitive staffing, permission, roster, attendance and payroll changes in **Audit history**, with scoped filters and pagination. Audit records may contain personal information and should be shared only with appropriately authorized users.
@@ -153,6 +191,7 @@ External email, push, SMS and WhatsApp notifications are **planned optional chan
 | Kiosk code was used or expired | Sign in on your own phone, wait for a fresh kiosk code and scan again. If the device is unavailable or revoked, ask an owner to activate a new one or use the attendance screen. |
 | Attendance alert is missing or out of date | Check venue monitoring, the latest scan, publication and assignment. Wait for the next scan after a clock; ask an operator about an overdue scan rather than assuming no exceptions exist. |
 | Timesheet differs from expected | Review break facts, corrections and approval status; request a correction instead of editing finalized history. |
+| Hours and labour total differs from the roster | Check publication, assignment, week/timezone and approval status. Scheduled hours include planned break time; worked/paid totals use approved recorded breaks. Use **Review source timesheets** to reconcile. |
 | No SMS/WhatsApp/email alert | These channels are not yet guaranteed operational. Check the in-app notification centre. |
 | Payroll rates appear missing | The central award intelligence and external payroll adapters are not yet production-verified. |
 

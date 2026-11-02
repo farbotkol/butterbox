@@ -101,6 +101,194 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("owner hours and labour report reconciles approved time with mobile filters and estimated costs", async ({ page, browser }) => {
+  test.setTimeout(150_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, secondVenueId, outsideVenueId, fohId, bohId, secondDepartmentId,
+    workerId, secondWorkerId, approvedId, bohSessionId, secondSessionId, pendingId, incompleteId, paidBreakId, unpaidBreakId] =
+    Array.from({ length: 17 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const ownerApi = createClient(apiUrl, anonKey, options);
+  const week = "2024-09-30";
+  const reportUrl = `/reports/hours?business=${businessId}&week=${week}&rate=30`;
+  try {
+    for (const role of ["owner", "manager", "worker", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `report-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Report UI cafe" }, { id: outsideId, name: "Outside report cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Report Sydney", timezone: "Australia/Sydney" },
+      { id: secondVenueId, business_id: businessId, name: "Report UTC", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Private outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+      { id: secondDepartmentId, business_id: businessId, venue_id: secondVenueId, name: "UTC FOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "Report worker", role_title: "Server" },
+      { id: secondWorkerId, business_id: businessId, venue_id: secondVenueId, department_id: secondDepartmentId,
+        name: "UTC worker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: workerId, department_id: bohId,
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        role_title: "Server", starts_at: "2024-10-01T01:00:00Z", ends_at: "2024-10-01T05:00:00Z", break_minutes: 30, is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: workerId,
+        role_title: "Kitchen", starts_at: "2024-10-01T06:00:00Z", ends_at: "2024-10-01T09:00:00Z", break_minutes: 0, is_published: true },
+      { business_id: businessId, venue_id: secondVenueId, department_id: secondDepartmentId, employee_id: secondWorkerId,
+        role_title: "Server", starts_at: "2024-10-01T01:00:00Z", ends_at: "2024-10-01T03:00:00Z", break_minutes: 0, is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        role_title: "Draft", starts_at: "2024-10-02T01:00:00Z", ends_at: "2024-10-02T02:00:00Z", break_minutes: 0, is_published: false },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([
+      { id: approvedId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId, started_by: users.worker },
+      { id: bohSessionId, business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: workerId, started_by: users.worker },
+      { id: secondSessionId, business_id: businessId, venue_id: secondVenueId, department_id: secondDepartmentId, employee_id: secondWorkerId, started_by: users.owner },
+      { id: pendingId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId, started_by: users.worker },
+      { id: incompleteId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId, started_by: users.worker },
+    ])).error).toBeNull();
+    await sql(`insert into public.attendance_events (
+      session_id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, occurred_at, source
+    ) select s.id, s.business_id, s.venue_id, s.department_id, s.employee_id, s.started_by, gen_random_uuid(),
+      t.event_type, t.occurred_at, 'server_clock'
+    from (values
+      ('${approvedId}', '2024-10-01 01:00+00', '2024-10-01 05:00+00'),
+      ('${bohSessionId}', '2024-10-01 06:00+00', '2024-10-01 08:00+00'),
+      ('${secondSessionId}', '2024-10-01 01:00+00', '2024-10-01 02:00+00'),
+      ('${pendingId}', '2024-10-02 01:00+00', '2024-10-02 02:00+00'),
+      ('${incompleteId}', '2024-10-02 03:00+00', null)
+    ) f(id, starts_at, ends_at)
+    join public.attendance_sessions s on s.id = f.id::uuid
+    cross join lateral (values ('clock_in', f.starts_at::timestamptz), ('clock_out', f.ends_at::timestamptz)) t(event_type, occurred_at)
+    where t.occurred_at is not null;
+    insert into public.attendance_breaks (id, session_id, business_id, classification) values
+      ('${paidBreakId}', '${approvedId}', '${businessId}', 'paid'),
+      ('${unpaidBreakId}', '${approvedId}', '${businessId}', 'unpaid');
+    insert into public.attendance_events (
+      session_id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, occurred_at, source, break_id
+    ) select s.id, s.business_id, s.venue_id, s.department_id, s.employee_id, s.started_by, gen_random_uuid(),
+      t.event_type, t.occurred_at::timestamptz, 'server_clock', t.break_id::uuid
+    from (values
+      ('${paidBreakId}', 'break_start', '2024-10-01 02:00+00'),
+      ('${paidBreakId}', 'break_end', '2024-10-01 02:15+00'),
+      ('${unpaidBreakId}', 'break_start', '2024-10-01 03:00+00'),
+      ('${unpaidBreakId}', 'break_end', '2024-10-01 03:30+00')
+    ) t(break_id, event_type, occurred_at)
+    join public.attendance_sessions s on s.id = '${approvedId}'::uuid;`);
+    expect((await ownerApi.auth.signInWithPassword({ email: `report-ui-owner-${suffix}@example.test`, password })).error).toBeNull();
+    for (const [venue, sessionIds] of [[venueId, [approvedId, bohSessionId]], [secondVenueId, [secondSessionId]]]) {
+      const entries = await ownerApi.rpc("list_weekly_worked_time_for_edit", {
+        p_business_id: businessId, p_venue_id: venue, p_week_start: week,
+      });
+      expect(entries.error).toBeNull();
+      for (const id of sessionIds) {
+        const entry = entries.data.find((item) => item.session_id === id);
+        expect(entry).toBeDefined();
+        expect((await ownerApi.rpc("decide_attendance_timesheet", {
+          p_business_id: businessId, p_venue_id: venue, p_session_id: id, p_request_id: randomUUID(),
+          p_expected_revision: entry.edit_revision, p_decision: "approved", p_reason: null,
+        })).error).toBeNull();
+      }
+    }
+    const report = await ownerApi.rpc("get_hours_labour_report", { p_business_id: businessId, p_week_start: week });
+    expect(report.error).toBeNull();
+    expect(report.data.reduce((sum, item) => sum + item.approved_paid_seconds, 0)).toBe(23400);
+    expect(report.data.reduce((sum, item) => sum + item.scheduled_seconds, 0)).toBe(32400);
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    page.setDefaultTimeout(20_000);
+    await signIn(page, `report-ui-owner-${suffix}@example.test`, password);
+    await page.goto(reportUrl);
+    await expect(page.getByRole("heading", { name: "Hours and labour", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Hours and labour" })).toBeVisible();
+    const totals = page.getByLabel("Report totals");
+    await expect(totals).toContainText("9h 0m 0s");
+    await expect(totals).toContainText("6h 15m 0s");
+    await expect(totals).toContainText("6h 30m 0s");
+    await expect(totals).toContainText("$195.00");
+    await expect(page.getByText("3 approved entries included. 2 entries excluded", { exact: false })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Metric definitions and limitations" })).toBeVisible();
+    await expect(page.getByText("Not actual payroll, an export or a compliance result.", { exact: false })).toBeVisible();
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile hours and labour"));
+    const form = page.getByRole("form", { name: "Report filters" });
+    await form.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueId);
+    await form.getByRole("combobox", { name: "Department", exact: true }).selectOption(fohId);
+    await form.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("article", { name: "Report Sydney / FOH" })).toContainText("3h 15m 0s");
+    await expect(totals).toContainText("$105.00");
+    await expect(page.getByRole("article", { name: "Report Sydney / BOH" })).toHaveCount(0);
+    const source = page.getByRole("link", { name: "Review source timesheets" });
+    await expect(source).toHaveAttribute("href", `/timesheets?venue=${venueId}&week=${week}&business=${businessId}`);
+    await source.click();
+    await expect(page.getByRole("heading", { name: "Weekly timesheet review" })).toBeVisible();
+    await expect(page.getByText("Approved by department manager", { exact: true }).first()).toBeVisible();
+
+    await page.goto(`${reportUrl}&venue=${secondVenueId}`);
+    await expect(totals).toContainText("2h 0m 0s");
+    await expect(totals).toContainText("$30.00");
+    await page.goto(`${reportUrl}&venue=${secondVenueId}&department=${fohId}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Choose a valid week");
+    await expect(totals).toHaveCount(0);
+    await page.goto(`${reportUrl}&rate=31`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("use each filter once");
+    await page.goto(`/reports/hours?business=${businessId}&week=2024-02-30`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Choose a valid week");
+    await page.goto(`/reports/hours?business=${businessId}&week=2020-01-06`);
+    await expect(page.getByText("No published assigned shifts or timesheet entries for these filters.")).toBeVisible();
+    await expect(totals).toContainText("Not estimated");
+
+    expect((await ownerApi.rpc("set_attendance_edit_lock", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: approvedId,
+      p_request_id: randomUUID(), p_locked: false, p_reason: "Report verifies outdated approvals",
+    })).error).toBeNull();
+    await page.goto(reportUrl);
+    await expect(totals).toContainText("3h 0m 0s");
+    await expect(totals).toContainText("$90.00");
+    await page.setViewportSize({ width: 1280, height: 900 });
+    findingsMustBeEmpty(await accessibilityFindings(page, "desktop hours and labour"));
+
+    for (const role of ["manager", "worker", "outside"]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const target = await context.newPage();
+      await signIn(target, `report-ui-${role}-${suffix}@example.test`, password);
+      await target.goto(reportUrl);
+      await expect(target.getByRole("main").getByRole("alert")).toContainText(role === "outside"
+        ? "selected business or venue is unavailable" : "Only a business owner");
+      await expect(target.getByLabel("Report totals")).toHaveCount(0);
+      const caller = createClient(apiUrl, anonKey, options);
+      expect((await caller.auth.signInWithPassword({ email: `report-ui-${role}-${suffix}@example.test`, password })).error).toBeNull();
+      expect((await caller.rpc("get_hours_labour_report", { p_business_id: businessId, p_week_start: week })).error?.message)
+        .toContain("Only a business owner");
+    }
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const id of Object.values(users)) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("attendance alerts support scoped mobile review and per-manager notifications", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
