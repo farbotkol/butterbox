@@ -6791,7 +6791,7 @@ test("core pages pass WCAG checks, keyboard controls and screen-reader smoke tes
     const ownerPages = [
       "/", roster, `/people?venue=${venueId}`, `/timesheets?venue=${venueId}`, `/work-time?venue=${venueId}`,
       `/availability?venue=${venueId}`, `/attendance?venue=${venueId}`, `/notifications?venue=${venueId}`,
-      "/settings/organisation", "/settings/permissions", "/settings/payroll",
+      "/settings/organisation", "/settings/permissions", "/settings/payroll", "/settings/audit",
     ];
     for (const path of ownerPages) {
       await page.goto(path);
@@ -7030,6 +7030,135 @@ test("loading, failure and missing-page states are announced and recoverable", a
   } finally {
     expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
+test("owners filter immutable staffing and payroll audit history without crossing businesses", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, departmentId, employeeId] =
+    Array.from({ length: 5 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "manager", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `audit-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Audit cafe ${suffix}` }, { id: outsideBusiness, name: `Outside audit ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Audit venue", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[2], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: "Audit Before", email: "not-copied@example.test", role_title: "Server" },
+      ...Array.from({ length: 51 }, (_, index) => ({
+        id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: departmentId,
+        name: `Audit Page Worker ${index + 1}`, role_title: "Server",
+      })),
+    ])).error).toBeNull();
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `audit-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("save_employee_profile", {
+      p_business_id: businessId, p_department_id: departmentId, p_employee_id: employeeId,
+      p_name: "Audit After", p_email: "not-copied@example.test", p_role_title: "Supervisor",
+      p_employment_type: "part_time", p_active: true,
+    })).error).toBeNull();
+    const scope = { p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-01-08", p_request_id: randomUUID() };
+    expect((await ownerApi.rpc("finalise_payroll_period", scope)).error).toBeNull();
+    expect((await ownerApi.rpc("reopen_payroll_period", {
+      ...scope, p_request_id: randomUUID(), p_reason: "Audit reopening smoke check",
+    })).error).toBeNull();
+    expect((await ownerApi.from("sensitive_action_audit").select("id")
+      .eq("business_id", outsideBusiness)).data).toEqual([]);
+    expect((await ownerApi.from("sensitive_action_audit").update({ reason: "forged" }).eq("business_id", businessId))
+      .error?.code).toBe("42501");
+
+    await page.goto("/settings/audit");
+    await expect(page.getByRole("heading", { name: "Welcome to Butterbox" })).toBeVisible();
+    await signIn(page, `audit-owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/audit?business=${businessId}`);
+    await expect(page.getByRole("heading", { name: "Sensitive action audit" })).toBeVisible();
+    const form = page.getByRole("form", { name: "Filter audit history" });
+    await form.getByLabel("Change category").selectOption("employees");
+    await form.getByRole("combobox", { name: "Operation", exact: true }).selectOption("UPDATE");
+    await form.getByLabel("Actor user ID").fill(users[0]);
+    const today = new Date().toISOString().slice(0, 10);
+    await form.getByLabel("From date (UTC)").fill(today);
+    await form.getByLabel("Through date (UTC)").fill(today);
+    await form.getByRole("button", { name: "Apply audit filters" }).click();
+    await expect(page.getByRole("status")).toHaveText("1 audit records match. Page 1.");
+    const history = page.getByRole("list", { name: "Sensitive action history" });
+    await expect(history.getByRole("listitem")).toHaveCount(1);
+    await expect(history).toContainText(`You (${users[0]})`);
+    await history.getByText("Before and after values").click();
+    await expect(history.locator("pre").nth(0)).toContainText("Audit Before");
+    await expect(history.locator("pre").nth(1)).toContainText("Audit After");
+    await expect(history).not.toContainText("not-copied@example.test");
+    await expect(history.locator("time")).toHaveAttribute("datetime", /T/);
+
+    await form.getByLabel("Change category").selectOption("payroll_period_events");
+    await form.getByRole("combobox", { name: "Operation", exact: true }).selectOption("");
+    await form.getByRole("button", { name: "Apply audit filters" }).click();
+    await expect(history.getByRole("listitem")).toHaveCount(2);
+    await expect(history).toContainText("Reason: Audit reopening smoke check");
+
+    await form.getByLabel("Change category").selectOption("employees");
+    await form.getByRole("combobox", { name: "Operation", exact: true }).selectOption("INSERT");
+    await form.getByLabel("Actor user ID").fill("");
+    await form.getByRole("button", { name: "Apply audit filters" }).click();
+    await expect(page.getByRole("status")).toHaveText("52 audit records match. Page 1.");
+    await expect(history.getByRole("listitem")).toHaveCount(50);
+    await page.getByRole("link", { name: "Next audit page" }).click();
+    await expect(page.getByRole("status")).toHaveText("52 audit records match. Page 2.");
+    await expect(history.getByRole("listitem")).toHaveCount(2);
+    await expect(page.getByRole("link", { name: "Previous audit page" })).toBeVisible();
+    await expect(history).toContainText("Database service (no user session)");
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile audit history"));
+    await page.goto(`/settings/audit?business=${businessId}&actor=invalid`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Invalid audit filters");
+    await expect(page.getByRole("list", { name: "Sensitive action history" })).toHaveCount(0);
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `audit-manager-${suffix}@example.test`, password);
+    await managerPage.goto(`/settings/audit?business=${businessId}`);
+    await expect(managerPage).toHaveURL(new RegExp(`/\\?error=permission&business=${businessId}`));
+    await expect(managerPage.getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Audit history" })).toHaveCount(0);
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `audit-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/settings/audit?business=${businessId}`);
+    await expect(outsidePage.getByRole("heading", { name: "Audit history unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Audit After", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const id of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
 

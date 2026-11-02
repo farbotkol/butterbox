@@ -3,8 +3,14 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **39**. In Progress: **1**.
-  Blocked: **3**. Not started (Backlog): **66**.
+  BB-PAYRULES stories). Verified Done: **40**. In Progress: **1**.
+  Blocked: **3**. Not started (Backlog): **65**.
+- BB-FOUND-007 (sensitive action audit) is Done. A clean isolated replay of
+  46 migrations passed **2,116/2,116** pgTAP assertions across 45 files,
+  including 31 audit assertions. All **19/19** authenticated integrations,
+  **139** Node tests (19 integrations skipped in that invocation), full ESLint,
+  TypeScript, split production compile/generate and **56/56** serialized
+  production-browser scenarios passed. Disk stayed above 29 GiB free.
 - BB-SAAS-004 (performance and accessibility) is Done. Axe WCAG-oriented,
   keyboard and accessible-landmark/status smoke checks pass across signed-out,
   owner and mobile employee core pages. The final production 25-worker/7-day
@@ -39,7 +45,7 @@
   authorisation/revocation test, **50/50** serialized production-browser
   scenarios, ESLint, TypeScript and the split production build. No SQL changed,
   so pgTAP was not rerun for this checkpoint.
-- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-005, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-005, BB-FOUND-006, BB-FOUND-007, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-008, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
@@ -343,8 +349,12 @@
 
 ## Current story
 
-- **BB-SAAS-004 — Performance and accessibility** is Done (evidence below).
-  Next ready P0: **BB-FOUND-007 — Audit sensitive actions**. BB-COMMS-002's
+- **BB-FOUND-007 — Audit sensitive actions** is Done (evidence below).
+  Next P0 to assess and implement: **BB-FOUND-008 — Resilience and operations**,
+  including an explicitly isolated restore rehearsal, monitoring and retention
+  documentation. Do not equate local recovery tests with deployed staging or
+  production backup guarantees.
+- **BB-SAAS-004 — Performance and accessibility** is Done. BB-COMMS-002's
   remaining offer notifications require an offer workflow first; do not mark
   it Done based only on roster publication updates.
 - **BB-FOUND-005 — Invite and onboard users** is Done (evidence below). The
@@ -490,6 +500,32 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-FOUND-007 — Audit sensitive actions (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| FOUND-007.1 Actor, tenant, timestamp, old/new values and applicable reason | Atomic AFTER triggers on 33 staffing, permissions, roster, attendance and payroll tables append allowlisted scalar snapshots to `sensitive_action_audit`. Database changes without `auth.uid()` are explicitly distinguished from user actions. No-op projected updates and rolled-back failures create no duplicate success events. Existing domain records are preserved; earlier events are not backfilled. | 31 pgTAP assertions passed real employee create/update, actor/time/business, before/after values, payroll reopen reason, failed mutations, no-op saves, source deletion, future-field exclusion and tenant deletion. Authenticated integration verified one audit row per committed payroll transition across concurrent retries. Production browser verified before/after profile values, actor, timestamp, reason and database-service attribution. | Pass |
+| FOUND-007.2 Authorised viewers filter audit history | Owner-only RLS and server page checks; explicit business context; validated category, operation, actor UUID and UTC date bounds; deterministic timestamp/ID ordering and 50-row pagination. Invalid filters show an alert without querying or displaying results. | Three Node tests passed filter/row validation and trigger/label parity. Production Chromium verified combined filters yielding one profile update, two payroll transitions, 52 insert records over two pages, invalid filters, owner revocation/tenant RLS in SQL, manager redirect, outside-owner unavailable state, mobile no-overflow and zero axe findings. | Pass |
+| FOUND-007.3 Ordinary users cannot modify audit records | No application insert/update/delete grants, no service-role access, protected trigger functions, append-only mutation guard including privileged writes. Only whole-business cascade deletion follows the established lifecycle. | pgTAP passed anonymous/employee/department-manager/cross-tenant read restrictions, owner insert/update/delete refusals, privileged update/delete refusals and revoked-owner access. Authenticated browser/API test verified owner update refused with 42501. Source deletion preserved history; tenant deletion removed only its own records. | Pass |
+
+Files: `supabase/migrations/20261103010000_sensitive_action_audit.sql`,
+`supabase/tests/database/sensitive_action_audit.test.sql`,
+`src/lib/sensitive-action-audit.ts`, `src/app/settings/audit/page.tsx`,
+`src/components/main-navigation.tsx`, `tests/sensitive-action-audit.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and tracking files.
+The clean isolated 46-migration replay passed; database regression
+**2,116 assertions / 45 files**, authenticated integrations **19/19**,
+Node **139 passed** (19 integration skips run separately), ESLint, TypeScript,
+split production build and **56/56** browser scenarios all passed.
+An initial unscoped `supabase test db` invocation also selected two legacy
+migration-rehearsal scripts that intentionally require a pre-canonical schema;
+it failed their prerequisites. Reran the complete transactional suite using
+the explicit `supabase/tests/database` directory, without modifying or
+weakening either migration rehearsal. Disk stayed above 29 GiB free.
+The audit begins at installation and is not a historical backfill. Redacted
+fields are deliberately excluded; free-text reasons and names remain sensitive.
 
 ### BB-SAAS-004 — Performance and accessibility (Done)
 
@@ -1460,9 +1496,11 @@ not yet run remotely.
 
 ## Next story
 
-- Next ready implementation: **BB-FOUND-007 — Audit sensitive actions** (P0).
-  Reuse the existing append-only domain audit records, add a safely scoped
-  filterable owner view and fill missing staffing/pay audit coverage.
+- Next P0: **BB-FOUND-008 — Resilience and operations**. Inspect the existing
+  liveness route and error handling; implement meaningful monitoring and
+  explicit backup retention guidance. Rehearse restore only in a verified
+  disposable project; if deployed staging access is required and unavailable,
+  record that acceptance criterion as Blocked rather than claiming it passed.
   BB-COMMS-002 remains In Progress until offer and approval notifications are
   implemented and tested, with their workflow prerequisites completed first.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth

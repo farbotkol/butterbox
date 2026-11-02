@@ -547,6 +547,17 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
       await reopening.release(false);
       await Promise.allSettled([pendingPreview, pendingExport].filter(Boolean));
     }
+    const audit = await clients.owner.from("sensitive_action_audit")
+      .select("record_id, actor_id, reason, new_values")
+      .eq("business_id", businessId).eq("source_table", "payroll_period_events");
+    assert.ifError(audit.error);
+    const periodEvents = await sql(`select count(*) from public.payroll_period_events ` +
+      `where business_id = '${businessId}'::uuid`);
+    assert.equal(audit.data.length, Number(periodEvents),
+      "concurrent retries record exactly one audit row per committed payroll transition");
+    assert.equal(new Set(audit.data.map((row) => row.record_id)).size, audit.data.length);
+    assert.ok(audit.data.every((row) => row.actor_id === users.owner || row.actor_id === users.gm));
+    assert.ok(audit.data.some((row) => row.reason === "Review late request" && row.new_values.action === "reopened"));
   } finally {
     for (const id of [businessId, outsideId]) {
       assert.ifError((await admin.from("businesses").delete().eq("id", id)).error);

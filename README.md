@@ -4,6 +4,26 @@ Butterbox is a Next.js application backed by Supabase. The product backlog is
 in [BACKLOG_INDEX.csv](BACKLOG_INDEX.csv); work in progress is recorded in
 [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
 
+## Sensitive action history
+
+Owners can open **Audit history** to review staffing, permission, roster,
+attendance and payroll changes recorded after the audit migration is installed.
+Filter by category, operation, actor user ID and inclusive UTC dates; results
+are paginated in groups of 50. Each record includes the business, actor,
+timestamp, allowed before/after fields and the source reason where applicable.
+Service changes without a user session are labelled **Database service**.
+Existing domain histories remain on their original screens; this view does
+not invent historical actors or backfill earlier changes.
+
+Audit records are inserted atomically with source changes and cannot be
+created, edited or deleted by application users or the service role. RLS
+restricts reads to the current business owner; revocation takes effect on the
+next request. A field allowlist excludes contact email, credentials, captured
+GPS positions and arbitrary nested metadata. Owners should still treat the
+included names, identifiers and free-text reasons as sensitive personal data.
+Source-record deletion retains its audit history; deleting the entire business
+follows the existing tenant cascade lifecycle.
+
 ## Local development
 
 Use Node.js 24 and Docker. From a clean checkout:
