@@ -68,14 +68,15 @@ source records.
 
 ## Security boundaries
 
-Authenticated users can read instrument names and **active** shared versions;
-they cannot read unpublished version content or mutate either table. Anonymous
-users have no access. RLS and table grants jointly enforce the boundary.
-The current catalogue read policy does not establish tenant membership, which
-remains an acceptance gap. Only trusted schema operators may write drafts; this
-is not yet a production publication authorisation model. The DDL guard prevents
-mutation of approved versions and allows existing active versions only to be
-superseded, never rewritten.
+Authenticated users with a current business-membership row can read instrument
+names and **active** shared versions; signed-in nonmembers see no catalogue
+rows. Customers cannot read unpublished version content or mutate either table.
+Anonymous users and the service role lack catalogue grants. RLS and table grants
+jointly enforce the boundary, and a committed membership removal takes effect
+on the next read-committed statement. Only trusted schema operators may write
+drafts; this is not yet a production publication authorisation model. The DDL
+guard prevents mutation of approved versions and allows existing active versions
+only to be superseded, never rewritten.
 
 The regression-evidence migration **blocks every new approval, activation and
 supersession from draft or pending review**, even for privileged operators.
@@ -123,17 +124,24 @@ government certification is claimed.
 
 `supabase/tests/database/award_central_foundation.test.sql` (48 assertions)
 covers schema, provenance, source immutability, SQL grants and the fail-closed
-publication block. `award_central_regression_evidence.test.sql` (59 assertions)
-covers evidence provenance, stale fingerprints, claimed-identity separation,
-draft coverage/conflict reporting, immutability, and denied role access.
+publication block. `award_central_member_reads.test.sql` (19 assertions)
+covers membership-gated catalogue reads and denied role access.
+`award_central_regression_evidence.test.sql` (59 assertions) covers evidence
+provenance, stale fingerprints, claimed-identity separation, draft
+coverage/conflict reporting, immutability, and denied role access.
 The migration rehearsal uses `tests/fixtures/award-central-pre-gate.sql` before
 this migration and `award-central-post-gate.test.sql` afterwards (10 assertions)
 to retain the previous active-version read, immutability and supersession
-checks without bypassing the new block. `award-central-concurrency.test.sql`
-(9 assertions) verifies that concurrent edits and duplicate inserts serialize
-correctly. These fixtures write committed synthetic rows and the concurrency
-fixture uses privileged local database connections: run them **only** on an
-explicitly identified, verified disposable Supabase database.
+checks without bypassing the new block. `award-central-member-legacy.test.sql`
+(14 assertions) checks membership and existing-version visibility after the
+upgrade. `award-central-concurrency.test.sql` (9 assertions) verifies that
+concurrent edits and duplicate inserts serialize correctly, while
+`award-central-member-concurrency.test.sql` (8 assertions) checks concurrent
+membership revocation. These fixtures write committed synthetic rows and use
+privileged local database connections: run them **only** on an explicitly
+identified, verified disposable Supabase database. The concurrency fixtures
+require a disposable database superuser such as `supabase_admin` for
+`dblink_connect_u`; do not grant that function to application roles.
 
 `tests/award-central-source-snapshots.integration.test.mjs` exercises the
 service-role writer through PostgREST against an explicitly disposable local
@@ -142,24 +150,25 @@ variables are set. Existing attendance, timesheet, payroll and Xero modules
 are unchanged. Do not deploy the migrations or represent the foundation as
 payroll-ready until integration review completes.
 
-The Award Central migrations are numbered `20261102200000`, `20261102210000`
-and `20261102220000`, after the roadmap branch's latest migration
-(`20261102190000_canonical_payroll_records.sql`). The foundation migration was
-previously `20261102080000`, which duplicated the attendance offline-claims
-version and prevented any clean migration replay; it was renumbered before
-being applied to any shared environment.
+The Award Central migrations in this branch are numbered `20261103000100`
+through `20261103000400`, after the merged roadmap's
+`20261103000000_cross_business_invitations.sql`. The original foundation
+timestamp `20261102080000` duplicated the attendance offline-claims version
+and prevented a clean replay. These migrations were subsequently renumbered;
+before applying to any existing environment, inspect its migration ledger and
+explicitly reconcile any previously applied Award Central timestamps.
 
 ## Current acceptance evidence
 
 | Criterion | Evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| BB-PAYRULES-002.1 | One shared, untenanted instrument/version library; versions are effective-dated and published versions are immutable. | Foundation pgTAP 48/48; pre-gate legacy rehearsal 10/10 covers active-only reads and immutability. Tenant membership is not verified by the catalogue read policy, and new publication is blocked. | Blocked |
+| BB-PAYRULES-002.1 | One shared, untenanted instrument/version library; versions are effective-dated and existing published versions are immutable. Business members can read the shared catalogue. | Foundation pgTAP 48/48, membership pgTAP 19/19, legacy rehearsals 10/10 and 14/14, membership concurrency 8/8, and a two-business HTTP test passed. New publication remains blocked pending governed validation. | Blocked |
 | BB-PAYRULES-002.2 | Lifecycle fields, source snapshot, clause references and evidence fields exist; publication now fails closed. | Foundation pgTAP 48/48. Mandatory validation evidence and clause-level rate provenance before governed publication are not yet implemented (BB-PAYRULES-020/021). | Blocked |
 | BB-PAYRULES-002.3 | Customer write grants are revoked; customers cannot supersede, activate or edit central versions. | Foundation pgTAP 48/48 (authenticated update rejected with 42501). Tenant-owned award configuration does not exist yet, so cross-tenant configuration isolation is untested (BB-PAYRULES-001/003). | Blocked |
 | BB-PAYRULES-002.4 | No calculation service or result-provenance record exists yet. | No calculation test exists; depends on BB-PAYRULES-004 onwards. | Blocked |
 | BB-PAYRULES-002.5 | Tenant-specific agreement rulesets are not implemented. | No agreement isolation test exists. | Blocked |
 | BB-PAYRULES-017.1 | A bounded official-host HTTP acquisition interface exists, but no provider endpoint schema, credentials or document parser is configured. | Mocked transport tests passed; no live Fair Work Commission API or award document was fetched. | Blocked |
-| BB-PAYRULES-017.2 | Snapshot schema and service-role writer retain original bytes, URL, retrieval time, source revision, effective dates, variation references and a database-computed content hash. | Node 6/6 plus the disposable-stack integration test 1/1 (original bytes and hash round-trip, duplicate rejected with 23505, rewrite and customer read/insert rejected with 42501). Not yet exercised with live FWC content (017.1). | Blocked |
+| BB-PAYRULES-017.2 | Snapshot schema and service-role writer retain original bytes, URL, retrieval time, source revision, effective dates, variation references and a database-computed content hash. | Source Node tests 6/6 plus the merged disposable-stack integration test 1/1 (original bytes and hash round-trip, duplicate rejected with 23505, rewrite and customer read/insert rejected with 42501). Not yet exercised with live FWC content (017.1). | Blocked |
 | BB-PAYRULES-017.3 | Known MAPD applicability, entitlement, agreement, variation-monitoring and full-clause gaps are mandatory unresolved metadata. | Node 6/6 and pgTAP (MAPD row without gaps rejected with 23514). | Pass |
 | BB-PAYRULES-017.4 | Failed, redirected, empty, oversized and invalid-date acquisitions reject; acquired sources are always staged. | Node 6/6 and pgTAP (`status` is constrained to `staged`); source-specific ambiguity detection is not implemented. | Blocked |
 | BB-PAYRULES-013.1 | Draft central scenarios and separately entered expectations can be staged for the required coverage areas. | Regression pgTAP 59/59. No independently authenticated expert-reviewed golden cases or deterministic runner exist. | Blocked |
@@ -167,12 +176,16 @@ being applied to any shared environment.
 | BB-PAYRULES-013.3 | New publication is unconditionally blocked; the draft report flags missing categories, contradictions, unresolved and stale cases. | Foundation pgTAP 48/48 and regression pgTAP 59/59; independently verified coverage, actual test results and a usable publication gate remain unimplemented. | Blocked |
 | BB-PAYRULES-013.4 | Source, claimed preparer/reviewer, limitations and a draft-version fingerprint are retained in immutable staging records. | Regression pgTAP 59/59 and concurrency rehearsal 9/9. Specialist identity, test-run provenance and signoff are not yet established; no government certification is claimed. | Blocked |
 
-Feature-branch checkpoint: the three Award Central migrations were replayed on
-a verified, disposable Supabase PostgreSQL container; foundation pgTAP 48/48,
-regression pgTAP 59/59, legacy rehearsal 10/10 and concurrency rehearsal 9/9
-passed. This database-only fallback is not a full-stack Supabase or merged
-roadmap test. The previous checkpoint's merge against roadmap commit `90f29fd`
-passed 43 database test files / 2,026 assertions and 146 Node tests, but did not
-include this regression-evidence migration. **Repeat merged migration replay,
-database and integration tests, TypeScript, ESLint and production build before
-integration.** Live FWC access and production build remain unverified.
+Local merge `49f8048`, incorporating roadmap commit `540ed3f`, was replayed on
+a verified disposable Supabase stack: all 49 migrations applied and the
+database suite passed 47 files / 2,203 assertions. The four Award Central
+legacy/concurrency rehearsals passed 10/10, 14/14, 8/8 and 9/9; the separate
+canonical-payroll legacy rehearsal passed 11/11. Award Central's two
+authenticated HTTP integration tests passed on that stack. The Node unit run
+passed 142 tests with 21 integration tests skipped; the attempted full
+database-backed run was interrupted by external SIGTERM. Award Central
+TypeScript and ESLint checks passed, but full TypeScript, full ESLint and both
+Turbopack and webpack production builds were interrupted. Browser tests were
+not run. The roadmap has advanced beyond `540ed3f`; repeat the full merged
+validation against the integration target before release. Live FWC access and
+production readiness remain unverified.
