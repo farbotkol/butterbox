@@ -4,6 +4,14 @@ Butterbox is a Next.js application backed by Supabase. The product backlog is
 in [BACKLOG_INDEX.csv](BACKLOG_INDEX.csv); work in progress is recorded in
 [IMPLEMENTATION_PROGRESS.md](IMPLEMENTATION_PROGRESS.md).
 
+## User guide and documentation
+
+- [Butterbox User Guide](docs/USER_GUIDE.md) — practical guidance for owners, managers, employees and payroll administrators, including current limitations.
+- [Product Decision Log](docs/DECISION_LOG.md) — approved product directions, pending approvals and delivery gates.
+- [Documentation backlog](BUTTERBOX_PRODUCT_BACKLOG.md#epic-doc--user-guidance-and-contextual-help-p1) — screen-level walkthrough validation, in-product help and ongoing documentation maintenance.
+
+The guide is a living document; always confirm the relevant capability is tested and available before relying on it in production.
+
 ## Sensitive action history
 
 Owners can open **Audit history** to review staffing, permission, roster,
