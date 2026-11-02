@@ -1365,6 +1365,41 @@
 
 After these, deliver attendance → timesheets → CSV as one pilot end-to-end path. A feature is not Done because an AI generated code: demonstrate the working behaviour and test it.
 
+
+## Epic DOC — User guidance and contextual help (P1)
+
+The canonical help content is maintained in `docs/USER_GUIDE.md` and any task-specific Markdown/MDX content in the repository. The customer-facing experience should be rendered as accessible, searchable HTML **inside the Next.js Butterbox application**, not maintained as a separate hand-coded HTML copy. Content must match implemented capabilities and permitted roles. Do not publish claims that an unverified or blocked workflow is available.
+
+### BB-DOC-001 — Validate and expand the role-based user guide (P1)
+
+**As** an owner, manager, employee or payroll administrator, **I want** trustworthy task-by-task instructions that match the current application.
+
+**Acceptance criteria**
+1. Every currently Done user-facing feature has an owner/manager/employee/payroll guide entry, or a documented reason it needs none.
+2. Relevant screens, actual navigation/button labels, business/venue role limitations and failure/recovery paths are verified against the implementation.
+3. Mobile-friendly screenshots or walkthrough illustrations are included only if captured/verified against the actual UI; never fabricate screen evidence.
+4. Future, blocked and production-unavailable functionality is clearly marked; privacy, awards and payroll guidance does not overclaim regulatory compliance.
+
+### BB-DOC-002 — Searchable in-app HTML help center (P1)
+
+**As** a Butterbox user, **I want** to find relevant guidance without leaving the application.
+
+**Acceptance criteria**
+1. Accessible responsive Help Center renders repository-maintained Markdown/MDX as safe HTML, with task/role categories for onboarding, people, rosters, attendance, timesheets and payroll.
+2. Keyword search and internal navigation return accurate task content, clear empty results and working routes without leaking cross-tenant/role-restricted content.
+3. Help pages display only supported feature instructions appropriate to role, and distinguish unavailable capabilities from working ones.
+4. Rendered content is sanitized/controlled, headings and navigation are keyboard/screen-reader friendly, and mobile/browser acceptance checks pass.
+
+### BB-DOC-003 — Contextual help and documentation upkeep (P1)
+
+**As** a user, **I want** relevant guidance accessible at the moment I need it; **as** a product owner, **I want** guidance kept accurate with each release.
+
+**Acceptance criteria**
+1. Core onboarding, roster, attendance, timesheet and payroll workflows expose contextual Help links to the appropriate guide section.
+2. Documentation changes are included in the Definition of Done for all user-visible features and reviewed whenever relevant screens, permissions or flows change.
+3. Help content has a review/version history; broken internal links, stale feature labels and accessibility regressions are caught by lightweight automated checks.
+4. Screenshots and in-app help are verified against actual application behavior; optional AI assistance is not represented as available until separately implemented and tested.
+
 ## Reusable GitHub Copilot / coding-agent task template
 
 > Implement **[STORY ID] — [TITLE]** in `farbotkol/butterbox`. Inspect the repository and identify relevant existing patterns. First write a short plan including schema, security/tenant isolation, UI states, APIs and tests. Implement only this story and any necessary small dependencies. Follow Butterbox's light-first brand tokens. Do not rewrite unrelated modules. For each acceptance criterion, add or update tests and show how it was verified. Include loading, empty, error, permission-denied and mobile states where relevant. Run lint, typecheck, tests and build; report commands and outcomes truthfully. Deliver a concise changed-file summary and any migrations or manual setup. Do not claim completion where credentials, infrastructure or external API access are missing.
