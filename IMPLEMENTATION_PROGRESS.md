@@ -448,7 +448,10 @@
   files; metadata, profiles and audit also passed **98/98** on the replay.
   A rolled-back upgrade fixture with pre-existing history passed **5/5**.
   Twelve targeted Node tests, changed-file ESLint and TypeScript passed.
-  Authenticated concurrency and production-browser verification remain.
+  The authenticated integration passed **1/1**, exercising competing
+  same-revision metadata edits, a profile/metadata race, idempotent retry,
+  live role revocation, department denial and two-tenant isolation.
+  Production build and browser verification remain.
   The separate Award Central workstream remains isolated. No criterion has
   been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
