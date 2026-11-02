@@ -523,20 +523,27 @@
   Preserve that default and its conflict checks; prevent bypass and stale
   approval server-side. This supplies the approval workflow needed for the
   broader `BB-ORG-006` configuration story. The uncommitted migration and
-  focused fixture passed **67/67** assertions in a rolled-back transaction
-  on the isolated acceptance database; neither is applied to a migration
-  ledger yet. The first fixture run stopped after 50 passes due to an
+  focused fixture passed **67/67** assertions on the isolated acceptance
+  project and **67/67** on the separate replay project after application of
+  the migration to their verified disposable ledgers. Seven affected
+  publication, conflict, tenant and audit files passed **290/290**. One
+  authenticated integration passed submission/approval races, retry
+  idempotency, draft contention, scope and concurrent permission revocation.
+  Focused Node tests passed **8/8**, and changed-file ESLint and TypeScript
+  passed. The first acceptance fixture stopped after 50 passes due to an
   unauthorized direct recipient-table query; the corrected employee-scoped
-  notification check passed. A different scoped manager must decide;
-  requesters may withdraw. UI, authenticated concurrency, neighbouring
-  publication and notification regressions, Node, browser, lint, TypeScript
-  and production build remain to be implemented or run.
+  notification check passed. Two replay setup attempts failed before assertions
+  due to a missing terminator and insufficient Auth-schema privileges; the
+  corrected temporary helper was rolled back and verified absent. A different
+  scoped manager must decide; requesters may withdraw. Owner and manager UI
+  is implemented but production-browser, accessibility and split build
+  verification remain outstanding. Full suites are intentionally deferred.
 
   | Criterion | Current evidence and next test | Status |
   | --- | --- | --- |
-  | ROSTER-009.1 — owner selects direct or approval | Database mode, scoped owner RPC and bypass checks: focused pgTAP 67/67; owner UI/browser test outstanding | Blocked pending UI verification |
-  | ROSTER-009.2 — reviewer sees changes | Immutable shift snapshot and scoped listing: focused pgTAP 67/67; reviewer UI/browser test outstanding | Blocked pending UI verification |
-  | ROSTER-009.3 — approval/rejection is scoped and audited | Scope, decisions, audit and conflict recheck: focused pgTAP 67/67; concurrency, integration and browser tests outstanding | Blocked pending remaining verification |
+  | ROSTER-009.1 — owner selects direct or approval | Database mode, scoped owner RPC and bypass checks: focused pgTAP 67/67 on both projects; owner UI/browser test outstanding | Blocked pending UI verification |
+  | ROSTER-009.2 — reviewer sees changes | Immutable shift snapshot and scoped listing: focused pgTAP 67/67 on both projects; reviewer UI/browser test outstanding | Blocked pending UI verification |
+  | ROSTER-009.3 — approval/rejection is scoped and audited | Scope, decisions, audit and conflict recheck: pgTAP 67/67 plus one passing authenticated race integration; browser test outstanding | Blocked pending UI verification |
 - **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
   above; the verified access and visibility changes have been pushed. Week
   boundaries are currently baked into roster publications and payroll
