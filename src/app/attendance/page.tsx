@@ -15,6 +15,7 @@ import { ClockLocationForm } from "@/components/clock-location-form";
 import { OfflineAttendance } from "@/components/offline-attendance";
 import { OfflineClaimReview } from "@/components/offline-claim-review";
 import { parseAttendanceState, parseClockOptions, type ClockOption } from "@/lib/attendance";
+import { canManageAttendanceAlerts } from "@/lib/attendance-alerts";
 import { parseAttendanceCorrections, type AttendanceCorrection } from "@/lib/attendance-corrections";
 import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
@@ -82,8 +83,6 @@ const errors: Record<string, string> = {
   "request-save": "We could not submit your request. Check your access and connection, then try again.",
   "request-mismatch": "The recorded event does not match the proposed time. Apply the correction or reject the request.",
 };
-const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
-
 export default async function AttendancePage({ searchParams }: AttendancePageProps) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -107,7 +106,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
     );
   }
 
-  const canReview = managerRoles.includes(workspace.membership.role);
+  const canReview = canManageAttendanceAlerts(workspace.membership.role);
   const [venueResult, optionResult, stateResult, exceptionResult, offlineResult, reviewResult, matchResult, openResult,
     openBreakResult, breakResolutionResult, correctionResult, decisionResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
@@ -303,6 +302,12 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
             className="mt-3 inline-block text-sm font-semibold text-ocean underline">
             View your attendance history
           </Link>
+          {canReview && (
+            <Link href={withBusiness(`/attendance/alerts?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id)}
+              className="ml-4 mt-3 inline-block text-sm font-semibold text-ocean underline">
+              Review attendance alerts
+            </Link>
+          )}
           {workspace.membership.role === "owner" && (
             <Link href={withBusiness(`/attendance/kiosks?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id)}
               className="ml-4 mt-3 inline-block text-sm font-semibold text-ocean underline">

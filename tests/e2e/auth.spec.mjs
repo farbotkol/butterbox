@@ -101,6 +101,173 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("attendance alerts support scoped mobile review and per-manager notifications", async ({ page, browser }) => {
+  test.setTimeout(150_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId, venueId, outsideVenueId, fohId, bohId, outsideDepartmentId,
+    workerId, draftWorkerId, shiftId, draftShiftId] = Array.from({ length: 11 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const ownerApi = createClient(apiUrl, anonKey, options);
+  const settingsArgs = {
+    p_business_id: businessId, p_venue_id: venueId,
+    p_enabled: false, p_grace_minutes: 1, p_no_show_minutes: 60,
+  };
+  let settingsAttempted = false;
+  const alertUrl = `/attendance/alerts?business=${businessId}&venue=${venueId}`;
+
+  async function signedInPage(role) {
+    const context = await browser.newContext({ baseURL: appUrl, viewport: { width: 390, height: 844 } });
+    contexts.push(context);
+    const target = await context.newPage();
+    target.setDefaultTimeout(20_000);
+    await signIn(target, `alert-browser-${role}-${suffix}@example.test`, password);
+    return target;
+  }
+
+  try {
+    for (const role of ["owner", "foh", "colleague", "boh", "worker", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `alert-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Alert browser cafe" },
+      { id: outsideBusinessId, name: "Outside alert browser cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Alert venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+      { id: outsideDepartmentId, business_id: outsideBusinessId, venue_id: outsideVenueId, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.foh, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.colleague, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusinessId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "Alert worker", role_title: "Server" },
+      { id: draftWorkerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        name: "Draft worker", role_title: "Server" },
+    ])).error).toBeNull();
+    const startsAt = new Date(Date.now() - 15 * 60_000).toISOString();
+    const endsAt = new Date(Date.now() + 2 * 60 * 60_000).toISOString();
+    expect((await admin.from("shifts").insert([
+      { id: shiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Server", starts_at: startsAt, ends_at: endsAt, is_published: true },
+      { id: draftShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: draftWorkerId, role_title: "Draft", starts_at: startsAt, ends_at: endsAt, is_published: false },
+    ])).error).toBeNull();
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `alert-browser-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+
+    page.setDefaultTimeout(20_000);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, `alert-browser-owner-${suffix}@example.test`, password);
+    await page.goto(`/attendance?business=${businessId}&venue=${venueId}`);
+    await page.getByRole("link", { name: "Review attendance alerts" }).click();
+    await expect(page.getByRole("heading", { name: "Attendance alerts", exact: true })).toBeVisible();
+    await expect(page.getByText("Monitoring is off for this venue.")).toBeVisible();
+    await page.getByRole("combobox", { name: "Monitoring", exact: true }).selectOption("true");
+    await page.getByLabel("Grace period (minutes)").fill("20");
+    await page.getByLabel("No-show threshold (minutes)").fill("20");
+    await page.getByRole("button", { name: "Save monitoring settings" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("longer no-show threshold");
+    await page.getByRole("combobox", { name: "Monitoring", exact: true }).selectOption("true");
+    await page.getByLabel("Grace period (minutes)").fill("1");
+    await page.getByLabel("No-show threshold (minutes)").fill("60");
+    settingsAttempted = true;
+    await page.getByRole("button", { name: "Save monitoring settings" }).click();
+    await expect(page.getByRole("status")).toContainText("Attendance alert settings saved.");
+    await sql("select public.run_attendance_alert_worker()");
+    await expect.poll(async () => {
+      const result = await ownerApi.rpc("list_attendance_alerts", {
+        p_business_id: businessId, p_venue_id: venueId,
+      });
+      expect(result.error).toBeNull();
+      return result.data.filter((alert) => alert.shift_id === shiftId).length;
+    }, { timeout: 10_000 }).toBe(1);
+    await page.reload();
+    const ownerAlert = page.getByRole("article", { name: "Attendance alert for Alert worker" });
+    await expect(ownerAlert).toContainText("Missing clock-in");
+    await expect(page.getByText("Draft worker", { exact: true })).toHaveCount(0);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile attendance alerts"));
+    expect(await page.locator("body").evaluate((body) =>
+      body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const manager = await signedInPage("foh");
+    await manager.goto(`/?business=${businessId}`);
+    const banner = manager.getByRole("region", { name: "Unread work updates" });
+    await expect(banner).toContainText("1 unread work update");
+    await banner.getByRole("link", { name: "View notifications" }).click();
+    const managerNotice = manager.getByRole("article", { name: "Attendance alert for Alert worker" });
+    await expect(managerNotice).toContainText("Unread");
+    await managerNotice.getByRole("button", { name: "View attendance alert" }).click();
+    const managerAlert = manager.getByRole("article", { name: "Attendance alert for Alert worker" });
+    await expect(managerAlert).toContainText("Missing clock-in");
+    await expect(manager.getByRole("button", { name: "Save monitoring settings" })).toHaveCount(0);
+    await managerAlert.getByRole("button", { name: "Acknowledge alert" }).click();
+    await expect(manager.getByRole("status")).toContainText("Alert acknowledged.");
+    await expect(managerAlert).toContainText("Acknowledged");
+
+    const colleague = await signedInPage("colleague");
+    await colleague.goto(`/?business=${businessId}`);
+    await expect(colleague.getByRole("region", { name: "Unread work updates" })).toContainText("1 unread work update");
+    await colleague.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    const colleagueNotice = colleague.getByRole("article", { name: "Attendance alert for Alert worker" });
+    await expect(colleagueNotice).toContainText("Acknowledged");
+    await expect(colleagueNotice).toContainText("Unread");
+    await colleagueNotice.getByRole("button", { name: "Mark as read" }).click();
+    await expect(colleague.getByRole("status")).toContainText("Notification marked as read.");
+    await expect(colleagueNotice).toContainText("Read");
+    await colleagueNotice.getByRole("button", { name: "View attendance alert" }).click();
+    const colleagueAlert = colleague.getByRole("article", { name: "Attendance alert for Alert worker" });
+    await expect(colleagueAlert.getByLabel("Resolution reason")).toHaveAttribute("required", "");
+    await colleagueAlert.getByLabel("Resolution reason").fill("Contacted worker");
+    await colleagueAlert.getByRole("button", { name: "Resolve alert" }).click();
+    await expect(colleague.getByRole("status")).toContainText("Alert resolved with its reason.");
+    await colleagueAlert.getByText("Review alert history").click();
+    await expect(colleagueAlert).toContainText("Reason: Contacted worker");
+    await expect(colleagueAlert).toContainText(users.colleague);
+
+    await page.goto(`/settings/audit?business=${businessId}&source=attendance_alert_events`);
+    await expect(page.getByRole("list", { name: "Sensitive action history" })).toContainText("Attendance alert decisions");
+    await expect(page.getByRole("list", { name: "Sensitive action history" })).toContainText("Reason: Contacted worker");
+
+    const boh = await signedInPage("boh");
+    await boh.goto(alertUrl);
+    await expect(boh.getByText("No alerts have been recorded for your accessible departments.")).toBeVisible();
+    await expect(boh.getByText("Alert worker", { exact: true })).toHaveCount(0);
+    const worker = await signedInPage("worker");
+    await worker.goto(`/attendance?business=${businessId}&venue=${venueId}`);
+    await expect(worker.getByRole("link", { name: "Review attendance alerts" })).toHaveCount(0);
+    await worker.goto(alertUrl);
+    await expect(worker.getByRole("main").getByRole("alert")).toContainText("Only managers");
+    const outside = await signedInPage("outside");
+    await outside.goto(alertUrl);
+    await expect(outside.getByRole("heading", { name: "Attendance alerts unavailable" })).toBeVisible();
+    await expect(outside.getByText("Alert worker", { exact: true })).toHaveCount(0);
+  } finally {
+    if (settingsAttempted) expect((await ownerApi.rpc("save_attendance_alert_settings", settingsArgs)).error).toBeNull();
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("QR kiosk devices rotate decoded codes and protect mobile attendance", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

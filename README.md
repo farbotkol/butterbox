@@ -33,6 +33,22 @@ Source-record deletion retains its audit history. Business deletion and
 truncation are disabled by the preservation migration, although other
 privileged operations may still remove records.
 
+## Attendance exception monitoring
+
+Owners enable per-venue monitoring in **Attendance → Review attendance
+alerts**. Scoped managers acknowledge or resolve signals; resolution requires
+a reason. See [the User Guide](docs/USER_GUIDE.md#configure-and-review-attendance-alerts)
+for thresholds, permissions, notification read state and limitations.
+
+The attendance-alert migrations require `pg_cron` and schedule
+`public.run_attendance_alert_worker()` every minute. Verify extension support
+and job operation in each authorized deployment before relying on alerts.
+The page warns when the most recent completed scan is more than five minutes
+old or unavailable. A scan uses its captured start time; a later clock is
+evaluated on a subsequent scan. Monitoring is disabled by default and only
+considers assigned, scheduled, published shifts. A no-show signal is not proof
+of absence or a payroll/compliance decision. No external messages are sent.
+
 ## Local development
 
 Use Node.js 24 and Docker. From a clean checkout:

@@ -56,7 +56,41 @@ yet accepted.
 - Employees can clock in and out and record breaks through supported workflows.
 - Location verification is a configurable point-in-time check, not continuous tracking by default; exceptions and corrections have review processes.
 - Where applicable, employees can view their own attendance history and correction decisions.
-- Automated late/no-show alerts are **not yet complete**.
+- Managers can review late, missing-clock and no-show signals within their
+  venue and department scope; an owner must first enable monitoring.
+
+#### Configure and review attendance alerts
+
+1. Open **Attendance**, select the venue and choose **Review attendance
+   alerts**. Owners can set **Monitoring** to **On**, choose a **Grace period
+   (minutes)** from 0 to 240, and a **No-show threshold (minutes)** greater
+   than the grace period and no more than 1,440. Select **Save monitoring
+   settings**. Monitoring is off by default for each venue.
+2. Check the monitoring status and latest completed scan before relying on
+   the list. An overdue or unavailable scan is explicitly warned about.
+   Automated scans run every minute; a clock recorded after a scan starts
+   may not appear until the next completed scan.
+3. In **Alert review**, inspect the assigned published shift and underlying
+   attendance. Draft, unassigned and non-scheduled shifts are excluded.
+   The grace period applies after shift start and end. A **No-show signal**
+   means no qualifying clock-in was recorded by the threshold, not proof
+   that the employee was absent. Pending offline claims are not confirmed clocks.
+4. Choose **Acknowledge alert** to record that the management team has seen
+   it. To close it, enter a **Resolution reason** (up to 500 characters) and
+   select **Resolve alert**. Expand **Review alert history** to see automatic
+   changes and attributed decisions. Owners can also inspect these in
+   **Audit history**.
+5. Alerts appear in managers' **Notifications**. **Mark as read** and
+   **View attendance alert** affect your own notification read state, not
+   another manager's. Acknowledgement is shared with the team. Repeated scans
+   do not duplicate the same signal; a changed signal reopens the alert and
+   creates a new current unread notice.
+
+FOH/BOH and other scoped managers can only review their permitted departments;
+employees cannot use this review workspace. Only owners change monitoring
+settings. Turning monitoring off stops new detection but retains history.
+Alerts do not change original clock records, approve timesheets, calculate
+pay or prove award breaches. External alert delivery is not enabled.
 
 #### Set up a QR clock kiosk
 
@@ -117,6 +151,7 @@ External email, push, SMS and WhatsApp notifications are **planned optional chan
 | Roster not visible to staff | Confirm that the correct draft has been published or approved, and that the employee is assigned to the venue. |
 | Clocking/location fails | Check device permission and the venue's location policy; use the supported exception/correction workflow. |
 | Kiosk code was used or expired | Sign in on your own phone, wait for a fresh kiosk code and scan again. If the device is unavailable or revoked, ask an owner to activate a new one or use the attendance screen. |
+| Attendance alert is missing or out of date | Check venue monitoring, the latest scan, publication and assignment. Wait for the next scan after a clock; ask an operator about an overdue scan rather than assuming no exceptions exist. |
 | Timesheet differs from expected | Review break facts, corrections and approval status; request a correction instead of editing finalized history. |
 | No SMS/WhatsApp/email alert | These channels are not yet guaranteed operational. Check the in-app notification centre. |
 | Payroll rates appear missing | The central award intelligence and external payroll adapters are not yet production-verified. |
@@ -127,7 +162,6 @@ Butterbox's agreed product direction is customer-owned export of employment reco
 
 ## Features not yet generally available or accepted
 
-- Automated late/no-show alerts
 - External notification channel delivery (email/push; SMS/WhatsApp additional planned options)
 - Direct payroll provider adapters (including deferred Xero)
 - Independent approved Award Central rule calculations

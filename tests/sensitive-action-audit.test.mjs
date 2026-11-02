@@ -32,7 +32,9 @@ test("audit filters validate exact dates, UTC bounds, identifiers and pagination
 
 test("audit row parsing rejects foreign, malformed and inconsistent records", () => {
   assert.deepEqual(parseAuditRows([row], business), [row]);
-  for (const source of ["attendance_kiosks", "venue_roster_week_events"]) {
+  for (const source of [
+    "attendance_kiosks", "venue_roster_week_events", "attendance_alert_policy_events", "attendance_alert_events",
+  ]) {
     assert.deepEqual(parseAuditRows([{ ...row, source_table: source }], business)?.[0].source_table, source);
     assert.equal(parseAuditFilters({ source })?.source, source);
   }
@@ -69,6 +71,8 @@ test("every audited source has a documented label and a database audit producer"
       .matchAll(/'([a-z_]+)', '(?:INSERT|UPDATE|DELETE)'/g)].map((match) => match[1]));
   assert.ok(manualSources.includes("attendance_kiosks"));
   assert.ok(manualSources.includes("venue_roster_week_events"));
+  assert.ok(manualSources.includes("attendance_alert_policy_events"));
+  assert.ok(manualSources.includes("attendance_alert_events"));
   assert.deepEqual([...new Set([...sources, ...manualSources])].sort(), Object.keys(auditSources).sort());
   for (const label of Object.values(auditSources)) assert.ok(label.length > 0);
 });

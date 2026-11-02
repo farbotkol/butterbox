@@ -3,15 +3,15 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **49**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **71**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **50**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **71**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
   then select ready Showcase P0 work. The showcase requires an explicitly
   verified isolated environment and synthetic data; it is not production
   approval, paid infrastructure authorization or legal/payroll sign-off.
-- BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
+- BB-ATTEND-006 (late, missing and no-show alerts) is **Done**. At the earlier checkpoint of
   2026-11-02 18:29 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
   seven adjacent files passed **440/440**, and a scheduled worker invocation
@@ -25,8 +25,12 @@
   correcting an earlier scan-time expectation; it verified real cron alert
   creation, scope, retries, revocation and locking races. The split production
   build passed; the new alert browser scenario timed out and must be
-  diagnosed and rerun. No
-  acceptance criterion is yet claimed complete.
+  diagnosed and rerun. Recovery verification now passes: **66/66** focused
+  and **285/285** adjacent pgTAP, **12/12** Node tests, **1/1** real
+  scheduled/race integration, the corrected mobile production browser,
+  changed-file ESLint, TypeScript and split production build. The four
+  neighbouring browser regressions passed in the prior run. User guidance
+  now documents the verified controls and limitations; all four criteria pass.
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
@@ -676,7 +680,7 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-- **BB-ATTEND-006 — Late, missing and no-show alerts: In Progress.** Started
+- **BB-ATTEND-006 — Late, missing and no-show alerts: Done.** Started
   2026-11-02 17:58 UTC after the QR checkpoint and BRAND planning checkpoint
   were pushed. The criteria are configurable thresholds, duplicate suppression,
   auditable acknowledgement and resolution, and exclusion of unpublished
@@ -729,16 +733,25 @@ settings/delivery still require their own implementation and verification.
   published-roster notification browser regressions passed (4/4). A retained browser fixture
   had no enabled monitoring policy; cleanup and the scenario must be
   investigated before completion.
-  Full suites are intentionally deferred; broader migration/security
-  regression is appropriate at workstream merge or release. Documentation:
-  user guide update pending the tested workflow.
+  At recovery, the incorrect Monitoring locator was already fixed to select
+  the combobox; the remaining failure came from the Next route announcer
+  also having an alert role. The assertion is now scoped to main content.
+  A fresh split production build and the entire mobile alert workflow passed
+  **1/1**, including axe, settings, acknowledgement, per-user reads, required
+  resolution, audit, employee denial, department and tenant isolation.
+  Focused pgTAP **66/66**, adjacent pgTAP **285/285**, Node **12/12**,
+  scheduled/concurrency integration **1/1**, ESLint and TypeScript were rerun
+  and passed. Both migrations remain applied only to the identified
+  disposable acceptance project. Full suites are intentionally deferred;
+  broader migration/security regression is appropriate at workstream merge
+  or release. Documentation: updated — User Guide and README.
 
   | Criterion | Implementation evidence | Actual verification | Status |
   | --- | --- | --- | --- |
-  | ATTEND-006.1 — configurable threshold | Owner-scoped venue policy in the uncommitted database migration | Focused pgTAP threshold cases passed; settings UI not yet tested | Blocked: incomplete vertical slice |
-  | ATTEND-006.2 — suppress duplicates | Worker reuses alert per shift/category and records transitions | Focused pgTAP repeated scans and authenticated scheduler/race test passed; browser workflow not yet verified | Blocked: pending browser verification |
-  | ATTEND-006.3 — auditable acknowledgement and resolution | Scoped actions create immutable decision and sensitive audit events | Focused pgTAP and authenticated competing decisions passed; UI not yet tested | Blocked: pending browser verification |
-  | ATTEND-006.4 — exclude unpublished shifts | Worker filters published assigned shifts | Focused pgTAP and actual cron draft exclusion passed; browser workflow not yet verified | Blocked: pending browser verification |
+  | ATTEND-006.1 — configurable threshold | Owner-scoped venue policy and Monitoring settings form | 66-assertion pgTAP, Node validation and mobile browser verified valid/invalid thresholds and owner-only writes | Pass |
+  | ATTEND-006.2 — suppress duplicates | Worker reuses alert per shift/employee/category and records transitions | pgTAP repeated scans and real scheduler/race integration verified deduplication, changed signals and per-user notification reads | Pass |
+  | ATTEND-006.3 — auditable acknowledgement and resolution | Scoped actions create immutable decision and sensitive audit events | pgTAP and concurrent decisions passed; mobile browser verified required reason, manager identity, history and owner audit | Pass |
+  | ATTEND-006.4 — exclude unpublished shifts | Worker filters published assigned scheduled shifts | pgTAP and actual cron draft exclusion passed; browser verified the draft worker never appeared in the alert list | Pass |
 - **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
   implementation and guide survived, and the disposable acceptance project
   remained healthy. The recovery status checkpoint `d8e9229` was pushed
@@ -2306,8 +2319,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Continue **BB-ATTEND-006** by designing and implementing scoped, auditable
-  alert detection and targeted tests. Keep the new BRAND stories in Backlog
+- After the verified **BB-ATTEND-006** checkpoint, select ready Showcase P0
+  work. Inspect **BB-REPORT-001** for scoped scheduled/actual totals while
+  maintaining the demo-isolation and owner-approval gates. Keep BRAND stories in Backlog
   until their assets and approvals
   exist. Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable

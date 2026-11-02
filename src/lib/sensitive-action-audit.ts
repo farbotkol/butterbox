@@ -23,6 +23,8 @@ export const auditSources = {
   roster_review_decisions: "Roster review decisions",
   venue_roster_week_events: "Venue planning week changes",
   attendance_kiosks: "Attendance kiosk devices",
+  attendance_alert_policy_events: "Attendance alert settings",
+  attendance_alert_events: "Attendance alert decisions",
   attendance_sessions: "Attendance sessions",
   attendance_events: "Clock and break events",
   attendance_breaks: "Break classifications",
