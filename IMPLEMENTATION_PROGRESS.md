@@ -390,12 +390,15 @@
   browser-tested. Four targeted Node test files passed **14/14**, changed-file
   ESLint and TypeScript passed. The tracked lint cache removed by ESLint was
   restored to its unchanged original state. The split production build passed.
-  The first mobile/desktop browser run failed before UI execution because two
-  bulk-inserted shift fixtures omitted the non-null acknowledgement flag; the
-  fixture was corrected and awaits rerun. Next: reuse the built production app
-  for the corrected serialized browser scenario, fix any failures and verify
-  every criterion. Full suites were intentionally deferred. No swap criterion
-  is yet marked Pass end-to-end.
+  The focused mobile/desktop production-browser scenario now passed **1/1**,
+  exercising both confirmations, manager review, changed availability,
+  rejection reason, both employees' notifications, acknowledgement, tenant and
+  department isolation, and mobile WCAG checks. Earlier browser attempts
+  exposed a missing fixture field and an alert locator that also matched the
+  Next.js route announcer; both were corrected without removing assertions.
+  Next: run affected neighbouring browser regressions and record each criterion
+  before committing. Full suites were intentionally deferred. The story is not
+  yet marked Done.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
   notifications. The targeted checks passed; see the criterion evidence below.
