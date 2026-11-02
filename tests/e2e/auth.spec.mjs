@@ -1562,6 +1562,189 @@ test("owners configure venue geofences with protected audit and scoped access", 
   }
 });
 
+test("owners and scoped managers review roster snapshots with mobile-safe audited decisions", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const names = ["owner", "foh", "boh", "worker", "outside"];
+  const users = {};
+  const contexts = [];
+  const [businessId, outsideId, venueId, secondVenueId, outsideVenueId, fohId, bohId,
+    employeeId, reviewedShiftId, lateShiftId] = Array.from({ length: 10 }, () => randomUUID());
+  const roster = `/roster?business=${businessId}&venue=${venueId}&department=${fohId}&week=2032-03-15`;
+  const settings = `/settings/organisation?business=${businessId}&venue=${venueId}`;
+  try {
+    for (const name of names) {
+      const created = await admin.auth.admin.createUser({
+        email: `roster-review-ui-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[name] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Review UI cafe" }, { id: outsideId, name: "Outside review UI cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Review venue", timezone: "UTC" },
+      { id: secondVenueId, business_id: businessId, name: "Second venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.foh, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users.worker, name: "Review worker", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      id: reviewedShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: employeeId, role_title: "Reviewed service", starts_at: "2032-03-15T09:00:00Z",
+      ends_at: "2032-03-15T13:00:00Z", break_minutes: 30, requires_acknowledgement: true,
+    })).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `roster-review-ui-owner-${suffix}@example.test`, password);
+    await page.goto(settings);
+    const policy = page.getByRole("form", { name: "Configure roster publication" });
+    await expect(policy.getByLabel("Publication mode")).toHaveValue("direct");
+    await policy.getByLabel("Publication mode").selectOption("approval");
+    await policy.getByRole("button", { name: "Save publication setting" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster publication setting saved.");
+    await expect(page.getByRole("region", { name: "Roster publication settings" }))
+      .toContainText("Direct publication to Approval required");
+    await policy.getByLabel("Publication mode").evaluate((select) => {
+      select.add(new Option("Invalid", "invalid"));
+      select.value = "invalid";
+    });
+    await policy.getByRole("button", { name: "Save publication setting" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "couldn't save the roster publication setting" })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("business")).toBe(businessId);
+    expect(new URL(page.url()).searchParams.get("venue")).toBe(venueId);
+    await expect(policy.getByLabel("Publication mode")).toHaveValue("approval");
+    const otherVenue = await admin.from("venues").select("roster_publication_mode").eq("id", secondVenueId).single();
+    expect(otherVenue.error).toBeNull();
+    expect(otherVenue.data.roster_publication_mode).toBe("direct");
+
+    const managerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(managerContext);
+    const manager = await managerContext.newPage();
+    await signIn(manager, `roster-review-ui-foh-${suffix}@example.test`, password);
+    await manager.goto(settings);
+    await expect(manager.getByRole("form", { name: "Configure roster publication" })).toHaveCount(0);
+    await manager.goto(roster);
+    await expect(manager.getByRole("button", { name: "Publish this department" })).toHaveCount(0);
+    await manager.getByRole("button", { name: "Submit for review" }).click();
+    await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
+    const firstHash = new URL(manager.url()).hash;
+    expect(firstHash).toMatch(/^#review-[0-9a-f-]{36}$/);
+    const managerReview = manager.locator(firstHash);
+    await expect(managerReview).toContainText("Reviewed service");
+    await expect(managerReview).toContainText("Review worker");
+    await expect(managerReview).toContainText("Acknowledgement required");
+    await expect(managerReview.getByRole("button", { name: "Approve and publish" })).toHaveCount(0);
+    await expect(manager.getByRole("button", { name: "Submit for review" })).toBeDisabled();
+    expect(await manager.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    expect((await admin.from("shifts").insert({
+      id: lateShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      role_title: "Later open draft", starts_at: "2032-03-16T09:00:00Z",
+      ends_at: "2032-03-16T13:00:00Z", break_minutes: 0,
+    })).error).toBeNull();
+    await page.goto(roster);
+    let ownerReview = page.locator(firstHash);
+    await expect(ownerReview).toContainText("Reviewed service");
+    await expect(ownerReview).not.toContainText("Later open draft");
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile roster review"));
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await ownerReview.getByRole("button", { name: "Approve and publish" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster approved and the reviewed shifts published.");
+    const published = await admin.from("shifts").select("id, is_published").in("id", [reviewedShiftId, lateShiftId]);
+    expect(published.error).toBeNull();
+    expect(published.data.find((shift) => shift.id === reviewedShiftId).is_published).toBe(true);
+    expect(published.data.find((shift) => shift.id === lateShiftId).is_published).toBe(false);
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const worker = await workerContext.newPage();
+    await signIn(worker, `roster-review-ui-worker-${suffix}@example.test`, password);
+    await worker.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    await expect(worker.getByRole("article", { name: "Roster update for week starting 2032-03-15" })).toHaveCount(1);
+    await worker.goto(`/my-schedule?business=${businessId}&venue=${venueId}&week=2032-03-15`);
+    const weekly = worker.getByRole("region", { name: "Weekly schedule" });
+    await expect(weekly).toContainText("Reviewed service");
+    await expect(weekly).not.toContainText("Later open draft");
+    await weekly.getByRole("button", { name: /Acknowledge Reviewed service shift/ }).click();
+    await expect(worker.getByRole("status")).toHaveText("Shift acknowledged.");
+
+    await manager.goto(roster);
+    await manager.getByRole("button", { name: "Submit for review" }).click();
+    await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
+    const secondHash = new URL(manager.url()).hash;
+    await page.goto(roster);
+    ownerReview = page.locator(secondHash);
+    await expect(ownerReview).toContainText("Later open draft");
+    await expect(ownerReview).toContainText("Open shift");
+    await ownerReview.getByLabel("Reason for rejection").fill("   ");
+    await ownerReview.getByRole("button", { name: "Reject review" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Enter a rejection reason" })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("business")).toBe(businessId);
+    expect(new URL(page.url()).searchParams.get("venue")).toBe(venueId);
+    expect(new URL(page.url()).hash).toBe(secondHash);
+    await ownerReview.getByLabel("Reason for rejection").fill("Coverage changed");
+    await ownerReview.getByRole("button", { name: "Reject review" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster review rejected. The submitted shifts remain drafts.");
+    await expect(page.locator(secondHash)).toContainText("Reason: Coverage changed");
+    await page.goto(`/settings/audit?business=${businessId}&source=roster_review_decisions`);
+    await expect(page.getByRole("list", { name: "Sensitive action history" }))
+      .toContainText("Roster review decisions");
+    await expect(page.getByRole("list", { name: "Sensitive action history" })).toContainText("Coverage changed");
+
+    await manager.goto(roster);
+    await manager.getByRole("button", { name: "Submit for review" }).click();
+    await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
+    const thirdHash = new URL(manager.url()).hash;
+    await page.goto(settings);
+    await policy.getByLabel("Publication mode").selectOption("direct");
+    await policy.getByRole("button", { name: "Save publication setting" }).click();
+    await expect(page.getByRole("status")).toHaveText("Roster publication setting saved.");
+    await manager.goto(roster);
+    await expect(manager.locator(thirdHash)).toContainText("drafts or the publication settings have changed");
+    await expect(manager.locator(thirdHash).getByRole("button", { name: "Approve and publish" })).toHaveCount(0);
+    await manager.locator(thirdHash).getByRole("button", { name: "Withdraw review" }).click();
+    await expect(manager.getByRole("status")).toHaveText("Roster review withdrawn. The submitted shifts remain drafts.");
+    await expect(manager.getByRole("button", { name: "Publish this department" })).toBeVisible();
+
+    const bohContext = await browser.newContext({ baseURL: appUrl });
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(bohContext, outsideContext);
+    const boh = await bohContext.newPage();
+    const outside = await outsideContext.newPage();
+    await signIn(boh, `roster-review-ui-boh-${suffix}@example.test`, password);
+    await boh.goto(roster);
+    await expect(boh.getByText("Reviewed service", { exact: true })).toHaveCount(0);
+    await expect(boh.getByText("Coverage changed", { exact: false })).toHaveCount(0);
+    await signIn(outside, `roster-review-ui-outside-${suffix}@example.test`, password);
+    await outside.goto(roster);
+    await expect(outside.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
+    await expect(outside.getByText("Reviewed service", { exact: true })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const id of [businessId, outsideId]) {
+      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+    }
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("owners configure venue conflict rules with protected history and scoped access", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

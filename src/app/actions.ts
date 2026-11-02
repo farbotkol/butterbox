@@ -24,6 +24,7 @@ import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
 } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
+import { parseRosterPublicationMode, rosterReviewFailureCode } from "@/lib/roster-review";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib/shift-offers";
 import { isSwapUuid, swapFailureCode } from "@/lib/shift-swaps";
@@ -548,6 +549,41 @@ export async function saveVenueConflictPolicyAction(formData: FormData) {
   revalidatePath("/settings/organisation");
   revalidatePath("/roster");
   redirect(`${destination}&saved=conflict-policy`);
+}
+
+export async function saveRosterPublicationModeAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const modes = formData.getAll("mode");
+  const mode = modes.length === 1 ? parseRosterPublicationMode(modes[0]) : null;
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid venue for the roster publication setting.");
+    redirect("/settings/organisation?error=roster-mode");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster settings workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  const destination = withBusiness(
+    `/settings/organisation?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id,
+  );
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+  if (!mode) {
+    console.error("Invalid roster publication mode request.");
+    redirect(`${destination}&error=roster-mode`);
+  }
+  const { error } = await workspace.supabase.rpc("save_roster_publication_mode", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_mode: mode,
+  });
+  if (error) {
+    console.error("Roster publication mode save failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "roster-mode"}`);
+  }
+  revalidatePath("/settings/organisation");
+  revalidatePath("/roster");
+  redirect(`${destination}&saved=roster-mode`);
 }
 
 export async function saveDepartmentAction(formData: FormData) {
@@ -2168,6 +2204,7 @@ export async function publishRosterAction(formData: FormData) {
         : error.message === "Roster has shifts longer than 24 hours" ? "publish-duration"
           : error.message === "Roster changed while publishing; please try again" ? "publish-busy"
             : error.message === "Assign or remove the acknowledgement requirement before publication" ? "publish-acknowledgement"
+            : error.message === "Roster approval is required" ? "review-settings"
             : "publish";
     redirect(`${destination}&error=${code}`);
   }
@@ -2176,6 +2213,111 @@ export async function publishRosterAction(formData: FormData) {
     redirect(`${destination}&error=publish-unknown`);
   }
   redirect(`${destination}&published=${data === 0 ? "none" : "1"}`);
+}
+
+function rosterReviewContext(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const requestIds = uuidList(formData, "request_id", 1);
+  const weeks = formData.getAll("week");
+  if (venueIds?.length !== 1 || departmentIds?.length !== 1 || requestIds?.length !== 1 ||
+    weeks.length !== 1 || typeof weeks[0] !== "string" || !isRosterWeek(weeks[0])) return null;
+  return { venueId: venueIds[0], departmentId: departmentIds[0], requestId: requestIds[0], week: weeks[0] };
+}
+
+export async function submitRosterReviewAction(formData: FormData) {
+  const context = rosterReviewContext(formData);
+  if (!context) {
+    console.error("Invalid roster review submission.");
+    redirect("/roster?error=review");
+  }
+  const workspace = await getWorkspace(context.venueId, businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster review workspace.", { message: workspace.message });
+    redirect("/roster?error=review");
+  }
+  const query = new URLSearchParams({
+    week: context.week, venue: workspace.venue.id, department: context.departmentId,
+  });
+  const destination = withBusiness(`/roster?${query}${collapsedRosterQuery(formData)}`, workspace.business.id);
+  const { data, error } = await workspace.supabase.rpc("submit_roster_review", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_department_id: context.departmentId,
+    p_week_start: context.week,
+    p_request_id: context.requestId,
+  });
+  if (error) {
+    console.error("Roster review submission failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${rosterReviewFailureCode(error.message)}`);
+  }
+  if (typeof data !== "string" || !parseBusinessId(data)) {
+    console.error("Roster review submission returned an invalid result.");
+    redirect(`${destination}&error=review-unknown`);
+  }
+  revalidatePath("/roster");
+  redirect(`${destination}&review=submitted#review-${data}`);
+}
+
+export async function decideRosterReviewAction(formData: FormData) {
+  const context = rosterReviewContext(formData);
+  const reviewIds = uuidList(formData, "review_id", 1);
+  const decisions = formData.getAll("decision");
+  const reasons = formData.getAll("reason");
+  const decision = decisions.length === 1 ? decisions[0] : null;
+  const reason = reasons.length === 0 ? "" : reasons.length === 1 && typeof reasons[0] === "string"
+    ? reasons[0].trim() : null;
+  if (!context || reviewIds?.length !== 1 ||
+    (decision !== "approved" && decision !== "rejected" && decision !== "withdrawn")) {
+    console.error("Invalid roster review decision submitted.");
+    redirect("/roster?error=review-reason");
+  }
+  const workspace = await getWorkspace(context.venueId, businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster review decision workspace.", { message: workspace.message });
+    redirect("/roster?error=review");
+  }
+  const query = new URLSearchParams({
+    week: context.week, venue: workspace.venue.id, department: context.departmentId,
+  });
+  const destination = withBusiness(`/roster?${query}${collapsedRosterQuery(formData)}`, workspace.business.id);
+  if (reason === null || reason.length > 500 || (decision === "rejected" && !reason)) {
+    console.error("Invalid roster review rejection reason.");
+    redirect(`${destination}&error=review-reason#review-${reviewIds[0]}`);
+  }
+  const lookup = await workspace.supabase.from("roster_review_requests").select("id")
+    .eq("id", reviewIds[0]).eq("business_id", workspace.business.id)
+    .eq("venue_id", workspace.venue.id).eq("department_id", context.departmentId)
+    .eq("week_start", context.week).maybeSingle();
+  if (lookup.error || !lookup.data) {
+    console.error("Could not find the roster review in the selected scope.", {
+      code: lookup.error?.code, message: lookup.error?.message ?? "Review not visible in this scope.",
+    });
+    redirect(`${destination}&error=review-permission`);
+  }
+  const { data, error } = await workspace.supabase.rpc("decide_roster_review", {
+    p_review_id: reviewIds[0], p_decision: decision, p_request_id: context.requestId,
+    p_reason: reason || null,
+  });
+  if (error) {
+    console.error("Roster review decision failed.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${rosterReviewFailureCode(error.message)}#review-${reviewIds[0]}`);
+  }
+  if (typeof data !== "number" || !Number.isInteger(data) ||
+    (decision === "approved" ? data <= 0 : data !== 0)) {
+    console.error("Roster review decision returned an invalid result.");
+    redirect(`${destination}&error=review-unknown#review-${reviewIds[0]}`);
+  }
+  revalidatePath("/roster");
+  if (decision === "approved") {
+    revalidatePath("/my-schedule");
+    revalidatePath("/notifications");
+  }
+  redirect(`${destination}&review=${decision}#review-${reviewIds[0]}`);
 }
 
 export async function acknowledgeShiftAction(formData: FormData) {

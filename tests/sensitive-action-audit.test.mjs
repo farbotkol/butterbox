@@ -53,6 +53,12 @@ test("every audited source has a documented label and a database trigger", () =>
   );
   assert.ok(metadataTrigger);
   sources.push(metadataTrigger[1]);
+  const rosterMigration = readFileSync(new URL("../supabase/migrations/20261103110000_roster_approval_workflow.sql", import.meta.url), "utf8");
+  const rosterTriggers = [...rosterMigration.matchAll(
+    /create trigger sensitive_action_audit\s+after insert on public\.([a-z_]+)\s+for each row execute function public\.record_sensitive_action_audit\(\)/g,
+  )].map((match) => match[1]);
+  assert.deepEqual(rosterTriggers.sort(), ["roster_review_decisions", "roster_review_requests"]);
+  sources.push(...rosterTriggers);
   assert.deepEqual(sources.sort(), Object.keys(auditSources).sort());
   for (const label of Object.values(auditSources)) assert.ok(label.length > 0);
 });

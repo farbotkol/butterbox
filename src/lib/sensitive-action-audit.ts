@@ -19,6 +19,8 @@ export const auditSources = {
   staff_invitations: "Staff invitations",
   shared_worker_link_events: "Shared-worker links",
   roster_publications: "Roster publications",
+  roster_review_requests: "Roster review submissions",
+  roster_review_decisions: "Roster review decisions",
   attendance_sessions: "Attendance sessions",
   attendance_events: "Clock and break events",
   attendance_breaks: "Break classifications",

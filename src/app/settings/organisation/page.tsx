@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import {
   saveDepartmentAction,
   saveJobRoleAction,
+  saveRosterPublicationModeAction,
   saveVenueConflictPolicyAction,
   saveVenueGeofenceAction,
   setVenueClockGeofenceAction,
@@ -10,6 +11,7 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import type { ConflictPolicyValues } from "@/lib/conflict-policy";
+import { parseRosterPublicationMode, parseRosterPublicationModeEvents } from "@/lib/roster-review";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace } from "@/lib/workspace";
@@ -61,6 +63,7 @@ const errorMessages: Record<string, string> = {
   "location-required": "Configure a venue location before enabling verification, and disable verification before removing it.",
   "location-policy": "Select whether clock location verification is enabled.",
   "conflict-policy": "Select a valid option for each roster conflict rule and try again.",
+  "roster-mode": "We couldn't save the roster publication setting. Choose a valid option and try again.",
   save: "We couldn't save that change. Check the name and try again.",
 };
 
@@ -112,14 +115,14 @@ export default async function OrganisationPage({
   if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const venues = await workspace.supabase.from("venues")
-    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
+    .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift, roster_publication_mode")
     .eq("business_id", workspace.business.id).order("name");
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
   if (!venues.error && !selectedVenue) redirect(withBusiness("/settings/organisation?error=filter", workspace.business.id));
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
   const canManageGeofence = workspace.membership.role === "owner";
-  const [departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory] = await Promise.all([
+  const [departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory, rosterModeHistory] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
     workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
@@ -142,6 +145,12 @@ export default async function OrganisationPage({
         .eq("business_id", workspace.business.id).eq("venue_id", venueId)
         .order("created_at", { ascending: false }).limit(10)
       : Promise.resolve({ data: [], error: null }),
+    canManageGeofence
+      ? workspace.supabase.from("roster_publication_mode_events")
+        .select("id, actor_id, old_mode, new_mode, created_at")
+        .eq("business_id", workspace.business.id).eq("venue_id", venueId)
+        .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const loadError = venues.error || departments.error || roles.error;
   if (loadError) console.error("Could not load departments and roles.", { code: loadError.code, message: loadError.message });
@@ -158,6 +167,14 @@ export default async function OrganisationPage({
   if (locationPolicyHistory.error) {
     console.error("Could not load clock location policy history.", {
       code: locationPolicyHistory.error.code, message: locationPolicyHistory.error.message,
+    });
+  }
+  const rosterMode = parseRosterPublicationMode(selectedVenue?.roster_publication_mode);
+  const rosterModeEvents = parseRosterPublicationModeEvents(rosterModeHistory.data);
+  if (canManageGeofence && (!rosterMode || rosterModeHistory.error || !rosterModeEvents)) {
+    console.error("Could not load roster publication settings or history.", {
+      code: rosterModeHistory.error?.code,
+      message: rosterModeHistory.error?.message ?? "The server returned invalid publication settings or history.",
     });
   }
   const departmentRows: Department[] = departments.data ?? [];
@@ -204,6 +221,7 @@ export default async function OrganisationPage({
                 : params.saved === "geofence" ? "Venue location saved."
                 : params.saved === "location-policy" ? "Clock location setting saved."
                 : params.saved === "conflict-policy" ? "Roster conflict rules saved."
+                : params.saved === "roster-mode" ? "Roster publication setting saved."
                 : "Department saved."}
         </p>
       )}
@@ -212,6 +230,54 @@ export default async function OrganisationPage({
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load departments. Try again.</p>
       ) : (
         <>
+          {canManageGeofence && selectedVenue && (
+            <section aria-label="Roster publication settings" className="mt-6 rounded-xl border border-line bg-white p-5">
+              <h2 className="font-semibold">Roster publication settings</h2>
+              <p id="roster-mode-help" className="mt-3 text-sm leading-6 text-muted">
+                Direct publication is the default. With approval required, a manager submits a private snapshot
+                and a different authorised owner, administrator or general manager approves or rejects it.
+                Changing this setting does not publish drafts and makes existing pending reviews stale.
+              </p>
+              {rosterMode ? (
+                <form action={saveRosterPublicationModeAction} aria-label="Configure roster publication"
+                  aria-describedby="roster-mode-help" className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <input type="hidden" name="business_id" value={workspace.business.id} />
+                  <input type="hidden" name="venue_id" value={venueId} />
+                  <label className="text-sm">Publication mode
+                    <select name="mode" defaultValue={rosterMode} className={fieldClass}>
+                      <option value="direct">Direct publication</option>
+                      <option value="approval">Approval required</option>
+                    </select>
+                  </label>
+                  <button type="submit" className="self-end justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
+                    Save publication setting
+                  </button>
+                </form>
+              ) : (
+                <p role="alert" className="mt-3 text-sm text-red-800">
+                  We couldn&apos;t load the publication setting. Reload before making changes.
+                </p>
+              )}
+              <h3 className="mt-5 text-sm font-semibold">Recent publication setting changes</h3>
+              {rosterModeHistory.error || !rosterModeEvents ? (
+                <p role="alert" className="mt-2 text-sm text-red-800">We couldn&apos;t load publication setting history.</p>
+              ) : rosterModeEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">No publication setting changes yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-2 text-sm">
+                  {rosterModeEvents.map((event) => (
+                    <li key={event.id} className="break-words">
+                      <time dateTime={event.created_at}>{new Date(event.created_at).toISOString()}</time>
+                      {" | "}{event.actor_id ? `User ${event.actor_id}` : "Database"}
+                      {" | "}{event.old_mode === "direct" ? "Direct publication" : "Approval required"}
+                      {" to "}{event.new_mode === "direct" ? "Direct publication" : "Approval required"}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {rosterModeEvents?.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
+            </section>
+          )}
           {canManageGeofence && selectedVenue && (
             <section aria-label="Roster conflict rules" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster conflict rules</h2>

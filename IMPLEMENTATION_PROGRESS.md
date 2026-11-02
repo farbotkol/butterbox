@@ -3,8 +3,21 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **46**. In Progress: **1**.
+  BB-PAYRULES stories). Verified Done: **47**. In Progress: **0**.
   Blocked: **5**. Not started (Backlog): **57**.
+- BB-ROSTER-009 (roster approval) is Done. A venue owner can retain direct
+  publication or require a different scoped owner, administrator or general
+  manager to review an immutable snapshot. The requester can withdraw;
+  rejection requires a reason. Approval publishes only reviewed shifts after
+  rechecking the current settings and publication blockers. Focused pgTAP
+  passed **67/67** on each isolated project; seven affected publication,
+  conflict, tenant and audit files passed **290/290**. One authenticated
+  concurrency integration, **17/17** Node tests, and **5/5** targeted
+  production-browser scenarios passed, including mobile axe, cross-tenant
+  scope, notifications and acknowledgement. Changed-file ESLint, TypeScript
+  and the split production build passed. Full suites were intentionally
+  deferred. Feature commit/push is pending this verified checkpoint; see the
+  criterion evidence below.
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
@@ -516,34 +529,51 @@
 
 ## Current story
 
-- **BB-ROSTER-009 — Roster approval workflow** is In Progress, in coding.
-  Its criteria are owner-selectable direct/approval publication, a reviewer
-  view of changes, and scoped audited approval/rejection. Existing publication
-  is direct, snapshots published shifts and sends recipient notifications.
-  Preserve that default and its conflict checks; prevent bypass and stale
-  approval server-side. This supplies the approval workflow needed for the
-  broader `BB-ORG-006` configuration story. The uncommitted migration and
-  focused fixture passed **67/67** assertions on the isolated acceptance
-  project and **67/67** on the separate replay project after application of
-  the migration to their verified disposable ledgers. Seven affected
-  publication, conflict, tenant and audit files passed **290/290**. One
-  authenticated integration passed submission/approval races, retry
-  idempotency, draft contention, scope and concurrent permission revocation.
-  Focused Node tests passed **8/8**, and changed-file ESLint and TypeScript
-  passed. The first acceptance fixture stopped after 50 passes due to an
-  unauthorized direct recipient-table query; the corrected employee-scoped
-  notification check passed. Two replay setup attempts failed before assertions
-  due to a missing terminator and insufficient Auth-schema privileges; the
-  corrected temporary helper was rolled back and verified absent. A different
-  scoped manager must decide; requesters may withdraw. Owner and manager UI
-  is implemented but production-browser, accessibility and split build
-  verification remain outstanding. Full suites are intentionally deferred.
+- **BB-ROSTER-009 — Roster approval workflow** is Done. Direct publication
+  remains the default. Owners can require review per venue; scoped managers
+  submit an immutable snapshot, a different scoped owner, administrator or
+  general manager approves or rejects, and requesters can withdraw. Rejection
+  requires a reason. Stale settings or changed submitted shifts prevent
+  approval; later drafts are not published inadvertently. Publication keeps
+  existing conflict checks, versioning, notifications and acknowledgement.
+  Settings and decisions are audited. This supplies the approval workflow
+  needed for the broader `BB-ORG-006` configuration story.
 
-  | Criterion | Current evidence and next test | Status |
-  | --- | --- | --- |
-  | ROSTER-009.1 — owner selects direct or approval | Database mode, scoped owner RPC and bypass checks: focused pgTAP 67/67 on both projects; owner UI/browser test outstanding | Blocked pending UI verification |
-  | ROSTER-009.2 — reviewer sees changes | Immutable shift snapshot and scoped listing: focused pgTAP 67/67 on both projects; reviewer UI/browser test outstanding | Blocked pending UI verification |
-  | ROSTER-009.3 — approval/rejection is scoped and audited | Scope, decisions, audit and conflict recheck: pgTAP 67/67 plus one passing authenticated race integration; browser test outstanding | Blocked pending UI verification |
+  | Criterion | Implementation evidence | Actual verification | Status |
+  | --- | --- | --- | --- |
+  | ROSTER-009.1 — owner selects direct or approval | Venue mode and owner RPC in `20261103110000_roster_approval_workflow.sql`; owner settings/action and protected history | 67/67 focused pgTAP on each isolated project; mobile browser verified both modes, separate venue default, invalid input and manager restriction | Pass |
+  | ROSTER-009.2 — reviewer sees changes | Immutable scoped shift snapshots, strict response parser and `roster-review-panel.tsx` | Focused pgTAP and authenticated integration verified stale snapshots and later drafts; mobile browser showed worker, role, time, break and acknowledgement without publishing the later draft | Pass |
+  | ROSTER-009.3 — approval/rejection is scoped and audited | Scoped transactional decision RPCs, immutable records, audit labels and manager forms | Focused pgTAP; one authenticated two-tenant concurrency/revocation integration; mobile browser verified independent approval, rejection reason, owner audit, withdrawal, notification and acknowledgement | Pass |
+
+  - **Changed files:** `supabase/migrations/20261103110000_roster_approval_workflow.sql`,
+    `supabase/tests/database/roster_approvals.test.sql`,
+    `src/app/actions.ts`, `src/app/roster/page.tsx`,
+    `src/app/settings/organisation/page.tsx`,
+    `src/components/roster-review-panel.tsx`, `src/lib/roster-review.ts`,
+    `src/lib/sensitive-action-audit.ts`, and the focused Node, integration,
+    audit and browser tests.
+  - **Selected tests and results:** Roster review **67/67** pgTAP on
+    `butterbox-acceptance` and **67/67** on `butterbox-fresh-migration-check`;
+    seven affected publication/conflict/tenant/audit pgTAP files **290/290**;
+    one authenticated race integration; **17/17** targeted Node tests;
+    five serial production-browser scenarios including mobile WCAG checks;
+    changed-file ESLint, TypeScript, split production compile/generate and
+    `git diff --check` all passed. Disk remained above 28 GiB.
+  - **Resolved failures:** The first acceptance fixture stopped after 50 passes
+    due to an unauthorized direct recipient-table query; the corrected
+    employee-scoped check passed. Two replay setup attempts failed before
+    assertions due to a missing SQL terminator and Auth-schema privileges;
+    the correctly privileged temporary helper was rolled back and verified
+    absent. The first browser run exposed an acknowledgement button's
+    accessible-name mismatch; the control was fixed and axe passed. A later
+    invalid-input browser assertion was narrowed to the actual alert rather
+    than Next.js's route announcer and passed on rerun.
+  - **Deferred and risks:** Full pgTAP, Node, authenticated integration and
+    browser suites were intentionally not run. Broader regression remains
+    necessary for workstream merge or release. Independent reviewer approval
+    is a documented design choice; an owner-only venue can withdraw and use
+    direct mode or grant a suitable second reviewer. Feature commit/push is
+    pending this verified checkpoint.
 - **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
   above; the verified access and visibility changes have been pushed. Week
   boundaries are currently baked into roster publications and payroll
@@ -1828,11 +1858,12 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Implement **BB-ROSTER-009 — Roster approval workflow**, then revisit
-  **BB-ORG-006 — Business configuration** prerequisites before changing week
-  boundaries or notification defaults. Existing roster publications and
-  payroll snapshots assume Monday-based weeks, so prospective semantics and
-  dependent workflows must be preserved.
+- Assess **BB-ORG-006 — Business configuration** now that roster approval
+  exists. Before changing week boundaries or notification defaults, establish
+  prospective semantics and dependencies: existing roster publications and
+  payroll snapshots assume Monday-based weeks and must not be reinterpreted.
+  If a required decision or prerequisite blocks the full story, record it and
+  continue with an independent ready Core Roadmap story.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the

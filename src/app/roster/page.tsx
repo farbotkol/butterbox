@@ -18,10 +18,12 @@ import {
   publishRosterAction,
   sendShiftOfferAction,
   setShiftAcknowledgementRequirementAction,
+  submitRosterReviewAction,
   withdrawShiftOfferAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { CopyRosterForm } from "@/components/copy-roster-form";
+import { RosterReviewPanel } from "@/components/roster-review-panel";
 import { ShiftEditor } from "@/components/shift-editor";
 import {
   availabilityForDate,
@@ -32,6 +34,7 @@ import {
 import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
 import { rosterOverlapConflicts } from "@/lib/roster-overlap-conflicts";
+import { parseRosterPublicationMode, parseRosterReviews } from "@/lib/roster-review";
 import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
@@ -72,6 +75,7 @@ type RosterPageProps = {
     edit?: string;
     created?: string;
     offer?: string;
+    review?: string;
   }>;
 };
 
@@ -94,6 +98,15 @@ const errorMessages: Record<string, string> = {
   "publish-busy": "The roster is being changed. Wait for the other change to finish, then try publishing again.",
   "publish-unknown": "The server could not confirm the publication result. Reload the roster before trying again.",
   "publish-acknowledgement": "Assign the open shift that requires acknowledgement, or remove its requirement before publishing.",
+  review: "We couldn't update this roster review. Check your permissions and try again.",
+  "review-permission": "You cannot decide this review. A different authorised reviewer with access to this department is required.",
+  "review-settings": "The publication setting changed. Reload the roster and review the current setting before proceeding.",
+  "review-pending": "A review is already pending for this department and week. Review or withdraw it first.",
+  "review-empty": "There are no draft shifts to submit for review.",
+  "review-stale": "The submitted drafts changed. Withdraw or reject the review and submit the current drafts.",
+  "review-decided": "This review was already decided or the request was reused. Reload the roster before trying again.",
+  "review-reason": "Enter a rejection reason of up to 500 characters and try again.",
+  "review-unknown": "The server could not confirm the review result. Reload the roster before trying again.",
   acknowledgement: "We couldn't update the acknowledgement requirement. Check the draft, employee and your permissions, then try again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
   "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
@@ -115,6 +128,13 @@ const offerMessages: Record<string, string> = {
   sent: "Shift offer sent. The shift stays open until you confirm a claim.",
   withdrawn: "Shift offer withdrawn.",
   confirmed: "Claim confirmed and the shift assigned.",
+};
+
+const reviewMessages: Record<string, string> = {
+  submitted: "Roster submitted for review. The submitted shifts remain private until approved.",
+  approved: "Roster approved and the reviewed shifts published.",
+  rejected: "Roster review rejected. The submitted shifts remain drafts.",
+  withdrawn: "Roster review withdrawn. The submitted shifts remain drafts.",
 };
 
 type OfferFormContext = { week: string; venueId: string; filterDepartment?: string; collapsed: string[] };
@@ -279,7 +299,7 @@ function AcknowledgementRequirementControl({
       {filterDepartment && <input type="hidden" name="filter_department" value={filterDepartment} />}
       <CollapsedFields departments={collapsed} />
       <button type="submit"
-        aria-label={`${required ? "Remove acknowledgement requirement for" : "Require acknowledgement for"} ${label}`}
+        aria-label={required ? `Remove requirement (acknowledgement) for ${label}` : `Require acknowledgement for ${label}`}
         className="rounded border border-ocean/30 bg-white px-2 py-1 text-[10px] font-semibold text-ocean hover:bg-soft-sea">
         {required ? "Remove requirement" : "Require acknowledgement"}
       </button>
@@ -314,7 +334,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const endAt = localMidnightAsUtc(weekEnd, workspace.venue.timezone);
   const [venueResult, departmentResult, employeeResult, jobRoleResult, linkResult, ownDepartmentsResult, patternResult, intervalResult, shiftResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
-      .select("id, name, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift", { count: "exact" })
+      .select("id, name, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift, roster_publication_mode", { count: "exact" })
       .eq("business_id", workspace.business.id).order("created_at").order("id").range(from, to),
     (venue) => venue.id),
     readAllPages((from, to) => workspace.supabase.from("departments")
@@ -401,10 +421,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     linkResult.error || ownDepartmentsResult.error || patternResult.error || intervalResult.error ||
     exceptionResult.error || overlapResult.error || shiftResult.error;
   const currentVenue = venueResult.data?.find((venue) => venue.id === workspace.venue.id);
-  if (loadError || !currentVenue) {
+  const rosterMode = parseRosterPublicationMode(currentVenue?.roster_publication_mode);
+  if (loadError || !currentVenue || !rosterMode) {
     console.error("Could not load the roster.", loadError
       ? { code: loadError.code, message: loadError.message }
-      : { message: "The selected venue is no longer available." });
+      : { message: "The selected venue or its publication setting is unavailable." });
     return (
       <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} email={workspace.user.email ?? ""}
         role={workspace.membership.role} venueName={workspace.venue.name}>
@@ -479,7 +500,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     visibleShifts.filter((shift) => shift.is_published && shift.requires_acknowledgement)
       .map((shift) => shift.id),
   );
-  const [publicationHistory, notificationReachability] = canManageSelectedDepartment && selectedDepartment
+  const [publicationHistory, notificationReachability, reviewResult] = canManageSelectedDepartment && selectedDepartment
     ? await Promise.all([
         readAllPages((from, to) => workspace.supabase.from("roster_publications")
           .select("id, version, published_at, venue_timezone, new_shift_count, shift_count, notifications_recorded", { count: "exact" })
@@ -494,8 +515,20 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           },
           { count: "exact" },
         ).order("publication_id").range(from, to), (result) => result.publication_id),
+        workspace.supabase.rpc("list_roster_reviews", {
+          p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+          p_department_id: selectedDepartment, p_week_start: week,
+        }),
       ])
-    : [null, null];
+    : [null, null, null];
+  const reviews = reviewResult ? parseRosterReviews(reviewResult.data) : [];
+  const reviewLoadError = Boolean(reviewResult?.error) || reviews === null;
+  if (reviewLoadError) {
+    console.error("Could not load roster reviews.", {
+      code: reviewResult?.error?.code,
+      message: reviewResult?.error?.message ?? "The server returned an invalid review snapshot.",
+    });
+  }
   if (publicationHistory?.error) {
     console.error("Could not load roster publication history.", {
       code: publicationHistory.error.code,
@@ -595,6 +628,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         {(venueResult.data ?? []).length > 1 && (
           <form action="/roster" className="flex items-center gap-2">
+            <input type="hidden" name="business" value={workspace.business.id} />
             <input type="hidden" name="week" value={week} />
             <label htmlFor="venue-filter" className="text-sm text-muted">Venue</label>
             <select id="venue-filter" name="venue" defaultValue={workspace.venue.id}
@@ -607,6 +641,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           </form>
         )}
         <form action="/roster" className="flex items-center gap-2">
+          <input type="hidden" name="business" value={workspace.business.id} />
           <input type="hidden" name="week" value={week} />
           <input type="hidden" name="venue" value={workspace.venue.id} />
           <CollapsedFields departments={collapsed} />
@@ -641,7 +676,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       </div>
 
       {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement || copiedCount !== undefined ||
-        (params.offer && offerMessages[params.offer])) && (
+        (params.offer && offerMessages[params.offer]) || (params.review && reviewMessages[params.review])) && (
         <p
           role={errorMessage ? "alert" : "status"}
           className={`mt-4 rounded-xl px-4 py-3 text-sm ${
@@ -656,6 +691,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 : `${copiedCount} ${copiedCount === 1 ? "shift was" : "shifts were"} copied into this week's draft roster.`
               : params.offer && offerMessages[params.offer]
               ? offerMessages[params.offer]
+              : params.review && reviewMessages[params.review]
+              ? reviewMessages[params.review]
               : params.ack_requirement
               ? "Acknowledgement requirement updated."
               : params.saved
@@ -707,7 +744,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 </p>
               </div>
             </div>
-            <form action={publishRosterAction}>
+            <form action={rosterMode === "approval" ? submitRosterReviewAction : publishRosterAction}>
+              <input name="business_id" type="hidden" value={workspace.business.id} />
               <input name="week" type="hidden" value={week} />
               <input name="venue_id" type="hidden" value={workspace.venue.id} />
               <CollapsedFields departments={collapsed} />
@@ -716,12 +754,14 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 type="hidden"
                 value={selectedDepartment}
               />
+              {rosterMode === "approval" && <input name="request_id" type="hidden" value={randomUUID()} />}
               <button
-                className="inline-flex items-center gap-2 rounded-xl border border-sea-glass/50 px-4 py-2.5 text-sm font-semibold text-ocean transition hover:bg-soft-sea"
+                className="inline-flex items-center gap-2 rounded-xl border border-sea-glass/50 px-4 py-2.5 text-sm font-semibold text-ocean transition hover:bg-soft-sea disabled:cursor-not-allowed disabled:opacity-50"
                 type="submit"
+                disabled={rosterMode === "approval" && (reviewLoadError || reviews?.some((review) => review.decision === null))}
               >
                 <Send size={16} aria-hidden="true" />
-                Publish this department
+                {rosterMode === "approval" ? "Submit for review" : "Publish this department"}
               </button>
             </form>
           </div>
@@ -738,6 +778,17 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               break: String(editingShift?.break_minutes ?? 30),
             }} />
         </section>
+      )}
+
+      {canManageSelectedDepartment && selectedDepartment && (
+        <RosterReviewPanel
+          context={{ businessId: workspace.business.id, venueId: workspace.venue.id,
+            departmentId: selectedDepartment, week, collapsed }}
+          mode={rosterMode} reviews={reviewLoadError ? null : reviews}
+          userId={workspace.user.id}
+          canDecide={["owner", "admin", "general_manager"].includes(workspace.membership.role)}
+          timezone={workspace.venue.timezone}
+        />
       )}
 
       {canManageSelectedDepartment && selectedDepartment && selectedDepartmentActive && (
