@@ -46,8 +46,8 @@
 - BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
   works per venue. Owner decision DEC-002 confirms prospective per-venue
   display-week starts, Monday payroll boundaries and essential in-app
-  defaults. As of 2026-11-02 12:14 UTC, an **uncommitted and incompletely
-  verified** prospective planning-week slice contains a versioned database
+  defaults. As of 2026-11-02 12:17 UTC, a verified prospective planning-week
+  slice, pending its feature commit, contains a versioned database
   setting, a canonical venue-local period resolver, an owner settings form
   and a separate read-only planning view. It deliberately keeps the existing
   editable roster and publication/payroll boundaries Monday-based. A rolled-back
@@ -55,11 +55,12 @@
   six neighboring pgTAP files passed **327/327**; the authenticated race,
   tenant and revocation integration passed **1/1** after correcting a lazy
   test request; focused Node tests passed **5/5**; changed-file ESLint and
-  TypeScript passed. Migration `20261103150000` is applied only to the
-  verified disposable acceptance project. Production build and
-  browser/accessibility verification remain outstanding. Optional
-  external channels require the undelivered
-  BB-COMMS-003 capability, consent and provider approval. Final DEC-002
+  TypeScript passed. The same **60/60** planning assertions passed on a
+  rollback-only fresh replay. Split production build and **3/3** targeted
+  browser scenarios passed, including mobile axe and scoped roles. Migration
+  `20261103150000` is applied only to the verified disposable acceptance
+  project. Optional external channels require the undelivered BB-COMMS-003
+  capability, consent and provider approval. Final DEC-002
   directs employee opt-outs, essential in-app notices and timezone-aware
   external quiet hours; the initial hours and urgent event list remain open.
   No historical periods have been reinterpreted.
@@ -458,6 +459,40 @@
   relying on an unchanged success message. No assertions were removed.
   The runner stopped its temporary app servers; production was not modified.
 
+## BB-ORG-006 — Acceptance evidence (Blocked)
+
+The following results verify the independent planning slice, **not** the
+complete business-configuration story. The existing operational editing
+roster, publication/review/copy workflows and **My schedule** remain
+Monday-based; the separate planning view is read-only and links to the
+appropriate operational weeks. Essential in-app defaults and optional channel
+settings/delivery still require their own implementation and verification.
+
+| Criterion | Implementation evidence | Runtime verification and actual result | Status |
+| --- | --- | --- | --- |
+| 006.1 Per-venue overrides are clear | Owner-only settings show the current and pending venue-local planning start; the scoped planning view labels its periods and explains Monday operational boundaries. Existing approval mode remains per venue. | `venue_roster_planning_weeks.test.sql` **60/60** on acceptance and **60/60** on a rolled-back replay; authenticated tenant/role integration **1/1**; mobile owner, manager and employee browser scenario **1/1** with axe passed. | Blocked for full story: notification defaults and channels are incomplete. |
+| 006.2 Changes apply prospectively | Append-only scheduled settings retain historical definitions; a short transition prevents date gaps. Pending changes cannot be replaced once the transition starts, and stale forms cannot reverse an activated setting. Publication, timesheet and payroll boundaries are not changed. | The focused pgTAP covers year/DST boundaries, historical settings, contiguous navigation, stale state and unchanged publication/payroll fixtures. Publication, approval, timesheet, payroll and tenant regressions passed **327/327** assertions; the owner-edit race and revocation integration passed **1/1**. Two neighboring browser regressions passed **2/2**. | Blocked for full story: remaining notification settings have not been implemented or verified. |
+| 006.3 Audit shows setting changes | Immutable venue events and sensitive-action audit identify actor, old/new weekday, effective date, revision and cancellation/replacement. Direct history writes are denied. | Focused pgTAP **60/60** includes audit fields, direct-write denial and privileged mutation denial; integration verifies one audit event under concurrent saves; the production-browser scenario displays settings history. | Blocked for full story: audit for unimplemented notification settings is not verified. |
+
+- Changed files: `20261103150000_venue_roster_planning_weeks.sql`, the
+  planning pgTAP and concurrency tests, `src/lib/roster-planning.ts`, owner
+  settings/actions, the new read-only planning route, roster link, browser
+  scenario, integration runner and README. The migration is applied only to
+  `butterbox-acceptance` (API 55421, DB 55422); replay changes rolled back on
+  `butterbox-fresh-migration-check` (DB 56422). Free disk remained above 29 GiB.
+- Targeted checks were selected for settings authorization, two-tenant scope,
+  audit immutability, prospective navigation, DST/year boundaries, unchanged
+  publication and payroll, actual concurrency and mobile UX. Node parser
+  tests **5/5**, changed-file ESLint, TypeScript, split production build and
+  **3/3** serialized browser scenarios passed. The first integration attempt
+  did not start its lazy request and timed out; the first browser attempt
+  failed because two multi-row fixtures omitted `is_published`. Both fixture
+  defects were corrected and the affected tests passed on rerun.
+- Full Node, pgTAP, integration and browser suites were intentionally deferred.
+  Broader migration and cross-tenant regression remains necessary before a
+  release, workstream merge or production-readiness decision. Initial
+  external quiet hours, urgent event types and providers remain owner-dependent.
+
 ## BB-SHIFTS-004 — Acceptance evidence
 
 | Criterion | Implementation evidence | Runtime verification and actual result | Status |
@@ -616,13 +651,11 @@
   `b45439e8d23a6d2257684fe7fe7ba6eeadbf5825` was pushed and verified. This
   work does not imply credential-remediation approval or evidence that
   security review occurred.
-- **BB-ORG-006 — Business configuration** is the current independent work:
-  verify the uncommitted prospective per-venue planning-week slice under
-  DEC-002. Approval mode already exists; external notification dependencies
-  remain Blocked and must not be activated. Migration `20261103150000` was
-  applied only to the verified disposable acceptance project. Focused database
-  and authenticated race tests have passed; next run the production build and
-  targeted mobile browser/accessibility scenario, then fix and rerun any failures.
+- **BB-ORG-006 — Business configuration** remains Blocked for full acceptance.
+  Its independent prospective planning-week slice passed targeted verification
+  under DEC-002 and awaits a feature commit; the database migration was applied
+  only to the disposable acceptance project. External notification
+  dependencies remain Blocked and must not be activated.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
@@ -2118,11 +2151,11 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Next inspect the directed prospective venue-week portion of
-  **BB-ORG-006** under DEC-002, followed by
-  **BB-ATTEND-004 — Rotating QR kiosk**. Keep ORG-006 Blocked until its
-  complete criteria and external-channel dependencies are verified. Preserve
-  existing immutable periods and do not silently reinterpret history.
+- Next inspect the highest-priority ready independent story,
+  **BB-ATTEND-004 — Rotating QR kiosk**, after the verified planning slice is
+  committed and pushed. Keep **BB-ORG-006** Blocked until its full criteria and
+  external-channel dependencies are verified. Preserve existing immutable
+  periods and do not silently reinterpret history.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Rehearse the DEC-005 recovery targets using the README procedure and
