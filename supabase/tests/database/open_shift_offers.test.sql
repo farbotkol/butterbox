@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon;
 grant execute on all functions in schema extensions to authenticated, anon;
-select extensions.plan(58);
+select extensions.plan(68);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a5700000-0000-4000-8000-000000000001', 'offer-owner@example.test', '{}'::jsonb),
@@ -248,5 +248,47 @@ select extensions.throws_ok(
 select extensions.throws_ok(
   $$update public.shift_offer_recipients set outcome = 'not_selected' where offer_id = current_setting('test.offer')::uuid and employee_id = 'e5700000-0000-4000-8000-000000000001'$$,
   'P0001', 'Shift offer history is immutable', 'recorded outcomes cannot be changed');
+
+-- Late responses: a pending recipient cannot claim a filled offer, and an
+-- employee who becomes ineligible no longer sees or can accept the offer.
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000002', true);
+set local role authenticated;
+select extensions.lives_ok($$select public.withdraw_shift_offer('98000000-0000-4000-8000-000000000001')$$, 'the stale expired offer is withdrawn');
+select extensions.isnt(set_config('test.late_offer', (select public.create_shift_offer('b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001', 'f5700000-0000-4000-8000-000000000005', array['e5700000-0000-4000-8000-000000000001', 'e5700000-0000-4000-8000-000000000002', 'e5700000-0000-4000-8000-000000000007']::uuid[], '2032-04-06 12:00+00'))::text, true), null, 'the manager reoffers the shift to three employees');
+reset role;
+insert into public.employee_availability_exceptions (business_id, venue_id, employee_id, starts_on, ends_on, exception_type, status)
+values ('b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001', 'e5700000-0000-4000-8000-000000000002', '2032-04-07', '2032-04-07', 'unavailable', 'active');
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000005', true);
+set local role authenticated;
+select extensions.is((select count(*) from public.list_my_shift_offers('b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001') where offer_id = current_setting('test.late_offer')::uuid)::integer, 0, 'an employee who becomes ineligible no longer sees the offer');
+select extensions.throws_ok(
+  $$select public.respond_shift_offer(current_setting('test.late_offer')::uuid, 'accept')$$,
+  'P0001', 'You are no longer eligible for this shift', 'an employee who becomes ineligible cannot accept');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000010', true);
+set local role authenticated;
+select extensions.isnt(public.respond_shift_offer(current_setting('test.late_offer')::uuid, 'accept'), null, 'one employee claims the reoffered shift');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000002', true);
+set local role authenticated;
+select extensions.is(public.confirm_shift_offer_claim(current_setting('test.late_offer')::uuid, 'e5700000-0000-4000-8000-000000000007'), 'confirmed', 'the manager fills the reoffered shift');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5700000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.results_eq(
+  $$select offer_status, response, outcome, can_respond from public.list_my_shift_offers('b5700000-0000-4000-8000-000000000001', 'c5700000-0000-4000-8000-000000000001') where offer_id = current_setting('test.late_offer')::uuid$$,
+  $$values ('filled'::text, 'pending'::text, 'closed'::text, false)$$, 'a recipient who had not answered sees the filled offer as closed');
+select extensions.throws_ok(
+  $$select public.respond_shift_offer(current_setting('test.late_offer')::uuid, 'accept')$$,
+  'P0001', 'Shift offer is no longer available', 'a filled offer cannot be accepted');
+select extensions.throws_ok(
+  $$select public.respond_shift_offer(current_setting('test.late_offer')::uuid, 'decline')$$,
+  'P0001', 'Shift offer is no longer available', 'a filled offer cannot be declined');
+reset role;
+select extensions.ok(
+  (select r.response = 'pending' and r.responded_at is null and s.employee_id = 'e5700000-0000-4000-8000-000000000007'
+   from public.shift_offer_recipients r join public.shift_offers o on o.id = r.offer_id join public.shifts s on s.id = o.shift_id
+   where r.offer_id = current_setting('test.late_offer')::uuid and r.employee_id = 'e5700000-0000-4000-8000-000000000001'),
+  'a refused late response leaves the recipient unanswered and the assignment unchanged');
 select * from extensions.finish();
 rollback;
