@@ -1698,6 +1698,146 @@ test("owners configure venue geofences with protected audit and scoped access", 
   }
 });
 
+test("venue planning weeks remain scoped, prospective and accessible on mobile", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const roles = ["owner", "manager", "worker", "outside"];
+  const users = {};
+  const contexts = [];
+  const [businessId, outsideId, venueId, secondVenueId, outsideVenueId, fohId, bohId,
+    workerId, cookId, publishedId, draftId, privateId] = Array.from({ length: 12 }, () => randomUUID());
+  const settings = `/settings/organisation?business=${businessId}&venue=${venueId}`;
+  const planning = `/roster/planning?business=${businessId}&venue=${venueId}&date=2032-03-21`;
+  try {
+    for (const role of roles) {
+      const created = await admin.auth.admin.createUser({
+        email: `planning-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Planning UI cafe" }, { id: outsideId, name: "Outside planning UI cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Sydney venue", timezone: "Australia/Sydney" },
+      { id: secondVenueId, business_id: businessId, name: "Perth venue", timezone: "Australia/Perth" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "Australia/Brisbane" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "Planning worker", role_title: "Server" },
+      { id: cookId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        name: "Private cook", role_title: "Cook" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: publishedId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Published service", starts_at: "2032-03-20T22:00:00Z",
+        ends_at: "2032-03-21T02:00:00Z", is_published: true, requires_acknowledgement: false },
+      { id: draftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Draft service", starts_at: "2032-03-21T22:00:00Z",
+        ends_at: "2032-03-22T02:00:00Z", is_published: false, requires_acknowledgement: false },
+      { id: privateId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: cookId, role_title: "Kitchen private", starts_at: "2032-03-22T22:00:00Z",
+        ends_at: "2032-03-23T02:00:00Z", is_published: false, requires_acknowledgement: false },
+    ])).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `planning-ui-owner-${suffix}@example.test`, password);
+    await page.goto(settings);
+    const region = page.getByRole("region", { name: "Roster planning week settings" });
+    const form = page.getByRole("form", { name: "Configure roster planning week" });
+    await expect(region).toContainText("Current planning start: Monday");
+    await expect(form.getByLabel("Planning week starts on")).toHaveValue("1");
+    await form.getByLabel("Planning week starts on").evaluate((select) => {
+      select.add(new Option("Invalid", "8"));
+      select.value = "8";
+    });
+    await form.getByRole("button", { name: "Save planning week" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "couldn't confirm the roster planning week" })).toBeVisible();
+    await form.getByLabel("Planning week starts on").selectOption("7");
+    await form.getByRole("button", { name: "Save planning week" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Roster planning week setting saved" })).toBeVisible();
+    await expect(region).toContainText("Current planning start: Monday");
+    await expect(region).toContainText("Scheduled: Sunday");
+    await expect(region).toContainText("Monday to Sunday");
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "venue planning settings"));
+
+    await page.goto(planning);
+    await expect(page.getByRole("heading", { name: "Venue planning view" })).toBeVisible();
+    await expect(page.getByText("Planning starts on Sunday.")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Shifts for 2032-03-21" })).toContainText("Published service");
+    await expect(page.getByRole("region", { name: "Shifts for 2032-03-22" })).toContainText("Draft service");
+    await expect(page.getByText("Kitchen private")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Operational week from 2032-03-15" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Operational week from 2032-03-22" })).toBeVisible();
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "venue planning view"));
+    await page.getByRole("link", { name: "Next planning period" }).click();
+    await expect(page.getByText("2032-03-28 to 2032-04-03")).toBeVisible();
+    await page.getByRole("link", { name: "Previous planning period" }).click();
+    await expect(page.getByText("2032-03-21 to 2032-03-27")).toBeVisible();
+    await page.getByRole("link", { name: "Operational week from 2032-03-15" }).click();
+    await expect(page.getByRole("heading", { name: "Weekly roster" })).toBeVisible();
+    await expect(page.getByText("This editing and publication roster uses Monday–Sunday operational weeks.")).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-15");
+    await page.goto(`/roster/planning?business=${businessId}&venue=${venueId}&date=2031-02-29`);
+    await expect(page.getByRole("alert").filter({ hasText: "Choose a valid planning date" })).toBeVisible();
+
+    const managerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(managerContext);
+    const manager = await managerContext.newPage();
+    await signIn(manager, `planning-ui-manager-${suffix}@example.test`, password);
+    await manager.goto(settings);
+    await expect(manager.getByRole("form", { name: "Configure roster planning week" })).toHaveCount(0);
+    await manager.goto(planning);
+    await expect(manager.getByText("Published service")).toBeVisible();
+    await expect(manager.getByText("Draft service")).toBeVisible();
+    await expect(manager.getByText("Kitchen private")).toHaveCount(0);
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const worker = await workerContext.newPage();
+    await signIn(worker, `planning-ui-worker-${suffix}@example.test`, password);
+    await worker.goto(planning);
+    await expect(worker.getByText("Published service")).toBeVisible();
+    await expect(worker.getByText("Draft service")).toHaveCount(0);
+    await expect(worker.getByText("Kitchen private")).toHaveCount(0);
+    findingsMustBeEmpty(await accessibilityFindings(worker, "employee planning view"));
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outside = await outsideContext.newPage();
+    await signIn(outside, `planning-ui-outside-${suffix}@example.test`, password);
+    await outside.goto(planning);
+    await expect(outside.getByRole("heading", { name: "Planning view unavailable" })).toBeVisible();
+    await expect(outside.getByText("Published service")).toHaveCount(0);
+
+    await page.goto(settings);
+    await form.getByLabel("Planning week starts on").selectOption("1");
+    await form.getByRole("button", { name: "Save planning week" }).click();
+    await expect(region).toContainText("Cancelled pending change");
+    await expect(region).not.toContainText("Scheduled: Sunday");
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const id of Object.values(users)) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("owners and scoped managers review roster snapshots with mobile-safe audited decisions", async ({ page, browser }) => {
   test.setTimeout(240_000);
   await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);

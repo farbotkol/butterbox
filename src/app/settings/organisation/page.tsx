@@ -1,8 +1,11 @@
+import { randomUUID } from "node:crypto";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   saveDepartmentAction,
   saveJobRoleAction,
   saveRosterPublicationModeAction,
+  saveVenueRosterWeekAction,
   saveVenueConflictPolicyAction,
   saveVenueGeofenceAction,
   setVenueClockGeofenceAction,
@@ -11,6 +14,7 @@ import {
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import type { ConflictPolicyValues } from "@/lib/conflict-policy";
+import { parseRosterWeekEvents, parseRosterWeekSettings, rosterWeekdays } from "@/lib/roster-planning";
 import { parseRosterPublicationMode, parseRosterPublicationModeEvents } from "@/lib/roster-review";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { withBusiness } from "@/lib/business-selection";
@@ -64,6 +68,9 @@ const errorMessages: Record<string, string> = {
   "location-policy": "Select whether clock location verification is enabled.",
   "conflict-policy": "Select a valid option for each roster conflict rule and try again.",
   "roster-mode": "We couldn't save the roster publication setting. Choose a valid option and try again.",
+  "roster-week": "We couldn't confirm the roster planning week setting. Reload and check it before trying again.",
+  "roster-week-stale": "The roster planning week setting changed. Reload and review it before saving again.",
+  "roster-week-transition": "The planning transition has already started. Wait until the scheduled start date before changing it.",
   save: "We couldn't save that change. Check the name and try again.",
 };
 
@@ -122,7 +129,10 @@ export default async function OrganisationPage({
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
   const canManageGeofence = workspace.membership.role === "owner";
-  const [departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory, rosterModeHistory] = await Promise.all([
+  const [
+    departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory, rosterModeHistory,
+    rosterWeekSettings, rosterWeekHistory,
+  ] = await Promise.all([
     workspace.supabase.from("departments").select("id, name, active")
       .eq("venue_id", venueId).order("name"),
     workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
@@ -151,6 +161,17 @@ export default async function OrganisationPage({
         .eq("business_id", workspace.business.id).eq("venue_id", venueId)
         .order("created_at", { ascending: false }).order("id", { ascending: false }).limit(10)
       : Promise.resolve({ data: [], error: null }),
+    canManageGeofence
+      ? workspace.supabase.rpc("get_venue_roster_week_settings", {
+        p_business_id: workspace.business.id, p_venue_id: venueId,
+      })
+      : Promise.resolve({ data: [], error: null }),
+    canManageGeofence
+      ? workspace.supabase.from("venue_roster_week_events")
+        .select("id, actor_id, revision, action, previous_weekday, weekday, effective_on, supersedes, recorded_at")
+        .eq("business_id", workspace.business.id).eq("venue_id", venueId)
+        .order("revision", { ascending: false }).limit(10)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const loadError = venues.error || departments.error || roles.error;
   if (loadError) console.error("Could not load departments and roles.", { code: loadError.code, message: loadError.message });
@@ -171,10 +192,19 @@ export default async function OrganisationPage({
   }
   const rosterMode = parseRosterPublicationMode(selectedVenue?.roster_publication_mode);
   const rosterModeEvents = parseRosterPublicationModeEvents(rosterModeHistory.data);
+  const rosterWeek = parseRosterWeekSettings(rosterWeekSettings.data);
+  const rosterWeekEvents = parseRosterWeekEvents(rosterWeekHistory.data);
   if (canManageGeofence && (!rosterMode || rosterModeHistory.error || !rosterModeEvents)) {
     console.error("Could not load roster publication settings or history.", {
       code: rosterModeHistory.error?.code,
       message: rosterModeHistory.error?.message ?? "The server returned invalid publication settings or history.",
+    });
+  }
+  if (canManageGeofence && (!rosterWeek || rosterWeekSettings.error || rosterWeekHistory.error || !rosterWeekEvents)) {
+    console.error("Could not load roster planning settings or history.", {
+      code: rosterWeekSettings.error?.code ?? rosterWeekHistory.error?.code,
+      message: rosterWeekSettings.error?.message ?? rosterWeekHistory.error?.message
+        ?? "The server returned invalid planning settings or history.",
     });
   }
   const departmentRows: Department[] = departments.data ?? [];
@@ -222,6 +252,8 @@ export default async function OrganisationPage({
                 : params.saved === "location-policy" ? "Clock location setting saved."
                 : params.saved === "conflict-policy" ? "Roster conflict rules saved."
                 : params.saved === "roster-mode" ? "Roster publication setting saved."
+                : params.saved === "roster-week" ? "Roster planning week setting saved. Check its effective date below."
+                : params.saved === "roster-week-unchanged" ? "The roster planning week setting was already selected."
                 : "Department saved."}
         </p>
       )}
@@ -230,6 +262,82 @@ export default async function OrganisationPage({
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load departments. Try again.</p>
       ) : (
         <>
+          {canManageGeofence && selectedVenue && (
+            <section aria-label="Roster planning week settings" className="mt-6 rounded-xl border border-line bg-white p-5">
+              <h2 className="font-semibold">Roster planning week</h2>
+              <p id="roster-week-help" className="mt-3 text-sm leading-6 text-muted">
+                The planning view uses this venue&apos;s local dates. Changes take effect after the current
+                planning week; the transition may have fewer than seven days so no dates are skipped.
+                Once a transition period begins, its pending change cannot be cancelled or replaced
+                until the new start takes effect.
+                The editing roster, publication versions, timesheets and payroll periods keep their
+                existing Monday-based boundaries. Past records are not changed.
+              </p>
+              {rosterWeek ? (
+                <>
+                  <p className="mt-3 text-sm">
+                    Current planning start: <strong>{rosterWeekdays[rosterWeek.current_weekday - 1]}</strong>.
+                    {rosterWeek.pending_weekday && rosterWeek.pending_effective_on && (
+                      <> Scheduled: <strong>{rosterWeekdays[rosterWeek.pending_weekday - 1]}</strong>
+                        {" "}from <time dateTime={rosterWeek.pending_effective_on}>{rosterWeek.pending_effective_on}</time>.</>
+                    )}
+                  </p>
+                  <form action={saveVenueRosterWeekAction} aria-label="Configure roster planning week"
+                    aria-describedby="roster-week-help" className="mt-4 grid gap-4 sm:grid-cols-2">
+                    <input type="hidden" name="business_id" value={workspace.business.id} />
+                    <input type="hidden" name="venue_id" value={venueId} />
+                    <input type="hidden" name="revision" value={rosterWeek.revision} />
+                    <input type="hidden" name="pending_id" value={rosterWeek.pending_id ?? ""} />
+                    <input type="hidden" name="request_id" value={randomUUID()} />
+                    <label className="text-sm">Planning week starts on
+                      <select name="weekday" defaultValue={String(rosterWeek.pending_weekday ?? rosterWeek.current_weekday)}
+                        disabled={rosterWeek.pending_locked} className={fieldClass}>
+                        {rosterWeekdays.map((day, index) => <option key={day} value={index + 1}>{day}</option>)}
+                      </select>
+                    </label>
+                    <button type="submit" disabled={rosterWeek.pending_locked}
+                      className="self-end justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white disabled:opacity-50">
+                      Save planning week
+                    </button>
+                  </form>
+                  {rosterWeek.pending_locked ? (
+                    <p role="status" className="mt-2 text-sm text-muted">
+                      This transition has started. Wait for the scheduled date before changing the planning start again.
+                    </p>
+                  ) : rosterWeek.pending_weekday && (
+                    <p className="mt-2 text-sm text-muted">To cancel the pending change, select the current planning start and save.</p>
+                  )}
+                  <Link href={`/roster/planning?${new URLSearchParams({ business: workspace.business.id, venue: venueId })}`}
+                    className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+                    Open venue planning view
+                  </Link>
+                </>
+              ) : (
+                <p role="alert" className="mt-3 text-sm text-red-800">
+                  We couldn&apos;t load the planning week setting. Reload before making changes.
+                </p>
+              )}
+              <h3 className="mt-5 text-sm font-semibold">Recent planning week changes</h3>
+              {rosterWeekHistory.error || !rosterWeekEvents ? (
+                <p role="alert" className="mt-2 text-sm text-red-800">We couldn&apos;t load planning week history.</p>
+              ) : rosterWeekEvents.length === 0 ? (
+                <p className="mt-2 text-sm text-muted">No planning week changes yet.</p>
+              ) : (
+                <ul className="mt-2 space-y-2 text-sm">
+                  {rosterWeekEvents.map((event) => (
+                    <li key={event.id} className="break-words">
+                      <time dateTime={event.recorded_at}>{new Date(event.recorded_at).toISOString()}</time>
+                      {" | "}User {event.actor_id}{" | "}
+                      {event.action === "cancelled" ? "Cancelled pending change" : "Scheduled change"}
+                      {": "}{rosterWeekdays[event.previous_weekday - 1]} to {rosterWeekdays[event.weekday - 1]}
+                      {" | "}effective <time dateTime={event.effective_on}>{event.effective_on}</time>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {rosterWeekEvents?.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
+            </section>
+          )}
           {canManageGeofence && selectedVenue && (
             <section aria-label="Roster publication settings" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster publication settings</h2>

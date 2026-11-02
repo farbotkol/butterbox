@@ -620,6 +620,14 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
             Review shift swaps
           </Link>
+          <p className="text-sm text-muted">
+            This editing and publication roster uses Monday–Sunday operational weeks.{" "}
+            <Link href={`/roster/planning?${new URLSearchParams({
+              business: workspace.business.id, venue: workspace.venue.id, date: week,
+            })}`} className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
+              Open venue planning view
+            </Link>
+          </p>
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 sm:justify-start">
           <Link

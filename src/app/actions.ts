@@ -24,6 +24,7 @@ import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
 } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
+import { parseRosterWeekInput } from "@/lib/roster-planning";
 import { parseRosterPublicationMode, rosterReviewFailureCode } from "@/lib/roster-review";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib/shift-offers";
@@ -584,6 +585,53 @@ export async function saveRosterPublicationModeAction(formData: FormData) {
   revalidatePath("/settings/organisation");
   revalidatePath("/roster");
   redirect(`${destination}&saved=roster-mode`);
+}
+
+export async function saveVenueRosterWeekAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const input = parseRosterWeekInput(formData);
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid venue for the roster planning week.");
+    redirect("/settings/organisation?error=roster-week");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the roster planning settings workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  const destination = withBusiness(
+    `/settings/organisation?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id,
+  );
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+  if (!input) {
+    console.error("Invalid roster planning week request.");
+    redirect(`${destination}&error=roster-week`);
+  }
+  const { data, error } = await workspace.supabase.rpc("save_venue_roster_week", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_weekday: input.weekday,
+    p_expected_revision: input.revision,
+    p_expected_pending_id: input.pendingId,
+    p_request_id: input.requestId,
+  });
+  if (error) {
+    console.error("Roster planning week save failed.", { code: error.code, message: error.message });
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Roster week setting changed; refresh before saving" ? "roster-week-stale"
+        : error.message === "Planning transition has started; wait for it to take effect" ? "roster-week-transition"
+        : "roster-week";
+    redirect(`${destination}&error=${code}`);
+  }
+  if (data !== null && !parseBusinessId(data)) {
+    console.error("Roster planning week save returned an invalid receipt.");
+    redirect(`${destination}&error=roster-week`);
+  }
+  revalidatePath("/settings/organisation");
+  revalidatePath("/roster/planning");
+  redirect(`${destination}&saved=${data === null ? "roster-week-unchanged" : "roster-week"}`);
 }
 
 export async function saveDepartmentAction(formData: FormData) {

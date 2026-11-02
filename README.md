@@ -182,6 +182,23 @@ Publication records in-app updates; unlinked employees see them once they accept
 a staff invitation or an owner links their account. Email and push delivery are
 not yet implemented (BB-COMMS-003).
 
+Owners can choose a venue's **Roster planning week** on **Departments**.
+Monday is the default. A new start day takes effect after the current
+venue-local planning week; an intervening transition may contain fewer than
+seven days so every date appears once. A pending change can be replaced or
+cancelled before its transition period begins; once that period starts, wait
+until the new start takes effect before changing it again. Changes and their
+effective dates are recorded in the venue settings history and sensitive-action
+audit.
+
+The read-only **Venue planning view** groups only shifts visible to the signed-in
+user by these prospective periods. It links to each Monday-based operational
+week covered by the view. Editing, copying, approval and publication remain on
+the existing Monday-to-Sunday roster; timesheet and payroll periods and historic
+publication records are not changed. **My schedule** retains its existing
+Monday-based navigation. This planning view does not implement optional
+notification delivery or the remaining business-configuration requirements.
+
 Owners can link an existing business member to an employee profile on
 **People**; the member's venue and department scope must permit that profile.
 Linked active employees
