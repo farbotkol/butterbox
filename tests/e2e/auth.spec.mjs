@@ -559,6 +559,213 @@ test("offline attendance claims survive reconnect failures and stay scoped to th
   }
 });
 
+test("employees and scoped managers complete and reject shift swaps with mobile notifications", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const names = ["owner", "foh", "boh", "ann", "ben", "outside"];
+  const users = {};
+  const contexts = [];
+  const [businessId, outsideId, venueId, outsideVenue, fohId, bohId, annId, benId,
+    annFirst, benFirst, annSecond, benSecond] = Array.from({ length: 12 }, () => randomUUID());
+  const ownerApi = createClient(apiUrl, anonKey, options);
+  const swapPath = `/shift-swaps?business=${businessId}&venue=${venueId}`;
+  const notificationPath = `/notifications?business=${businessId}&venue=${venueId}`;
+
+  try {
+    for (const name of names) {
+      const created = await admin.auth.admin.createUser({
+        email: `swap-ui-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[name] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Swap UI cafe" }, { id: outsideId, name: "Other UI cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Swap venue", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.foh, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users.ann, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.ben, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: annId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.ann, name: "Swap Ann", role_title: "Server" },
+      { id: benId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.ben, name: "Swap Ben", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: annFirst, employee_id: annId, role_title: "First Ann", starts_at: "2032-04-05T09:00:00Z",
+        ends_at: "2032-04-05T13:00:00Z", requires_acknowledgement: true },
+      { id: benFirst, employee_id: benId, role_title: "First Ben", starts_at: "2032-04-05T09:00:00Z",
+        ends_at: "2032-04-05T13:00:00Z", requires_acknowledgement: true },
+      { id: annSecond, employee_id: annId, role_title: "Second Ann", starts_at: "2032-04-06T09:00:00Z",
+        ends_at: "2032-04-06T13:00:00Z", requires_acknowledgement: false },
+      { id: benSecond, employee_id: benId, role_title: "Second Ben", starts_at: "2032-04-06T14:00:00Z",
+        ends_at: "2032-04-06T18:00:00Z", requires_acknowledgement: false },
+    ].map((shift) => ({ ...shift, business_id: businessId, venue_id: venueId, department_id: fohId })))).error).toBeNull();
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `swap-ui-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("publish_roster", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId, p_week_start: "2032-04-05",
+    })).error).toBeNull();
+
+    await signIn(page, `swap-ui-foh-${suffix}@example.test`, password);
+    const annContext = await browser.newContext({ baseURL: appUrl });
+    const benContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(annContext, benContext);
+    const annPage = await annContext.newPage();
+    const benPage = await benContext.newPage();
+    await signIn(annPage, `swap-ui-ann-${suffix}@example.test`, password);
+    await signIn(benPage, `swap-ui-ben-${suffix}@example.test`, password);
+
+    await annPage.goto(`/my-schedule?business=${businessId}&venue=${venueId}&week=2032-04-05`);
+    await annPage.getByRole("link", { name: "Request or review shift swaps" }).click();
+    const requestSection = annPage.getByRole("region", { name: "Request a swap" });
+    const firstRequest = requestSection.locator("details").filter({ hasText: "First Ann" });
+    await firstRequest.locator("summary").click();
+    await firstRequest.getByLabel("Choose a colleague").selectOption(benId);
+    await firstRequest.getByRole("button", { name: "Request swap" }).click();
+    await expect(annPage.getByRole("status")).toContainText("Swap requested");
+    const firstSwap = new URL(annPage.url()).hash.replace("#swap-", "");
+    expect(firstSwap).toMatch(/^[0-9a-f-]{36}$/);
+
+    await page.goto(swapPath);
+    const managerFirst = page.locator(`#swap-${firstSwap}`);
+    await expect(managerFirst).toContainText("Awaiting colleague response");
+    await expect(managerFirst.getByRole("button", { name: "Approve swap" })).toHaveCount(0);
+
+    await benPage.goto(notificationPath);
+    const requestNotice = benPage.getByRole("article", { name: /Shift swap update for Swap Ann and Swap Ben/ })
+      .filter({ hasText: "Swap Ann requested a shift swap with you." });
+    await expect(requestNotice).toContainText("Unread");
+    await requestNotice.getByRole("button", { name: "View shift swap" }).click();
+    const benFirstCard = benPage.locator(`#swap-${firstSwap}`);
+    await expect(benFirstCard).toContainText("Awaiting colleague response");
+    expect(await benPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(benPage, "mobile shift swaps"));
+    await benFirstCard.getByLabel("Choose your shift to exchange").selectOption(benFirst);
+    await benFirstCard.getByRole("button", { name: "Propose and confirm my shift" }).click();
+    await expect(benPage.getByRole("status")).toContainText("Your shift was proposed");
+    await benPage.goto(notificationPath);
+    await expect(requestNotice).toContainText("Read");
+
+    await annPage.goto(notificationPath);
+    const proposalNotice = annPage.getByRole("article", { name: /Shift swap update for Swap Ann and Swap Ben/ })
+      .filter({ hasText: "Swap Ben proposed a shift for your swap." });
+    await proposalNotice.getByRole("button", { name: "View shift swap" }).click();
+    await annPage.locator(`#swap-${firstSwap}`).getByRole("button", { name: "Confirm exchange" }).click();
+    await expect(annPage.getByRole("status")).toContainText("A manager must review it");
+
+    await page.goto(notificationPath);
+    const reviewNotice = page.getByRole("article", { name: /Shift swap update for Swap Ann and Swap Ben/ })
+      .filter({ hasText: "Swap Ann and Swap Ben confirmed a swap for review." });
+    await reviewNotice.getByRole("button", { name: "View shift swap" }).click();
+    await expect(managerFirst).toContainText("Both employees confirmed");
+    const exceptionId = randomUUID();
+    expect((await admin.from("employee_availability_exceptions").insert({
+      id: exceptionId, business_id: businessId, venue_id: venueId, employee_id: benId,
+      starts_on: "2032-04-05", ends_on: "2032-04-05", exception_type: "unavailable", status: "active",
+    })).error).toBeNull();
+    await managerFirst.getByRole("button", { name: "Approve swap" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("no longer eligible");
+    expect((await admin.from("employee_availability_exceptions").delete().eq("id", exceptionId)).error).toBeNull();
+    await managerFirst.getByRole("button", { name: "Approve swap" }).click();
+    await expect(page.getByRole("status")).toContainText("Swap approved");
+    const approvedShifts = await admin.from("shifts").select("id, employee_id").in("id", [annFirst, benFirst]);
+    expect(approvedShifts.error).toBeNull();
+    expect(approvedShifts.data.find((shift) => shift.id === annFirst).employee_id).toBe(benId);
+    expect(approvedShifts.data.find((shift) => shift.id === benFirst).employee_id).toBe(annId);
+
+    for (const worker of [annPage, benPage]) {
+      await worker.goto(notificationPath);
+      const approved = worker.getByRole("article", { name: /Shift swap update for Swap Ann and Swap Ben/ })
+        .filter({ hasText: "Your shift swap was approved." });
+      await expect(approved).toContainText("Unread");
+      await approved.getByRole("button", { name: "View shift swap" }).click();
+      await expect(worker.locator(`#swap-${firstSwap}`)).toContainText("Approved");
+    }
+    await annPage.goto(`/my-schedule?business=${businessId}&venue=${venueId}&week=2032-04-05`);
+    const weekly = annPage.getByRole("region", { name: "Weekly schedule" });
+    await expect(weekly).toContainText("First Ben");
+    await expect(weekly).not.toContainText("First Ann");
+    await weekly.getByRole("button", { name: /Acknowledge First Ben shift/ }).click();
+    await expect(annPage.getByRole("status")).toHaveText("Shift acknowledged.");
+
+    await annPage.goto(swapPath);
+    const secondRequest = annPage.getByRole("region", { name: "Request a swap" })
+      .locator("details").filter({ hasText: "Second Ann" });
+    await secondRequest.locator("summary").click();
+    await secondRequest.getByLabel("Choose a colleague").selectOption(benId);
+    await secondRequest.getByRole("button", { name: "Request swap" }).click();
+    await expect(annPage.getByRole("status")).toContainText("Swap requested");
+    const secondSwap = new URL(annPage.url()).hash.replace("#swap-", "");
+    await benPage.goto(swapPath);
+    const benSecondCard = benPage.locator(`#swap-${secondSwap}`);
+    await benSecondCard.getByLabel("Choose your shift to exchange").selectOption(benSecond);
+    await benSecondCard.getByRole("button", { name: "Propose and confirm my shift" }).click();
+    await expect(benPage.getByRole("status")).toContainText("Your shift was proposed");
+    await annPage.goto(swapPath);
+    await annPage.locator(`#swap-${secondSwap}`).getByRole("button", { name: "Confirm exchange" }).click();
+    await expect(annPage.getByRole("status")).toContainText("A manager must review it");
+
+    const bohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(bohContext);
+    const bohPage = await bohContext.newPage();
+    await signIn(bohPage, `swap-ui-boh-${suffix}@example.test`, password);
+    await bohPage.goto(swapPath);
+    await expect(bohPage.locator(`#swap-${secondSwap}`)).toHaveCount(0);
+    await expect(bohPage.getByRole("button", { name: "Approve swap" })).toHaveCount(0);
+
+    await page.goto(swapPath);
+    const managerSecond = page.locator(`#swap-${secondSwap}`);
+    await managerSecond.getByLabel("Reason for rejection").fill("   ");
+    await managerSecond.getByRole("button", { name: "Reject swap" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("Enter a rejection reason");
+    await managerSecond.getByLabel("Reason for rejection").fill("Coverage required");
+    await managerSecond.getByRole("button", { name: "Reject swap" }).click();
+    await expect(page.getByRole("status")).toContainText("Swap rejected");
+    for (const worker of [annPage, benPage]) {
+      await worker.goto(notificationPath);
+      const rejected = worker.getByRole("article", { name: /Shift swap update for Swap Ann and Swap Ben/ })
+        .filter({ hasText: "Your shift swap was rejected." });
+      await expect(rejected).toContainText("Unread");
+      await rejected.getByRole("button", { name: "View shift swap" }).click();
+      await expect(worker.locator(`#swap-${secondSwap}`)).toContainText("Manager's reason: Coverage required");
+    }
+    const rejectedShifts = await admin.from("shifts").select("id, employee_id").in("id", [annSecond, benSecond]);
+    expect(rejectedShifts.error).toBeNull();
+    expect(rejectedShifts.data.find((shift) => shift.id === annSecond).employee_id).toBe(annId);
+    expect(rejectedShifts.data.find((shift) => shift.id === benSecond).employee_id).toBe(benId);
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `swap-ui-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(swapPath);
+    await expect(outsidePage.getByRole("heading", { name: "Shift swaps unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Swap Ann", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const id of [businessId, outsideId]) {
+      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+    }
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("prepared attendance reopens offline without crossing account or tenant sessions", async ({
   page, context, browser,
 }) => {

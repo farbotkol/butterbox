@@ -1,8 +1,9 @@
 import Link from "next/link";
 
-export function RosterNotificationBanner({ count, venueId }: {
+export function RosterNotificationBanner({ count, venueId, businessId }: {
   count: number | null;
   venueId: string;
+  businessId?: string;
 }) {
   if (count === null) {
     return (
@@ -16,7 +17,9 @@ export function RosterNotificationBanner({ count, venueId }: {
     <section aria-label="Unread work updates"
       className="mt-5 rounded-xl border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ink">
       You have {count} unread work {count === 1 ? "update" : "updates"}.{" "}
-      <Link href={`/notifications?${new URLSearchParams({ venue: venueId })}`}
+      <Link href={`/notifications?${new URLSearchParams({
+        venue: venueId, ...(businessId ? { business: businessId } : {}),
+      })}`}
         className="font-semibold text-ocean underline">
         View notifications
       </Link>

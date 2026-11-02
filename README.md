@@ -525,6 +525,27 @@ against the published snapshot and account, and remain valid when an unchanged
 shift appears in a later version. If a required draft becomes unassigned, it
 must be reassigned or its requirement removed before publishing.
 
+### Shift swaps
+
+From **My schedule**, a linked employee can request an exchange of an upcoming
+published shift with a colleague in the same venue and department. The
+colleague can decline or explicitly agree by proposing one of their own
+upcoming published shifts in that department. The requester must then confirm
+the proposed exchange. Shifts longer than 24 hours cannot be swapped.
+
+An authorised department manager reviews the confirmed exchange on **Shift
+swaps** and can approve it or reject it with a reason. Approval rechecks both
+employees' qualifications, availability and overlapping shifts, including
+explicitly linked profiles at other venues. Until approval, neither assignment
+changes. Approval records a new publication snapshot and resets any required
+acknowledgement for the incoming assignee; previous acknowledgements remain in
+the history. If a shift changes or starts before approval, request a new swap.
+
+The recipient, requester and scoped managers receive relevant in-app updates
+in **Notifications**; the two employees receive the approval or rejection
+outcome. Updates can be marked read or opened directly. Email and push delivery
+are not yet available.
+
 ```sh
 npm run dev
 npm test

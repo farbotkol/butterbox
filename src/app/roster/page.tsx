@@ -566,6 +566,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           <p className="mt-2 text-muted">
             Build a balanced week for your FOH and BOH teams.
           </p>
+          <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+            Review shift swaps
+          </Link>
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 sm:justify-start">
           <Link

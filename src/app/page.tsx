@@ -210,7 +210,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
       </section>
 
-      <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} />
+      <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} businessId={workspace.business.id} />
       {onboarding && (onboardingProgress
         ? <OnboardingChecklist progress={onboardingProgress} venueId={workspace.venue.id} />
         : <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">

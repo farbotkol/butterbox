@@ -25,6 +25,7 @@ import {
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib/shift-offers";
+import { isSwapUuid, swapFailureCode } from "@/lib/shift-swaps";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
 import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage } from "@/lib/payroll-periods";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
@@ -2358,4 +2359,183 @@ export async function respondShiftOfferAction(formData: FormData) {
   revalidatePath("/my-schedule");
   revalidatePath("/roster");
   redirect(`${destination}&offer=${response === "accept" ? "accepted" : "declined"}#shift-offers`);
+}
+
+async function swapActionWorkspace(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  if (!venueIds || venueIds.length !== 1) {
+    console.error("Invalid shift swap venue.");
+    redirect("/shift-swaps?error=invalid");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the shift swap workspace.", { message: workspace.message });
+    redirect("/shift-swaps?error=permission");
+  }
+  const destination = `/shift-swaps?${new URLSearchParams({
+    business: workspace.business.id, venue: workspace.venue.id,
+  })}`;
+  return { workspace, destination };
+}
+
+function revalidateSwapPaths() {
+  revalidatePath("/shift-swaps");
+  revalidatePath("/my-schedule");
+  revalidatePath("/roster");
+  revalidatePath("/notifications");
+  revalidatePath("/");
+}
+
+export async function submitShiftSwapAction(formData: FormData) {
+  const { workspace, destination } = await swapActionWorkspace(formData);
+  const operation = formData.get("operation");
+  if (typeof operation !== "string" || ![
+    "request", "propose", "decline-request", "confirm", "decline-proposal", "withdraw", "approve", "reject",
+  ].includes(operation)) {
+    console.error("Invalid shift swap operation.");
+    redirect(`${destination}&error=invalid`);
+  }
+
+  if (operation === "request") {
+    const shiftIds = uuidList(formData, "shift_id", 1);
+    const employeeIds = uuidList(formData, "employee_id", 1);
+    if (!shiftIds || shiftIds.length !== 1 || !employeeIds || employeeIds.length !== 1) {
+      console.error("Invalid shift swap request selection.");
+      redirect(`${destination}&error=selection#request-swap`);
+    }
+    const { data, error } = await workspace.supabase.rpc("request_shift_swap", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+      p_shift_id: shiftIds[0], p_recipient_employee_id: employeeIds[0],
+    });
+    if (error || !isSwapUuid(data)) {
+      console.error("Could not request the shift swap.", {
+        code: error?.code, message: error?.message ?? "The server returned an invalid swap identifier.",
+      });
+      redirect(`${destination}&error=${error ? swapFailureCode(error.message) : "unknown"}#request-swap`);
+    }
+    revalidateSwapPaths();
+    redirect(`${destination}&saved=requested#swap-${data}`);
+  }
+
+  const swapIds = uuidList(formData, "swap_id", 1);
+  if (!swapIds || swapIds.length !== 1) {
+    console.error("Invalid shift swap identifier.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const swapId = swapIds[0];
+  const { data: visibleSwap, error: lookupError } = await workspace.supabase.rpc("list_shift_swaps", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+  }).eq("swap_id", swapId).maybeSingle();
+  if (lookupError || !visibleSwap) {
+    console.error("Could not find the shift swap in the selected workspace.", {
+      code: lookupError?.code, message: lookupError?.message ?? "Swap unavailable in this workspace.",
+    });
+    redirect(`${destination}&error=permission#swap-${swapId}`);
+  }
+
+  let result: { data: unknown; error: { code?: string; message: string } | null };
+  switch (operation) {
+    case "propose": {
+      const shiftIds = uuidList(formData, "shift_id", 1);
+      if (!shiftIds || shiftIds.length !== 1) {
+        console.error("Invalid reciprocal shift selection.");
+        redirect(`${destination}&error=selection#swap-${swapId}`);
+      }
+      result = await workspace.supabase.rpc("respond_shift_swap", {
+        p_swap_id: swapId, p_response: "propose", p_recipient_shift_id: shiftIds[0],
+      });
+      break;
+    }
+    case "decline-request":
+      result = await workspace.supabase.rpc("respond_shift_swap", {
+        p_swap_id: swapId, p_response: "decline", p_recipient_shift_id: null,
+      });
+      break;
+    case "confirm":
+    case "decline-proposal":
+      result = await workspace.supabase.rpc("confirm_shift_swap", {
+        p_swap_id: swapId, p_response: operation === "confirm" ? "confirm" : "decline",
+      });
+      break;
+    case "withdraw":
+      result = await workspace.supabase.rpc("withdraw_shift_swap", { p_swap_id: swapId });
+      break;
+    case "approve":
+    case "reject": {
+      const reasons = formData.getAll("reason");
+      const reason = reasons.length === 1 && typeof reasons[0] === "string" ? reasons[0].trim() : "";
+      if (operation === "reject" && (reason.length < 1 || reason.length > 500)) {
+        console.error("Invalid shift swap rejection reason.");
+        redirect(`${destination}&error=reason#swap-${swapId}`);
+      }
+      result = await workspace.supabase.rpc("review_shift_swap", {
+        p_swap_id: swapId, p_decision: operation, p_reason: operation === "reject" ? reason : null,
+      });
+      break;
+    }
+    default:
+      console.error("Unsupported shift swap operation.");
+      redirect(`${destination}&error=invalid`);
+  }
+  if (result.error) {
+    console.error("Could not update the shift swap.", {
+      code: result.error.code, message: result.error.message,
+    });
+    redirect(`${destination}&error=${swapFailureCode(result.error.message)}#swap-${swapId}`);
+  }
+  revalidateSwapPaths();
+  const saved = operation === "decline-request" || operation === "decline-proposal" ? "declined"
+    : operation === "propose" ? "proposed" : operation === "confirm" ? "confirmed"
+      : operation === "approve" ? "approved" : operation === "reject" ? "rejected" : "withdrawn";
+  redirect(`${destination}&saved=${saved}#swap-${swapId}`);
+}
+
+export async function markShiftSwapNotificationReadAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const notificationIds = uuidList(formData, "notification_id", 1);
+  const operation = formData.get("operation");
+  if (!venueIds || venueIds.length !== 1 || !notificationIds || notificationIds.length !== 1 ||
+    (operation !== "read" && operation !== "open")) {
+    console.error("Invalid shift swap notification request.");
+    redirect("/notifications?error=read");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the shift swap notification workspace.", { message: workspace.message });
+    redirect("/notifications?error=read");
+  }
+  const destination = `/notifications?${new URLSearchParams({
+    business: workspace.business.id, venue: workspace.venue.id,
+  })}`;
+  const { data: visibleNotice, error: lookupError } = await workspace.supabase.rpc("list_shift_swap_notifications", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+  }).eq("notification_id", notificationIds[0]).maybeSingle();
+  if (lookupError || !visibleNotice) {
+    console.error("Could not find the swap notification in the selected workspace.", {
+      code: lookupError?.code, message: lookupError?.message ?? "Notification unavailable in this workspace.",
+    });
+    redirect(`${destination}&error=read`);
+  }
+  const { data, error } = await workspace.supabase.rpc("mark_shift_swap_notification_read", {
+    p_notification_id: notificationIds[0],
+  });
+  const result = Array.isArray(data) && data.length === 1 ? data[0] : null;
+  if (error || !result || result.business_id !== workspace.business.id ||
+    result.venue_id !== workspace.venue.id || !isSwapUuid(result.swap_id)) {
+    console.error("Could not mark the shift swap notification read.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid notification target.",
+    });
+    redirect(`${destination}&error=read`);
+  }
+  revalidateSwapPaths();
+  if (operation === "open") {
+    redirect(`/shift-swaps?${new URLSearchParams({
+      business: workspace.business.id, venue: workspace.venue.id,
+    })}#swap-${result.swap_id}`);
+  }
+  redirect(`${destination}&saved=read`);
 }

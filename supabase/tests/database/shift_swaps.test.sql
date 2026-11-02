@@ -85,6 +85,10 @@ select extensions.isnt(set_config('test.swap', public.request_shift_swap(
   'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001',
   'f5800000-0000-4000-8000-000000000001', 'e5800000-0000-4000-8000-000000000002')::text, true),
   null, 'the requester proposes a swap');
+select extensions.is(
+  (select count(*)::integer from public.list_my_pending_swap_recipients(
+    'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')),
+  0, 'a requester cannot discover the recipient profile through the response picker');
 select extensions.throws_ok(
   $$select public.request_shift_swap('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'f5800000-0000-4000-8000-000000000001', 'e5800000-0000-4000-8000-000000000002')$$,
   'P0001', 'There is already an open swap for this shift', 'duplicate active requests are rejected');
@@ -102,6 +106,9 @@ select extensions.throws_ok(
   $$select * from public.list_shift_swaps('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')$$,
   'P0001', 'Permission denied', 'another tenant cannot list swaps');
 select extensions.throws_ok(
+  $$select * from public.list_my_pending_swap_recipients('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')$$,
+  'P0001', 'Permission denied', 'another tenant cannot list swap response profiles');
+select extensions.throws_ok(
   $$select public.review_shift_swap(current_setting('test.swap')::uuid, 'approve', null)$$,
   'P0001', 'Swap not found or permission denied', 'another tenant cannot approve a swap');
 reset role;
@@ -111,6 +118,10 @@ set local role authenticated;
 select extensions.is(
   (select count(*)::integer from public.list_shift_swaps('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')),
   0, 'a BOH manager cannot list FOH swaps');
+select extensions.is(
+  (select count(*)::integer from public.list_my_pending_swap_recipients(
+    'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')),
+  0, 'a manager cannot list another employee response profile');
 select extensions.throws_ok(
   $$select public.review_shift_swap(current_setting('test.swap')::uuid, 'approve', null)$$,
   'P0001', 'Swap not found or permission denied', 'a BOH manager cannot review FOH swaps');
@@ -125,6 +136,11 @@ reset role;
 
 select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000005', true);
 set local role authenticated;
+select extensions.results_eq(
+  $$select swap_id, employee_id from public.list_my_pending_swap_recipients(
+    'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')$$,
+  $$select current_setting('test.swap')::uuid, 'e5800000-0000-4000-8000-000000000002'::uuid$$,
+  'the recipient can match a request to their exact profile');
 select extensions.is(
   (select count(*)::integer from public.list_shift_swap_notifications('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')
     where swap_id = current_setting('test.swap')::uuid and event_type = 'requested' and unread),
@@ -144,6 +160,10 @@ select extensions.throws_ok(
 select extensions.lives_ok(
   $$select public.respond_shift_swap(current_setting('test.swap')::uuid, 'propose', 'f5800000-0000-4000-8000-000000000002')$$,
   'the recipient proposes their own overlapping shift as the outgoing shift');
+select extensions.is(
+  (select count(*)::integer from public.list_my_pending_swap_recipients(
+    'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001')),
+  0, 'a response profile is no longer returned after the recipient proposes');
 select extensions.lives_ok(
   $$select public.acknowledge_shift('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'f5800000-0000-4000-8000-000000000002')$$,
   'the recipient can acknowledge their original shift');
@@ -335,6 +355,72 @@ set local role authenticated;
 select extensions.lives_ok(
   $$select public.withdraw_shift_swap(current_setting('test.stale')::uuid)$$,
   'the requester can withdraw a stale request');
+reset role;
+
+insert into public.shifts (
+  id, business_id, venue_id, department_id, employee_id, role_title, starts_at, ends_at,
+  is_published, requires_acknowledgement
+) values
+  ('f5800000-0000-4000-8000-000000000008', 'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'd5800000-0000-4000-8000-000000000001', 'e5800000-0000-4000-8000-000000000001', 'Barista', '2032-04-12 09:00+00', '2032-04-12 13:00+00', false, true),
+  ('f5800000-0000-4000-8000-000000000009', 'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'd5800000-0000-4000-8000-000000000001', 'e5800000-0000-4000-8000-000000000002', 'Barista', '2032-04-19 09:00+00', '2032-04-19 13:00+00', false, true);
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000001', true);
+update public.shifts set is_published = true
+where id in ('f5800000-0000-4000-8000-000000000008', 'f5800000-0000-4000-8000-000000000009');
+
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.isnt(set_config('test.cross_week', public.request_shift_swap(
+  'b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001',
+  'f5800000-0000-4000-8000-000000000008', 'e5800000-0000-4000-8000-000000000002')::text, true),
+  null, 'a swap may be requested between different roster weeks');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000005', true);
+set local role authenticated;
+select extensions.lives_ok(
+  $$select public.respond_shift_swap(current_setting('test.cross_week')::uuid, 'propose', 'f5800000-0000-4000-8000-000000000009')$$,
+  'the recipient can propose a shift in a different roster week');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.lives_ok(
+  $$select public.confirm_shift_swap(current_setting('test.cross_week')::uuid, 'confirm')$$,
+  'the requester confirms the cross-week proposal');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000002', true);
+set local role authenticated;
+select extensions.lives_ok(
+  $$select public.review_shift_swap(current_setting('test.cross_week')::uuid, 'approve', null)$$,
+  'a scoped manager can approve the cross-week exchange');
+reset role;
+select extensions.results_eq(
+  $$select p.week_start, ps.employee_id
+    from public.roster_publications p
+    join public.roster_publication_shifts ps on ps.publication_id = p.id
+    where p.publication_kind = 'swap'
+      and ps.shift_id in ('f5800000-0000-4000-8000-000000000008', 'f5800000-0000-4000-8000-000000000009')
+    order by p.week_start$$,
+  $$values ('2032-04-12'::date, 'e5800000-0000-4000-8000-000000000002'::uuid),
+    ('2032-04-19'::date, 'e5800000-0000-4000-8000-000000000001'::uuid)$$,
+  'the cross-week exchange publishes the new assignments in both weeks');
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000005', true);
+set local role authenticated;
+select extensions.is(
+  (select acknowledged_at from public.list_shift_acknowledgements('b5800000-0000-4000-8000-000000000001',
+    'c5800000-0000-4000-8000-000000000001', array['f5800000-0000-4000-8000-000000000008']::uuid[])),
+  null, 'the incoming assignee must acknowledge the first week');
+select extensions.lives_ok(
+  $$select public.acknowledge_shift('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'f5800000-0000-4000-8000-000000000008')$$,
+  'the incoming assignee can acknowledge the first week');
+reset role;
+select set_config('request.jwt.claim.sub', 'a5800000-0000-4000-8000-000000000004', true);
+set local role authenticated;
+select extensions.is(
+  (select acknowledged_at from public.list_shift_acknowledgements('b5800000-0000-4000-8000-000000000001',
+    'c5800000-0000-4000-8000-000000000001', array['f5800000-0000-4000-8000-000000000009']::uuid[])),
+  null, 'the incoming assignee must acknowledge the second week');
+select extensions.lives_ok(
+  $$select public.acknowledge_shift('b5800000-0000-4000-8000-000000000001', 'c5800000-0000-4000-8000-000000000001', 'f5800000-0000-4000-8000-000000000009')$$,
+  'the incoming assignee can acknowledge the second week');
 reset role;
 
 select * from extensions.finish();

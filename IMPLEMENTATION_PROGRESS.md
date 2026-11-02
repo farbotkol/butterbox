@@ -3,8 +3,17 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **44**. In Progress: **1**.
+  BB-PAYRULES stories). Verified Done: **45**. In Progress: **0**.
   Blocked: **4**. Not started (Backlog): **60**.
+- BB-SHIFTS-004 (shift swaps) is Done. Both employees consent, scoped managers
+  review, and approval rechecks eligibility and conflicts before recording
+  new publication snapshots and in-app outcomes. The affected pgTAP files
+  passed 354 assertions in total (67 swap and 287 neighbouring assertions);
+  the 67 swap assertions also passed on a separate fresh-replay project.
+  The race/tenant integration, 14 unit tests and five targeted production
+  browser scenarios passed, as did changed-file lint, TypeScript and the
+  production build. Full suites were intentionally deferred. The feature
+  checkpoint and remote verification are pending.
 - BB-SHIFTS-001/002/003 (open-shift offers, responses and transactional
   confirmation) are Done under the targeted testing policy: 78 open-offer
   pgTAP assertions plus five neighbouring rostering suites, one lock-gated
@@ -68,7 +77,9 @@
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-008, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
-  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002, BB-PAY-003 and BB-SAAS-004.
+  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002, BB-PAY-003,
+  BB-SHIFTS-001, BB-SHIFTS-002, BB-SHIFTS-003, BB-SHIFTS-004, BB-COMMS-002
+  and BB-SAAS-004.
 - BB-ORG-005's remaining approval/export attribution criterion is now verified,
   without recreating the existing venue workflow. The authenticated integration
   finalises and exports Sydney and Perth separately for linked worker profiles;
@@ -365,45 +376,66 @@
   relying on an unchanged success message. No assertions were removed.
   The runner stopped its temporary app servers; production was not modified.
 
+## BB-SHIFTS-004 — Acceptance evidence
+
+| Criterion | Implementation evidence | Runtime verification and actual result | Status |
+| --- | --- | --- | --- |
+| 004.1 Both sides confirm | A recipient explicitly proposes their own shift; the requester confirms that exact proposal before review. Requests are account-linked and employees cannot act as one another. | `shift_swaps.test.sql` **67/67** on acceptance and fresh-replay projects; authenticated race/tenant integration **1/1**; focused desktop/mobile production-browser scenario **1/1**. | Pass |
+| 004.2 Eligibility and overlaps are rechecked at approval | Scoped approval locks relevant shifts and workers and rechecks roles, availability, linked-venue overlaps, current assignments and consent. The two exchanged shifts are excluded only from each other's overlap checks. | Swap pgTAP **67/67**, including invalid/stale, cross-tenant and department denials; race integration **1/1**, including simultaneous approvals and linked-worker scheduling races in both directions; focused browser **1/1**, including changed availability. | Pass |
+| 004.3 Manager can reject with a reason | The scoped manager review RPC requires a nonblank reason for rejection, records the actor and reason, and leaves assignments unchanged. | Swap pgTAP **67/67**, including missing reason, retained decision, unchanged assignments and manager-scope denial; focused browser **1/1**. | Pass |
+| 004.4 Notifications are sent | In-app notifications are account-scoped, deduplicated and link to the request; both employees receive approval or rejection outcomes. | Swap pgTAP **67/67**, including both-recipient approval/rejection assertions; focused browser **1/1** verified both employees' read states and deep links. | Pass |
+
+- **Additional publication and acknowledgement evidence:** the swap pgTAP
+  suite verifies new assignee acknowledgements, including a shift returned to
+  its previous employee and an exchange across two roster weeks. The focused
+  browser verifies reassignment and a new acknowledgement. Neighbouring
+  pgTAP files passed **287/287** assertions: acknowledgements 59, publication
+  versions 47, publication notifications 77, open offers 78 and shared-worker
+  conflicts 26. Four neighbouring serialized production-browser scenarios
+  passed: publication notifications, acknowledgements, open-shift offers and
+  core accessibility.
+- **Other selected checks and results:** Four relevant Node files passed
+  **14/14**. The authenticated race integration passed **1/1**. Changed-file
+  ESLint, TypeScript, `git diff --check` and the split production
+  compile/generate passed. The suite ran against the identified disposable
+  `butterbox-acceptance` project (DB port 55422); the swap migrations and
+  expanded swap suite also passed on `butterbox-fresh-migration-check`
+  (DB port 56422). The fresh-replay project's older Auth schema prevented its
+  notification fixture from starting; that neighbouring suite passed on the
+  acceptance project.
+- **Resolved test failures:** An initial approval-lock failure was fixed with
+  the forward migration. A browser fixture missing a required field and an
+  alert locator that also matched the route announcer were corrected without
+  removing assertions. The tracked ESLint cache was restored unchanged and a
+  session-local cache was used thereafter.
+- **Files:** `supabase/migrations/20261103060000_shift_swap_approval_locks.sql`,
+  `supabase/tests/database/shift_swaps.test.sql`, the `shift-swaps` page and
+  helper, server actions, schedule/roster/notification pages and banner,
+  swap unit and concurrency tests, the targeted browser scenario, integration
+  runner, and `README.md`. The earlier
+  `20261103050000_shift_swap_requests.sql` migration remains intact.
+- **Deferred and risks:** Full pgTAP, Node, authenticated integration and
+  browser suites were not run for this story. Broader regression remains
+  necessary when merging workstreams or preparing a release. Existing
+  open-shift offers do not gain retroactive notifications. Email/push delivery
+  remains BB-COMMS-003; no external delivery is claimed.
+
 ## Current story
 
-- **BB-SHIFTS-004 — Request shift swap** remains In Progress. Recovery on
-  2026-11-02 found the swap migration and 341-line pgTAP test committed and
-  pushed in `9ec5e6f033e8e95e1d17624beb7c7f5d38321604`, with a clean
-  worktree and the same fetched remote SHA. The identified isolated
-  `butterbox-acceptance` database has the migration applied. The first
-  acceptance run reached **23 passing and 10 failing assertions** before a
-  later SQL error aborted the suite: approval calls nonexistent
-  `public.lock_shared_worker_links(uuid)` and downstream approval, assignment,
-  publication and acknowledgement assertions fail. A new uncommitted
-  forward-only migration now follows the existing shared-worker and employee
-  lock order. With that replacement applied only inside a rolled-back
-  transaction, the expanded swap pgTAP file passed **58/58**, including
-  response-profile authorisation. The correction was then applied with the
-  Supabase CLI to the verified disposable acceptance project only. The swap,
-  acknowledgement, publication-version, publication-notification, open-offer
-  and shared-worker pgTAP files passed **345/345 assertions**. The targeted
-  authenticated integration passed **1/1**, covering cross-tenant/BOH denial,
-  concurrent manager approvals and both directions of linked-venue scheduling
-  races. Employee and manager interfaces, selected-business notification
-  links and validated response parsing are implemented but uncommitted and not
-  browser-tested. Four targeted Node test files passed **14/14**, changed-file
-  ESLint and TypeScript passed. The tracked lint cache removed by ESLint was
-  restored to its unchanged original state. The split production build passed.
-  The focused mobile/desktop production-browser scenario now passed **1/1**,
-  exercising both confirmations, manager review, changed availability,
-  rejection reason, both employees' notifications, acknowledgement, tenant and
-  department isolation, and mobile WCAG checks. Earlier browser attempts
-  exposed a missing fixture field and an alert locator that also matched the
-  Next.js route announcer; both were corrected without removing assertions.
-  Next: run affected neighbouring browser regressions and record each criterion
-  before committing. Full suites were intentionally deferred. The story is not
-  yet marked Done.
+- **BB-SHIFTS-004 — Request shift swap** is Done, subject to the feature
+  checkpoint and push below. The recovered migration and initial test had
+  already been pushed as `9ec5e6f033e8e95e1d17624beb7c7f5d38321604`.
+  The first isolated run had 23 passing and 10 failing assertions before an
+  SQL error: approval called nonexistent or incorrectly signed locking
+  helpers. A forward-only migration corrected the shared-worker and employee
+  lock order; the original migration was preserved. Employee and manager UI,
+  account-scoped notifications, publication/acknowledgement handling and
+  tests are now implemented and verified as detailed below.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
   notifications. The targeted checks passed; see the criterion evidence below.
   Commit `47bfab03a81bbea5ab9dedd732f77ab0c3bc6a4f` was pushed and its remote
-  SHA matched. Next: **BB-SHIFTS-004 — Request shift swap** (now In Progress).
+  SHA matched.
 - **BB-SHIFTS-001/002/003 — Open-shift offers** are Done (evidence below).
   The offer workflow is the source for BB-COMMS-002's offer and claim-outcome
   notifications.
@@ -1663,10 +1695,11 @@ not yet run remotely.
 
 ## Next story
 
-- Next: implement **BB-SHIFTS-004 — Request shift swap**. Reuse the shared
-  shift eligibility/conflict helpers and add both employee confirmations,
-  manager rejection with a reason, and scoped notifications before marking any
-  acceptance criterion Done.
+- After committing and pushing BB-SHIFTS-004, start **BB-RULES-001 — Employment
+  rule metadata**. Its P0 criteria require maintainable employment basis and
+  award/contract references, explicit unknown classifications, and
+  effective-dated changes. It is a core prerequisite for the separate Award
+  Central workstream; do not modify that branch or imply payroll compliance.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the

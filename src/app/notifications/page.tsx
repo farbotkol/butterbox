@@ -3,9 +3,11 @@ import { redirect } from "next/navigation";
 import {
   markRosterNotificationReadAction,
   markShiftOfferNotificationReadAction,
+  markShiftSwapNotificationReadAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { readAllPages } from "@/lib/paginated-rows";
+import { parseSwapNotifications, swapNotificationMessage, type SwapNotification } from "@/lib/shift-swaps";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { addDays, formatDay, getWorkspace } from "@/lib/workspace";
 
@@ -32,7 +34,8 @@ type OfferNotice = {
   unread: boolean;
 };
 
-type Notice = RosterNotice | OfferNotice;
+type SwapNotice = SwapNotification & { kind: "swap" };
+type Notice = RosterNotice | OfferNotice | SwapNotice;
 
 const offerOutcomeMessages: Record<NonNullable<OfferNotice["outcome"]>, string> = {
   confirmed: "Your shift claim was approved.",
@@ -66,7 +69,7 @@ export default async function NotificationsPage({
     );
   }
 
-  const [venueResult, rosterNotifications, offerNotifications] = await Promise.all([
+  const [venueResult, rosterNotifications, offerNotifications, swapNotifications] = await Promise.all([
     workspace.supabase.from("venues").select("id, name")
       .eq("business_id", workspace.business.id).order("created_at"),
     readAllPages<Omit<RosterNotice, "kind">>((from, to) => workspace.supabase.rpc("list_roster_notifications", {
@@ -81,17 +84,25 @@ export default async function NotificationsPage({
     }, { count: "exact" }).order("created_at", { ascending: false })
       .order("notification_id", { ascending: false }).range(from, to),
     (notice) => notice.notification_id),
+    readAllPages<SwapNotification>((from, to) => workspace.supabase.rpc("list_shift_swap_notifications", {
+      p_business_id: workspace.business.id,
+      p_venue_id: workspace.venue.id,
+    }, { count: "exact" }).order("created_at", { ascending: false })
+      .order("notification_id", { ascending: false }).range(from, to),
+    (notice) => notice?.notification_id),
   ]);
-  const loadError = venueResult.error || rosterNotifications.error || offerNotifications.error;
-  if (loadError) {
+  const swapNotices = parseSwapNotifications(swapNotifications.data);
+  const loadError = venueResult.error || rosterNotifications.error || offerNotifications.error || swapNotifications.error;
+  if (loadError || !swapNotices) {
     console.error("Could not load notifications.", {
-      code: loadError.code,
-      message: loadError.message,
+      code: loadError?.code,
+      message: loadError?.message ?? "The server returned invalid shift swap notifications.",
     });
   }
   const notifications: Notice[] = [
     ...(rosterNotifications.data ?? []).map((notice) => ({ ...notice, kind: "roster" as const })),
     ...(offerNotifications.data ?? []).map((notice) => ({ ...notice, kind: "offer" as const })),
+    ...(swapNotices ?? []).map((notice) => ({ ...notice, kind: "swap" as const })),
   ].sort((a, b) => {
     const first = a.kind === "roster" ? a.published_at : a.created_at;
     const second = b.kind === "roster" ? b.published_at : b.created_at;
@@ -133,13 +144,13 @@ export default async function NotificationsPage({
           Notification marked as read.
         </p>
       )}
-      {loadError ? (
+      {loadError || !swapNotices ? (
         <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your notifications. Check your connection and try again.
         </p>
       ) : notifications.length === 0 ? (
         <p className="mt-5 rounded-xl border border-line bg-white p-5 text-sm text-muted">
-          No work updates yet. New roster changes and shift offers will appear here.
+          No work updates yet. New roster changes, shift offers and swap requests will appear here.
         </p>
       ) : (
         <ol className="mt-5 space-y-3">
@@ -147,21 +158,24 @@ export default async function NotificationsPage({
             <li key={`${notice.kind}-${notice.kind === "roster" ? notice.publication_id : notice.notification_id}`}>
               <article aria-label={notice.kind === "roster"
                 ? `Roster update for week starting ${notice.week_start}`
-                : `${notice.event_type === "offer" ? "Shift offer" : "Shift offer outcome"} for ${notice.role_title}`}
+                : notice.kind === "offer"
+                  ? `${notice.event_type === "offer" ? "Shift offer" : "Shift offer outcome"} for ${notice.role_title}`
+                  : `Shift swap update for ${notice.requester_name} and ${notice.recipient_name}`}
                 className="rounded-xl border border-line bg-white p-5">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h2 className="font-semibold">
                       {notice.kind === "roster" ? "Your roster was updated"
-                        : notice.event_type === "offer" ? "A shift was offered to you"
-                          : offerOutcomeMessages[notice.outcome ?? "closed"]}
+                        : notice.kind === "swap" ? swapNotificationMessage(notice)
+                          : notice.event_type === "offer" ? "A shift was offered to you"
+                            : offerOutcomeMessages[notice.outcome ?? "closed"]}
                     </h2>
                     {notice.kind === "roster" ? (
                       <p className="mt-1 text-sm text-muted">
                         {formatDay(notice.week_start)} – {formatDay(addDays(notice.week_start, 6))}
                         {" · "}{notice.week_start.slice(0, 4)}
                       </p>
-                    ) : (
+                    ) : notice.kind === "offer" ? (
                       <p className="mt-1 text-sm text-muted">
                         {notice.role_title} · {notice.department_name} ·{" "}
                         {new Intl.DateTimeFormat("en-AU", {
@@ -169,6 +183,8 @@ export default async function NotificationsPage({
                           hour: "numeric", minute: "2-digit",
                         }).format(new Date(notice.starts_at))}
                       </p>
+                    ) : (
+                      <p className="mt-1 text-sm text-muted">{notice.requester_name} · {notice.recipient_name}</p>
                     )}
                     <p className="mt-1 text-xs text-muted">
                       {notice.kind === "roster" ? "Published" : "Received"} {new Intl.DateTimeFormat("en-AU", {
@@ -198,7 +214,7 @@ export default async function NotificationsPage({
                       </button>
                     )}
                   </form>
-                ) : (
+                ) : notice.kind === "offer" ? (
                   <form action={markShiftOfferNotificationReadAction} className="mt-4 flex flex-wrap gap-2">
                     <input type="hidden" name="notification_id" value={notice.notification_id} />
                     <input type="hidden" name="business_id" value={workspace.business.id} />
@@ -210,6 +226,22 @@ export default async function NotificationsPage({
                     {notice.unread && (
                       <button type="submit" name="operation" value="read"
                         className="rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ocean">
+                        Mark as read
+                      </button>
+                    )}
+                  </form>
+                ) : (
+                  <form action={markShiftSwapNotificationReadAction} className="mt-4 flex flex-wrap gap-2">
+                    <input type="hidden" name="notification_id" value={notice.notification_id} />
+                    <input type="hidden" name="business_id" value={workspace.business.id} />
+                    <input type="hidden" name="venue_id" value={workspace.venue.id} />
+                    <button type="submit" name="operation" value="open"
+                      className="min-h-11 rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
+                      View shift swap
+                    </button>
+                    {notice.unread && (
+                      <button type="submit" name="operation" value="read"
+                        className="min-h-11 rounded-lg border border-line px-4 py-2 text-sm font-semibold text-ocean">
                         Mark as read
                       </button>
                     )}
