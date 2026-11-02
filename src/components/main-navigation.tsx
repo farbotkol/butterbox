@@ -9,6 +9,7 @@ const links = [
   { href: "/my-schedule", label: "My schedule", icon: CalendarCheck },
   { href: "/attendance", label: "Clock in / out", icon: Timer },
   { href: "/notifications", label: "Notifications", icon: Bell },
+  { href: "/announcements", label: "Announcements", icon: Bell },
   { href: "/roster", label: "Rostering", icon: CalendarDays },
   { href: "/availability", label: "Availability", icon: Clock },
   { href: "/help", label: "Help", icon: CircleHelp },

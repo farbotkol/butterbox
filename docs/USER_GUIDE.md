@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.1 — reviewed 2026-11-02 (Core Roadmap).
+**Guide version:** 1.2 — reviewed 2026-11-02 (Core Roadmap).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -563,6 +563,63 @@ Use **Previous audit page**/**Next audit page** when available. UTC audit-date
 filters differ from venue-local timesheet weeks. A failed/incomplete load is
 not proof that no activity occurred.
 
+## Announcements
+
+Open **Announcements** (`/announcements`) in **Main navigation**.
+**Help with announcements** opens this task in the Help Center.
+Notices are in-app only: no email, push or external delivery is sent.
+Publication does not alter rosters, cancel shifts or create legal consent.
+
+### Publish and track — managers
+
+1. In **New announcement**, enter **Title** (up to 120 characters) and
+   **Message** (up to 4000). Messages render as plain text, not HTML.
+2. Choose **Audience** and **Department**. Owners/admins may publish to the
+   whole business or current venue; general managers retain their existing
+   business/venue scope. Department managers may publish only to their
+   permitted department. For business/venue notices, choose **No department**;
+   for department notices, choose an active permitted department.
+   A URL or changed form option cannot grant broader permissions.
+3. Choose **Acknowledgement**: **Information only** or **Require explicit
+   acknowledgement**. Check the publication confirmation, then
+   **Publish announcement**. Only active staff linked to current accounts with
+   audience access are recorded as recipients. Unlinked/inactive staff are
+   omitted; an empty audience fails without publishing.
+4. Check **Published announcements** for the actual recorded recipient and
+   acknowledged/pending counts. **View receipts for [title]** opens
+   **Recipient receipts**, with frozen recipient names and acknowledgement
+   timestamps. Managers cannot inspect notices or receipts outside their
+   current authorized publication scope. Owners can filter **Audit history**
+   by **Announcement publications** or **Announcement recipients and
+   acknowledgements** for attributable database changes.
+5. Published content and recipient snapshots cannot be edited or withdrawn.
+   New staff are not added later. If a correction is needed, publish a clearly
+   identified follow-up; do not assume the original was removed.
+
+Publication validates inputs and permission on the server. Failed submissions
+keep the form content visible. For an uncertain result, inspect published
+history before retrying the same request or refreshing to create a new one.
+An identical retry is idempotent; changing an already-used request is rejected.
+These are operational notices, not a guaranteed-delivery or read-receipt service.
+
+### Read and acknowledge — linked staff
+
+**My announcements** lists notices recorded for your staff account within your
+current business/department access. **Notifications** shows up to five recent
+announcement previews for the selected venue; **View announcement history**
+opens the full currently permitted history.
+
+- Information-only notices need no action.
+- A required notice has a read-confirmation checkbox and **Acknowledge notice**.
+  Check it and submit explicitly. The acknowledgement timestamp is retained,
+  including after an identical retry. Opening the page alone does not acknowledge.
+- Staff cannot publish, inspect other recipients or acknowledge on another
+  person's behalf. Archiving an employee does not itself erase authorized
+  history; revocation, account reassignment and current scope still affect access.
+- If history/receipts cannot be verified, the screen shows an explicit error,
+  not evidence that nobody received or acknowledged a notice. Refresh and ask
+  your owner to check the linked account and permission scope.
+
 ## For employees
 
 1. Accept your invitation, verify your account and sign in.
@@ -570,11 +627,12 @@ not proof that no activity occurred.
 3. Set weekly availability and enter date-specific unavailability or leave requests. Track status rather than assuming a request was approved.
 4. Respond to open-shift offers or propose shift swaps if your business uses those workflows.
 5. Clock in/out, record breaks, review personal attendance history and request corrections where needed. At a configured kiosk, sign in on your own phone first, scan the current code, check the venue and confirm the QR clock. If a code has expired or was used, wait for the display to refresh and scan again. End an open break in **Attendance** before using a QR to clock out.
-6. Use the in-app notification centre for relevant outcomes and updates.
+6. Use the in-app notification centre for relevant outcomes and updates; read
+   **Announcements** and explicitly acknowledge a required notice where appropriate.
 
 **Notifications** (`/notifications`) contains your permitted roster updates,
-open-shift offers/outcomes and swap events; scoped managers also see attendance
-alerts. Opening/marking a notice read does not acknowledge a shift, consent to a
+open-shift offers/outcomes, swap events and recent announcement previews; scoped
+managers also see attendance alerts. Opening/marking a notice read does not acknowledge a shift, consent to a
 swap, confirm an open-shift claim or approve time. Use the linked task screen for
 those decisions. Use **View your attendance history** from **Attendance** for
 your own historical effective clocks and correction decisions.
@@ -601,6 +659,7 @@ External email, push, SMS and WhatsApp notifications are **planned optional chan
 | Timesheet differs from expected | Review break facts, corrections and approval status; request a correction instead of editing finalized history. |
 | Hours and labour total differs from the roster | Check publication, assignment, week/timezone and approval status. Scheduled hours include planned break time; worked/paid totals use approved recorded breaks. Use **Review source timesheets** to reconcile. |
 | No SMS/WhatsApp/email alert | These channels are not yet guaranteed operational. Check the in-app notification centre. |
+| Announcement missing or cannot publish | Check linked active recipient accounts and business/venue/department scope. Published notices do not add later staff; empty or forbidden audiences fail explicitly. |
 | Payroll rates appear missing | The central award intelligence and external payroll adapters are not yet production-verified. |
 
 ## Data privacy and cancellation
@@ -683,6 +742,7 @@ not every sentence or all app screens; human review remains necessary.
 | --- | --- | --- | --- |
 | 1.0 | 2026-11-02 | `c1ddaf3` (guide audit); DEMO-001/002 evidence below | Done-feature mapping and source label/permission review; recorded targeted browser evidence, not a fresh full-app walkthrough |
 | 1.1 | 2026-11-02 | `9918957` (DOC-002); DOC-003 contextual links | Markdown-backed role-safe search and core contextual navigation; targeted runtime and lightweight upkeep checks |
+| 1.2 | 2026-11-02 | `300426b` (announcement backend); COMMS-001 UI | Scoped plain-text publication, recipient history, acknowledgements, real HTTP retries and mobile browser acceptance |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -721,6 +781,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-DEMO-002 | Guided owner/payroll, scoped FOH/BOH manager and mobile employee baseline reviews; real navigation, permission failures and explicit omissions |
 | BB-DOC-002 | Getting help and improving this guide — authenticated role-scoped HTML, search, task navigation, denied/empty states and limitations |
 | BB-DOC-003 | Help at the point of work; Guide review and maintenance — scoped core links, review history, lightweight checks and accurate screenshot/AI limitations |
+| BB-COMMS-001 | Announcements — manager publication/scope, immutable snapshots, linked-staff history, explicit acknowledgements, errors and in-app-only limitations |
 | BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
 | BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
 | BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |

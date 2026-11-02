@@ -101,6 +101,177 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("scoped announcements publish immutable plain-text history with real acknowledgements and concurrent retries", async ({ page, browser }) => {
+  test.setTimeout(150_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, fohId, bohId, workerId, bohWorkerId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const clients = {};
+  const destination = `/announcements?business=${businessId}&venue=${venueId}`;
+  try {
+    for (const role of ["owner", "manager", "worker", "boh", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `notice-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+      clients[role] = createClient(apiUrl, anonKey, options);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Announcement test cafe" }, { id: outsideId, name: "Outside notice cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Notice venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "employee", venue_id: venueId, department_id: bohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "FOH notice worker", role_title: "Server" },
+      { id: bohWorkerId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        auth_user_id: users.boh, name: "BOH notice worker", role_title: "Cook" },
+    ])).error).toBeNull();
+    for (const [role, client] of Object.entries(clients)) {
+      expect((await client.auth.signInWithPassword({
+        email: `notice-ui-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+    }
+    await page.goto(destination);
+    await expect(page).toHaveURL((url) => url.pathname === "/login");
+    await signIn(page, `notice-ui-owner-${suffix}@example.test`, password);
+    await page.goto(destination);
+    await expect(page.getByRole("heading", { name: "Announcements", exact: true })).toBeVisible();
+    const form = page.getByRole("form", { name: "Publish announcement", exact: true });
+    await form.getByLabel("Title", { exact: true }).fill("Venue briefing");
+    await form.getByLabel("Message", { exact: true }).fill("Read this plain text <img src=x onerror=alert(1)>.");
+    await form.getByLabel("Acknowledgement", { exact: true }).selectOption("required");
+    await form.getByRole("checkbox").check();
+    await form.getByRole("button", { name: "Publish announcement", exact: true }).click();
+    const published = page.getByRole("article", { name: "Venue briefing", exact: true });
+    await expect(published).toContainText("2 recorded recipients");
+    await expect(published).toContainText("0 acknowledged; 2 pending");
+    await expect(published.locator("img")).toHaveCount(0);
+    await page.getByRole("link", { name: "View receipts for Venue briefing", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Recipient receipts", exact: true })).toBeVisible();
+    await expect(page.getByText("FOH notice worker: Pending acknowledgement", { exact: true })).toBeVisible();
+    const publishedRows = await clients.owner.rpc("list_published_announcements", { p_business_id: businessId });
+    expect(publishedRows.error).toBeNull();
+    const venueNotice = publishedRows.data.find((item) => item.title === "Venue briefing").announcement_id;
+
+    const workerContext = await browser.newContext({ viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, `notice-ui-worker-${suffix}@example.test`, password);
+    await workerPage.goto(destination);
+    await expect(workerPage.getByRole("heading", { name: "New announcement", exact: true })).toHaveCount(0);
+    const received = workerPage.getByRole("article", { name: "Venue briefing", exact: true });
+    await expect(received).toContainText("<img src=x onerror=alert(1)>");
+    await expect(received.locator("img")).toHaveCount(0);
+    await received.getByRole("checkbox").check();
+    await received.getByRole("button", { name: "Acknowledge notice", exact: true }).focus();
+    await workerPage.keyboard.press("Enter");
+    await expect(workerPage.getByRole("article", { name: "Venue briefing", exact: true })).toContainText("Acknowledged");
+    await expect(workerPage.getByRole("button", { name: "Acknowledge notice", exact: true })).toHaveCount(0);
+    expect(await workerPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const accessibility = await new AxeBuilder({ page: workerPage }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
+    await workerPage.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    await workerPage.getByRole("region", { name: "Announcement updates", exact: true })
+      .getByRole("link", { name: "Venue briefing", exact: true }).click();
+    await expect(workerPage.getByRole("article", { name: "Venue briefing", exact: true })).toContainText("Acknowledged");
+
+    const managerContext = await browser.newContext();
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `notice-ui-manager-${suffix}@example.test`, password);
+    await managerPage.goto(destination);
+    const managerForm = managerPage.getByRole("form", { name: "Publish announcement", exact: true });
+    await expect(managerForm.getByLabel("Audience", { exact: true }).locator("option")).toHaveCount(1);
+    await expect(managerForm.getByLabel("Department", { exact: true }).locator(`option[value="${bohId}"]`)).toHaveCount(0);
+    await managerForm.getByLabel("Title", { exact: true }).fill("FOH information");
+    await managerForm.getByLabel("Message", { exact: true }).fill("Information, not a roster change.");
+    await managerForm.getByRole("checkbox").check();
+    await managerForm.getByRole("button", { name: "Publish announcement", exact: true }).click();
+    await expect(managerPage.getByRole("article", { name: "FOH information", exact: true })).toContainText("1 recorded recipients");
+    await expect(managerPage.getByRole("article", { name: "Venue briefing", exact: true })).toHaveCount(0);
+    await managerForm.getByLabel("Title", { exact: true }).fill("Denied whole venue");
+    await managerForm.getByLabel("Message", { exact: true }).fill("This must not be published.");
+    await managerForm.getByLabel("Audience", { exact: true }).evaluate((select) => {
+      select.add(new Option("Forged venue", "venue", true, true));
+    });
+    await managerForm.getByLabel("Department", { exact: true }).selectOption("");
+    await managerForm.getByRole("checkbox").check();
+    await managerForm.getByRole("button", { name: "Publish announcement", exact: true }).click();
+    await expect(managerForm.getByRole("alert")).toContainText("You cannot publish to that audience");
+    await expect(managerForm.getByLabel("Title", { exact: true })).toHaveValue("Denied whole venue");
+    await workerPage.goto(destination);
+    await expect(workerPage.getByRole("article", { name: "FOH information", exact: true })).toContainText("Information only");
+    expect((await clients.boh.rpc("list_my_announcements", { p_business_id: businessId })).data.map((item) => item.title)).not.toContain("FOH information");
+
+    const args = {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: null,
+      p_title: "Concurrent briefing", p_body: "Recorded once", p_requires_acknowledgement: true, p_request_id: randomUUID(),
+    };
+    const publications = await Promise.all([
+      clients.owner.rpc("publish_announcement", args), clients.owner.rpc("publish_announcement", args),
+    ]);
+    for (const result of publications) expect(result.error).toBeNull();
+    expect(publications[0].data).toBe(publications[1].data);
+    expect(await sql(`select count(*) from public.announcements where id='${publications[0].data}'`)).toBe("1");
+    const myRows = await clients.worker.rpc("list_my_announcements", { p_business_id: businessId });
+    expect(myRows.error).toBeNull();
+    const receipt = myRows.data.find((item) => item.announcement_id === publications[0].data);
+    const ackArgs = { p_business_id: businessId, p_recipient_id: receipt.recipient_id };
+    const acknowledgements = await Promise.all([
+      clients.worker.rpc("acknowledge_announcement", ackArgs), clients.worker.rpc("acknowledge_announcement", ackArgs),
+    ]);
+    for (const result of acknowledgements) expect(result.error).toBeNull();
+    expect(acknowledgements[0].data).toBe(acknowledgements[1].data);
+    expect(await sql(`select count(*) from public.sensitive_action_audit where business_id='${businessId}'
+      and source_table='announcement_recipients' and operation='UPDATE' and record_id='${receipt.recipient_id}'`)).toBe("1");
+    expect((await clients.manager.rpc("publish_announcement", { ...args, p_request_id: randomUUID() })).error?.message).toBe("Permission denied");
+    expect((await clients.worker.rpc("publish_announcement", { ...args, p_request_id: randomUUID() })).error?.message).toBe("Permission denied");
+    expect((await clients.outside.rpc("list_my_announcements", { p_business_id: businessId })).error?.message).toBe("Permission denied");
+    expect((await clients.boh.rpc("acknowledge_announcement", ackArgs)).error?.message).toBe("Permission denied");
+    expect((await clients.manager.rpc("list_announcement_receipts", {
+      p_business_id: businessId, p_announcement_id: venueNotice,
+    })).error?.message).toBe("Permission denied");
+    await workerPage.goto(`${destination}&notice=${venueNotice}`);
+    await expect(workerPage.getByText("The notice is unavailable or you do not have permission to view its receipts.", { exact: true })).toBeVisible();
+    await workerPage.goto(`/announcements?business=${outsideId}&venue=${outsideVenueId}`);
+    await expect(workerPage.getByRole("heading", { name: "Announcements unavailable", exact: true })).toBeVisible();
+    await page.goto(`${destination}&notice=${venueNotice}`);
+    await expect(page.getByRole("article", { name: "Venue briefing", exact: true })).toContainText("1 acknowledged; 1 pending");
+    await expect(page.getByText(/^FOH notice worker: Acknowledged/)).toBeVisible();
+    await page.goto(`/settings/audit?business=${businessId}&source=announcements`);
+    await expect(page.getByRole("list", { name: "Sensitive action history", exact: true })
+      .getByRole("heading", { name: /Announcement publications/ })).toHaveCount(3);
+    await workerPage.goto(destination);
+    await workerPage.getByRole("link", { name: "Help with announcements", exact: true }).click();
+    await expect(workerPage.getByRole("article", { name: "Announcements", exact: true })).toContainText("Opening the page alone does not acknowledge");
+    expect(await sql(`select count(*) from public.announcements where business_id='${businessId}'`)).toBe("3");
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const client of Object.values(clients)) expect((await client.auth.signOut()).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const userId of Object.values(users)) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
 test("owner hours and labour report reconciles approved time with mobile filters and estimated costs", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);

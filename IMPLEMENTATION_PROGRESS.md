@@ -3,8 +3,13 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **57**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **63**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **58**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **63**.
+- BB-COMMS-001 is **Done**: immutable permission-scoped in-app announcements,
+  frozen recipient history and explicit acknowledgement receipts. Focused
+  pgTAP **36/36**, direct regressions **158/158**, Node **15/15**, final
+  production browsers **2/2** including real HTTP concurrency and adjacent
+  shift-swap notifications; lint/types/build passed. Guide/help updated.
 - BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
   and mobile employee baseline journeys; actual login/navigation, sample
   download and permission failures verified in **4/4** focused production
@@ -699,46 +704,57 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-COMMS-001 — Send announcements: In Progress (Debugging).**
-DOC-003 `b051a4a0d3c56b299c21ce602cc40e941caa3ef2` pushed; exact remote SHA
-verified. Remaining Showcase P0 identity work requires owner approval.
-Scenario-driven SHIFTS-005 needs employment/change-warning safeguards; those
-configuration fields/workflows are absent, so do not claim that story ready
-merely because Dependencies is blank. Select independent in-app COMMS-001 P1,
-reusing the verified COMMS-002/permission/audit foundations.
-Implement business/venue/department-scoped immutable notices, frozen recipient
-history and required acknowledgement receipts; external delivery is excluded.
-Plan focused scope/tenant/invalid/immutable/idempotency database tests, Node
-validation, authenticated races and real scoped/mobile browser checks.
-At 2026-11-02 22:22 UTC, scoped immutable publication/recipient/acknowledgement
-functions and audit-source labels pass **36/36** focused pgTAP in rollback
-preflight and again against the applied migration. Three direct permission,
-audit and roster-notification regressions pass **158/158** (50 + 31 + 77).
-Migration `20261103200000` is applied/recorded only in verified disposable
-`butterbox-acceptance` (API 55421, DB 55422); do not edit it in place.
-No reset or production/shared database operation performed.
-Focused announcement validation and audit Node tests pass **7/7**; changed
-ESLint, TypeScript and split production build passed.
+**Selecting the next ready operational story after verified COMMS-001.**
+Remaining Showcase P0 identity work requires owner approval. Scenario-driven
+SHIFTS-005 needs absent employment/change-warning safeguards; do not treat
+blank Dependencies as proof of readiness. Inspect the next independent
+P1 showcase story and preserve all approval/workstream boundaries.
 
-Uncommitted UI/API: native publish form with immutable-publication confirmation,
-server actions, role-scoped employee/published history and receipts,
-announcement navigation and separate notification-centre previews.
-The focused browser timed out before publishing, with the message filled and
-acknowledgement option still unselected. Explicit label/for associations added
-to the three selects; affected browser rerun next. No runtime acceptance or
-HTTP concurrency result claimed yet. Cleanup retained synthetic fixture
-businesses/records, removed disposable auth users; app runner stopped.
-Disk guard remained 28 GiB free; showcase proxy stopped when no longer needed.
+## Latest completed announcement story
 
-COMMS-001-AC1 scoped recipients, AC2 audit/immutability, AC3 history and AC4
-required acknowledgement/retries have passing backend evidence, but remain
-**not fully verified** until end-to-end and authenticated race checks pass.
-Selected tests cover tenant/department scope, malformed input, frozen history,
-audit, archive/revocation and idempotency; full unrelated suites deferred.
-Remaining risks: HTTP publication/acknowledgement concurrency, manager form
-denials, actual notifications/history navigation and mobile accessibility.
-Broader regression required at release/workstream merge.
-**Documentation: pending** tested functionality; do not advertise this workflow.
+**BB-COMMS-001 — Send announcements: Done.**
+Verified 2026-11-02 22:27 UTC. Reused existing membership/department helpers,
+audit producer, pagination and controlled native server-action forms.
+
+| Criterion | Implementation and test | Actual result | Status |
+| --- | --- | --- | --- |
+| COMMS-001-AC1 | Business/venue/department publication RPC enforces current scope; active linked recipients frozen; native form confirmation; forged broader audience rejected with content preserved | Scope/tenant pgTAP and real owner/FOH/employee/outside HTTP/browser checks passed | Pass |
+| COMMS-001-AC2 | Immutable notice/snapshot update/delete/truncate safeguards and actor-attributable audit; owner audit labels/filter | Database audit/immutability checks and real owner audit history passed | Pass |
+| COMMS-001-AC3 | Own linked-staff history, escaped plain-text content, current membership/reassignment checks, notifications preview and contextual guide | Employee history/notification/help browser, archive/revocation pgTAP and mobile axe/overflow passed | Pass |
+| COMMS-001-AC4 | Explicit required acknowledgement, frozen timestamp, scoped manager counts/named receipts; repeat/parallel requests cannot duplicate publication/ack audit | Applied pgTAP, real two-request publication and acknowledgement races plus manager receipts passed | Pass |
+
+Migration `20261103200000` applied/recorded **only** in verified disposable
+`butterbox-acceptance` (API 55421, DB 55422). Do not edit it in place.
+Focused pgTAP passed **36/36** in rollback preflight and applied replay;
+three directly affected files passed **158/158** (permissions 50, audit 31,
+roster notifications 77). Announcement/audit/help Node tests passed **15/15**.
+Final production browsers passed **2/2**: complete announcement scenario
+(multiple roles, raw-HTML text, native publication/ack, manager counts,
+forged-scope failure, own history, outside-tenant denial, parallel HTTP retries,
+audit and actual guide destination) and adjacent shift-swap notifications.
+Changed-file ESLint, TypeScript and split production build passed.
+
+Initial audit-source test lacked the new trigger producers; extended its
+explicit producer contract and reran successfully. Initial browser timed out
+on wrapped select labels before publication; used explicit label/for
+associations, reran successfully, then reran final guide/audit and adjacent
+notification checks. No legitimate assertion removed; no known final failure.
+Selected focused units/database/browser/HTTP paths cover the changed vertical
+slice and direct dependencies. Full unrelated Node, pgTAP, integration and
+browser suites intentionally deferred; no resets or hosted/live operations.
+Broader migration/release/workstream-merge regression remains required.
+No external delivery, legal consent, automatic shift cancellation or payroll
+compliance claim. Synthetic fixture records/businesses retained; disposable
+auth users removed and bounded app/proxy processes stopped. Disk guard
+remained 28 GiB free.
+
+Files: announcement migration/pgTAP, model/unit tests, new page/actions/form,
+main navigation, notifications, audit sources/tests, canonical guide and help
+topic/contract tests. **Documentation: updated** role/task procedures,
+tested labels, limitations, recovery, version 1.2 and coverage index.
+Backend checkpoint `300426bc23daebedadf1d82d8f26152fe7823a5a` pushed with
+matching remote SHA; verified UI/feature checkpoint follows.
+Unrelated `.eslintcache` deletion remains unstaged and preserved.
 
 ## Latest completed contextual-help story
 

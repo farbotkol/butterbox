@@ -7,6 +7,7 @@ import {
 } from "@/app/actions";
 import { markAttendanceAlertNotificationReadAction } from "@/app/attendance/alerts/actions";
 import { AppShell } from "@/components/app-shell";
+import { parseMyAnnouncements, type MyAnnouncement } from "@/lib/announcements";
 import {
   attendanceAlertSignalLabels, attendanceAlertStatusLabels, canManageAttendanceAlerts,
   parseAttendanceAlertNotifications, type AttendanceAlertNotification,
@@ -76,7 +77,7 @@ export default async function NotificationsPage({
   }
 
   const canReviewAttendance = canManageAttendanceAlerts(workspace.membership.role);
-  const [venueResult, rosterNotifications, offerNotifications, swapNotifications, attendanceNotifications] = await Promise.all([
+  const [venueResult, rosterNotifications, offerNotifications, swapNotifications, attendanceNotifications, announcementResponse] = await Promise.all([
     workspace.supabase.from("venues").select("id, name")
       .eq("business_id", workspace.business.id).order("created_at"),
     readAllPages<Omit<RosterNotice, "kind">>((from, to) => workspace.supabase.rpc("list_roster_notifications", {
@@ -104,7 +105,15 @@ export default async function NotificationsPage({
         .order("notification_id", { ascending: false }).range(from, to),
       (notice) => notice?.notification_id)
       : Promise.resolve({ data: [], error: null }),
+    readAllPages<MyAnnouncement>((from, to) => workspace.supabase.rpc("list_my_announcements", {
+      p_business_id: workspace.business.id,
+    }, { count: "exact" }).order("published_at", { ascending: false }).order("recipient_id").range(from, to),
+    (notice) => notice?.recipient_id),
   ]);
+  const announcements = parseMyAnnouncements(announcementResponse.data);
+  if (announcementResponse.error || !announcements) console.error("Could not load announcement notifications.", {
+    code: announcementResponse.error?.code, message: announcementResponse.error?.message ?? "Invalid announcement history.",
+  });
   const swapNotices = parseSwapNotifications(swapNotifications.data);
   const attendanceNotices = parseAttendanceAlertNotifications(attendanceNotifications.data);
   const loadError = venueResult.error || rosterNotifications.error || offerNotifications.error ||
@@ -151,6 +160,23 @@ export default async function NotificationsPage({
           </form>
         )}
       </div>
+
+      <section aria-labelledby="announcement-updates-heading" className="mt-5 rounded-xl border border-line bg-white p-4">
+        <h2 id="announcement-updates-heading" className="font-semibold">Announcement updates</h2>
+        {announcementResponse.error || !announcements
+          ? <p role="alert" className="mt-2 text-sm text-red-900">Announcement updates could not load. Refresh and try again.</p>
+          : <ul className="mt-2 space-y-2">{announcements.filter((notice) => notice.venue_id === workspace.venue.id).slice(0, 5)
+            .map((notice) => <li key={notice.recipient_id} className="text-sm">
+              <Link href={`/announcements?${new URLSearchParams({
+                business: workspace.business.id, venue: workspace.venue.id,
+              })}#notice-${notice.recipient_id}`} className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
+                {notice.title}
+              </Link>
+              {notice.requires_acknowledgement && !notice.acknowledged_at && <span className="ml-2">Acknowledgement required</span>}
+            </li>)}</ul>}
+        <Link href={`/announcements?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
+          className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">View announcement history</Link>
+      </section>
 
       {params.error && (
         <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
