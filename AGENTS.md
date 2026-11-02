@@ -8,6 +8,14 @@ PostgreSQL, Auth and Row Level Security (RLS). Server-side checks, not hidden UI
 controls, enforce tenant, venue, department and role permissions. Preserve the
 FOH/BOH delegated-management model and existing application conventions.
 
+## Showcase-first prioritization
+
+The owner has authorized a **first internal product-review Showcase MVP**, distinct from production go-live. `BACKLOG_INDEX.csv` contains both the original `Priority` (long-term roadmap) and `Showcase_Priority` (first-review sequencing). Do not overwrite either with the other.
+
+When choosing new work, first inspect the committed active story, dependency readiness, `Status` and `Showcase_Priority`. Safely complete or checkpoint BB-ATTEND-006 if it is still actively being developed, then select ready **P0 showcase** work ahead of later P1/P2/P3 work. Avoid rebuilding Done stories. Do not start blocked stories or violate production/security approvals. Update story evidence and documentation when completing work.
+
+The DEMO epic is an **internal evaluation milestone only**. Use a separately verified isolated environment and synthetic fixtures; no production data, live payroll or real external messages. Do not claim production readiness or award-calculation correctness. Branding requires owner approval for the final logo/identity, and generated concept images are not actual UI screenshots. See `BUTTERBOX_PRODUCT_BACKLOG.md` (Epic DEMO) for exit gates and story-specific criteria.
+
 ## Session recovery and story selection
 
 - Before coding, read `BACKLOG_INDEX.csv`, `IMPLEMENTATION_PROGRESS.md` and the

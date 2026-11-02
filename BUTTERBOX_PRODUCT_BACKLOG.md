@@ -6,6 +6,45 @@
 **Architecture:** Next.js + Supabase PostgreSQL/Auth/RLS, server-side domain services, durable background jobs, configurable payroll adapters  
 **Status:** Proposed requirements; not a representation of implemented features or regulatory certification.
 
+
+## Epic DEMO — First internal Showcase MVP (P0 milestone)
+
+**Milestone intent:** This is an internal, repeatable, interactive **product-review showcase**, not a production-go-live MVP. Reviewers must experience the existing application through safe synthetic data. The demo must not use production customer data or send real payroll/outbound messages. Future-vision concepts must be clearly distinguished from functioning features.
+
+| ID | Story | Showcase priority | Status | Dependencies |
+|---|---|---|---|---|
+| BB-DEMO-001 | Isolated synthetic showcase café | P0 | Backlog | — |
+| BB-DEMO-002 | Guided owner, manager and employee showcase journeys | P0 | Backlog | BB-DEMO-001 |
+| BB-DEMO-003 | Showcase UI, navigation and mobile polish | P0 | Backlog | BB-BRAND-002; BB-DEMO-002 |
+| BB-DEMO-004 | Repeatable showcase acceptance and reset | P0 | Backlog | BB-DEMO-001; BB-DEMO-002; BB-DEMO-003 |
+| BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | Backlog | BB-DEMO-002 |
+
+### Story acceptance requirements
+
+**BB-DEMO-001 — Isolated synthetic showcase café.** Dedicated positively verified isolated demo environment; 12–15 fictional staff members, FOH/BOH roles and realistic availability, rosters, attendance, corrections and approved time/payroll CSV samples. Repeatable, resettable fixtures, no real data, live messaging or payroll, and no seeding unidentified or production environments. This provides a specific implementation slice of the separate broader SAAS-003 demo-isolation work and does not make SAAS-003 fully Done.
+
+**BB-DEMO-002 — Guided owner, manager and employee showcase journeys.** Reproducible walkthroughs and scoped review accounts for setup, staff, roster, open shifts, attendance, timesheets and payroll preparation. Include real navigation and negative/permission paths; clearly label missing features.
+
+**BB-DEMO-003 — Showcase UI, navigation and mobile polish.** Review real deployed application routes with approved logo, consistent UI design and accessible responsive behavior, correcting the highest-impact issues. Do not represent illustrative marketing imagery as real app screenshots.
+
+**BB-DEMO-004 — Repeatable showcase acceptance and reset.** Restricted, stable reviewer access; verified reset; automated core journey smoke checks and tenant isolation; documentation of review accounts, failure modes and known gaps; record owner review. Not authorization for production release or paid infrastructure.
+
+**BB-DEMO-005 — Clearly labeled future-vision concept previews (optional).** Optional AI, forecasting and Award Central concepts may use illustrative synthetic data but must be identified as concepts; do not imply verified employment entitlements or functioning production AI.
+
+### Showcase priority overlay — applies to every row in BACKLOG_INDEX.csv
+
+The CSV retains the existing `Priority` column for the full product and adds `Showcase_Priority` as the **first-showcase scheduling axis**. Neither changes the factual `Status`. Every story, including Done and Blocked, receives a value.
+
+- **P0 — Showcase-essential:** Features and foundations needed to demonstrate the owner-to-employee-to-payroll journey, safe synthetic demo data, navigation, identity, core branding, and a simple hours dashboard.
+- **P1 — Valuable showcase enhancement:** Helpful but not essential at first review, e.g. late/no-show alerts, optional warnings, extended help and extra UI productivity.
+- **P2 — Later demonstration/marketing enhancements:** Optional AI concept, forecasting, extended communications or campaign assets; may be considered after the core demo.
+- **P3 — Post-showcase / production milestone:** SaaS billing, live payroll adapters, operational resilience, real award-calculation and compliance signoff, and other features that do not need to ship for the internal review.
+
+**Selection rule:** Complete and safely checkpoint the active BB-ATTEND-006 work before major reprioritization, unless blocked. Then tackle **ready, not-Done P0 showcase stories** and their required dependencies, prioritizing BB-DEMO-001/002, BB-REPORT-001, approved brand assets and BB-DEMO-003/004. P0 foundational stories already Done need not be rebuilt. A Blocked P0 item stays blocked until explicitly cleared. A P1 in-progress feature may be completed rather than abandoned when the safe finishing cost is small.
+
+**First-showcase exit gate:** A positively identified isolated demo with synthetic café data, working owner/manager/employee journeys on mobile and desktop, understandable planned-vs-worked hours, consistent approved branding, safe repeatable reset and passing targeted smoke tests. These gates do **not** signify production readiness, independent award validation, actual payroll transmission, approved retention practices, paid subscription operations or live marketing integrations.
+
+
 ## Backlog use and rules
 
 - **P0:** pilot-critical; **P1:** sellable product; **P2:** intelligent differentiation or scale.

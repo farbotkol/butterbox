@@ -2,9 +2,15 @@
 
 ## Execution summary
 
-- Total stories: **122** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
-  Blocked: **6**. Not started (Backlog): **66**.
+- Total stories: **127** (including 22 Award Central BB-PAYRULES, three
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **49**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **71**.
+- At 18:25 UTC, owner commits added a separate Showcase priority overlay and
+  five internal-demo stories while preserving original roadmap priorities and
+  statuses. Finish or safely checkpoint the active attendance-alert story,
+  then select ready Showcase P0 work. The showcase requires an explicitly
+  verified isolated environment and synthetic data; it is not production
+  approval, paid infrastructure authorization or legal/payroll sign-off.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
   2026-11-02 18:23 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
@@ -20,7 +26,7 @@
   creation, scope, retries, revocation and locking races. Production build
   and browser acceptance remain outstanding. No
   acceptance criterion is yet claimed complete.
-- The requested **BRAND** epic and ten P2 planning stories now cover an asset
+- The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
   Backlog. The concept catalogue exists, but its referenced image binaries,
@@ -710,6 +716,11 @@ settings/delivery still require their own implementation and verification.
   Synthetic monitoring was disabled during cleanup. A mobile browser test
   has been added but has not yet run. Next verify the production build and
   browser workflows.
+  The subsequent status push was rejected because the owner advanced the
+  remote branch. The incoming Showcase overlay and five DEMO stories were
+  fetched and the CSV conflict was resolved by preserving every incoming
+  priority and the locally updated ATTEND-006 evidence; uncommitted feature
+  files were not overwritten. The merge and push are pending at this report.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
