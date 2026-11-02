@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **51**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **70**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **69**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -679,6 +679,19 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-BRAND-001 — Organize and govern brand assets: In Progress.** Ready
+Showcase P0; REPORT-001 feature `efd9c77` pushed and remote SHA matched.
+Documentation-only scope: inventory source/derivative paths, hashes, versions,
+custodians, known provenance, unverified rights and owner-review states;
+explicitly mark all five absent concept PNGs missing. Document safe
+contribution, storage, release and replacement procedures. Existing app marks
+are present but not evidence of final owner identity approval. Do not generate,
+upload, rename or approve artwork. Verify every inventory path and checksum;
+no application tests are needed for unchanged runtime code.
+Documentation: operational asset guidance underway; no new user workflow.
+
+## Latest completed reporting story
 
 **BB-REPORT-001 — Hours and labour dashboard: Done.** Selected ready
 Showcase P0 after verified ATTEND-006 (`6c67d10`, remote SHA matched).
