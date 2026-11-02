@@ -46,15 +46,18 @@
 - BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
   works per venue. Owner decision DEC-002 confirms prospective per-venue
   display-week starts, Monday payroll boundaries and essential in-app
-  defaults. As of 2026-11-02 12:07 UTC, an **uncommitted and incompletely
+  defaults. As of 2026-11-02 12:14 UTC, an **uncommitted and incompletely
   verified** prospective planning-week slice contains a versioned database
   setting, a canonical venue-local period resolver, an owner settings form
   and a separate read-only planning view. It deliberately keeps the existing
   editable roster and publication/payroll boundaries Monday-based. A rolled-back
-  database preflight passed **55/55** assertions, focused Node tests passed
-  **5/5**, and changed-file ESLint and TypeScript passed. The migration is not
-  applied; authenticated concurrency, applied-migration regressions, production
-  build and browser/accessibility verification remain outstanding. Optional
+  database preflight and applied-migration tests passed **60/60** assertions;
+  six neighboring pgTAP files passed **327/327**; the authenticated race,
+  tenant and revocation integration passed **1/1** after correcting a lazy
+  test request; focused Node tests passed **5/5**; changed-file ESLint and
+  TypeScript passed. Migration `20261103150000` is applied only to the
+  verified disposable acceptance project. Production build and
+  browser/accessibility verification remain outstanding. Optional
   external channels require the undelivered
   BB-COMMS-003 capability, consent and provider approval. Final DEC-002
   directs employee opt-outs, essential in-app notices and timezone-aware
@@ -616,11 +619,10 @@
 - **BB-ORG-006 — Business configuration** is the current independent work:
   verify the uncommitted prospective per-venue planning-week slice under
   DEC-002. Approval mode already exists; external notification dependencies
-  remain Blocked and must not be activated. The new database migration has
-  only been tested in rollback; preserve historical publication, payroll and
-  timesheet boundaries. Next verify disposable project identity and disk,
-  apply the migration there, then run focused database, authenticated race
-  and production-browser tests.
+  remain Blocked and must not be activated. Migration `20261103150000` was
+  applied only to the verified disposable acceptance project. Focused database
+  and authenticated race tests have passed; next run the production build and
+  targeted mobile browser/accessibility scenario, then fix and rerun any failures.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
