@@ -6,10 +6,11 @@
   BB-PAYRULES stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **54**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:22 UTC, work has started with a trace of existing attendance,
-  authorization, geofence and idempotency paths. The criteria for a signed,
-  venue-bound expiring code, replay denial, controlled display access and
-  server-validated clocks have not yet been implemented or verified.
+  2026-11-02 12:29 UTC, an uncommitted migration and focused test implement
+  the initial device and clock transactions; a rollback-only database
+  preflight passed **55/55** assertions. The migration has not been applied.
+  Device and employee UI, authenticated concurrency, browser acceptance and
+  final verification remain outstanding; no full criterion is yet Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -643,11 +644,29 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-- **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. First inspect the
-  existing clock-event, geofence, venue authorization and idempotency paths,
-  then design a controlled kiosk and one-use venue-bound code without
-  weakening canonical attendance or immutable timekeeping records. No QR tests
-  or changes have been made yet.
+- **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
+  `20261103160000_attendance_qr_kiosks.sql` and
+  `attendance_qr_kiosks.test.sql` passed **55/55** assertions in a rolled-back
+  preflight on the verified disposable acceptance project. Owners create a
+  device-specific, one-use 15-minute activation credential; the device gets a
+  separate 30-day credential, not an owner session. Codes are HMAC-signed,
+  venue-bound, expire within 45 seconds and are consumed atomically with the
+  existing server clock and geofence checks. Exact retries return the original
+  receipt; other replays are denied. Consumed code links are immutable.
+  - **004.1 (signed, expiring, venue-bound):** database preflight passed;
+    **Blocked** on display and end-to-end verification.
+  - **004.2 (replay denied):** sequential database preflight passed;
+    **Blocked** on concurrent and end-to-end verification.
+  - **004.3 (controlled display):** owner/device authorization preflight
+    passed; **Blocked** on the device UI and browser verification.
+  - **004.4 (server clock validation):** state, tenant, timestamp and geofence
+    preflight passed; **Blocked** on integration and employee UI verification.
+  A short-lived code can still be photographed and relayed; this does not
+  establish physical presence or replace configured geofence review.
+  Next implement device activation/display and authenticated employee clocking,
+  then test races, authorization and browser/mobile failure paths. Full
+  repository suites are deferred; affected attendance and tenant suites will
+  run after the migration is safely applied to the isolated project.
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
   historical credential findings. DEC-004 authorizes a read-only, redacted
   assessment and classification; no credential rotation, privileged access
