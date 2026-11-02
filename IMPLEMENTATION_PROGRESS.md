@@ -6,7 +6,7 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:45 UTC, the uncommitted device and employee UI and transaction
+  2026-11-02 12:50 UTC, the uncommitted device and employee UI and transaction
   migration are implemented but not runtime-verified end to end. On the
   isolated applied schema, QR pgTAP passed **62/62** and seven neighboring
   attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
@@ -15,8 +15,10 @@
   passed. Changed-file ESLint and TypeScript passed before the latest test
   additions. Migration `20261103160000` is
   applied and recorded only in `butterbox-acceptance` (API 55421, DB 55422);
-  do not edit the applied migration in place. Browser acceptance and final
-  verification remain outstanding. No full
+  do not edit the applied migration in place. The split production build passed.
+  Browser testing exposed a defect: a separate anonymous tab's session-end
+  announcement redirects the independently activated kiosk to login. A fix,
+  focused cross-tab regression and browser acceptance remain outstanding. No full
   criterion is yet Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
@@ -686,7 +688,10 @@ settings/delivery still require their own implementation and verification.
   passed. Next test races, authorization and browser/mobile failure paths. The
   migration was applied only to the verified isolated acceptance project;
   any schema fix now requires a forward migration. Full repository suites are
-  deferred; production build and browser verification are next. The
+  deferred. The split production compile/type/generate build passed; the first
+  browser attempt failed on an ambiguous test selector, which was corrected.
+  The second browser attempt exposed the kiosk/session-end defect described
+  above; fix it and rerun both kiosk and existing cross-tab session scenarios. The
   test-only Apache-2.0 `jsqr` decoder was added because this Chromium build
   does not expose a native barcode decoder; browser tests must decode the
   rendered SVG rather than merely reading the generated URL.
