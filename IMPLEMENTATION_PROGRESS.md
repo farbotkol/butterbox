@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **52**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **69**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **68**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -679,6 +679,19 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-DOC-001 — Validate and expand role-based user guide: In Progress.**
+Selected ready Showcase P0 after BRAND-001 `c1ddaf3` was pushed with its remote
+SHA verified. Audit all 52 currently Done stories; add task-oriented steps and
+a coverage index linking each user-facing feature to instructions, or record
+why runtime guidance is not applicable. Verify real routes, labels, permissions
+and recovery against implementation, distinguishing source review from actual
+browser runs. Existing production browser evidence for kiosk, alerts and
+reporting is available; no fabricated screenshots or claim of a new full
+runtime regression. This is documentation-only; no application code changes.
+Documentation: underway. No DOC-001 criterion is yet Pass.
+
+## Latest completed brand-governance story
 
 **BB-BRAND-001 — Organize and govern brand assets: Done.** Ready
 Showcase P0; REPORT-001 feature `efd9c77` pushed and remote SHA matched.
