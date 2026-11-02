@@ -441,9 +441,14 @@
   disposable acceptance project. Seven focused pgTAP files then produced
   **249 passing assertions** across six files; `sensitive_action_audit`
   aborted when deleting a profile because the new immutable history cascaded
-  from the employee. Fix the underlying deletion/history interaction with a
-  forward migration, then rerun the affected tests. UI, authenticated
-  concurrency and browser verification remain.
+  from the employee. Forward migration `20261103080000` now retains historical
+  employee IDs while allowing the existing profile-deletion lifecycle; both
+  migrations were applied to the verified acceptance and fresh-replay projects.
+  The affected acceptance suites passed **282/282** assertions across seven
+  files; metadata, profiles and audit also passed **98/98** on the replay.
+  A rolled-back upgrade fixture with pre-existing history passed **5/5**.
+  Twelve targeted Node tests, changed-file ESLint and TypeScript passed.
+  Authenticated concurrency and production-browser verification remain.
   The separate Award Central workstream remains isolated. No criterion has
   been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
