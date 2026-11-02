@@ -1,19 +1,21 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 13:58 AEDT (UTC+11), initialized from remotely verified GitHub evidence
-- **Reporter:** ChatGPT / owner-requested reporting setup (not a live Copilot agent checkpoint)
+- **Last report:** 2026-11-02 03:04:06 UTC (14:04:06 AEDT, UTC+11), observed from the Codespace clock
+- **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
 - **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
-- **Agent execution state:** Unknown — no live Codespace activity observed
-- **Last documented story:** `BB-SAAS-004 — Performance and accessibility` — Done
-- **Next documented ready story:** `BB-FOUND-007 — Audit sensitive actions`
-- **Acceptance criteria for next story:** Not yet inspected or reported by the executing agent; inspect `BUTTERBOX_PRODUCT_BACKLOG.md`
-- **Phase:** Handoff / waiting for Roadmap Agent to report its own active phase
-- **Current activity:** No live activity verified; reporting policy established in `AGENTS.md`
-- **Progress since previous report:** Initial status file created; no application implementation or story acceptance claimed
-- **Tests:** Last published core checkpoint reported 55/55 browser scenarios and 136 Node tests passing; earlier database baseline 2,085/2,085 assertions and 19/19 authenticated integrations. **No tests run as part of this documentation change.**
-- **Blockers requiring owner intervention:** `BB-PAY-004` Xero Payroll adapter awaits authorized Australian Xero Payroll test access and credentials; no new blocker assessed here
-- **Next action:** Roadmap Agent should inspect branch and backlog, confirm current story/criteria, update this file with actual activity, and continue `BB-FOUND-007` or the highest-priority ready work
-- **Latest development commit:** Unknown from this status initialization; read branch history before reporting a SHA
-- **Status push:** This file is being added by a GitHub commit; its commit SHA is returned by GitHub and cannot be embedded in the same commit without creating another commit
+- **Agent execution state:** Active at this checkpoint, finishing verified work and saving recovery state. This timestamp does not prove continued execution after the response; no background scheduling is configured.
+- **Current story:** `BB-FOUND-008 — Resilience and operations` — verified partial implementation; Blocked, not Done
+- **Acceptance criteria:** FOUND-008.1 health/error metrics: Pass; FOUND-008.2 staging restore rehearsal: Blocked; FOUND-008.3 idempotent retry behaviour: Pass through existing authenticated regressions; FOUND-008.4 documented backup retention: Pass for documentation only, not deployed retention verification
+- **Phase:** Blocked (staging restore); local implementation/testing Complete
+- **Current activity:** Saving the verified checkpoint and integrating the owner's newly added reporting requirements without overwriting concurrent work
+- **Progress since previous report:** BB-FOUND-007 is Done with all three criteria verified: atomic attributed before/after/reason history, owner-only filtering, immutable records. BB-FOUND-008 adds bounded database readiness, protected process-scoped metrics, redacted request-error instrumentation, and backup/recovery guidance.
+- **Passing tests:** Final clean 47-migration isolated replay; 2,121/2,121 pgTAP assertions across 46 files; 19/19 authenticated integrations; 146 Node tests (19 integrations skipped in the unit-only run and passed separately); ESLint; TypeScript; split production compile/generate; 57/57 serialized production-browser scenarios. A real hanging dependency verified the three-second readiness deadline with scheduling tolerance. Readiness failure/recovery, metric authentication and counters passed on the disposable project.
+- **Failing tests:** None remaining. Earlier audit validation accidentally selected legacy pre-migration rehearsal scripts; the complete transactional suite passed after selecting its explicit directory. An initial Node test used an unsupported mocking API; replaced with scoped environment restoration and reran successfully. No legitimate assertions were removed.
+- **Blockers requiring owner intervention:** FOUND-008 needs an explicitly authorised isolated hosted staging project, secure restore/backup access and approval/provisioning of recovery targets. No staging restore, retained hosted backups or external alert delivery is claimed. FOUND-001 historical credential assessment, SAAS-003 production/sample-data assessment and PAY-004 authorised AU Xero Payroll test access remain blocked.
+- **Next concrete action:** Start `BB-SHIFTS-001 — Offer open shift` independently, reusing current venue/role/availability/conflict checks; follow with BB-SHIFTS-002/003 before completing offer notifications in BB-COMMS-002. Resume staging recovery acceptance only after the owner identifies and authorises its isolated target.
+- **Latest development commit:** `b4bfd02` (operational resilience partial checkpoint); completed audit story `012e07c`
+- **Push outcome:** Initial push rejected because concurrent owner documentation advanced the branch. Merged those commits without rewriting history as `937f823`. The OAuth helper then refused the CI workflow change due to missing workflow scope; the existing authorised Codespace GitHub token successfully pushed it. Remote SHA was verified as `937f8235a04913e03d7cb8a51f61773749a39a8d` at the reported timestamp. This subsequent status-only checkpoint is committed/pushed separately.
+- **Backlog:** 109 total; 40 Done, 1 In Progress, 4 Blocked, 64 Backlog
+- **Resources/safety:** 8 CPUs, 31 GiB RAM, approximately 30 GiB free disk (disk guard stayed above 29 GiB during testing). Disposable project `butterbox-acceptance`, API 55421/database 55422; no production/shared database changes, deployment, history rewrite, volume or cache cleanup. Temporary browser servers stopped.
 
-> This is a one-time reporting handoff, not an automated heartbeat. Future updates must be authored and pushed by the running Roadmap Agent.
+Detailed criterion evidence and recovery steps are in `IMPLEMENTATION_PROGRESS.md`.
