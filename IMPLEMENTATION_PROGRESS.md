@@ -370,7 +370,8 @@
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
   notifications. The targeted checks passed; see the criterion evidence below.
-  Next: **BB-SHIFTS-004 — Request shift swap** (now In Progress).
+  Commit `47bfab03a81bbea5ab9dedd732f77ab0c3bc6a4f` was pushed and its remote
+  SHA matched. Next: **BB-SHIFTS-004 — Request shift swap** (now In Progress).
 - **BB-SHIFTS-001/002/003 — Open-shift offers** are Done (evidence below).
   The offer workflow is the source for BB-COMMS-002's offer and claim-outcome
   notifications.
