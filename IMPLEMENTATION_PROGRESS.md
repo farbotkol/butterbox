@@ -715,6 +715,16 @@ otherwise inspect the remaining P1 stories and their actual policy/data
 dependencies before starting. Do not treat unapproved brand concepts or
 unvalidated employment rules as approved inputs.
 
+Next-selection check at 2026-11-02 23:23 UTC: Showcase P0 BRAND-002 has no
+owner-approved vector or verified rights; downstream branding and DEMO-003/004
+depend on it. P1 employment-change and minimum-engagement stories lack
+validated configured restrictions. REPORT-002 is a possible independent P1
+slice, but the existing product has no definition for "excessive hours":
+the threshold and whether to compare scheduled or worked hours require an
+owner/product decision. Do not infer an overtime or award rule. Ask for the
+report definition before starting; if deferred, reassess independent ready
+work rather than changing the story's status or claiming acceptance.
+
 ## Latest completed roster productivity story
 
 **BB-ROSTER-011 — Roster keyboard productivity: Done.**
