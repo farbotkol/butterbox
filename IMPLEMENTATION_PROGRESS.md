@@ -6,7 +6,7 @@
   BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **66**.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
-  2026-11-02 18:21 UTC. Its database implementation is applied only to the
+  2026-11-02 18:23 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
   seven adjacent files passed **440/440**, and a scheduled worker invocation
   succeeded. A follow-up notification-read migration passed **66/66** focused
@@ -15,9 +15,10 @@
   focused Node tests passed **12/12**, changed-file ESLint and TypeScript
   passed. The forward migration is now applied only in the same disposable
   project; **66/66** focused and **285/285** adjacent assertions passed.
-  Real cron alert creation was observed, but the overall integration failed
-  on a scan-time expectation and is being rerun with an explicit following-scan
-  check. Production build and browser acceptance remain outstanding. No
+  The authenticated scheduler/concurrency integration passed **1/1** after
+  correcting an earlier scan-time expectation; it verified real cron alert
+  creation, scope, retries, revocation and locking races. Production build
+  and browser acceptance remain outstanding. No
   acceptance criterion is yet claimed complete.
 - The requested **BRAND** epic and ten P2 planning stories now cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
@@ -703,9 +704,12 @@ settings/delivery still require their own implementation and verification.
   An authenticated test observed a real cron-created alert and exclusion of
   draft/disabled-tenant shifts; the overall run failed when it expected a
   scan to include a clock recorded after its captured scan time. The revised
-  test checks both the as-of-start result and the subsequent update and is
-  running. Synthetic monitoring was disabled during cleanup. Next finish
-  concurrency verification, production build and browser workflows.
+  test checks both the as-of-start result and the subsequent update and
+  passed **1/1**, also covering permissions, retries, notification reads,
+  membership revocation, policy and shift locking and competing resolutions.
+  Synthetic monitoring was disabled during cleanup. A mobile browser test
+  has been added but has not yet run. Next verify the production build and
+  browser workflows.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
@@ -713,9 +717,9 @@ settings/delivery still require their own implementation and verification.
   | Criterion | Implementation evidence | Actual verification | Status |
   | --- | --- | --- | --- |
   | ATTEND-006.1 — configurable threshold | Owner-scoped venue policy in the uncommitted database migration | Focused pgTAP threshold cases passed; settings UI not yet tested | Blocked: incomplete vertical slice |
-  | ATTEND-006.2 — suppress duplicates | Worker reuses alert per shift/category and records transitions | Focused pgTAP repeated-scan cases passed; real scheduler and races not yet tested | Blocked: pending runtime verification |
-  | ATTEND-006.3 — auditable acknowledgement and resolution | Scoped actions create immutable decision and sensitive audit events | Focused pgTAP actor, reason, idempotency and immutability cases passed; UI and races not yet tested | Blocked: incomplete vertical slice |
-  | ATTEND-006.4 — exclude unpublished shifts | Worker filters published assigned shifts | Focused pgTAP draft exclusion passed; real scheduled creation not yet tested | Blocked: pending runtime verification |
+  | ATTEND-006.2 — suppress duplicates | Worker reuses alert per shift/category and records transitions | Focused pgTAP repeated scans and authenticated scheduler/race test passed; browser workflow not yet verified | Blocked: pending browser verification |
+  | ATTEND-006.3 — auditable acknowledgement and resolution | Scoped actions create immutable decision and sensitive audit events | Focused pgTAP and authenticated competing decisions passed; UI not yet tested | Blocked: pending browser verification |
+  | ATTEND-006.4 — exclude unpublished shifts | Worker filters published assigned shifts | Focused pgTAP and actual cron draft exclusion passed; browser workflow not yet verified | Blocked: pending browser verification |
 - **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
   implementation and guide survived, and the disposable acceptance project
   remained healthy. The recovery status checkpoint `d8e9229` was pushed
