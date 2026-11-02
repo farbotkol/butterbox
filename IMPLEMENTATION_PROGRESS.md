@@ -758,6 +758,8 @@ server action, guarded-deletion migration and pgTAP/concurrency tests,
 tenant-isolation runner, focused browser/unit tests and canonical guide.
 **Documentation: updated** User Guide v1.3 and its contextual roster-help
 content with tested labels, scope, deletion behavior and browser limitations.
+Development commit `20742da5d9f6b5baf2096607e79330e330022cc9` was pushed to
+`copilot/finish-roadmap-for-app`; the remote SHA matched.
 The unrelated `.eslintcache` deletion remains unstaged and preserved.
 
 ## Latest completed announcement story
