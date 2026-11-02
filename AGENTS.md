@@ -72,6 +72,43 @@ FOH/BOH delegated-management model and existing application conventions.
   after the session without actual orchestration. At the end, report backlog
   status counts, current validation and recommended next steps.
 
+## Risk-Based, Change-Focused Testing
+
+- Use targeted tests as the default. Identify the changed implementation,
+  affected acceptance criteria and direct dependencies, then run the smallest
+  meaningful tests covering them.
+- Do not repeat unchanged full-repository suites without a risk-based reason.
+  Record tests that were run, actual outcomes and tests intentionally deferred.
+- Expand to broader regression for shared architecture or trust-boundary
+  changes, migration compatibility, security changes with a wide blast radius,
+  significant deterministic-payroll changes, roadmap integration and release
+  readiness.
+- Treat externally interrupted tests as unverified, not as application failures
+  or passes. Never weaken legitimate assertions to obtain a passing result.
+
+## Agent Progress Reporting and Visibility
+
+- Award Central work on `feature/award-central-foundation` maintains
+  `docs/agent-status/award-central.md` as its current workstream report and
+  `docs/award-central/IMPLEMENTATION_PROGRESS.md` as its acceptance-evidence
+  record. Core progress remains in the root `IMPLEMENTATION_PROGRESS.md`.
+- During active work, refresh the status report approximately every 10 minutes
+  and at each meaningful milestone. Include the UTC timestamp, story and
+  criteria, phase, actual activity and progress, test outcomes, deferred tests,
+  blockers, next action, latest commit and last verified push.
+- Approximately every 15 minutes of active work, commit and push the current
+  report to the assigned Award Central feature branch. Commit a documentation
+  checkpoint if implementation is still in progress. Do not interrupt a
+  sensitive database operation, long test or Git operation to meet an interval.
+- Report immediately on story changes, milestones, blockers, significant test
+  results and before stopping. Keep reports truthful: never claim work is still
+  running, tests passed, a push succeeded or a story is done without verifying
+  it.
+- For the Award Central workstream, the assignment to
+  `feature/award-central-foundation` takes precedence over the generic roadmap
+  branch workflow above: do not push Award Central work to the roadmap branch,
+  merge PR #3, or change the roadmap agent's status report.
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know

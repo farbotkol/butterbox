@@ -1,6 +1,29 @@
 # Award Central implementation progress
 
-## Branch scope and merge recovery - 2026-11-02
+## Current checkpoint - 2026-11-02 03:31 UTC
+
+This report belongs only to `feature/award-central-foundation`. Current
+verified local and remote feature-branch HEAD is `5abd50df9d286ddd711c88a6584c623e49718741`;
+the worktree is clean and has no unpushed commits. It includes a merge of
+roadmap commit `024d79f663398a7fb75f1f4dbcb5c3155dbf87fd`. The roadmap branch
+has since advanced to `9bac44f9b196a72eaf47bdcd53609c5bffbc7f65`; this later
+target has not been merged or tested here.
+
+PR #3 is open and Draft, with base `copilot/finish-roadmap-for-app` at
+`024d79f`; do not merge it. The PR metadata was checked at the current feature
+HEAD. The workstream owns only BB-PAYRULES; the latest Core statuses remain
+unchanged. Current `BACKLOG_INDEX.csv` has 109 unique stories: 38 Done,
+4 In Progress, 4 Blocked and 63 Backlog. Award Central stories 002 and 013
+are In Progress; 017 is Blocked; none is Done.
+
+The combined feature branch has 49 SQL migrations with unique version
+filenames. Do not silently replay a renumbered Award Central migration against
+an environment whose migration history records its former version. No merge is
+currently in progress. Merged testing evidence further below is specific to
+the exact merge commit and tests named; it does not establish acceptance
+against the newer `9bac44f` roadmap tip.
+
+## Branch scope and merge recovery - historical checkpoints
 
 This report belongs only to `feature/award-central-foundation`. Core's
 implementation status and historical validation remain in
@@ -68,14 +91,11 @@ with 21 integration tests skipped. A full pgTAP rerun and targeted ESLint
 were interrupted by SIGTERM; full authenticated integration, TypeScript,
 ESLint, production build and browser checks remain outstanding for this merge.
 
-The feature branch was subsequently verified on the remote at merge commit
-`49f8048`; this validation report is a later checkpoint. The available
-GitHub credential in this session was rejected, so later local commits still
-need an authenticated push. PR #3 was confirmed open and draft. The roadmap
-branch subsequently advanced beyond `540ed3f` to `024d79f`; the follow-on
-merge incorporates that revision, with only the targeted verification noted
-above. Repeat outstanding checks and validation against the actual integration
-target before release. Do not merge PR #3.
+The merge commit `49f8048` was later followed by branch-only reporting commits
+and merge commit `5abd50d`. The remote feature ref matched `5abd50d` at the
+current checkpoint. The roadmap branch subsequently advanced beyond the
+merged `024d79f` to `9bac44f`; repeat the relevant integration checks against
+that actual target before release. Do not merge PR #3.
 
 ## Current Award Central story status
 

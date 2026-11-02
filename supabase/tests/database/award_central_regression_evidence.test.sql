@@ -1,5 +1,5 @@
 begin;
-select plan(59);
+select plan(60);
 
 select has_table('public', 'award_central_regression_candidates', 'central regression candidate staging exists');
 select has_table('public', 'award_central_regression_expectations', 'independent expected outputs are stored separately');
@@ -76,8 +76,8 @@ select is((select model_reference from public.award_central_regression_candidate
   where id = 'a1300000-0000-4000-8000-000000000005'), 'synthetic-model-v1',
   'AI candidate model provenance is retained');
 select is((select count(*)::int from public.award_central_regression_draft_issues(
-  'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_coverage'), 11,
-  'the draft report identifies uncovered categories');
+  'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_coverage'), 12,
+  'a candidate without expected output cannot satisfy coverage');
 select is((select count(*)::int from public.award_central_regression_draft_issues(
   'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_expectation'), 1,
   'the draft report identifies candidates with no expected output');
@@ -226,11 +226,23 @@ select is((select version_content_sha256 from public.award_central_regression_ca
   public.award_central_version_content_hash('a1300000-0000-4000-8000-000000000004'),
   'new cases capture the revised draft fingerprint');
 select is((select count(*)::int from public.award_central_regression_draft_issues(
-  'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_coverage'), 10,
-  'an additional category reduces the count of missing coverage areas');
+  'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_coverage'), 12,
+  'a case without expected output cannot satisfy an additional coverage area');
 select is((select count(*)::int from public.award_central_regression_draft_issues(
   'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_expectation'), 1,
   'the revised case is reported until expected output is independently staged');
+insert into public.award_central_regression_expectations (
+  candidate_id, source_snapshot_id, method, preparer_reference, reviewer_reference,
+  source_clause_refs, expected_output, coverage_limitations
+) values (
+  'a1300000-0000-4000-8000-000000000008',
+  'a1300000-0000-4000-8000-000000000001',
+  'independent_manual', 'synthetic-preparer', 'synthetic-reviewer',
+  '["synthetic clause"]', '{"synthetic":true}', 'Synthetic test evidence only'
+);
+select is((select count(*)::int from public.award_central_regression_draft_issues(
+  'a1300000-0000-4000-8000-000000000004') where issue_code = 'missing_coverage'), 11,
+  'only current, resolved cases with independent expected output satisfy coverage');
 select is((select unresolved_reason from public.award_central_regression_candidates
   where id = 'a1300000-0000-4000-8000-000000000005'), 'Synthetic unresolved critical case',
   'unresolved candidate limitations are preserved');
