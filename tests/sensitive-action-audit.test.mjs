@@ -65,6 +65,12 @@ test("every audited source has a documented label and a database audit producer"
   )].map((match) => match[1]);
   assert.deepEqual(rosterTriggers.sort(), ["roster_review_decisions", "roster_review_requests"]);
   sources.push(...rosterTriggers);
+  const announcementMigration = readFileSync(new URL("../supabase/migrations/20261103200000_scoped_announcements.sql", import.meta.url), "utf8");
+  const announcementTriggers = [...announcementMigration.matchAll(
+    /create trigger sensitive_action_audit after insert(?: or update)? on public\.([a-z_]+)\s+for each row execute function public\.record_sensitive_action_audit\(\)/g,
+  )].map((match) => match[1]);
+  assert.deepEqual(announcementTriggers.sort(), ["announcement_recipients", "announcements"]);
+  sources.push(...announcementTriggers);
   const migrationDirectory = new URL("../supabase/migrations/", import.meta.url);
   const manualSources = readdirSync(migrationDirectory).filter((file) => file.endsWith(".sql"))
     .flatMap((file) => [...readFileSync(new URL(file, migrationDirectory), "utf8")

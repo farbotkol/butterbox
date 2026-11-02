@@ -15,6 +15,8 @@ export const auditSources = {
   employee_availability_intervals: "Availability intervals",
   employee_availability_exceptions: "Leave and date exceptions",
   employee_preferences: "Employee preferences",
+  announcements: "Announcement publications",
+  announcement_recipients: "Announcement recipients and acknowledgements",
   shifts: "Shifts",
   staff_invitations: "Staff invitations",
   shared_worker_link_events: "Shared-worker links",

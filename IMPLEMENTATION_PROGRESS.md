@@ -699,7 +699,7 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-COMMS-001 — Send announcements: In Progress (Planning).**
+**BB-COMMS-001 — Send announcements: In Progress (Debugging).**
 DOC-003 `b051a4a0d3c56b299c21ce602cc40e941caa3ef2` pushed; exact remote SHA
 verified. Remaining Showcase P0 identity work requires owner approval.
 Scenario-driven SHIFTS-005 needs employment/change-warning safeguards; those
@@ -710,7 +710,34 @@ Implement business/venue/department-scoped immutable notices, frozen recipient
 history and required acknowledgement receipts; external delivery is excluded.
 Plan focused scope/tenant/invalid/immutable/idempotency database tests, Node
 validation, authenticated races and real scoped/mobile browser checks.
-Acceptance criteria COMMS-001-AC1 through AC4 are not yet verified.
+At 2026-11-02 22:22 UTC, scoped immutable publication/recipient/acknowledgement
+functions and audit-source labels pass **36/36** focused pgTAP in rollback
+preflight and again against the applied migration. Three direct permission,
+audit and roster-notification regressions pass **158/158** (50 + 31 + 77).
+Migration `20261103200000` is applied/recorded only in verified disposable
+`butterbox-acceptance` (API 55421, DB 55422); do not edit it in place.
+No reset or production/shared database operation performed.
+Focused announcement validation and audit Node tests pass **7/7**; changed
+ESLint, TypeScript and split production build passed.
+
+Uncommitted UI/API: native publish form with immutable-publication confirmation,
+server actions, role-scoped employee/published history and receipts,
+announcement navigation and separate notification-centre previews.
+The focused browser timed out before publishing, with the message filled and
+acknowledgement option still unselected. Explicit label/for associations added
+to the three selects; affected browser rerun next. No runtime acceptance or
+HTTP concurrency result claimed yet. Cleanup retained synthetic fixture
+businesses/records, removed disposable auth users; app runner stopped.
+Disk guard remained 28 GiB free; showcase proxy stopped when no longer needed.
+
+COMMS-001-AC1 scoped recipients, AC2 audit/immutability, AC3 history and AC4
+required acknowledgement/retries have passing backend evidence, but remain
+**not fully verified** until end-to-end and authenticated race checks pass.
+Selected tests cover tenant/department scope, malformed input, frozen history,
+audit, archive/revocation and idempotency; full unrelated suites deferred.
+Remaining risks: HTTP publication/acknowledgement concurrency, manager form
+denials, actual notifications/history navigation and mobile accessibility.
+Broader regression required at release/workstream merge.
 **Documentation: pending** tested functionality; do not advertise this workflow.
 
 ## Latest completed contextual-help story

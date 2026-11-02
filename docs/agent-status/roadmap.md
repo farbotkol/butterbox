@@ -1,23 +1,23 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 22:08 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-02 22:22 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent; Core Roadmap on `copilot/finish-roadmap-for-app`
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current story:** BB-COMMS-001 — Send announcements (In Progress)
-- **Phase:** Planning
+- **Phase:** Debugging
 - **Criteria:** Permission-scoped recipients; auditable publication; employee history; tracked required acknowledgements.
-- **Activity:** Implement independent in-app announcements. Scenario staffing changes need absent employment/change-warning safeguards; remaining P0 identity work needs approval.
-- **Progress:** Core contextual task links implemented and verified, with canonical guide history and lightweight upkeep checks. No attendance/demo feature rebuilt.
-- **Changed files/modules:** Setup/checklist, weekly roster, employee schedule, clocking, timesheets/CSV, mapping and AppShell support label; help tests, User Guide and trackers. No database/shared authorization changes.
-- **Tests and results:** Help Node 8/8, contextual production browser 5/5 across final focused runs (owner, FOH, BOH, employee and new-account setup). Actual destinations, permission gating, business pinning, keyboard and mobile axe/overflow passed. Changed-file ESLint, TypeScript and split production build passed. DOC-002's separate 5/5 units and 4/4 browsers remain recorded prior evidence.
-- **Failing tests:** None final. Fixed test root-path normalization; corrected paraphrased payroll-warning expectation to actual maintained wording and reran owner. Other four scenarios passed first.
+- **Activity:** Diagnose pre-publication browser timeout and rerun after explicitly associating select labels. Preserve verified announcement backend separately from unverified UI.
+- **Progress:** Announcement backend applied only to identified disposable acceptance project. Immutable scoped publication/recipients, audit and idempotent explicit acknowledgement implemented; UI/API/history/notifications wired but not yet accepted.
+- **Changed files/modules:** Forward announcement migration, focused pgTAP, audit labels/tests, announcement parser/actions/page/form, navigation, notifications and focused auth browser.
+- **Tests and results:** Announcement pgTAP 36/36 in rollback and applied replay; direct permissions/audit/roster-notification regressions 158/158. Announcement/audit Node 7/7; changed-file ESLint, TypeScript and split production build passed. HTTP concurrency assertions not reached yet.
+- **Failing tests:** One 150-second browser timeout before publication, acknowledgement option not selected in captured snapshot. Explicit select labels added; rerun pending. No database error/lock wait observed after runner exit.
 - **Deferred tests:** Full unrelated Node, pgTAP, integration and browser suites. No reset/reseed for help. Broader release/workstream-merge regression remains required.
 - **Risks/blockers:** Hosted production isolation and reviewer access remain unverified; owner-approved identity outstanding. Historical privileged-candidate review/rotation needs separate approval. FOUND-001, RULES-005, ORG-006, FOUND-008, SAAS-003 and deferred Xero PAY-004 retain their recorded blockers.
-- **Documentation:** Updated canonical guide with tested contextual labels, role scope, version/history, upkeep commands and screenshot/AI/support-delivery limitations. Automated core contracts do not replace human prose review.
+- **Documentation:** DOC-002/003 guide remains updated. COMMS-001 guidance pending verified browser behavior; not advertised as delivered.
 - **Resources:** Disk guard remained 28 GiB free; bounded tests serialized.
 - **Latest pushed commit:** `b051a4a0d3c56b299c21ce602cc40e941caa3ef2` (DOC-003, remote SHA verified).
 - **Push outcome:** DOC-003 pushed successfully with matching remote SHA.
-- **Next concrete action:** Add forward announcement migration and targeted disposable permission/tenant/acknowledgement tests. Preserve unrelated unstaged `.eslintcache` deletion. COMMS-001 documentation pending verified implementation.
+- **Next concrete action:** Checkpoint verified backend separately, rerun scoped announcement browser and HTTP races, then document actual behavior. Preserve unrelated unstaged `.eslintcache` deletion.
 - **Backlog:** 127 total; 57 Done, 1 In Progress, 6 Blocked, 63 Backlog.
 
 Criterion evidence: `IMPLEMENTATION_PROGRESS.md`.
