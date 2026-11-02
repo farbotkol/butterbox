@@ -1,11 +1,11 @@
 import { spawnSync } from "node:child_process";
 
-export function testSupabaseStatus(workdir) {
-  const executable = process.env.BUTTERBOX_TEST_SUPABASE_CLI;
+export function testSupabaseStatus(workdir, env = process.env) {
+  const executable = env.BUTTERBOX_TEST_SUPABASE_CLI;
   const command = executable || "npx";
   const args = executable ? [] : ["--yes", "supabase@2.122.0"];
   args.push("status", "--workdir", workdir, "-o", "json");
-  const status = spawnSync(command, args, { encoding: "utf8" });
+  const status = spawnSync(command, args, { encoding: "utf8", env });
   if (status.error) throw status.error;
   if (status.status !== 0) {
     throw new Error(

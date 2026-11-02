@@ -723,6 +723,32 @@ scope; no remote reviewer-access claim. Fixture, browser, reset, outbound and
 cross-project checks deferred until the new stack is healthy. Documentation:
 operator guidance pending verified behavior; no new user-facing workflow yet.
 
+**Verified backend milestone — 2026-11-02 19:24 UTC:** Supported ES256
+`key_ops`/`ext` metadata fixed Auth startup without changing private key material.
+Six services healthy on the owned internal Docker network; loopback proxy
+listeners verified. All migrations through `20261103190000` applied in order.
+The first foreign-key probe incorrectly used the intentionally anonymous
+OpenAPI discovery endpoint. Replaced that proxy metric with the real
+requirement: own signed service JWT can read the empty business table;
+foreign-signed administrative JWT and anonymous business reads are denied.
+Generated JWT secrets match both DB and Auth containers. Actual container route
+table has no external default route. This is local development containment, not
+verified production or hostile shared-host isolation.
+
+Selected tests: seven Node environment/status tests (private/unique keys,
+exclusive paths, symlink/tamper/permission rejection, network/storage/port/health
+checks and explicit child environment); **7/7 passed**. Focused
+`onboarding_and_demo_isolation.test.sql` and `tenant_isolation.test.sql`:
+**74/74 passed** in the new project. Changed-file ESLint, zero warnings, and
+TypeScript passed. No app code changed, so no production rebuild; fixture,
+browser, reset and active egress tests remain deferred. Startup refuses
+unidentified existing volumes rather than adopting or deleting them.
+Changed modules: new environment helper and focused test, optional explicit
+environment in the existing local status helper, operator README and evidence.
+Documentation: updated operator README; user guidance not applicable yet
+(no new app workflow). DEMO-001 remains In Progress: no fictional cafe/accounts,
+reset, approved CSV or simulation UI has been delivered.
+
 ## Latest completed documentation story
 
 **BB-DOC-001 — Validate and expand role-based user guide: Done.**

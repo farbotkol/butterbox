@@ -89,6 +89,61 @@ Privileged direct table writes or schema changes can bypass this safeguard and
 must be governed separately. See `docs/DECISION_LOG.md` (DEC-003) for the
 remaining isolation, historical-data assessment and clean-conversion requirements.
 
+### Experimental local showcase environment
+
+BB-DEMO-001 is **not ready for reviewers**. Its isolated empty backend is
+verified; fictional staff, reset, app labeling and sample payroll workflows
+are still pending. Do not seed an acceptance, ordinary local, unidentified or
+production project instead.
+
+The operator-only helper requires the verified Supabase CLI 2.122.0 executable,
+Docker and at least 10 GiB available disk. Choose a **new absolute directory
+outside the checkout**, named `butterbox-showcase`, whose parent already exists:
+
+```sh
+export BUTTERBOX_TEST_SUPABASE_CLI=/absolute/path/to/supabase
+node scripts/showcase-environment.mjs prepare /private/operator/path/butterbox-showcase
+```
+
+Preparation creates mode-0700 directories, mode-0600 generated API/signing
+material and hashed migration snapshots. It refuses to overwrite an existing
+directory. Never commit or publish those files, private failure diagnostics or
+raw CLI status output. No automatic seed or signup is enabled.
+
+The empty backend uses project `butterbox-showcase`, dedicated storage and an
+owned **internal-only Docker network**. This Docker configuration does not
+publish container ports; fixed-target host proxies provide local access without
+giving the service containers an external default route. Start the proxy in
+one terminal, then the backend in another:
+
+```sh
+node scripts/showcase-environment.mjs proxy /private/operator/path/butterbox-showcase
+```
+
+```sh
+node scripts/showcase-environment.mjs start /private/operator/path/butterbox-showcase
+node scripts/showcase-environment.mjs verify /private/operator/path/butterbox-showcase
+```
+
+Proxies listen only on `127.0.0.1`: API **57421**, database **57422**, Mailpit
+**57424**. They check target project/workdir, network, health and storage before
+forwarding. Stop the proxy with Ctrl-C when finished. Do not make these ports
+public or use this as a production/shared-host security boundary: the CLI still
+uses its standard local PostgreSQL password, and trusted local operators have
+Docker access. No app server or remote reviewer access is provisioned here.
+
+Verification checks every required service, generated signing-secret wiring,
+the real Auth endpoint, acceptance of the project's signed administrative JWT
+and rejection of a foreign administrative JWT and anonymous business reads.
+Local OpenAPI discovery is anonymous; an opaque `apikey` alone is not the
+authorization test. The helper does not print tokens.
+
+Startup refuses to adopt existing volumes without a running verified project.
+If startup fails, preserve the private diagnostics and any volume for operator
+inspection; do not reset, remove or bypass health checks. There is intentionally
+no reset/fixture command yet. Continue to monitor disk during startup and tests,
+stopping safely below 10 GiB. Normal customer sample-data safeguards remain off.
+
 Owners can configure each venue's latitude, longitude and clocking radius on
 **Departments**. Coordinates accept up to six meaningful decimal places and
 the radius is 1–10,000 metres; clearing all three fields removes the
