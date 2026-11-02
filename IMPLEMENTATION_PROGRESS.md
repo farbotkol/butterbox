@@ -12,7 +12,10 @@
   passed **300/300**. Two authenticated concurrency integrations, **10/10**
   Node tests and **5/5** targeted production-browser scenarios passed.
   Changed-file ESLint, TypeScript and the split production build passed.
-  Full suites were intentionally deferred. See the criterion evidence below.
+  Full suites were intentionally deferred. Feature commit
+  `2549475af5de0930f54b2b2ccf6f5ef81dc91003` was pushed in merge checkpoint
+  `7abb5ad31fb5a93440970ecb4b9b81443fc540b2`, whose remote SHA matched.
+  See the criterion evidence below.
 - BB-ROSTER-009 (roster approval) is Done. A venue owner can retain direct
   publication or require a different scoped owner, administrator or general
   manager to review an immutable snapshot. The requester can withdraw;
@@ -37,10 +40,12 @@
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
-  Privileged business deletion can cascade employment records; an approved
-  live-record retention/deletion policy and hosted recovery are not verified.
-  The owner must specify and approve the preservation policy before the last
-  criterion can be implemented and verified. Partial feature commit
+  Privileged business deletion can cascade employment records. Owner decision
+  `docs/DECISION_LOG.md` confirms a non-destructive, café-owned export model,
+  but its proposed durations, legal requirements and operational recovery
+  controls remain unapproved. Investigate safe partial preservation controls
+  without enabling deletion or claiming the last criterion is complete.
+  Partial feature commit
   `a98b1ad18abc69cf12f442e9a38db26028b46a58` was pushed and its remote SHA
   matched. See the criterion table below.
 - BB-RULES-001 (employment rule metadata) is Done. Scoped dated history
@@ -538,16 +543,19 @@
   and audit helpers, browser tests and `README.md`.
 - **Deferred and risks:** Full pgTAP, Node, authenticated integration and
   browser suites were intentionally not run; broader regression is needed at
-  workstream merge or release. The owner must approve which records and
-  retention periods are required, how privileged deletion is controlled and
-  what recovery procedure is acceptable. No live records were altered and
-  legal or payroll compliance is not claimed.
+  workstream merge or release. The owner has confirmed the non-destructive
+  direction in `docs/DECISION_LOG.md`, but the proposed durations, legal
+  preservation requirements and operational recovery controls still need
+  approval. No live records were altered and legal or payroll compliance is
+  not claimed.
 
 ## Current story
 
-- The verified `BB-ROSTER-005` feature is awaiting its commit and push.
-  Next, inspect the existing attendance and QR foundations for
-  **BB-ATTEND-004 — Rotating QR kiosk**.
+- **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
+  acceptance. In response to owner decision DEC-001, inspect the existing
+  deletion cascades, preservation controls and test cleanup before selecting a
+  safe non-destructive partial safeguard. Do not enable permanent deletion or
+  assume the proposed retention periods are approved.
 
 ## Recently completed story
 
@@ -592,8 +600,11 @@
     before switching to the normal migration role, and rollback was verified.
   - **Deferred and risks:** Full database, Node, integration and browser
     suites were intentionally not run. Broader regression remains required at
-    workstream merge or release. At 2026-11-02 10:58 UTC the verified feature
-    changes were not yet committed or pushed.
+    workstream merge or release. Feature commit
+    `2549475af5de0930f54b2b2ccf6f5ef81dc91003` was pushed through merge
+    checkpoint `7abb5ad31fb5a93440970ecb4b9b81443fc540b2`; its remote SHA
+    matched. The first push was rejected because the owner had concurrently
+    added DEC-001; both histories were merged without rewriting either.
 
 ## Earlier completed story
 
@@ -1923,12 +1934,12 @@ not yet run remotely.
 
 ## Next story
 
-- Resume **BB-RULES-005 — Privacy and retention policy** only after the owner
-  approves the required record classes, live retention/deletion controls and
-  recovery expectations. Implement and verify the resulting safeguards without
-  altering live records or assuming legal approval.
-- Commit and push the verified **BB-ROSTER-005** feature, then inspect
-  **BB-ATTEND-004 — Rotating QR kiosk** and its attendance prerequisites.
+- Inspect **BB-RULES-005 — Privacy and retention policy** for a safe partial,
+  non-destructive preservation safeguard under DEC-001. Keep the story Blocked
+  until the required legal, duration and operational approvals and all
+  acceptance evidence exist; do not alter live records.
+- After safe preservation work, inspect **BB-ATTEND-004 — Rotating QR kiosk**
+  and its attendance prerequisites.
 - Resume **BB-ORG-006** only after owner-approved roster/payroll transition
   and notification-default semantics and the necessary delivery capability
   are available. Preserve existing immutable periods and do not silently
