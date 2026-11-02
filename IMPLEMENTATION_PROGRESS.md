@@ -433,6 +433,11 @@
   compatible by recording an effective-today entry when its basis is changed.
   Date-aware reads must select the active version, including future changes,
   and optimistic revisions must protect the new editor from stale submissions.
+  The new migration and pgTAP file are uncommitted. On the verified isolated
+  acceptance database, a rolled-back migration/test transaction passed
+  **47/47** metadata assertions and a separate rolled-back transaction passed
+  the existing employee-profile suite **18/18**. No schema change was retained
+  by those runs; UI, authenticated concurrency and browser verification remain.
   The separate Award Central workstream remains isolated. No criterion has
   been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
