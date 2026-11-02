@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **52**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **68**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **53**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **68**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -680,7 +680,7 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-DOC-001 — Validate and expand role-based user guide: In Progress.**
+**BB-DOC-001 — Validate and expand role-based user guide: Done.**
 Selected ready Showcase P0 after BRAND-001 `c1ddaf3` was pushed with its remote
 SHA verified. Audit all 52 currently Done stories; add task-oriented steps and
 a coverage index linking each user-facing feature to instructions, or record
@@ -689,7 +689,37 @@ and recovery against implementation, distinguishing source review from actual
 browser runs. Existing production browser evidence for kiosk, alerts and
 reporting is available; no fabricated screenshots or claim of a new full
 runtime regression. This is documentation-only; no application code changes.
-Documentation: underway. No DOC-001 criterion is yet Pass.
+Expanded the existing guide with account/setup/recovery, business and delegated
+access, department/geofence administration, staff/qualification/invitation
+tasks, recurring/date availability, preferences, roster copy/quick-change/review,
+open-shift/swap consent, offline reconciliation/correction, timesheet approval,
+whole-venue finalisation, CSV reconciliation/mapping, audit and accessibility
+instructions. Existing user-facing labels and scope restrictions were checked
+against the cited implementation, including actual owner/admin/general-manager
+unlock authorization rather than older abbreviated UI copy. Explicitly
+documented additional-venue provisioning as backend-only: there is no invented
+Add venue button. Current identity/third-party rights, account-service email
+versus optional external channels, payroll/legal limits and unimplemented
+Help Center/contextual links remain clearly distinguished.
+
+Verification on 2026-11-02: coverage maps all **53 Done stories** (52 previous
+features plus DOC-001) exactly once, including explicit non-app reasons for
+brand governance, canonical data structures and engineering performance work.
+All relative implementation links resolve; no screenshot/image markup was
+added. Source review is explicitly distinguished from recorded targeted
+production-browser evidence for kiosk, attendance alerts and reporting.
+
+| Criterion | Implementation evidence | Verification and actual result | Status |
+| --- | --- | --- | --- |
+| DOC-001.1 — Done feature coverage | User Guide task sections and story-by-story coverage index | Compared index with committed tracker plus this story: no missing/duplicate IDs | Pass |
+| DOC-001.2 — actual screens/scope/recovery | Cited page/component/workspace sources; role-specific task steps and failure guidance | Source-checked labels, route files, membership/department scope, approval, finalisation and error paths; links verified | Pass |
+| DOC-001.3 — authentic illustrations only | No screenshots or generated UI images included | Guide explicitly states evidence scope and rejects marketing concepts as screen evidence | Pass |
+| DOC-001.4 — availability and legal limits | Future features, backend-only venue provisioning, sample safeguard, external delivery and payroll/privacy gates labeled | Checked against implemented screens and DEC-001 through DEC-005; no production/compliance claims | Pass |
+
+Documentation: updated — `docs/USER_GUIDE.md`. Runtime tests, lint, type-check
+and build intentionally not rerun: no runtime code changed. This does not claim
+a fresh route-by-route browser regression or hosted customer acceptance.
+Guide upkeep remains continuous; DOC-002/003 are separate implementation work.
 
 ## Latest completed brand-governance story
 

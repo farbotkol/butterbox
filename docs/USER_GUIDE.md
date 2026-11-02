@@ -6,6 +6,12 @@
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
+**Find a task:** [Accounts and business access](#accounts-and-business-access) |
+[People and availability](#people-and-availability) |
+[Rostering](#rostering) | [Open shifts and swaps](#open-shifts-and-swaps) |
+[Attendance](#attendance) | [Timesheets and payroll](#timesheets-and-payroll-preparation) |
+[Hours and labour](#hours-and-labour--owners) | [Troubleshooting](#troubleshooting)
+
 ## Getting started — owners
 
 1. Register and verify your account, then sign in.
@@ -17,6 +23,62 @@
 
 **Permissions:** Owners can manage the business; general managers and FOH/BOH managers have scoped responsibilities. Employees can access their own supported self-service functionality. A manager must not assume that access to one department permits access to another. Accounts with multiple business memberships can switch the active business; each request is independently authorized.
 
+### Accounts and business access
+
+- **Create account** opens registration (`/signup`); enter your email and a
+  password of at least ten characters, then complete email verification.
+  **Sign in** (`/login`) uses **Email address** and **Password**. Invalid
+  credentials deliberately do not identify whether an account exists.
+- Use **Forgot password?**, then **Send reset link** (`/forgot-password`).
+  Follow the account-service email and choose **Update password** on
+  `/reset-password`. An expired/invalid link requires a new reset request;
+  after a completed reset, sign in with the new password.
+- **Sign out** ends access, including session synchronization across tabs.
+  If a session ends, sign in again before retrying an operation. Check the
+  recorded outcome before resubmitting an uncertain clock, approval or export.
+- With more than one membership, use **Switch business**, then **Open** on
+  **Choose a business** (`/choose-business`). A page/form opened for another
+  business stays attached to that business; switching does not authorize it
+  for the new selection. If access was revoked, choose an available business
+  rather than changing URL IDs.
+- First-time owners use `/setup`: complete business/venue name, address and
+  **Venue timezone**, then **Create workspace**. **Save progress** retains
+  an incomplete setup. **Add a sample team** is unavailable in this environment;
+  leave it off and create a clean workspace. This is not a demo-data installer.
+
+Registration, password and staff-invitation emails are account-service messages
+and depend on the deployment's configured mail service. They do not mean optional
+roster/attendance email, SMS, push or WhatsApp channels are live.
+
+### Delegate access and select a venue
+
+1. As an owner, open **Permissions** (`/settings/permissions`). For an existing
+   business member choose **Role**, **Venue** and **Department**, then **Save
+   permissions**. Review the saved scope before giving that person work.
+2. Owner membership administration is distinct from an employee profile,
+   account link and role qualification. Department managers manage permitted
+   departments; an extra employee qualification does not grant management rights.
+3. Use each screen's **Venue** selector and its submit button to switch between
+   already provisioned venues. Venue selection never changes business membership.
+   The current app has no **Add venue** page/button: additional venue
+   provisioning is a backend/operator workflow, not an instruction to create a
+   second business or to modify a database yourself.
+4. Owners configure location in **Departments** (`/settings/organisation`),
+   under **Venue location and geofence**: set **Latitude**, **Longitude**
+   and **Radius in metres**, then **Save venue location**. Choose **Clock
+   location verification** and **Save clock location setting** separately.
+   Coordinates must be valid; radius is a whole number from 1 to 10,000 metres.
+   Clear all location fields together only after disabling verification.
+5. In **Departments and roles**, authorized owner/admin/general-manager
+   scopes can **Add department** or **Save department**. Eligible managers can
+   **Add role**/**Save role** in their permitted department. Inactive departments
+   must be reactivated before adding/reactivating roles. Role-level
+   **Automatic assignment** and **Manual assignment** restrictions are separate;
+   **Save restriction** is not a replacement for **Save manual restriction**.
+
+If permissions or membership change while a form is open, reload and review
+the current scope. Do not treat a hidden button as the security boundary.
+
 ## For owners and venue managers
 
 ### People and availability
@@ -27,6 +89,60 @@
 - Use the searchable team directory within your permitted business/venue/department scope.
 - Employment rule metadata retains effective-dated employment basis and award/contract references. **This alone does not calculate or certify award-compliant pay.**
 
+#### Maintain profiles, qualifications and invitations
+
+1. Open **People** (`/people`, heading **Employee profiles**). Use **Search
+   team**, **Venue**, **Department**, **Role** and **Status**, then **Filter
+   team**. **Archived** records are historical, not deleted.
+2. Under **Add employee**, supply the profile and primary department, then
+   **Add employee**. On an existing profile choose **Save employee**.
+   Set **Status** to **Archived** rather than deleting historical records;
+   select an active status and save to reactivate. Managers of additional
+   departments may see the profile without being able to edit its home details.
+3. Use **Save departments** for additional eligible departments, **Save
+   eligible roles** for qualifications and **Set primary role** for the
+   **Primary qualified role**. Choose a replacement primary role before removing
+   its qualification/department. Changing the profile job title manually can
+   clear a different primary qualified role. Inactive roles are unavailable for
+   new work; qualification alone does not override availability/conflicts.
+4. Under **Staff invitation**, enter **Invitation email** and **Send
+   invitation** for an active, unlinked employee in an active department.
+   The recipient verifies the email and chooses their own password; an existing
+   Butterbox account joins this business with employee access, not inherited
+   permissions from another business. Invitations expire after seven days.
+   Use **Resend email** or **Revoke invitation** as appropriate; issue a new
+   invitation after expiry. Only the intended authenticated recipient may accept.
+5. **Save account link** links an existing eligible business member to the
+   profile for self-service. This is distinct from an invitation. Authorized
+   cross-venue managers may **Link profiles**/**Unlink profile** under **Shared
+   staff across venues** after checking the identity confirmations. Linking
+   affects cross-venue conflict/attendance identity checks, not permission scope.
+6. Choose **Review employment metadata** on a profile. Supply **Effective date**,
+   **Employment basis** and optional classification/award/contract references.
+   Review dated history before saving a new record: future dates do not apply
+   yet, and a later same-date record supersedes rather than deletes the earlier
+   entry. If the record changed concurrently, refresh before saving again.
+   Unknown metadata is not evidence that no employment obligations apply.
+
+#### Maintain availability, leave and preferences
+
+1. Open **Availability** (`/availability`, heading **Availability and leave**).
+   On your linked employee profile add recurring day/time intervals and **Save
+   availability**. An overnight interval belongs to the selected starting day.
+   Review the explicit unavailable-week choice before saving an empty pattern.
+2. Under **Date exceptions**, choose **Block dates (unavailable)** or **Request
+   leave**, set **From**/**Through** and **Save date exception**. Date blocks
+   and approved leave override recurring availability for whole local days;
+   pending leave is visible but does not yet change availability.
+3. Use **Cancel** for an active date block or pending request. Approved leave
+   needs a manager: in **Team leave requests**, scoped managers can **Approve**,
+   **Reject** or **Confirm cancellation**. Read the resulting status rather
+   than assuming a request or cancellation was approved.
+4. Under **Work preferences**, set **Preferred weekly hours (optional)** from
+   0 to 168 in quarter-hour increments, select both email choices and **Save
+   work preferences**. Hours are preferences, not contract limits. The saved
+   email choices do not activate external notification delivery.
+
 ### Rostering
 
 - The weekly people-by-day roster groups shifts by department and supports week navigation, venue filters and responsive layouts.
@@ -34,6 +150,41 @@
 - Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. Published shifts and review snapshots have separate integrity controls.
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
 - If roster approval is enabled, a distinct authorized reviewer can approve or reject a submitted roster snapshot. Rejection requires a reason, and approval rechecks current blockers.
+
+#### Build, copy and publish a week
+
+1. Open **Rostering** (`/roster`), select the venue, operational week and
+   department. Use **Collapse**/**Expand** for department rows; filters do not
+   grant access to other departments.
+2. In **Add a shift**, choose role, team member (or leave unassigned), **Starts**,
+   **Ends** and **Break (mins)**, then **Save draft shift**. To edit an existing
+   draft use **Update draft shift**. A draft is not employee-visible; a planned
+   break is not a recorded paid/unpaid break.
+3. **Copy a previous week** and **Copy into this week** create private editable
+   drafts in the selected department. Review each new shift for current
+   eligibility and conflicts before publication. This is week copying, not a
+   separate named-template library.
+4. For a quick change, activate the shift's **Move or duplicate** control with
+   keyboard/touch, or drag to a team member/day. Choose the action/destination
+   and **Preview change**. Inspect blockers/warnings, then **Apply move** or
+   **Create draft duplicate**. Published shifts can be duplicated as drafts,
+   not moved. **Undo last quick change** rechecks that undo is still safe.
+   If the result is uncertain, use **Retry same request** or reload and inspect;
+   do not repeatedly create new requests.
+5. Resolve overlap, eligibility and blocking availability issues. Owners can
+   configure **Roster conflict rules** in **Departments** and **Save roster
+   conflict rules**; warnings and blockers differ by policy. Warnings are not
+   payroll/legal clearance. Assignment and publication recheck current data.
+6. For direct publication choose **Publish this department**. In approval mode,
+   **Submit for review** creates an immutable submitted snapshot. In **Roster
+   reviews**, a different authorized reviewer uses **Approve and publish** or
+   enters a rejection reason and rejects it; the requester can **Withdraw
+   review**. Changed/stale drafts require withdrawal/rejection and resubmission.
+   Later-added drafts are not silently included in an earlier approval.
+7. Check **Publication history** and in-app notices. Employees use **My
+   schedule** (`/my-schedule`) for assigned published shifts; where required,
+   use **Acknowledge shift**. Reading a notice is not shift acknowledgement.
+   A changed published assignment can require a fresh acknowledgement.
 
 **Week-start setting:** In organisation settings, an owner can set the
 **Roster planning week** for each venue; the default is Monday. Changes take
@@ -50,6 +201,23 @@ yet accepted.
 - Managers can offer available shifts; eligible staff may respond. A claim is committed transactionally to avoid double assignment.
 - Staff can request shift swaps. Both participants must consent; a scoped manager reviews the request. Approval rechecks eligibility and conflicts, then updates the relevant published record/notification trail.
 - An offer or swap is not final merely because a notification was received: check the actual recorded outcome.
+
+**Open-shift sequence:** In the roster's **Open shifts**, publish an upcoming
+unassigned shift before offering it. Choose eligible staff and a future **Offer
+expires** time before shift start. Employees see **Claim shift** or decline in
+**My schedule**. A claim expresses interest: the manager must confirm a claimant
+before the shift is assigned. Competing confirmations cannot both fill it;
+if a candidate is no longer available, refresh and reassess rather than
+assuming assignment. Managers may withdraw an open offer.
+
+**Swap sequence:** Follow the shift-swaps link to `/shift-swaps`. The requester
+chooses a colleague and **Request swap**. The recipient chooses **Choose your
+shift to exchange**, then **Propose and confirm my shift**; the requester must
+then **Confirm exchange**. Either can decline at the relevant step. A scoped
+manager uses **Approve swap** or supplies **Reason for rejection** and **Reject
+swap**. Both consent and current eligibility/conflicts are required. If a
+shift changes, create a new request; a stale snapshot cannot be approved.
+Both employees receive in-app outcomes; verify the resulting published shifts.
 
 ### Attendance
 
@@ -92,6 +260,54 @@ settings. Turning monitoring off stops new detection but retains history.
 Alerts do not change original clock records, approve timesheets, calculate
 pay or prove award breaches. External alert delivery is not enabled.
 
+#### Clock, review location and correct reported time
+
+1. Open **Clock in / out** (`/attendance`), choose the right permitted
+   employee/department if prompted and **Clock in**. Check **Current attendance**.
+   Use **Start paid break** or **Start unpaid break**, **End break**, then
+   **Clock out**. End an open break before clocking out. The page shows the
+   server-recorded result, not a successful clock just because a button was pressed.
+2. If location verification is enabled, permit the point-in-time location check.
+   Denied, inaccurate or unavailable location can still record a clock with an
+   exception. Managers inspect **Location exceptions**, then **Mark as reviewed**
+   with the required review details. That review does not alter original time.
+3. Employees use **Submit correction request** for a missing/incorrect clock:
+   choose the event, proposed local time and reason. If a daylight-saving time
+   occurs twice, choose the correct occurrence; a nonexistent local time is
+   rejected. Submission does not itself change recorded attendance.
+4. Managers review these requests in **Attendance**. Compare the recorded event
+   and reported time, enter **Reason for review**, then **Approve if time already
+   matches**, **Approve and apply proposed time**, or **Reject request**.
+   Creating a missing session or completing an open session requires explicit
+   unverified-time confirmation and checking breaks; it is not automatic approval.
+5. For a finished session, open **Work time** (`/work-time`), expand **Review
+   and correct attendance**, choose the event/time, enter **Reason for correction**
+   and **Save correction**. Original events remain immutable; corrections and
+   edit-lock decisions are attributed additions visible in history.
+6. **Lock attendance edits** prevents corrections but is not approval.
+   Scoped owners/admins/general managers may **Unlock attendance edits** with
+   a reason. An unlock/change can invalidate prior approval. Finalised payroll
+   must be reopened before attendance can change; refresh after a stale-data error.
+
+#### Use the offline fallback safely
+
+- While signed in and online, expand **Prepare this tab for offline reopening**,
+  choose matching **Offline passphrase** values of 12 to 128 characters and
+  **Prepare offline reopening**. Preparation is scoped to this tab, account
+  and venue; signing out removes it. Another tab is not automatically prepared.
+- If clocking fails, use **Save offline clock in**/**Save offline clock out**
+  in **Offline attendance fallback**. These are unverified device-time claims,
+  not confirmed server clocks, approved hours or captured breaks.
+- Reconnect and use the same account to upload pending claims. Retain the device
+  data until receipt is confirmed; clearing browser data can lose pending claims.
+  A changed/unknown account session disables the fallback until checked online.
+  If storage or JavaScript fails, note the time separately and contact a manager.
+- Managers reconcile a claim with a finished event using **Match without
+  changing time** or **Use claimed time as correction**, with a reason.
+  Paired claims or a missing clock-out can create/complete attendance only
+  through the explicit review forms; review reported breaks before approval.
+  Rejected/previously linked claims must not be used to duplicate attendance.
+
 #### Set up a QR clock kiosk
 
 1. As a business owner, open **Attendance**, select the venue and choose
@@ -123,6 +339,59 @@ The usual attendance screen remains available when scanning is not possible.
 2. Approve work within your department/business permissions.
 3. Finalize the payroll period under the approved workflow.
 4. Generate a traceable payroll export or generic CSV where supported, and retain export identifiers/history.
+
+#### Review, approve and finalise time
+
+1. Open **Timesheet review** (`/timesheets`, heading **Weekly timesheet review**).
+   Choose **Venue**, **Week containing date** and **Employee**, then **Apply
+   filters**. Weeks are Monday-based in the venue timezone; corrected session
+   start determines the week. Overnight records are not split.
+2. Compare **Published shifts** with **Attendance sessions** and **Inspect source
+   events**. Elapsed time is clock span; worked time subtracts all recorded
+   breaks; paid time subtracts only unpaid breaks. Missing/invalid clocks or
+   breaks show unavailable calculations, not zero hours. Scheduled span includes
+   planned break time; matching totals do not pair sessions with shifts.
+3. Department managers use **Approve time** or enter **Reason for returning**
+   and **Return for correction**. Only an owner may decide their own attendance;
+   other managers need another authorized reviewer. Approval locks edits.
+   Pending/returned/outdated entries are not approved merely because they are locked.
+4. For bulk edit locks, select valid unlocked sessions, provide the reason and
+   review the receipt's locked/excluded/already-locked counts. Bulk locking is
+   not department approval or payroll finalisation.
+5. In **Payroll period**, resolve **Outstanding exceptions**. An owner, admin
+   or general manager with access to every venue department can **Finalise
+   payroll period**, only after the week ends. The action covers the whole
+   venue, not the current employee filter. A finalisation snapshot retains exact
+   seconds even when displayed durations are rounded.
+6. An authorized whole-venue reviewer can enter **Reason for reopening** and
+   **Reopen payroll period** before changes. Reapprove changed entries and
+   finalise again; reopening does not erase the previous snapshot or exported
+   history. If period state cannot load, attendance changes fail closed.
+
+#### Prepare CSV, reconcile exports and map employees
+
+1. In a finalised, exception-free venue week, review **Generic payroll CSV**,
+   then **Prepare payroll CSV** and the recorded batch/history. A batch contains
+   only approved sessions never exported before and is **whole venue** even if
+   an employee filter is selected. Its canonical records preserve source
+   attendance, approval and finalisation references; this is not wage calculation.
+2. Preparation, download and provider import are different events. Check the
+   saved batch and **Payroll export history** before retrying; downloading or
+   importing the same batch again may pay people twice. Retain batch/finalisation
+   IDs and confirm any import separately in your payroll system.
+3. After an exported session changes, inspect before/after records, make any
+   required adjustment outside Butterbox, enter **Reconciliation reason**,
+   confirm the external handling and **Record manual reconciliation**.
+   Previously exported sessions are not emitted again. This records your
+   acknowledgement; Butterbox does not send an adjustment.
+4. Owners/admins use **Manage payroll employee mapping** in the payroll-period
+   section to open `/settings/payroll`. Use **Add mapping destination**, select
+   the destination and **Show mappings**. Enter each **Payroll employee ID** and
+   **Reason for mapping change**, then **Save payroll ID**. A blank ID removes
+   the mapping and blocks provider-ready records for that employee. Refresh
+   after duplicate/stale/conflicting-ID errors; never guess an employee ID.
+5. Mapping setup is not OAuth or a connected provider. The generic CSV contains
+   no external payroll IDs; saving a destination does not alter that fact.
 
 **Important:** Butterbox's generic payroll records and CSV workflow do not mean Xero, MYOB, Employment Hero or QuickBooks integrations are live. Xero integration is intentionally deferred. Award Central's gross-pay interpretation is not yet independently approved for production calculations.
 
@@ -168,6 +437,12 @@ it does not approve hours, export payroll or transmit data to a provider.
 
 Business owners can review sensitive staffing, permission, roster, attendance and payroll changes in **Audit history**, with scoped filters and pagination. Audit records may contain personal information and should be shared only with appropriately authorized users.
 
+Open `/settings/audit` through **Audit history**; filter by **Change category**,
+**Operation**, **Actor user ID**, **From date (UTC)** and **Through date (UTC)**.
+Use **Previous audit page**/**Next audit page** when available. UTC audit-date
+filters differ from venue-local timesheet weeks. A failed/incomplete load is
+not proof that no activity occurred.
+
 ## For employees
 
 1. Accept your invitation, verify your account and sign in.
@@ -176,6 +451,19 @@ Business owners can review sensitive staffing, permission, roster, attendance an
 4. Respond to open-shift offers or propose shift swaps if your business uses those workflows.
 5. Clock in/out, record breaks, review personal attendance history and request corrections where needed. At a configured kiosk, sign in on your own phone first, scan the current code, check the venue and confirm the QR clock. If a code has expired or was used, wait for the display to refresh and scan again. End an open break in **Attendance** before using a QR to clock out.
 6. Use the in-app notification centre for relevant outcomes and updates.
+
+**Notifications** (`/notifications`) contains your permitted roster updates,
+open-shift offers/outcomes and swap events; scoped managers also see attendance
+alerts. Opening/marking a notice read does not acknowledge a shift, consent to a
+swap, confirm an open-shift claim or approve time. Use the linked task screen for
+those decisions. Use **View your attendance history** from **Attendance** for
+your own historical effective clocks and correction decisions.
+
+**Mobile and keyboard use:** Horizontal main navigation can scroll on a narrow
+screen. Use **Skip to main content** and visible keyboard focus; quick roster
+changes have explicit controls instead of requiring a drag gesture. Wait for
+loading/pending state and the actual result. If a result is uncertain, refresh
+and inspect history before retrying. No fixed response-time guarantee is implied.
 
 External email, push, SMS and WhatsApp notifications are **planned optional channels**, not currently guaranteed live delivery. Recipient preferences and consent govern any future activation.
 
@@ -209,6 +497,89 @@ Butterbox's agreed product direction is customer-owned export of employment reco
 
 ## Getting help and improving this guide
 
-The application includes onboarding checklist and inline help for certain tasks, but comprehensive screen-by-screen contextual help is still planned. A future documentation story must verify each feature's actual routes, button labels, screenshots, permissions and failure cases using production-browser acceptance evidence before considering this guide a fully validated walkthrough.
+The application includes onboarding and some inline help. A searchable HTML
+Help Center and comprehensive contextual links remain BB-DOC-002/003 work;
+this Markdown guide does not claim those routes are deployed.
+
+### Verification scope and feature coverage
+
+This guide was checked on 2026-11-02 against the Main Roadmap implementation
+through `c1ddaf3`. Routes, button wording, role checks and recovery paths were
+source-reviewed. The kiosk, attendance-alert and reporting workflows also have
+recorded targeted production-browser evidence in
+[implementation progress](../IMPLEMENTATION_PROGRESS.md). This documentation
+audit is **not** a new browser replay of every screen or a production sign-off.
+No screenshots or generated UI images are included; illustrative brand
+concepts are not screen evidence.
+
+Source checkpoints for maintainers:
+
+| Area | Inspected implementation |
+| --- | --- |
+| Account and session | [Login](../src/app/login/page.tsx), [registration](../src/app/signup/page.tsx), [reset request](../src/app/forgot-password/page.tsx), [reset completion](../src/app/reset-password/page.tsx), [setup](../src/app/setup/page.tsx) |
+| Business and access | [Chooser](../src/app/choose-business/page.tsx), [workspace context](../src/lib/workspace.ts), [permissions](../src/app/settings/permissions/page.tsx), [navigation](../src/components/main-navigation.tsx) |
+| Organisation and people | [Departments](../src/app/settings/organisation/page.tsx), [people](../src/app/people/page.tsx), [employment](../src/app/people/[employeeId]/employment/page.tsx), [availability](../src/app/availability/page.tsx) |
+| Roster and exchanges | [Roster](../src/app/roster/page.tsx), [editor](../src/components/shift-editor.tsx), [quick changes](../src/components/roster-quick-changes.tsx), [copy](../src/components/copy-roster-form.tsx), [review](../src/components/roster-review-panel.tsx), [schedule](../src/app/my-schedule/page.tsx), [swaps](../src/app/shift-swaps/page.tsx) |
+| Attendance | [Clock/review](../src/app/attendance/page.tsx), [offline fallback](../src/components/offline-attendance.tsx), [offline review](../src/components/offline-claim-review.tsx), [work time](../src/app/work-time/page.tsx), [alerts](../src/app/attendance/alerts/page.tsx), [kiosk](../src/app/attendance/kiosks/page.tsx) |
+| Payroll, notices and reporting | [Timesheets](../src/app/timesheets/page.tsx), [mapping](../src/app/settings/payroll/page.tsx), [notifications](../src/app/notifications/page.tsx), [audit](../src/app/settings/audit/page.tsx), [hours](../src/app/reports/hours/page.tsx) |
+
+Every Done story at this audit checkpoint maps to task guidance below, or to an
+explicit non-user-facing reason. Update this index when a story becomes Done.
+
+| Story | Guidance / non-user-facing reason |
+| --- | --- |
+| BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
+| BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
+| BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |
+| BB-FOUND-005 | Maintain profiles, qualifications and invitations — invite/accept/resend/revoke |
+| BB-FOUND-006 | Accounts and business access — Switch business and existing-tab behavior |
+| BB-FOUND-007 | Audit history — owner filters and UTC dates |
+| BB-ORG-001 | Accounts and business access — Create workspace / Save progress; sample safeguard |
+| BB-ORG-002 | Delegate access and select a venue — geofence and clock-location policy |
+| BB-ORG-003 | Delegate access and select a venue — departments, roles and restrictions |
+| BB-ORG-004 | Delegate access and select a venue — department management scope |
+| BB-ORG-005 | Delegate access and select a venue — existing-venue selectors; additional provisioning is backend-only |
+| BB-PEOPLE-001 | Maintain profiles, qualifications and invitations — add/save/archive/reactivate |
+| BB-PEOPLE-002 | Maintain profiles, qualifications and invitations — departments, eligible and primary roles |
+| BB-PEOPLE-003 | Maintain availability, leave and preferences — recurring intervals |
+| BB-PEOPLE-004 | Maintain availability, leave and preferences — date exceptions and leave decisions |
+| BB-PEOPLE-005 | Maintain availability, leave and preferences — preferred hours/email choices; profile contact email |
+| BB-PEOPLE-006 | Maintain profiles, qualifications and invitations — directory filters |
+| BB-ROSTER-001 | Build, copy and publish a week — weekly roster |
+| BB-ROSTER-002 | Build, copy and publish a week — draft create/edit |
+| BB-ROSTER-003 | Build, copy and publish a week; Open shifts and swaps — unassigned coverage |
+| BB-ROSTER-004 | Build, copy and publish a week — actual week-copy workflow, not a named-template library |
+| BB-ROSTER-005 | Build, copy and publish a week — preview/apply/guarded undo and keyboard alternative |
+| BB-ROSTER-006 | Build, copy and publish a week — filters and collapse |
+| BB-ROSTER-007 | Build, copy and publish a week — conflict warnings/blockers |
+| BB-ROSTER-008 | Build, copy and publish a week; Notifications — publish/notices/acknowledgement |
+| BB-ROSTER-009 | Build, copy and publish a week — distinct snapshot reviewer |
+| BB-ROSTER-010 | Build, copy and publish a week; For employees — My schedule |
+| BB-ATTEND-001 | Clock, review location and correct reported time — server clocks |
+| BB-ATTEND-002 | Clock, review location and correct reported time — paid/unpaid breaks |
+| BB-ATTEND-003 | Delegate access; Clock, review location and correct reported time — location policy/exceptions |
+| BB-ATTEND-004 | Set up a QR clock kiosk — owner activation, expiry and revocation |
+| BB-ATTEND-005 | Use the offline fallback safely — device claims and reconciliation |
+| BB-ATTEND-006 | Configure and review attendance alerts — settings, decisions and limits |
+| BB-ATTEND-007 | Clock, review location and correct reported time — immutable corrections/edit locks |
+| BB-TIME-001 | Review, approve and finalise time — elapsed/worked/paid definitions and invalid entries |
+| BB-TIME-002 | Review, approve and finalise time — weekly filters, source events and bulk locks |
+| BB-TIME-003 | Clock, review location and correct reported time — employee requests and manager decisions |
+| BB-TIME-004 | Review, approve and finalise time — department approval, self-review and stale approval |
+| BB-TIME-005 | Review, approve and finalise time — whole-venue finalisation/reopening |
+| BB-TIME-006 | Prepare CSV, reconcile exports and map employees — batch/history/source references |
+| BB-PAY-001 | Prepare CSV, reconcile exports and map employees — canonical snapshots; no separate employee action |
+| BB-PAY-002 | Prepare CSV, reconcile exports and map employees — generic CSV and reconciliation |
+| BB-PAY-003 | Prepare CSV, reconcile exports and map employees — explicit destination/employee mapping |
+| BB-SHIFTS-001 | Open shifts and swaps — offer audience/expiry |
+| BB-SHIFTS-002 | Open shifts and swaps — employee claim/decline |
+| BB-SHIFTS-003 | Open shifts and swaps — manager confirmation and competing claims |
+| BB-SHIFTS-004 | Open shifts and swaps — two-party consent and scoped review |
+| BB-COMMS-002 | For employees — Notifications and distinction from task decisions |
+| BB-RULES-001 | Maintain profiles, qualifications and invitations — effective-dated employment metadata |
+| BB-REPORT-001 | Hours and labour — owners — definitions, filtering, reconciliation and illustrative costs |
+| BB-SAAS-004 | For employees — Mobile and keyboard use; engineering performance work has no separate user operation |
+| BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
+| BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
 **Document ownership:** Main Roadmap feature agent maintains user-facing guidance with each completed feature. Update this guide and any relevant help UI when workflows change; indicate unavailable or blocked capabilities explicitly.
