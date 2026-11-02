@@ -34,8 +34,10 @@
   display-week starts, Monday payroll boundaries and essential in-app
   defaults, but these settings and their transition safeguards are not yet
   implemented or verified. Optional external channels require the undelivered
-  BB-COMMS-003 capability, consent and provider approval; optional categories
-  and quiet hours remain open. No historical periods have been reinterpreted.
+  BB-COMMS-003 capability, consent and provider approval. Final DEC-002
+  directs employee opt-outs, essential in-app notices and timezone-aware
+  external quiet hours; the initial hours and urgent event list remain open.
+  No historical periods have been reinterpreted.
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
@@ -572,6 +574,22 @@
   businesses are preserved rather than bypassing the guard; authenticated
   and browser cleanup still require runtime verification. Changed-file lint
   and TypeScript passed. The migration remains unapplied and uncommitted.
+- At 11:14 UTC the additive guard had been applied and recorded only in the
+  verified `butterbox-acceptance` project (API 55421, DB 55422). Its
+  retention-aware teardown passed **24/24** authenticated integration
+  scenarios and **1/1** signup browser scenario; synthetic businesses remain
+  in that disposable project, while test user accounts were removed. The
+  first broad pgTAP attempt exposed global counts that included retained
+  fixtures; after scoping counts to the relevant test session or tenant, the
+  offline-session, payroll-mapping and notification files passed **47/47**,
+  **30/30** and **77/77**. The full pgTAP rerun, a deletion/clock race,
+  additional browser coverage, replay and final lint/TypeScript remain pending.
+- At 11:15 UTC the owner's final DEC-002 clarification was fetched and
+  fast-forwarded as `fb0bb857f34fd282d58905e4579489ac672bddc6`, preserving
+  uncommitted retention work. Display-week changes must not silently alter
+  payroll or publication boundaries; venue defaults cannot override employee
+  consent, and urgent external notices may bypass quiet hours only through
+  eligible channels.
 
 ## Recently completed story
 
