@@ -51,7 +51,7 @@ export function AppShell({
             className="flex min-h-11 items-center gap-3 rounded-lg px-4 py-3 text-sm text-muted hover:bg-cloud hover:text-ocean"
           >
             <CircleHelp size={17} aria-hidden="true" />
-            Help
+            Contact support
           </a>
         </div>
       </aside>

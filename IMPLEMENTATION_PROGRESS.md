@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **56**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **64**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **57**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **64**.
 - BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
   and mobile employee baseline journeys; actual login/navigation, sample
   download and permission failures verified in **4/4** focused production
@@ -699,12 +699,47 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-DOC-003 — Contextual help and documentation upkeep: In Progress (Planning).**
-DOC-002 is verified below; DOC-003 is the next ready P1 with its prerequisite
-Done. Remaining Showcase P0 identity work requires owner approval. Add scoped
-task links to onboarding, roster, attendance, timesheets and payroll screens,
-then lightweight source/link/review checks and focused production browsers.
-Preserve existing workflow authorization; no database changes planned.
+**Selecting the next ready P1 operational story.**
+DOC-003 is verified below. Remaining Showcase P0 identity work requires owner
+approval. Inspect configured roster-change/employment safeguards before
+scenario-driven SHIFTS-005; complete genuine prerequisites first. Preserve
+Award Central separation and all owner-dependent blockers.
+
+## Latest completed contextual-help story
+
+**BB-DOC-003 — Contextual help and documentation upkeep: Done.**
+Verified 2026-11-02 22:05 UTC. Reused `helpHref` and native links; no new help
+framework, business mutation, schema or authorization policy.
+
+| Criterion | Implementation and test | Actual result | Status |
+| --- | --- | --- | --- |
+| DOC-003-AC1 | Setup/checklist, weekly roster, employee schedule, clocking, timesheets, permission-gated CSV and mapping links; role-aware destinations and business pinning | Four member-role production scenarios plus new-account setup passed (5/5 across final focused runs) | Pass |
+| DOC-003-AC2 | Existing AGENTS documentation Definition of Done retained; canonical guide updated with exact screen labels, scope, errors and limitations | Automated DoD/label checks and source review passed | Pass |
+| DOC-003-AC3 | Version/date history in User Guide; lightweight Markdown file/anchor, contextual destination, source label and review-history contracts; browser focus/axe/overflow checks | 8/8 Node tests, contextual keyboard/mobile/browser checks passed | Pass |
+| DOC-003-AC4 | Real article destinations checked against production app; explicit no UI screenshot/optional AI claims, concept images not screen evidence | Guide limitation contracts and real browser articles passed | Pass |
+
+Changed: eight core workflow/checklist surfaces, AppShell's ambiguous email
+Help label now `Contact support`, User Guide and focused help tests.
+Selected tests: help source/render/search/role regressions plus link, label and
+history contracts; owner, FOH, BOH, employee contextual browsers and onboarding.
+TypeScript, changed-file ESLint and split production build passed.
+First upkeep run found a test root-path trailing-slash bug (not a broken guide
+link); corrected path normalization, all 8 tests passed. Initial owner browser
+expected a paraphrase of the payroll warning; replaced with the actual
+`this is not wage calculation` and deferred-Xero wording, reran owner successfully.
+Both manager and employee scenarios already passed; assertions preserved.
+No final known failure. Disk guard stayed at 28 GiB free.
+
+Full unrelated Node, pgTAP, integration and browser suites intentionally
+deferred: links only, no workflow mutations, schema or shared security changes.
+Automated stale-label checks cover core link/screen contracts, not all prose;
+human review remains mandatory. Broader regression required at release/merge.
+**Documentation: updated** canonical guide, role/screen link table, version
+history, upkeep command, limitations and coverage index.
+DOC-002 feature `991895768ad73fc0d1319b8baba8f680fd4dd9f6` was pushed; exact
+remote SHA verified. DOC-003 verified feature checkpoint follows this evidence.
+An unrelated `.eslintcache` deletion appeared during execution; preserved
+unstaged rather than attributing it or overwriting concurrent work.
 
 ## Latest completed help story
 
@@ -2713,8 +2748,9 @@ but has not yet run remotely.
   records or bypass the fail-closed safeguard.
 - **BB-DEMO-001/002** are Done. Remaining Showcase P0 brand/UI/reset milestone
   work depends on final owner-approved identity; do not invent that approval.
-  Continue **BB-DOC-003** contextual help/upkeep after verified DOC-002.
-  ATTEND-006, REPORT-001, BRAND-001 and DOC-001/002 are Done; do not rebuild them.
+  Select ready P1 operational work; inspect roster-change safeguards required
+  before scenario-driven staffing changes. ATTEND-006, REPORT-001, BRAND-001
+  and DOC-001/002/003 are Done; do not rebuild them.
   Other BRAND delivery still requires its specific assets and approvals.
   Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable

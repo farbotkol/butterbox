@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { acknowledgeShiftAction, respondShiftOfferAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { helpHref } from "@/lib/help";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { groupEmployeeSchedule, type EmployeeScheduleShift } from "@/lib/employee-schedule";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
@@ -232,6 +233,10 @@ export default async function MySchedulePage({
           <p className="mt-2 text-sm text-muted">
             Only your published shifts are shown. Times use {workspace.venue.timezone.replaceAll("_", " ")}.
           </p>
+          <Link href={helpHref("employee", workspace.business.id)}
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+            Help with your schedule
+          </Link>
           <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
             Request or review shift swaps

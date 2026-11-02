@@ -3,6 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
+**Guide version:** 1.1 — reviewed 2026-11-02 (Core Roadmap).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -642,8 +643,50 @@ as HTML; it is not a separate hand-maintained copy.
 Raw embedded HTML, images and unapproved URLs are not rendered by the help
 viewer. Guide references without a permitted in-app destination remain text.
 Unavailable capabilities and payroll/legal limitations remain clearly marked.
-Comprehensive screen-specific contextual links and documentation upkeep remain
-separate BB-DOC-003 work; this Help Center does not claim those are deployed.
+
+### Help at the point of work
+
+Use the following contextual links without submitting a workflow form:
+
+| Screen | Link | Guidance |
+| --- | --- | --- |
+| Set up your workspace | Help with workspace setup | Getting started |
+| Owner's first-roster checklist | Help with your first roster | Getting started |
+| Weekly roster | Help with rosters | Building/publishing for managers; employee self-service for employees |
+| My schedule | Help with your schedule | Employee self-service |
+| Clock in / out | Help with clocking and corrections | Clocking, recorded breaks, location and correction requests |
+| Weekly timesheet review | Help with timesheet review | Scoped review, approval and finalisation limitations |
+| Generic payroll CSV section | Help with payroll CSV | Preparing/reconciling approved-hours CSV; only shown with the existing finalisation/export permission |
+| Payroll employee mapping | Help with payroll preparation | Mapping limitations and payroll-preparation guidance |
+
+Links retain the server-resolved business; help does not broaden venue,
+department or payroll access. Employees cannot use a direct timesheet URL to
+obtain manager guidance. **All help topics** returns to browsing; use browser
+Back to return to the originating screen. Search does not change application
+records. The desktop **Contact support** link opens an email composer; it is
+not the in-app Help Center or a guarantee of support delivery.
+
+### Guide review and maintenance
+
+Documentation is part of the user-visible feature Definition of Done in
+[AGENTS.md](../AGENTS.md). Review changed labels, routes, scope, errors and
+limitations with each affected feature; add an entry below and update the
+coverage index. Keep this Markdown canonical rather than editing generated HTML.
+Run `node --experimental-strip-types --test tests/help.test.mjs` for source,
+content/link, documented-label and history checks. Rerun focused production
+browser scenarios when affected screens, navigation or help rendering change;
+those checks include actual article destinations, keyboard focus and mobile
+axe/overflow. Automated label contracts cover the core contextual workflows,
+not every sentence or all app screens; human review remains necessary.
+
+| Version | Reviewed (UTC date) | Source checkpoint / change | Verified scope |
+| --- | --- | --- | --- |
+| 1.0 | 2026-11-02 | `c1ddaf3` (guide audit); DEMO-001/002 evidence below | Done-feature mapping and source label/permission review; recorded targeted browser evidence, not a fresh full-app walkthrough |
+| 1.1 | 2026-11-02 | `9918957` (DOC-002); DOC-003 contextual links | Markdown-backed role-safe search and core contextual navigation; targeted runtime and lightweight upkeep checks |
+
+No actual UI screenshots or optional AI help are available through this viewer.
+Do not present concept artwork as UI evidence or planned AI assistance as a
+working support feature.
 
 ### Verification scope and feature coverage
 
@@ -677,6 +720,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-DEMO-001 | Internal synthetic showcase — local review accounts, fictional records, sample-only CSV and reset limitations |
 | BB-DEMO-002 | Guided owner/payroll, scoped FOH/BOH manager and mobile employee baseline reviews; real navigation, permission failures and explicit omissions |
 | BB-DOC-002 | Getting help and improving this guide — authenticated role-scoped HTML, search, task navigation, denied/empty states and limitations |
+| BB-DOC-003 | Help at the point of work; Guide review and maintenance — scoped core links, review history, lightweight checks and accurate screenshot/AI limitations |
 | BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
 | BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
 | BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |

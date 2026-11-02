@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { helpHref } from "@/lib/help";
 import type { OnboardingProgress } from "@/lib/onboarding";
 
-export function OnboardingChecklist({ progress, venueId }: {
-  progress: OnboardingProgress; venueId: string;
+export function OnboardingChecklist({ progress, venueId, businessId }: {
+  progress: OnboardingProgress; venueId: string; businessId: string;
 }) {
   const rosterUrl = `/roster?venue=${encodeURIComponent(venueId)}`;
   const steps = [
@@ -25,6 +26,9 @@ export function OnboardingChecklist({ progress, venueId }: {
         <h2 id="onboarding-heading" className="text-lg font-semibold">Get your first roster ready</h2>
         <p className="text-sm text-muted">{completed} of {steps.length} steps complete</p>
       </div>
+      <Link href={helpHref("onboarding", businessId)} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Help with your first roster
+      </Link>
       <ol className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
         {steps.map((step) => (
           <li key={step.title} className="rounded-lg border border-line p-3 text-sm">

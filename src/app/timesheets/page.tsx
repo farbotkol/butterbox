@@ -6,6 +6,7 @@ import {
   prepareGenericPayrollExportAction, reconcileGenericPayrollExportAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { helpHref } from "@/lib/help";
 import { correctionEventLabels } from "@/lib/attendance-corrections";
 import {
   PayrollRecordValidationError, validateCanonicalPayrollRows,
@@ -376,6 +377,10 @@ export default async function TimesheetsPage({ searchParams }: {
       <p className="mt-2 text-sm text-muted">
         Compare published shifts with recorded attendance, then approve or return entries for the departments you manage.
       </p>
+      <Link href={helpHref("timesheets", workspace.business.id)}
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Help with timesheet review
+      </Link>
     </div>
     <form action="/timesheets" className="mt-5 grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-4 sm:items-end">
       <div>
@@ -542,6 +547,10 @@ export default async function TimesheetsPage({ searchParams }: {
           </details>}
           {period.canFinalise && <section aria-labelledby="payroll-export-heading" className="mt-4 border-t border-line pt-4">
             <h3 id="payroll-export-heading" className="font-semibold">Generic payroll CSV</h3>
+            <Link href={helpHref("payroll", workspace.business.id)}
+              className="mt-2 inline-flex min-h-11 items-center font-semibold text-ocean underline">
+              Help with payroll CSV
+            </Link>
             <p className="mt-2 text-muted">
               This whole-venue export includes only approved, finalised sessions that have never been exported.
               Employee filters do not limit it. It is not an award calculation and contains no external payroll IDs.

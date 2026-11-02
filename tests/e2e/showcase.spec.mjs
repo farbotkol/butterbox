@@ -251,6 +251,15 @@ test("help center supports authenticated onboarding without granting business ta
     await expect(page.getByRole("link", { name: "Preparing and reconciling payroll CSV", exact: true })).toHaveCount(0);
     await page.getByRole("link", { name: "Back to setup", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Set up your workspace", exact: true })).toBeVisible();
+    const setupHelp = page.getByRole("link", { name: "Help with workspace setup", exact: true });
+    await setupHelp.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("article", { name: "Getting started", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Back to setup", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
     const denied = await page.goto("/help?topic=payroll&role=owner");
     expect(denied.status()).toBe(404);
   } finally {
@@ -259,3 +268,56 @@ test("help center supports authenticated onboarding without granting business ta
     expect(deleted.error).toBeNull();
   }
 });
+
+for (const role of ["owner", "foh_manager", "boh_manager", "employee"]) {
+  test(`contextual help ${role} follows real core-workflow links without expanding permissions`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, role);
+    const workflows = [
+      { route: "/attendance", label: "Help with clocking and corrections", topic: "attendance", title: "Clocking and corrections" },
+      { route: "/my-schedule", label: "Help with your schedule", topic: "employee", title: "Employee self-service" },
+      ...(role !== "employee" ? [
+        { route: "/roster", label: "Help with rosters", topic: "rosters", title: "Building and publishing rosters" },
+        { route: "/timesheets", label: "Help with timesheet review", topic: "timesheets", title: "Reviewing and approving timesheets" },
+      ] : [
+        { route: "/roster", label: "Help with rosters", topic: "employee", title: "Employee self-service" },
+      ]),
+      ...(role === "owner" ? [
+        { route: "/", label: "Help with your first roster", topic: "onboarding", title: "Getting started" },
+        { route: "/settings/payroll", label: "Help with payroll preparation", topic: "payroll", title: "Preparing and reconciling payroll CSV" },
+        { route: "/timesheets", label: "Help with payroll CSV", topic: "payroll", title: "Preparing and reconciling payroll CSV", week: state.plan.week },
+      ] : []),
+    ];
+    for (const workflow of workflows) {
+      const params = new URLSearchParams({
+        business: state.plan.businessId, venue: state.plan.venueId, week: workflow.week ?? state.plan.currentWeek,
+      });
+      await page.goto(`${workflow.route}?${params}`);
+      const link = page.getByRole("link", { name: workflow.label, exact: true });
+      await expect(link).toBeVisible();
+      expect(new URL(await link.getAttribute("href"), page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+      await link.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("article", { name: workflow.title, exact: true })).toBeVisible();
+      expect(new URL(page.url()).searchParams.get("topic")).toBe(workflow.topic);
+      expect(new URL(page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+      expect(accessibility.violations).toEqual([]);
+      if (workflow.topic === "payroll") {
+        await expect(page.getByRole("article")).toContainText("this is not wage calculation");
+        await expect(page.getByRole("article")).toContainText("Xero integration is intentionally deferred");
+      }
+    }
+    if (role !== "owner") {
+      await page.goto(`/timesheets?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.week}`);
+      await expect(page.getByRole("link", { name: "Help with payroll CSV", exact: true })).toHaveCount(0);
+      if (role === "employee") {
+        await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("error") === "permission");
+        await expect(page.getByRole("link", { name: "Help with timesheet review", exact: true })).toHaveCount(0);
+      }
+      const denied = await page.goto(`/help?business=${state.plan.businessId}&topic=payroll&role=owner`);
+      expect(denied.status()).toBe(404);
+    }
+  });
+}

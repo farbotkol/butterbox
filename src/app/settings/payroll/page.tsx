@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { savePayrollMappingAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { helpHref } from "@/lib/help";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import { readAllPages } from "@/lib/paginated-rows";
 import {
@@ -74,6 +75,10 @@ export default async function PayrollMappingPage({ searchParams }: {
       This is mapping setup only, not an authenticated provider connection. No payroll is sent.
       Xero and other adapters remain unavailable until separately verified.
     </p>
+    <Link href={helpHref("payroll", workspace.business.id)}
+      className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+      Help with payroll preparation
+    </Link>
     <Link href={`/timesheets?venue=${workspace.venue.id}`} className="mt-3 inline-block font-semibold text-ocean">
       Return to timesheets
     </Link>

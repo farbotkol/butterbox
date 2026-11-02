@@ -10,6 +10,7 @@ import {
   submitAttendanceCorrectionRequestAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { helpHref } from "@/lib/help";
 import { AttendanceCorrectionHistory } from "@/components/attendance-correction-history";
 import { ClockLocationForm } from "@/components/clock-location-form";
 import { OfflineAttendance } from "@/components/offline-attendance";
@@ -298,6 +299,10 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           <p className="mt-2 text-sm text-muted">
             Your clock time is recorded by the server, not your device.
           </p>
+          <Link href={helpHref("attendance", workspace.business.id)}
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+            Help with clocking and corrections
+          </Link>
           <Link href={withBusiness(`/attendance/history?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id)}
             className="mt-3 inline-block text-sm font-semibold text-ocean underline">
             View your attendance history

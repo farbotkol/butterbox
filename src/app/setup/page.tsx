@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createBusinessAction, saveBusinessDraftAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
+import { helpHref } from "@/lib/help";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
@@ -42,6 +43,9 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           You&apos;ll be the business owner. Add your first venue and start with
           a clean roster.
         </p>
+        <Link href={helpHref("onboarding")} className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+          Help with workspace setup
+        </Link>
         {params.error && (
           <p role="alert" className="mt-5 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">
             {params.error === "create"

@@ -22,6 +22,7 @@ import {
   withdrawShiftOfferAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { helpHref } from "@/lib/help";
 import { CopyRosterForm } from "@/components/copy-roster-form";
 import {
   QuickShiftDropTarget, QuickShiftHandle, RosterQuickChangeProvider, type QuickShiftWorker,
@@ -616,6 +617,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           <p className="mt-2 text-muted">
             Build a balanced week for your FOH and BOH teams.
           </p>
+          <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id)}
+            className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+            Help with rosters
+          </Link>
           <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
             className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
             Review shift swaps
