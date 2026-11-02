@@ -46,7 +46,7 @@ export function isQuickChangeUuid(value: unknown): value is string {
   return typeof value === "string" && Boolean(parseBusinessId(value));
 }
 
-function isTimestamp(value: unknown): value is string {
+export function isRosterTimestamp(value: unknown): value is string {
   return typeof value === "string" && value.length <= 40 &&
     /(?:Z|[+-]\d{2}:\d{2})$/i.test(value) && Number.isFinite(Date.parse(value));
 }
@@ -69,7 +69,7 @@ function parseReasons<T extends string>(value: unknown, allowed: readonly T[]): 
 export function parseQuickChangeInput(value: unknown): QuickChangeInput | null {
   if (!isRecord(value) || !isQuickChangeUuid(value.businessId) || !isQuickChangeUuid(value.venueId) ||
     !isQuickChangeUuid(value.departmentId) || !isQuickChangeUuid(value.shiftId) ||
-    !isTimestamp(value.expectedUpdatedAt) || typeof value.weekStart !== "string" ||
+    !isRosterTimestamp(value.expectedUpdatedAt) || typeof value.weekStart !== "string" ||
     !isRosterWeek(value.weekStart) || !isEmploymentEffectiveDate(value.weekStart) ||
     !isEmploymentEffectiveDate(value.targetDate) ||
     (value.targetEmployeeId !== null && !isQuickChangeUuid(value.targetEmployeeId)) ||
@@ -98,7 +98,7 @@ export function parseQuickChangePreview(value: unknown, input: QuickChangeInput)
     (value.target_employee_id === null ? value.target_employee_name !== null
       : typeof value.target_employee_name !== "string" || !value.target_employee_name.trim()) ||
     typeof value.role_title !== "string" || !value.role_title.trim() || value.role_title.length > 80 ||
-    !isTimestamp(value.starts_at) || !isTimestamp(value.ends_at) ||
+    !isRosterTimestamp(value.starts_at) || !isRosterTimestamp(value.ends_at) ||
     Date.parse(value.ends_at) <= Date.parse(value.starts_at) ||
     typeof value.publish_blocks_overlap !== "boolean" ||
     typeof value.publish_blocks_unavailability !== "boolean") return null;

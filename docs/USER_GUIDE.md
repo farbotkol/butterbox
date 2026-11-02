@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.2 — reviewed 2026-11-02 (Core Roadmap).
+**Guide version:** 1.3 — reviewed 2026-11-02 (Core Roadmap).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -270,6 +270,37 @@ the current scope. Do not treat a hidden button as the security boundary.
 - Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. Published shifts and review snapshots have separate integrity controls.
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
 - If roster approval is enabled, a distinct authorized reviewer can approve or reject a submitted roster snapshot. Rejection requires a reason, and approval rechecks current blockers.
+
+#### Find a team member and use optional shortcuts
+
+1. In **Weekly roster**, enter a name or part of a name in **Find team member**
+   and choose **Search roster**. Matching ignores case and is limited to the
+   people and departments your current access permits. Use **Clear roster search**
+   to show the permitted rows again. A search can contain up to 100 characters;
+   an invalid or repeated search in a link displays an error. If no rows match,
+   the roster says **No team members match this search.**
+2. Search changes the display only; it does not narrow totals, open shifts,
+   conflict checks, copies or publication. Review the full selected department
+   before publishing. The search stays with week, department and collapse
+   navigation, but can clear after a roster action saves or publishes.
+3. **Roster keyboard shortcuts** start off. Select **Enable roster shortcuts**
+   to use **Alt+Shift+Left/Right** for the previous/next week and
+   **Alt+Shift+F** to focus team-member search. They apply when focus is in the
+   main roster, not inside forms, text editors or dialogs, and pause while a
+   quick-change preview or deletion confirmation is open. They do not replace
+   the ordinary week links or browser Find. The selection resets on a full page
+   load; turn it off if your browser, device or assistive technology uses those
+   keys. These shortcuts have been tested in Chromium, not every browser.
+
+To remove an assigned draft, an authorized manager activates its **Delete
+draft shift** control, checks the team member, role and time, and chooses
+**Confirm deletion** or **Cancel deletion**. Confirmed deletion is permanent
+and has no deletion undo; **Undo last quick change** applies only to eligible
+quick moves and duplicates. Deletion confirmation requires JavaScript. If the
+shift changes before confirmation, deletion is rejected and the roster asks you
+to review the current details before confirming again. If the shift is no
+longer available or access has changed, reload and check the roster before
+trying again.
 
 #### Build, copy and publish a week
 
@@ -743,6 +774,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.0 | 2026-11-02 | `c1ddaf3` (guide audit); DEMO-001/002 evidence below | Done-feature mapping and source label/permission review; recorded targeted browser evidence, not a fresh full-app walkthrough |
 | 1.1 | 2026-11-02 | `9918957` (DOC-002); DOC-003 contextual links | Markdown-backed role-safe search and core contextual navigation; targeted runtime and lightweight upkeep checks |
 | 1.2 | 2026-11-02 | `300426b` (announcement backend); COMMS-001 UI | Scoped plain-text publication, recipient history, acknowledgements, real HTTP retries and mobile browser acceptance |
+| 1.3 | 2026-11-02 | BB-ROSTER-011 roster productivity | Scoped roster search, opt-in Chromium shortcuts, draft-deletion confirmation and mobile accessibility |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

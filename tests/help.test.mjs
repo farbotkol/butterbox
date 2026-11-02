@@ -51,6 +51,16 @@ test("help keyword and category search requires all terms and preserves empty an
   assert.deepEqual(searchHelp(topics, "CSV", "Nonexistent category"), []);
 });
 
+test("manager roster help includes the actual display filter and optional shortcuts", () => {
+  const topics = helpTopics(source, "foh_manager");
+  const roster = topics.find((topic) => topic.id === "rosters");
+  assert.ok(roster);
+  assert.match(roster.markdown, /Search changes the display only;/);
+  assert.match(roster.markdown, /Alt\+Shift\+Left\/Right/);
+  assert.match(roster.markdown, /Confirm deletion/);
+  assert.ok(searchHelp(topics, "roster shortcuts").some((topic) => topic.id === "rosters"));
+});
+
 test("help links retain business scope and allow only visible real guide anchors", () => {
   const owner = helpTopics(source, "owner", true);
   const employee = helpTopics(source, "employee", true);

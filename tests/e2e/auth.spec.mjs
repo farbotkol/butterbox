@@ -914,41 +914,50 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const users = [];
   const contexts = [];
-  const [businessId, venueId, fohId, bohId, alexId, samId, sourceId, overlapId] =
-    Array.from({ length: 8 }, () => randomUUID());
+  const [businessId, venueId, fohId, bohId, alexId, samId, sourceId, overlapId, openId,
+    outsideBusinessId, outsideVenueId, outsideDepartmentId, outsideEmployeeId] =
+    Array.from({ length: 13 }, () => randomUUID());
   const roster = `/roster?business=${businessId}&venue=${venueId}&department=${fohId}&week=2032-03-29`;
   async function sourceShift() {
-    const result = await admin.from("shifts").select("id, employee_id, starts_at, is_published, requires_acknowledgement")
+    const result = await admin.from("shifts").select("id, employee_id, role_title, starts_at, updated_at, is_published, requires_acknowledgement")
       .eq("id", sourceId).single();
     expect(result.error).toBeNull();
     return result.data;
   }
   try {
-    for (const role of ["manager", "worker", "boh"]) {
+    for (const role of ["manager", "worker", "boh", "outside"]) {
       const created = await admin.auth.admin.createUser({
         email: `quick-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
       });
       expect(created.error).toBeNull();
       users.push(created.data.user.id);
     }
-    expect((await admin.from("businesses").insert({ id: businessId, name: "Quick change UI cafe" })).error).toBeNull();
-    expect((await admin.from("venues").insert({
-      id: venueId, business_id: businessId, name: "Quick venue", timezone: "UTC",
-    })).error).toBeNull();
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Quick change UI cafe" },
+      { id: outsideBusinessId, name: "Outside quick change cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Quick venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
     expect((await admin.from("departments").insert([
       { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
       { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+      { id: outsideDepartmentId, business_id: outsideBusinessId, venue_id: outsideVenueId, name: "Outside team" },
     ])).error).toBeNull();
     expect((await admin.from("business_memberships").insert([
       { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: fohId },
       { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: fohId },
       { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: outsideBusinessId, user_id: users[3], role: "owner" },
     ])).error).toBeNull();
     expect((await admin.from("employees").insert([
       { id: alexId, business_id: businessId, venue_id: venueId, department_id: fohId,
         auth_user_id: users[1], name: "Alex Quick", role_title: "Server" },
       { id: samId, business_id: businessId, venue_id: venueId, department_id: fohId,
         name: "Sam Quick", role_title: "Server" },
+      { id: outsideEmployeeId, business_id: outsideBusinessId, venue_id: outsideVenueId,
+        department_id: outsideDepartmentId, name: "Mira Outside", role_title: "Server" },
     ])).error).toBeNull();
     expect((await admin.from("shifts").insert([
       { id: sourceId, business_id: businessId, venue_id: venueId, department_id: fohId,
@@ -959,6 +968,10 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
         employee_id: samId, role_title: "Existing service",
         starts_at: "2032-03-30T09:00:00Z", ends_at: "2032-03-30T11:00:00Z",
         requires_acknowledgement: false },
+      { id: openId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: null, role_title: "Open coverage",
+        starts_at: "2032-04-03T09:00:00Z", ends_at: "2032-04-03T11:00:00Z",
+        requires_acknowledgement: false },
     ])).error).toBeNull();
     expect((await admin.from("employee_availability_exceptions").insert({
       business_id: businessId, venue_id: venueId, employee_id: samId,
@@ -968,12 +981,91 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await page.setViewportSize({ width: 1440, height: 900 });
     await signIn(page, `quick-browser-manager-${suffix}@example.test`, password);
     await page.goto(roster);
+    const shortcuts = page.getByRole("checkbox", { name: "Enable roster shortcuts", exact: true });
+    await expect(shortcuts).not.toBeChecked();
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
+    await shortcuts.check();
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+f");
+    await expect(page.getByLabel("Find team member", { exact: true })).toBeFocused();
+    await page.getByLabel("Find team member", { exact: true }).fill("aLeX");
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
+    await page.getByRole("button", { name: "Search roster", exact: true }).click();
+    await expect(page.locator(`#roster-row-${fohId}-${alexId}`)).toBeVisible();
+    await expect(page.locator(`#roster-row-${fohId}-${samId}`)).toHaveCount(0);
+    await expect(page.getByText("2 assigned", { exact: false })).toContainText("1 open");
+    await expect(page.getByText("Open coverage", { exact: true })).toBeVisible();
+    expect(new URL(page.url()).searchParams.get("business")).toBe(businessId);
+    await page.getByRole("button", { name: "Collapse Front of House", exact: true }).click();
+    await expect(page.locator(`#roster-row-${fohId}-${alexId}`)).toBeHidden();
+    expect(new URL(page.url()).searchParams.get("q")).toBe("aLeX");
+    await page.getByRole("button", { name: "Expand Front of House", exact: true }).click();
+    await page.locator("#department-filter").selectOption(fohId);
+    await page.getByRole("button", { name: "Apply filter", exact: true }).click();
+    expect(new URL(page.url()).searchParams.get("q")).toBe("aLeX");
+    await page.getByRole("link", { name: "Next week", exact: true }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("week") === "2032-04-05" &&
+      url.searchParams.get("q") === "aLeX" && url.searchParams.get("department") === fohId);
+    await page.getByRole("link", { name: "Previous week", exact: true }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("week") === "2032-03-29" &&
+      url.searchParams.get("q") === "aLeX" && url.searchParams.get("business") === businessId);
+    await page.getByRole("link", { name: "Clear roster search", exact: true }).click();
+    await expect(page.getByLabel("Find team member", { exact: true })).toHaveValue("");
+    await shortcuts.check();
+    await page.locator("#main-content").focus();
+    const findPrevented = await page.locator("#main-content").evaluate((element) => {
+      const event = new KeyboardEvent("keydown", { key: "f", ctrlKey: true, bubbles: true, cancelable: true });
+      element.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(findPrevented).toBe(false);
+    await page.evaluate(() => {
+      const editor = document.createElement("div");
+      editor.id = "test-roster-rich-editor";
+      editor.contentEditable = "true";
+      document.getElementById("main-content").append(editor);
+      editor.focus();
+    });
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
+    await page.locator("#test-roster-rich-editor").evaluate((editor) => editor.remove());
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+ArrowLeft");
+    await expect(page).toHaveURL((url) => url.searchParams.get("week") === "2032-03-22" && url.searchParams.get("business") === businessId);
+    await expect(shortcuts).toBeChecked();
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    await expect(page).toHaveURL((url) => url.searchParams.get("week") === "2032-03-29");
+    await shortcuts.uncheck();
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+ArrowLeft");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
+    await shortcuts.check();
+    await page.getByLabel("Find team member", { exact: true }).fill("absent-worker-63728");
+    await page.getByRole("button", { name: "Search roster", exact: true }).click();
+    await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
+    await page.goto(`${roster}&q=one&q=two`);
+    await expect(page.getByRole("alert").filter({ hasText: "Enter one team-member search" })).toBeVisible();
+    await page.goto(`${roster}&q=${"a".repeat(101)}`);
+    await expect(page.getByRole("alert").filter({ hasText: "Enter one team-member search" })).toBeVisible();
+    await page.goto(`${roster}&q=Mira%20Outside`);
+    await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Mira Outside", { exact: true })).toHaveCount(0);
+    await page.goto(roster);
+    await expect(shortcuts).not.toBeChecked();
+    await shortcuts.check();
     const source = page.getByRole("button", { name: /Move or duplicate Alex Quick, Quick service/ });
     const target = page.locator(`#roster-row-${fohId}-${samId} td`).nth(3).locator("div").first();
     await source.dragTo(target);
     const panel = page.getByRole("region", { name: "Quick shift change" });
     const preview = panel.locator('[aria-label="Shift change preview"]');
     await expect(preview).toContainText("Sam Quick");
+    await panel.getByRole("heading", { name: "Quick shift change", exact: true }).focus();
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
     await expect(panel.getByLabel("Target day")).toHaveValue("2032-04-01");
     await expect(preview).toContainText("unavailable or has approved leave");
     expect((await sourceShift()).starts_at).toBe("2032-03-29T09:00:00+00:00");
@@ -1038,9 +1130,95 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await signIn(boh, `quick-browser-boh-${suffix}@example.test`, password);
     await boh.goto(roster);
     await expect(boh.getByRole("button", { name: /Move or duplicate Alex Quick/ })).toHaveCount(0);
+    await boh.goto(`${roster}&q=Alex`);
+    await expect(boh.getByText("No team members match this search.", { exact: true })).toBeVisible();
+    await expect(boh.getByText("Alex Quick", { exact: true })).toHaveCount(0);
+    await expect(worker.getByRole("button", { name: /Delete .* shift/ })).toHaveCount(0);
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outside = await outsideContext.newPage();
+    await signIn(outside, `quick-browser-outside-${suffix}@example.test`, password);
+    await outside.goto(roster);
+    await expect(outside.getByRole("heading", { name: "Roster unavailable", exact: true })).toBeVisible();
+    await expect(outside.getByText("Alex Quick", { exact: true })).toHaveCount(0);
+    for (const role of ["worker", "boh", "outside"]) {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `quick-browser-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      expect((await client.rpc("delete_shift", { p_shift_id: sourceId })).error).not.toBeNull();
+      expect((await client.rpc("delete_shift_if_unchanged", {
+        p_shift_id: sourceId, p_expected_updated_at: (await sourceShift()).updated_at,
+      })).error?.message).toBe("Permission denied");
+      expect((await sourceShift()).id).toBe(sourceId);
+    }
+    const noJavaScript = await browser.newContext({ baseURL: appUrl, javaScriptEnabled: false });
+    contexts.push(noJavaScript);
+    await noJavaScript.addCookies(await page.context().cookies());
+    const noJavaScriptPage = await noJavaScript.newPage();
+    await noJavaScriptPage.goto(roster);
+    await expect(noJavaScriptPage).toHaveURL((url) => url.pathname === "/roster");
+    await expect(noJavaScriptPage.getByRole("heading", { name: "Weekly roster", exact: true })).toBeVisible();
+    const noJavaScriptDelete = noJavaScriptPage.getByRole("form", { name: "Delete Alex Quick shift", exact: true });
+    await expect(noJavaScriptDelete).toBeVisible();
+    const noJavaScriptNotice = noJavaScriptDelete.locator("noscript span");
+    await expect(noJavaScriptNotice).toBeVisible();
+    await expect(noJavaScriptNotice).toHaveText("JavaScript is required to confirm draft deletion.");
+    await noJavaScriptDelete.getByRole("button", { name: "Delete Alex Quick shift", exact: true }).click();
+    await expect(noJavaScriptDelete.getByRole("button", { name: "Confirm deletion", exact: true })).toHaveCount(0);
+    expect((await sourceShift()).id).toBe(sourceId);
+    await page.getByRole("button", { name: "Delete Alex Quick shift", exact: true }).click();
+    const confirmation = page.getByRole("button", { name: "Confirm deletion", exact: true });
+    await expect(confirmation).toBeFocused();
+    await expect(confirmation).toHaveAccessibleDescription(/Alex Quick, Quick service/);
+    await expect(page.getByRole("button", { name: "Delete Alex Quick shift", exact: true }))
+      .toHaveAttribute("aria-expanded", "true");
+    const confirmationBounds = await confirmation.boundingBox();
+    expect(confirmationBounds.x).toBeGreaterThanOrEqual(0);
+    expect(confirmationBounds.x + confirmationBounds.width).toBeLessThanOrEqual(375);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.locator("#main-content").focus();
+    await page.keyboard.press("Alt+Shift+ArrowRight");
+    expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
+    await page.getByRole("button", { name: "Cancel deletion", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Delete Alex Quick shift", exact: true })).toBeFocused();
+    await expect(page.getByRole("button", { name: "Delete Alex Quick shift", exact: true }))
+      .toHaveAttribute("aria-expanded", "false");
+    expect((await sourceShift()).id).toBe(sourceId);
+    await page.getByRole("button", { name: "Delete Alex Quick shift", exact: true }).click();
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile draft deletion confirmation"));
+    const oldRevision = (await sourceShift()).updated_at;
+    const changed = await admin.from("shifts").update({ role_title: "Revised quick service" })
+      .eq("id", sourceId).select("updated_at").single();
+    expect(changed.error).toBeNull();
+    expect(changed.data.updated_at).not.toBe(oldRevision);
+    await page.getByRole("button", { name: "Confirm deletion", exact: true }).click();
+    await expect(page.locator('p[role="alert"]')).toContainText("This draft changed");
+    expect((await sourceShift()).role_title).toBe("Revised quick service");
+    await page.getByRole("button", { name: "Delete Alex Quick shift", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Confirm deletion", exact: true }))
+      .toHaveAccessibleDescription(/Alex Quick, Revised quick service/);
+    await page.getByRole("button", { name: "Confirm deletion", exact: true }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("Draft shift removed.");
+    const deleted = await admin.from("shifts").select("id").eq("id", sourceId).maybeSingle();
+    expect(deleted.error).toBeNull();
+    expect(deleted.data).toBeNull();
+    await page.getByLabel("Find team member", { exact: true }).fill("no matching team member");
+    await page.getByRole("button", { name: "Search roster", exact: true }).click();
+    await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
+    await expect(page.getByText("Open coverage", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Publish this department", exact: true }).click();
+    await expect(page.locator('p[role="status"]')).toContainText("Front of House roster published.");
+    const published = await admin.from("shifts").select("id, is_published").in("id", [overlapId, openId]);
+    expect(published.error).toBeNull();
+    expect(published.data).toHaveLength(2);
+    expect(published.data.every((shift) => shift.is_published)).toBe(true);
+    await page.getByRole("link", { name: "Help with rosters", exact: true }).click();
+    const help = page.getByRole("article", { name: "Building and publishing rosters", exact: true });
+    await expect(help.getByText("Search changes the display only;", { exact: false })).toBeVisible();
   } finally {
     for (const context of contexts) await context.close();
-    await assertBusinessFixturesPreserved(admin, businessId);
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
@@ -3023,6 +3201,10 @@ test("configured conflict rules block assignments and publication until warnings
     await expect(managerPage.locator("article", { hasText: "FOH conflict" }).getByRole("note"))
       .toContainText("Overlaps another shift");
     await expect(managerPage.getByText("Private BOH conflict", { exact: true })).toHaveCount(0);
+    await managerPage.getByLabel("Find team member", { exact: true }).fill("no matching team member");
+    await managerPage.getByRole("button", { name: "Search roster", exact: true }).click();
+    await expect(managerPage.getByText("No team members match this search.", { exact: true })).toBeVisible();
+    await expect(managerPage.getByText("FOH conflict", { exact: true })).toHaveCount(0);
     await managerPage.getByRole("button", { name: "Publish this department" }).click();
     await expect(managerPage).toHaveURL(/error=publish-overlap/);
     await expect(managerPage.locator('p[role="alert"]')).toContainText("overlapping shifts");
@@ -3034,6 +3216,8 @@ test("configured conflict rules block assignments and publication until warnings
     await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${bohId}`);
     await page.locator("article", { hasText: "Private BOH conflict" })
       .getByRole("button", { name: "Delete Policy worker shift" }).click();
+    await page.locator("article", { hasText: "Private BOH conflict" })
+      .getByRole("button", { name: "Confirm deletion", exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("Draft shift removed.");
     await page.goto(roster);
     await page.getByRole("button", { name: "Publish this department" }).click();
@@ -8175,6 +8359,9 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
     await signIn(page, `copy-browser-foh-${suffix}@example.test`, password);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(roster("2032-04-05"));
+    await page.getByLabel("Find team member", { exact: true }).fill("no matching team member");
+    await page.getByRole("button", { name: "Search roster", exact: true }).click();
+    await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
     const form = page.getByRole("form", { name: "Copy a previous roster week" });
     const sourceInput = form.getByLabel("Source week commencing Monday");
     await expect(sourceInput).toHaveValue(source);

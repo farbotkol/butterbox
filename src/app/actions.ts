@@ -26,6 +26,7 @@ import {
 } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { parseRosterWeekInput } from "@/lib/roster-planning";
+import { isRosterTimestamp } from "@/lib/roster-quick-changes";
 import { parseRosterPublicationMode, rosterReviewFailureCode } from "@/lib/roster-review";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib/shift-offers";
@@ -2206,6 +2207,14 @@ export async function copyRosterWeekAction(_previous: RosterCopyState, formData:
 
 export async function deleteShiftAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
+  const shiftIds = uuidList(formData, "shift_id", 1);
+  const expectedUpdatedAt = singleFormString(formData, "expected_updated_at");
+  const week = text(formData, "week", 10);
+  if (!venueIds || venueIds.length !== 1 || !shiftIds || shiftIds.length !== 1 ||
+    !isRosterTimestamp(expectedUpdatedAt) || !isRosterWeek(week)) {
+    console.error("Invalid draft shift deletion request.");
+    redirect("/roster?error=delete");
+  }
   const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
@@ -2213,19 +2222,21 @@ export async function deleteShiftAction(formData: FormData) {
     console.error("Could not load the roster workspace for deletion.", { message: workspace.message });
     redirect("/roster?error=delete");
   }
-  if (!venueIds || venueIds.length !== 1) redirect("/roster?error=delete");
-
-  const shiftId = text(formData, "shift_id", 36);
-  const week = text(formData, "week", 10);
   const filterDepartment = text(formData, "filter_department", 36);
-  if (!shiftId || !/^\d{4}-\d{2}-\d{2}$/.test(week)) redirect("/roster");
-
-  const { error } = await workspace.supabase.rpc("delete_shift", {
-    p_shift_id: shiftId,
-  });
-  redirect(
-    `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}${filterDepartment ? `&department=${encodeURIComponent(filterDepartment)}` : ""}${collapsedRosterQuery(formData)}&${error ? "error=delete" : "deleted=1"}`,
+  const destination = withBusiness(
+    `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}${filterDepartment ? `&department=${encodeURIComponent(filterDepartment)}` : ""}${collapsedRosterQuery(formData)}`,
+    workspace.business.id,
   );
+  const { error } = await workspace.supabase.rpc("delete_shift_if_unchanged", {
+    p_shift_id: shiftIds[0], p_expected_updated_at: expectedUpdatedAt,
+  });
+  if (error) {
+    console.error("Draft shift deletion failed.", { code: error.code, message: error.message });
+    const code = error.message === "Shift changed; reload the roster" ? "delete-stale" : "delete";
+    redirect(`${destination}&error=${code}`);
+  }
+  revalidatePath("/roster");
+  redirect(`${destination}&deleted=1`);
 }
 
 export async function setShiftAcknowledgementRequirementAction(formData: FormData) {

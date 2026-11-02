@@ -3,8 +3,13 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **58**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **62**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **59**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **62**.
+- BB-ROSTER-011 is **Done**: opt-in keyboard shortcuts, scoped display-only
+  team-member search, guarded draft-deletion confirmation and existing quick
+  undo. Focused Node **21/21**, applied pgTAP **190/190**, authenticated
+  concurrency **2/2** and serialized Chromium **4/4** passed. Lint, types
+  and split production build passed; guide and contextual help updated.
 - BB-COMMS-001 is **Done**: immutable permission-scoped in-app announcements,
   frozen recipient history and explicit acknowledgement receipts. Focused
   pgTAP **36/36**, direct regressions **158/158**, Node **15/15**, final
@@ -704,18 +709,56 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-ROSTER-011 — Roster keyboard productivity: In Progress (Planning).**
-COMMS-001 `8cd468ebae5368d0e08569caf9184a21b617dbe8` pushed with exact remote
-SHA verified. Select ready Showcase P1 keyboard productivity, reusing Done
-ROSTER-005/006 quick-change undo and scoped grouping. Original priority P2
-is preserved. Remaining P0 identity work requires approval; staffing scenarios
-and overtime/restriction warnings lack necessary employment-change definitions.
-Add optional shortcuts that never intercept editing, scoped employee-name
-display search and deliberate draft deletion confirmation. Preserve existing
-server authorization and publication semantics; search must not narrow totals
-or publish only a hidden subset. Focused Node, relevant production browser,
-changed-code lint/types/build and actual guide update planned.
-**Documentation: pending** verified new behavior; no criterion marked Pass yet.
+No story is currently In Progress. BB-ROSTER-011 is verified below. Select
+the next ready Showcase P0 story if its owner-approval prerequisites are met;
+otherwise inspect the remaining P1 stories and their actual policy/data
+dependencies before starting. Do not treat unapproved brand concepts or
+unvalidated employment rules as approved inputs.
+
+## Latest completed roster productivity story
+
+**BB-ROSTER-011 — Roster keyboard productivity: Done.**
+Verified 2026-11-02 23:20 UTC. Reused the existing scoped roster, navigation,
+quick-change undo, scheduling membership lock and authorized deletion.
+
+| Criterion | Implementation and test | Actual result | Status |
+| --- | --- | --- | --- |
+| ROSTER-011-AC1 | Shortcuts are opt-in, limited to focused roster content and disabled for forms, editors, dialogs, previews and confirmations; documented ordinary links and browser Find remain available | Chromium keyboard/focus, editing and no-interception checks plus mobile axe and overflow checks passed | Pass |
+| ROSTER-011-AC2 | Existing quick move/duplicate undo; explicit named draft confirmation, cancellation/focus restoration and no-JavaScript notice; locked revision check and permission recheck before deletion | Production browser verified cancel, undo, stale rejection and fresh confirmation; pgTAP and real edit/delete/revocation races passed | Pass |
+| ROSTER-011-AC3 | Documented Alt+Shift navigation and search focus; original links and search work without enabling shortcuts | Chromium production browser verified default-off, enable/disable, search focus and both week directions; helper tests passed | Pass |
+
+Name search is case-insensitive, limited to permitted staff, validates duplicate
+and overlength inputs and is a display filter only. Browser checks verified
+that totals, open shifts, conflict evaluation, copying and publication retain
+their full selected scope, including a no-match publication. FOH, BOH,
+employee and other-business denial paths were exercised.
+
+Forward migration `20261103210000` passed **24/24** rollback preflight and
+was applied/recorded only to the verified isolated `butterbox-acceptance`
+project (API 55421, DB 55422). The applied deletion, draft-edit, quick-change
+and tenant-isolation pgTAP suites passed **190/190**. Authenticated deletion
+and adjacent quick-change concurrency tests passed **2/2**, covering locked
+edits, duplicate submissions, revoked permissions and cross-tenant denial.
+Roster/group/help unit tests passed **21/21**. Four serialized production
+Chromium scenarios passed: productivity/undo/confirmation/help, conflict
+policies, mobile grouping and scoped copy. Changed-file ESLint, TypeScript,
+split production build and whitespace checks passed.
+
+The first stale-confirmation browser test exposed a real deletion race;
+the revision guard fixed it and the same scenario passed on rerun. An initial
+no-JavaScript text-selector failure was corrected to assert actual visibility
+and exact text; no acceptance assertion was removed. Full unrelated unit,
+database, integration and browser suites were intentionally deferred. Only
+Chromium was exercised; Firefox, Safari and manual assistive-technology review
+remain release verification risks, as does broader workstream-merge/migration
+regression. No production data, resets or external delivery were used.
+
+Files: roster page, productivity/quick-change components, roster helpers,
+server action, guarded-deletion migration and pgTAP/concurrency tests,
+tenant-isolation runner, focused browser/unit tests and canonical guide.
+**Documentation: updated** User Guide v1.3 and its contextual roster-help
+content with tested labels, scope, deletion behavior and browser limitations.
+The unrelated `.eslintcache` deletion remains unstaged and preserved.
 
 ## Latest completed announcement story
 

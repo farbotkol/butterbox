@@ -7,7 +7,6 @@ import {
   Pencil,
   Plus,
   Send,
-  Trash2,
   UsersRound,
 } from "lucide-react";
 import Link from "next/link";
@@ -28,6 +27,7 @@ import {
   QuickShiftDropTarget, QuickShiftHandle, RosterQuickChangeProvider, type QuickShiftWorker,
 } from "@/components/roster-quick-changes";
 import { RosterReviewPanel } from "@/components/roster-review-panel";
+import { ConfirmedRosterDelete, RosterKeyboardControls } from "@/components/roster-productivity";
 import { ShiftEditor } from "@/components/shift-editor";
 import {
   availabilityForDate,
@@ -39,7 +39,7 @@ import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
 import { rosterOverlapConflicts } from "@/lib/roster-overlap-conflicts";
 import { parseRosterPublicationMode, parseRosterReviews } from "@/lib/roster-review";
-import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
+import { collapsedRosterDepartments, matchesRosterSearch, rosterSearchQuery, rosterViewHref as buildRosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
 import {
@@ -80,6 +80,7 @@ type RosterPageProps = {
     created?: string;
     offer?: string;
     review?: string;
+    q?: string | string[];
   }>;
 };
 
@@ -95,6 +96,7 @@ const errorMessages: Record<string, string> = {
   permission: "You don't have permission to change that department's roster.",
   save: "We couldn't save that shift. Check the date, employee and role.",
   delete: "We couldn't delete that shift. Published shifts cannot be deleted.",
+  "delete-stale": "This draft changed since you opened the confirmation. Review the current shift and confirm deletion again.",
   publish: "We couldn't publish this roster. Check your permissions and try again.",
   "publish-unavailable": "This roster has unavailable workers. Review the affected shifts before publishing.",
   "publish-overlap": "This roster has overlapping shifts. Review the affected shifts before publishing.",
@@ -332,6 +334,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     );
   }
 
+  const search = rosterSearchQuery(params.q);
+  if (search === null) console.error("Invalid roster team-member search.");
+  const rosterViewHref = (week: string, department: string | undefined, collapsed: readonly string[], venue?: string) =>
+    buildRosterViewHref(week, department, collapsed, venue, search ?? "", workspace.business.id);
   const week = getWeekStart(params.week, workspace.venue.timezone);
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
@@ -487,6 +493,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     linkRows ?? [],
     visibleShifts,
   );
+  const matchingGroups = search === null ? [] : rosterGroups.map((group) => ({
+    ...group, employees: group.employees.filter((employee) => matchesRosterSearch(employee.name, search)),
+  })).filter((group) => !search || group.employees.length > 0);
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const canManage = isManager(workspace.membership.role);
   const canManageDepartment = (departmentId: string) => {
@@ -636,6 +645,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 sm:justify-start">
           <Link
+            id="roster-previous-week"
             href={rosterViewHref(previousWeek, filterDepartment, collapsed, workspace.venue.id)}
             aria-label="Previous week"
             className="rounded-lg p-2 text-muted hover:bg-soft-sea"
@@ -646,6 +656,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             {weekLabel}
           </div>
           <Link
+            id="roster-next-week"
             href={rosterViewHref(nextWeek, filterDepartment, collapsed, workspace.venue.id)}
             aria-label="Next week"
             className="rounded-lg p-2 text-muted hover:bg-soft-sea"
@@ -659,6 +670,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         {(venueResult.data ?? []).length > 1 && (
           <form action="/roster" className="flex items-center gap-2">
             <input type="hidden" name="business" value={workspace.business.id} />
+            {search && <input type="hidden" name="q" value={search} />}
             <input type="hidden" name="week" value={week} />
             <label htmlFor="venue-filter" className="text-sm text-muted">Venue</label>
             <select id="venue-filter" name="venue" defaultValue={workspace.venue.id}
@@ -672,6 +684,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         )}
         <form action="/roster" className="flex items-center gap-2">
           <input type="hidden" name="business" value={workspace.business.id} />
+          {search && <input type="hidden" name="q" value={search} />}
           <input type="hidden" name="week" value={week} />
           <input type="hidden" name="venue" value={workspace.venue.id} />
           <CollapsedFields departments={collapsed} />
@@ -704,6 +717,28 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           </span>
         </div>
       </div>
+
+      <form action="/roster" aria-label="Search team members" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
+        <input type="hidden" name="business" value={workspace.business.id} />
+        <input type="hidden" name="venue" value={workspace.venue.id} />
+        <input type="hidden" name="week" value={week} />
+        {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
+        <CollapsedFields departments={collapsed} />
+        <div className="min-w-0 flex-1 text-sm font-medium">
+          <label htmlFor="roster-search">Find team member</label>
+          <input key={search === null ? "invalid:" : `valid:${search}`} id="roster-search" type="search"
+            name="q" maxLength={100} defaultValue={search ?? ""}
+            className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-line p-2" />
+        </div>
+        <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">Search roster</button>
+        <Link href={buildRosterViewHref(week, filterDepartment, collapsed, workspace.venue.id, "", workspace.business.id)}
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">Clear roster search</Link>
+        <p className="w-full text-xs text-muted">Display filter only. Totals, open shifts, conflict checks, copies and publication still cover the full selected scope.</p>
+      </form>
+      {search === null ? <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-900">
+        Enter one team-member search of up to 100 characters.
+      </p> : search && matchingGroups.length === 0 && <p role="status" className="mt-3 text-sm text-muted">No team members match this search.</p>}
+      <RosterKeyboardControls />
 
       {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement || copiedCount !== undefined ||
         (params.offer && offerMessages[params.offer]) || (params.review && reviewMessages[params.review])) && (
@@ -960,11 +995,13 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 })}
               </tr>
             </thead>
-            {rosterGroups.map(({ department, employees: groupEmployees }) => (
+            {matchingGroups.map(({ department, employees: groupEmployees }) => (
               <tbody key={department.id} aria-label={`Department ${department.name}`}>
                 <tr className="bg-cloud">
                   <th colSpan={8} scope="rowgroup" className="border-b border-line px-4 py-2 text-sm font-semibold text-ocean">
                     <form action="/roster">
+                      <input type="hidden" name="business" value={workspace.business.id} />
+                      {search && <input type="hidden" name="q" value={search} />}
                       <input type="hidden" name="week" value={week} />
                       <input type="hidden" name="venue" value={workspace.venue.id} />
                       {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
@@ -1103,21 +1140,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                   </Link>
                                 )}
                                 {canManageDepartment(shift.department_id) && !shift.is_published && (
-                                  <form action={deleteShiftAction}>
+                                  <ConfirmedRosterDelete action={deleteShiftAction} label={`Delete ${employee.name} shift`}
+                                    details={`${employee.name}, ${shift.role_title}, ${formatDay(date)}, ${formatTime(shift.starts_at, workspace.venue.timezone)} – ${formatTime(shift.ends_at, workspace.venue.timezone)}`}>
+                                    <input name="business_id" type="hidden" value={workspace.business.id} />
                                     <input name="shift_id" type="hidden" value={shift.id} />
+                                    <input name="expected_updated_at" type="hidden" value={shift.updated_at} />
                                     <input name="week" type="hidden" value={week} />
                                     <input name="venue_id" type="hidden" value={workspace.venue.id} />
                                     {filterDepartment && <input name="filter_department" type="hidden" value={filterDepartment} />}
                                     <CollapsedFields departments={collapsed} />
-                                    <button
-                                      className="rounded p-1 text-muted/70 hover:bg-white hover:text-red-700"
-                                      aria-label={`Delete ${employee.name} shift`}
-                                      title="Delete draft shift"
-                                      type="submit"
-                                    >
-                                      <Trash2 size={12} aria-hidden="true" />
-                                    </button>
-                                  </form>
+                                  </ConfirmedRosterDelete>
                                 )}
                               </div>
                             </article>

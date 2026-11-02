@@ -205,7 +205,8 @@ export function RosterQuickChangeProvider({
         A preview appears before any change is applied.
       </p>
       {(selection || undo || notice || error) && (
-        <section aria-label="Quick shift change" className="mt-6 rounded-lg border border-ocean/25 bg-white p-4 shadow-sm">
+        <section aria-label="Quick shift change" data-roster-editor={selection ? true : undefined}
+          className="mt-6 rounded-lg border border-ocean/25 bg-white p-4 shadow-sm">
           {selection && (
             <>
               <h2 ref={headingRef} tabIndex={-1} className="text-base font-semibold focus:outline-2 focus:outline-ocean">

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  isRosterTimestamp,
   parseQuickChangeInput,
   parseQuickChangePreview,
   quickChangeBlockingMessages,
@@ -23,6 +24,14 @@ const preview = {
   blocking: [], warnings: ["linked-overlap"],
   publish_blocks_overlap: true, publish_blocks_unavailability: false,
 };
+
+test("roster revisions retain timezone and microsecond precision without accepting invalid values", () => {
+  assert.equal(isRosterTimestamp("2032-03-29T10:00:00.123456+00:00"), true);
+  assert.equal(isRosterTimestamp("2032-03-29T10:00:00Z"), true);
+  for (const value of [null, "", "2032-03-29T10:00:00", "not-a-date", "x".repeat(41)]) {
+    assert.equal(isRosterTimestamp(value), false);
+  }
+});
 
 test("quick-change inputs require a valid scoped week, target and revision", () => {
   assert.deepEqual(parseQuickChangeInput(input), input);
