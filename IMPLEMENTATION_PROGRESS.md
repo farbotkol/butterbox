@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **55**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **65**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **56**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **64**.
 - BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
   and mobile employee baseline journeys; actual login/navigation, sample
   download and permission failures verified in **4/4** focused production
@@ -699,19 +699,49 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-DOC-002 — Searchable in-app HTML help center: In Progress (Planning).**
-DEMO-002 `769b5b93659eeb59622edf7a4913e3e8ae7a8bad` pushed with exact remote
-SHA verified. Remaining Showcase P0 branding/UI work lacks final owner-approved
-identity. Select independent ready P1 DOC-002 (DOC-001 prerequisite Done).
-Render repository-maintained guide sections, not a separately hand-coded HTML
-copy. Authenticate and resolve current membership server-side; whitelist task
-visibility by effective role, ignore user-supplied role overrides and preserve
-business scoping. Provide accessible native search/category/navigation,
-controlled Markdown rendering and explicit empty/invalid/denied states.
-Use existing app shell/navigation; no database or shared authorization changes.
-Targeted parser/rendering/scope tests, lint/types, production build and real
-mobile/browser search/permission checks planned. Documentation update pending
-actual tested behavior. No DOC-002 criterion verified yet.
+**BB-DOC-003 — Contextual help and documentation upkeep: In Progress (Planning).**
+DOC-002 is verified below; DOC-003 is the next ready P1 with its prerequisite
+Done. Remaining Showcase P0 identity work requires owner approval. Add scoped
+task links to onboarding, roster, attendance, timesheets and payroll screens,
+then lightweight source/link/review checks and focused production browsers.
+Preserve existing workflow authorization; no database changes planned.
+
+## Latest completed help story
+
+**BB-DOC-002 — Searchable in-app HTML help center: Done.**
+Verified 2026-11-02 21:58 UTC. Recovered unfinished implementation rather than
+recreating it. `/help` loads selected canonical User Guide sections, derives
+topic visibility from server-resolved workspace membership, and preserves
+business selection. New accounts receive only onboarding/common guidance.
+React Markdown/GFM controls exclude raw HTML, images and unsupported URLs.
+Standalone tracing includes the canonical guide.
+
+| Criterion | Implementation and test | Actual result | Status |
+| --- | --- | --- | --- |
+| DOC-002-AC1 | Markdown-backed role/task categories, semantic native controls and HTML; five focused Node tests, production article rendering and mobile axe/overflow | 5/5 Node; focused browser checks passed | Pass |
+| DOC-002-AC2 | All-term search/category filter, explicit no-results/invalid query, scoped topic links; real owner/FOH/employee browsers deny forged role/topic and outside-business requests | 3/3 member-role scenarios passed; onboarding also passed | Pass |
+| DOC-002-AC3 | Effective membership whitelist, restricted new-owner guidance, unavailable/legal/payroll labels, showcase-only walkthroughs | All-role/simulation unit checks and four production scenarios passed | Pass |
+| DOC-002-AC4 | Controlled Markdown rendering, permitted anchor rewriting, native keyboard order, mobile semantic article and axe | Rendering/link tests, keyboard/mobile browser checks passed | Pass |
+
+Files: `src/lib/help.ts`, `src/app/help/page.tsx`, navigation, Next tracing,
+dependency manifests, `tests/help.test.mjs`, focused showcase browser scenarios
+and `docs/USER_GUIDE.md`. TypeScript, changed-file ESLint and split production
+compile/generate passed. Production standalone guide file confirmed present.
+Initial three member browsers failed on a locator matching both the application
+validation alert and Next's route announcer; scoped the locator to the actual
+validation message and reran all four scenarios successfully. No assertions
+removed. Disk guard remained at 28 GiB free.
+
+Tests selected: help parser/rendering/role/search/link units and real search,
+navigation, denied-business, forbidden-topic, onboarding and mobile browser
+paths. Full unrelated Node, pgTAP, authenticated integration and browser suites
+intentionally deferred: no schema, business mutations or shared authorization
+change. Broader regression required at release/workstream merge; this is not
+production or payroll-compliance acceptance.
+**Documentation: updated** canonical guide with tested labels, permissions,
+search/error behavior and limitations; DOC-003 contextual links remain separate.
+Latest pushed recovery checkpoint: `3e33c7a831d1a5fc6e3738c060bcef49fd1cab59`.
+Verified feature commit/push follows this evidence.
 
 ## Latest completed guided showcase story
 
@@ -2683,8 +2713,8 @@ but has not yet run remotely.
   records or bypass the fail-closed safeguard.
 - **BB-DEMO-001/002** are Done. Remaining Showcase P0 brand/UI/reset milestone
   work depends on final owner-approved identity; do not invent that approval.
-  Select independent ready P1 work, including **BB-DOC-002** searchable HTML help.
-  ATTEND-006, REPORT-001, BRAND-001 and DOC-001 are Done; do not rebuild them.
+  Continue **BB-DOC-003** contextual help/upkeep after verified DOC-002.
+  ATTEND-006, REPORT-001, BRAND-001 and DOC-001/002 are Done; do not rebuild them.
   Other BRAND delivery still requires its specific assets and approvals.
   Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable

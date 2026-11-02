@@ -616,9 +616,34 @@ Butterbox's agreed product direction is customer-owned export of employment reco
 
 ## Getting help and improving this guide
 
-The application includes onboarding and some inline help. A searchable HTML
-Help Center and comprehensive contextual links remain BB-DOC-002/003 work;
-this Markdown guide does not claim those routes are deployed.
+Open **Help** in **Main navigation** for the authenticated **Help Center**
+(`/help`). It renders selected sections of this maintained Markdown guide
+as HTML; it is not a separate hand-maintained copy.
+
+1. Use **Search help** for keywords, optionally choose a **Category**, then
+   **Search**. All entered terms must match a task's title, category or content.
+   An empty search lists available tasks; no matches are reported explicitly.
+   Searches are limited to 160 characters.
+2. Open a task, use its internal links, or choose **All help topics**.
+   Search and links retain the selected business. Mobile navigation may scroll;
+   native form controls and visible keyboard focus remain available.
+3. Available tasks follow the current server-verified membership. Employees
+   do not receive owner administration/payroll-preparation articles;
+   department managers do not receive owner-only audit/report tasks. Describing
+   a scoped workflow does not grant permission to execute it. A forged role,
+   topic or business URL does not expand access; unknown/forbidden topics
+   return a not-found page. If business access cannot be verified, help shows
+   an explicit unavailable state instead of another business's content.
+4. Before initial setup, an authenticated new owner can open `/help` for
+   onboarding/common guidance and use **Back to setup**. Signed-out requests
+   return to sign-in. Showcase walkthrough topics appear only in the explicitly
+   configured synthetic environment, not normal customer workspaces.
+
+Raw embedded HTML, images and unapproved URLs are not rendered by the help
+viewer. Guide references without a permitted in-app destination remain text.
+Unavailable capabilities and payroll/legal limitations remain clearly marked.
+Comprehensive screen-specific contextual links and documentation upkeep remain
+separate BB-DOC-003 work; this Help Center does not claim those are deployed.
 
 ### Verification scope and feature coverage
 
@@ -651,6 +676,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | --- | --- |
 | BB-DEMO-001 | Internal synthetic showcase — local review accounts, fictional records, sample-only CSV and reset limitations |
 | BB-DEMO-002 | Guided owner/payroll, scoped FOH/BOH manager and mobile employee baseline reviews; real navigation, permission failures and explicit omissions |
+| BB-DOC-002 | Getting help and improving this guide — authenticated role-scoped HTML, search, task navigation, denied/empty states and limitations |
 | BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
 | BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
 | BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |

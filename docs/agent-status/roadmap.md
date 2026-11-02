@@ -1,24 +1,23 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 21:55 UTC, observed from the Codespace clock
-- **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
-- **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
-- **Agent execution state:** Active at this checkpoint. The timestamp does not prove later execution; no background scheduling is configured.
-- **Current story:** `BB-DOC-002 — Searchable in-app HTML help center` (In Progress)
-- **Acceptance criteria:** Accessible responsive Markdown-backed HTML; role/task categories and keyword search; authorized content/routes and clear empty states; controlled rendering, keyboard/mobile acceptance and accurate unavailable-feature labels.
-- **Phase:** Testing
-- **Current activity:** Recovered the uncommitted role-scoped help route, Markdown dependencies, navigation, guide changes and four browser scenarios. Five focused Node tests and TypeScript passed; production/browser verification next. No database or shared authorization change.
-- **Progress since previous report:** Added tested read-only baseline journeys to the existing User Guide and four production-browser scenarios. Actual owner login/checklist/setup redirect, departments/14 staff, publication/open shifts, approved sample download and correction page passed. Both managers see only their seven staff/approved groups and cannot export/reopen; mobile employee schedule/availability/history and direct timesheet denial passed. Repeated journeys preserved the fixture; 29 GiB free disk.
-- **Testing policy in effect:** Targeted verification.
-- **Tests selected and actual results:** Four guided production journeys passed (owner 1/1, both managers 2/2, mobile employee 1/1), including actual login/navigation, seeded counts, real sample download, scope/denials and mobile axe/overflow. Post-walkthrough HTTP baseline integrity 1/1; test ESLint zero warnings, TypeScript and split production build passed. Initial owner failures were test selectors/filter assumptions; fixed and rerun. DEMO-001's 31 focused tests, 74 pgTAP, labelled browser and ordinary report/CSV 2/2 remain its prior evidence, not a new full regression.
-- **Tests intentionally deferred:** Full unrelated Node, pgTAP, integration and browser suites; hosted reviewer access, owner review and production/conversion acceptance. Broader regression remains required at release/workstream merge.
-- **Remaining verification risks:** Standard local database password, trusted-local containment only; no production/shared-host isolation claim. Reviewer port API 403; remote access unverified. Final identity approval outstanding.
-- **Documentation:** Updated README operator commands/limitations, role-based User Guide, story criterion table and trackers.
-- **Failing tests:** None in final focused runs. Earlier exact-password-label timeout and owner default department filter assumptions corrected; affected cases passed.
-- **Blockers requiring intervention:** Immediate private owner/security review of the privileged candidates; FOUND-001 remediation/rotation and history changes require separate authorization. RULES-005 legal retention/recovery and ORG-006 external delivery remain unverified; FOUND-008 hosted restore is deferred to pre-production; SAAS-003 still requires production assessment and clean real-customer conversion despite this local demo slice. PAY-004 remains deferred.
-- **Next concrete action:** Implement the role-scoped guide loader, safe HTML/search page and navigation entry; focused unit/browser checks next.
-- **Latest development commit:** `769b5b93659eeb59622edf7a4913e3e8ae7a8bad` (completed DEMO-002)
-- **Push outcome:** Guided journey feature pushed; exact remote SHA verified. DOC-002 planning checkpoint follows.
-- **Backlog:** 127 total; 55 Done, 1 In Progress, 6 Blocked, 65 Backlog
+- **Last report:** 2026-11-02 21:58 UTC, observed from the Codespace clock
+- **Reporter:** Executing Roadmap Agent; Core Roadmap on `copilot/finish-roadmap-for-app`
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-DOC-003 — Contextual help and documentation upkeep (In Progress)
+- **Phase:** Planning
+- **Criteria:** Scoped contextual links for five core workflows; documentation Definition of Done; review/history and lightweight link/label/accessibility checks; only verified illustrations and no unimplemented AI claims.
+- **Activity:** Commit verified DOC-002, then add core-screen task links and upkeep checks.
+- **Progress:** Recovered DOC-002 is Done; no previous attendance or demo features rebuilt. Safe Markdown-backed authenticated Help Center, search/categories, role-scoped articles and explicit failures are verified.
+- **Changed files/modules:** Help loader/page, navigation, tracing, Markdown dependencies, unit/browser tests, User Guide and trackers. No database/shared authorization changes.
+- **Tests and results:** Help Node 5/5; help production browser 4/4 (owner, FOH, employee and new-account onboarding), including keyword/category/empty/invalid input, forged topic/role, denied outside business, keyboard, mobile axe/overflow. Changed-file ESLint, TypeScript and split production build passed; standalone guide asset present.
+- **Failing tests:** None in final runs. Initial three browser failures were duplicate alert locators matching Next's announcer; corrected selector and all four scenarios rerun successfully.
+- **Deferred tests:** Full unrelated Node, pgTAP, integration and browser suites. No reset/reseed for help. Broader release/workstream-merge regression remains required.
+- **Risks/blockers:** Hosted production isolation and reviewer access remain unverified; owner-approved identity outstanding. Historical privileged-candidate review/rotation needs separate approval. FOUND-001, RULES-005, ORG-006, FOUND-008, SAAS-003 and deferred Xero PAY-004 retain their recorded blockers.
+- **Documentation:** Updated canonical User Guide with tested Help controls, permissions, errors and unavailable-feature labels. DOC-003 links are not yet claimed delivered.
+- **Resources:** Disk guard remained 28 GiB free; bounded tests serialized.
+- **Latest pushed commit:** `3e33c7a831d1a5fc6e3738c060bcef49fd1cab59` (recovery checkpoint, remote SHA verified).
+- **Push outcome:** Verified DOC-002 feature checkpoint pending immediately after this report.
+- **Next concrete action:** Stage/review/redacted offline secret scan, commit/push DOC-002; implement DOC-003 contextual links.
+- **Backlog:** 127 total; 56 Done, 1 In Progress, 6 Blocked, 64 Backlog.
 
-Detailed criterion evidence and recovery steps are in `IMPLEMENTATION_PROGRESS.md`.
+Criterion evidence: `IMPLEMENTATION_PROGRESS.md`.

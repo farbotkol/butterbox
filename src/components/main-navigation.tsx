@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, Building2, CalendarCheck, CalendarDays, ClipboardList, Clock, LayoutDashboard, ShieldCheck, Timer, UsersRound } from "lucide-react";
+import { Bell, Building2, CalendarCheck, CalendarDays, CircleHelp, ClipboardList, Clock, LayoutDashboard, ShieldCheck, Timer, UsersRound } from "lucide-react";
 import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -11,6 +11,7 @@ const links = [
   { href: "/notifications", label: "Notifications", icon: Bell },
   { href: "/roster", label: "Rostering", icon: CalendarDays },
   { href: "/availability", label: "Availability", icon: Clock },
+  { href: "/help", label: "Help", icon: CircleHelp },
 ];
 
 function NavigationPending() {

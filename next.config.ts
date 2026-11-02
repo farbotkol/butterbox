@@ -6,6 +6,9 @@ const codespaceOrigin = process.env.CODESPACE_NAME
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingIncludes: {
+    "/help": ["./docs/USER_GUIDE.md"],
+  },
   ...(codespaceOrigin
     ? {
         allowedDevOrigins: [codespaceOrigin],

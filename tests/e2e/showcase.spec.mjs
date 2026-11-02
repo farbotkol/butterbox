@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
 import path from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
 import { readEnvironment, showcaseStatus, verify } from "../../scripts/showcase-environment.mjs";
 
 const workdir = process.env.BUTTERBOX_SHOWCASE_WORKDIR;
@@ -16,8 +18,8 @@ const settings = showcaseStatus(workdir);
 const state = JSON.parse(await readFile(path.join(workdir, "fixture-state.json"), "utf8"));
 if (state.phase !== "seeded" || state.simulationOnly !== true) throw new Error("Showcase fixture is not ready.");
 
-async function authenticate(context, role) {
-  const account = state.accounts.find((item) => item.role === role);
+async function authenticate(context, role, account = state.accounts.find((item) => item.role === role)) {
+  if (!account) throw new Error(`Missing synthetic ${role} review account.`);
   const cookies = [];
   const supabase = createServerClient(settings.API_URL, settings.ANON_KEY, {
     cookies: { getAll: () => [], setAll: (values) => cookies.push(...values) },
@@ -188,4 +190,72 @@ test("guided mobile employee follows schedule, availability and original attenda
   await page.goto(`/timesheets?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.week}`);
   await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("error") === "permission");
   await expect(page.getByRole("heading", { name: "Weekly timesheet review", exact: true })).toHaveCount(0);
+});
+
+for (const role of ["owner", "foh_manager", "employee"]) {
+  test(`help center ${role} uses safe scoped search, keyboard navigation and real permission failures`, async ({ page }) => {
+    await page.setViewportSize(role === "employee" ? { width: 375, height: 812 } : { width: 1440, height: 1000 });
+    await page.goto("/help");
+    await expect(page).toHaveURL((url) => url.pathname === "/login");
+    await signIn(page, role);
+    await navigate(page, "Help", "Help Center");
+    const payroll = page.getByRole("navigation", { name: "Help topics", exact: true })
+      .getByRole("link", { name: "Preparing and reconciling payroll CSV", exact: true });
+    await expect(payroll).toHaveCount(role === "owner" ? 1 : 0);
+    await page.getByLabel("Search help", { exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel("Category", { exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Search", exact: true })).toBeFocused();
+    await page.getByLabel("Search help", { exact: true }).fill("absent-keyword-93725");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByText("No help topics match your search.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Help topics", exact: true })).toHaveCount(0);
+    await page.getByLabel("Search help", { exact: true }).fill("clock");
+    await page.getByLabel("Category", { exact: true }).selectOption("Attendance");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("navigation", { name: "Help topics", exact: true })
+      .getByRole("link", { name: "Clocking and corrections", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Clocking and corrections", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.getByRole("link", { name: "All help topics", exact: true }).click();
+    expect(new URL(page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+    await page.goto(`/help?business=${state.plan.businessId}&q=one&q=two`);
+    await expect(page.getByRole("alert").filter({ hasText: "Enter a single search" })).toBeVisible();
+    const forbidden = await page.goto(`/help?business=${state.plan.businessId}&topic=${role === "owner" ? "missing-task" : "payroll"}&role=owner`);
+    expect(forbidden.status()).toBe(404);
+    await expect(page.getByRole("article")).toHaveCount(0);
+    await page.goto(`/help?business=${state.plan.outsideId}`);
+    await expect(page.getByRole("heading", { name: "Help unavailable", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Help topics", exact: true })).toHaveCount(0);
+  });
+}
+
+test("help center supports authenticated onboarding without granting business task access", async ({ page, context }) => {
+  const admin = createClient(settings.API_URL, settings.SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const account = {
+    email: `showcase-help-${randomUUID()}-${state.namespace}@example.test`,
+    password: `${randomBytes(24).toString("base64url")}aA1!`,
+  };
+  const created = await admin.auth.admin.createUser({ ...account, email_confirm: true });
+  expect(created.error).toBeNull();
+  let session;
+  try {
+    session = await authenticate(context, "new_owner", account);
+    await page.goto("/help?topic=onboarding");
+    await expect(page.getByRole("article", { name: "Getting started", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Preparing and reconciling payroll CSV", exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Back to setup", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Set up your workspace", exact: true })).toBeVisible();
+    const denied = await page.goto("/help?topic=payroll&role=owner");
+    expect(denied.status()).toBe(404);
+  } finally {
+    if (session) await session.auth.signOut();
+    const deleted = await admin.auth.admin.deleteUser(created.data.user.id);
+    expect(deleted.error).toBeNull();
+  }
 });
