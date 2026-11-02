@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -353,7 +353,7 @@ test("offline attendance reconciliation serializes retries, decisions, permissio
     assert.deepEqual(afterRevocation.data, []);
     await finishLiveBreak(restrictedBreak);
   } finally {
-    assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
   }
 });

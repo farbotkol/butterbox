@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   prepareCanonicalPayrollForProvider, validateCanonicalPayrollRows,
 } from "../src/lib/canonical-payroll.ts";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -560,7 +560,7 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     assert.ok(audit.data.some((row) => row.reason === "Review late request" && row.new_values.action === "reopened"));
   } finally {
     for (const id of [businessId, outsideId]) {
-      assert.ifError((await admin.from("businesses").delete().eq("id", id)).error);
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of Object.values(users)) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
   }

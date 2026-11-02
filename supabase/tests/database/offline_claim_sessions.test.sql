@@ -241,7 +241,8 @@ select extensions.throws_ok(
 select extensions.is((select count(*)::integer from public.attendance_events where source = 'offline_claim'), 2,
   'reopening does not erase original events');
 reset role;
-select extensions.is((select count(*)::integer from public.attendance_events where source = 'server_clock'), 2,
+select extensions.is((select count(*)::integer from public.attendance_events
+  where session_id = '29000000-0000-4000-8000-000000000001' and source = 'server_clock'), 2,
   'existing server-clock events retain their original source');
 select extensions.throws_ok(
   $$update public.attendance_offline_claim_sessions set reason = 'Altered'$$,

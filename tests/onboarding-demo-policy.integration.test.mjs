@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -94,7 +94,7 @@ test(
         businesses.push(...memberships.data.map((membership) => membership.business_id));
       }
       for (const business of new Set(businesses)) {
-        assert.ifError((await admin.from("businesses").delete().eq("id", business)).error);
+        await assertBusinessFixturesPreserved(admin, business);
       }
       for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
     }

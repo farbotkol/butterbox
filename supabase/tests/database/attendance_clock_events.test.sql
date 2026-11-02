@@ -393,8 +393,9 @@ select extensions.is(
     where actor_id = 'a8000000-0000-4000-8000-000000000005'),
   3, 'the owner retains scoped access to the former account original events');
 reset role;
-select extensions.lives_ok(
+select extensions.throws_ok(
   $$delete from public.businesses where id = 'b8000000-0000-4000-8000-000000000001'$$,
-  'explicit business removal can cascade its original attendance records');
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business removal cannot cascade original attendance records');
 select * from extensions.finish();
 rollback;

@@ -400,8 +400,11 @@ select extensions.throws_ok($$delete from public.generic_payroll_reconciliations
 select extensions.is((select count(*) from public.generic_payroll_export_entries
   where business_id = 'b7500000-0000-4000-8000-000000000001'), 3::bigint,
   'only three distinct sessions were ever exported across all versions and weeks');
-delete from public.businesses where id = 'b7500000-0000-4000-8000-000000000001';
-select extensions.is((select count(*) from public.generic_payroll_export_batches), 0::bigint,
-  'deleting a disposable business cascades to its export ledger');
+select extensions.throws_ok($$delete from public.businesses where id = 'b7500000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade the export ledger');
+select extensions.is((select count(*) from public.generic_payroll_export_batches
+  where business_id = 'b7500000-0000-4000-8000-000000000001'), 2::bigint,
+  'both export batches remain after the rejected deletion');
 select * from extensions.finish();
 rollback;

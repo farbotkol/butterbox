@@ -305,10 +305,15 @@ select extensions.throws_ok($$select * from pg_temp.bulk('16000000-0000-4000-800
   (select selection from saved_selections where name = 'initial'))$$,
   'P0001', 'Selected attendance not found or permission denied', 'idempotent retries respect changed department scope');
 reset role;
-delete from public.businesses where id = 'b6000000-0000-4000-8000-000000000001';
-select extensions.is((select count(*) from public.attendance_bulk_edit_lock_batches
-  where business_id = 'b6000000-0000-4000-8000-000000000001'), 0::bigint,
-  'deleting a disposable tenant cascades immutable audit batches');
+select set_config('test.preserved_lock_batch_count', (select count(*)::text from public.attendance_bulk_edit_lock_batches
+  where business_id = 'b6000000-0000-4000-8000-000000000001'), true);
+select extensions.throws_ok($$delete from public.businesses where id = 'b6000000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade immutable audit batches');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_lock_batch_count')::bigint
+  from public.attendance_bulk_edit_lock_batches
+  where business_id = 'b6000000-0000-4000-8000-000000000001'),
+  'all immutable audit batches remain after the rejected deletion');
 
 select * from extensions.finish();
 rollback;

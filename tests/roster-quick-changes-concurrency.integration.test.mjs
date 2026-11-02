@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -229,7 +229,7 @@ test("quick roster changes serialize retries and recheck conflicts, reviews and 
     })).error?.message, "Shift changed since the quick change", "undo never changes a published shift");
     assert.equal((await shift(raceSourceId)).is_published, true);
   } finally {
-    assert.ifError((await admin.from("businesses").delete().in("id", [businessId, outsideId])).error);
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
     for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
   }
 });

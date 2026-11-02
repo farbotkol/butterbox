@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
 const anonKey = process.env.BUTTERBOX_TEST_SUPABASE_ANON_KEY;
@@ -14,6 +15,7 @@ test(
     timeout: 60_000,
   },
   async () => {
+    await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, url);
     const options = { auth: { autoRefreshToken: false, persistSession: false } };
     const admin = createClient(url, serviceKey, options);
     const member = createClient(url, anonKey, options);
@@ -120,7 +122,7 @@ test(
     } finally {
       await member.auth.signOut();
       for (const business of [ownedBusiness, staffBusiness, outsideBusiness]) {
-        assert.ifError((await admin.from("businesses").delete().eq("id", business)).error);
+        await assertBusinessFixturesPreserved(admin, business);
       }
       for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
     }

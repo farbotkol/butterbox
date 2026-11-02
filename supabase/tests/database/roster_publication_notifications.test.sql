@@ -92,7 +92,9 @@ select extensions.is(
     'd4000000-0000-4000-8000-000000000001', '2032-03-15'),
   0, 'a repeated publication without drafts remains a no-op');
 reset role;
-select extensions.is((select count(*)::integer from public.roster_publication_recipients), 2,
+select extensions.is((select count(*)::integer from public.roster_publication_recipients r
+  join public.roster_publications p on p.id = r.publication_id
+  where p.business_id = 'b4000000-0000-4000-8000-000000000001'), 2,
   'two impacted profiles produce one recipient each despite multiple shifts and an open shift');
 select extensions.is(
   (select count(*)::integer from public.roster_publication_recipients
@@ -356,7 +358,8 @@ reset role;
 select extensions.is(
   (select count(*)::integer from public.roster_publication_recipients r
     join public.roster_publications p on p.id = r.publication_id
-    where p.week_start = '2032-03-29'),
+    where p.business_id = 'b4000000-0000-4000-8000-000000000001'
+      and p.week_start = '2032-03-29'),
   0, 'blocked publication cannot create a recipient or notification');
 
 insert into public.employees (id, business_id, venue_id, department_id, auth_user_id, name, role_title) values

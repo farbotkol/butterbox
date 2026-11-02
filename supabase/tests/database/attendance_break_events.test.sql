@@ -417,13 +417,14 @@ select extensions.is(
     where session_id = current_setting('test.break_session')::uuid
       and actor_id = 'a9000000-0000-4000-8000-000000000004'),
   6, 'original break and clock events retain the actor identifier');
-select extensions.lives_ok(
+select extensions.throws_ok(
   $$delete from public.businesses where id = 'b9000000-0000-4000-8000-000000000001'$$,
-  'removing the entire disposable business cascades immutable break records');
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business removal cannot cascade immutable break records');
 select extensions.is(
   (select count(*)::integer from public.attendance_breaks
     where business_id = 'b9000000-0000-4000-8000-000000000001'),
-  0, 'business removal cascades its breaks');
+  3, 'business removal preserves its breaks');
 
 select * from extensions.finish();
 rollback;

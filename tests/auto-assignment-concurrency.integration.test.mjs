@@ -5,6 +5,7 @@ import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { promisify } from "node:util";
 import { createClient } from "@supabase/supabase-js";
+import { assertBusinessFixturesPreserved } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -620,7 +621,7 @@ test(
       await runAcknowledgementRaces("2032-06-14");
     } finally {
       assert.ifError((await admin.from("shifts").delete().eq("business_id", businessId)).error);
-      assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);
+      await assertBusinessFixturesPreserved(admin, businessId);
       for (const id of users) assert.ifError((await admin.auth.admin.deleteUser(id)).error);
     }
   },

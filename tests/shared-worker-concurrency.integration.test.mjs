@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -259,8 +259,7 @@ test(
       assert.ifError(revokedWrites.error);
       assert.deepEqual(revokedWrites.data, []);
     } finally {
-      const removed = await admin.from("businesses").delete().eq("id", businessId);
-      assert.ifError(removed.error);
+      await assertBusinessFixturesPreserved(admin, businessId);
       if (userId) assert.ifError((await admin.auth.admin.deleteUser(userId)).error);
       if (managerId) assert.ifError((await admin.auth.admin.deleteUser(managerId)).error);
     }

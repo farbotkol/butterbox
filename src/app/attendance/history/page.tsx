@@ -82,9 +82,10 @@ export default async function PersonalAttendanceHistoryPage({ searchParams }: { 
       </p>
       <p className="mt-2 text-sm leading-6 text-muted">
         Original events and corrections are protected from ordinary edits and are not automatically expired.
-        A privileged business deletion can remove associated records. An approved legal retention policy and
-        hosted backups have not been verified; contact your employer about access, correction or retention
-        after your account access ends. This description is not a compliance guarantee.
+        Business deletion is disabled by the preservation safeguard, but other privileged database or storage
+        operations could still remove records. An approved legal retention policy and hosted backups have not
+        been verified; contact your employer about access, correction or retention after your account access
+        ends. This description is not a compliance guarantee.
       </p>
     </section>
     {page === null && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">

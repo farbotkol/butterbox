@@ -149,7 +149,8 @@ select extensions.throws_ok($$select * from public.list_payroll_mapping_connecti
 select extensions.throws_ok($$select * from pg_temp.provider_records()$$,
   'P0001', 'Permission denied', 'outside owner cannot fetch mapped payroll records');
 reset role;
-select extensions.is((select count(*) from public.payroll_employee_mapping_events), 4::bigint,
+select extensions.is((select count(*) from public.payroll_employee_mapping_events
+  where business_id = 'b7600000-0000-4000-8000-000000000001'), 4::bigint,
   'only committed mapping transitions are audited, not retries or failures');
 select extensions.throws_ok($$update public.payroll_employee_mapping_events set reason = 'rewrite'$$,
   'P0001', 'Original attendance records are immutable', 'mapping audit cannot be rewritten');
@@ -157,8 +158,11 @@ select extensions.throws_ok($$update public.payroll_mapping_connections set acco
   'P0001', 'Original attendance records are immutable', 'destination identity cannot change underneath existing mappings');
 select extensions.ok((select relrowsecurity from pg_class where oid = 'public.payroll_employee_mappings'::regclass),
   'mapping storage has RLS enabled');
-delete from public.businesses where id = 'b7600000-0000-4000-8000-000000000001';
-select extensions.is((select count(*) from public.payroll_employee_mapping_events), 0::bigint,
-  'disposable business cleanup cascades mapping history safely');
+select extensions.throws_ok($$delete from public.businesses where id = 'b7600000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade mapping history');
+select extensions.is((select count(*) from public.payroll_employee_mapping_events
+  where business_id = 'b7600000-0000-4000-8000-000000000001'), 4::bigint,
+  'mapping history remains after the rejected deletion');
 select * from extensions.finish();
 rollback;

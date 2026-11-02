@@ -316,10 +316,15 @@ select extensions.throws_ok($$update public.payroll_period_events set reason = '
   'P0001', 'Original attendance records are immutable', 'period events are immutable for privileged updates');
 select extensions.throws_ok($$delete from public.payroll_period_entries$$,
   'P0001', 'Original attendance records are immutable', 'period entries are immutable for privileged deletes');
-delete from public.businesses where id = 'b7200000-0000-4000-8000-000000000001';
-select extensions.is((select count(*) from public.payroll_period_events
-  where business_id = 'b7200000-0000-4000-8000-000000000001'), 0::bigint,
-  'deleting a disposable tenant cascades its payroll periods');
+select set_config('test.preserved_period_count', (select count(*)::text from public.payroll_period_events
+  where business_id = 'b7200000-0000-4000-8000-000000000001'), true);
+select extensions.throws_ok($$delete from public.businesses where id = 'b7200000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade payroll periods');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_period_count')::bigint
+  from public.payroll_period_events
+  where business_id = 'b7200000-0000-4000-8000-000000000001'),
+  'all payroll period events remain after the rejected deletion');
 
 select * from extensions.finish();
 rollback;

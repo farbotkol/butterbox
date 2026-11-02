@@ -2,12 +2,14 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
 const anonKey = process.env.BUTTERBOX_TEST_SUPABASE_ANON_KEY;
 const serviceKey = process.env.BUTTERBOX_TEST_SUPABASE_SERVICE_KEY;
 const disposable = process.env.BUTTERBOX_TEST_DISPOSABLE;
-const configured = [url, anonKey, serviceKey, disposable].some(Boolean);
+const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
+const configured = [url, anonKey, serviceKey, disposable, container].some(Boolean);
 
 test(
   "two tenants remain isolated and concurrent shift assignments cannot overlap",
@@ -26,6 +28,7 @@ test(
     assert.equal(parsedUrl.password, "");
     assert.equal(parsedUrl.search, "");
     assert.equal(parsedUrl.hash, "");
+    await disposableDatabase(container, url);
 
     const options = { auth: { autoRefreshToken: false, persistSession: false } };
     const admin = createClient(url, serviceKey, options);
@@ -273,17 +276,15 @@ test(
       await assertConcurrentAssignments(first);
     } finally {
       const cleanupErrors = [];
-      if (businesses.length > 0) {
-        const shifts = await admin.from("shifts").delete().in("business_id", businesses);
-        if (shifts.error) cleanupErrors.push(`shifts: ${shifts.error.message}`);
-        const removed = await admin.from("businesses").delete().in("id", businesses);
-        if (removed.error) cleanupErrors.push(`businesses: ${removed.error.message}`);
+      try {
+        await assertBusinessFixturesPreserved(admin, businesses);
+      } finally {
+        for (const user of users) {
+          const removed = await admin.auth.admin.deleteUser(user);
+          if (removed.error) cleanupErrors.push(`test user: ${removed.error.message}`);
+        }
+        assert.deepEqual(cleanupErrors, [], "Disposable test user accounts must be removed");
       }
-      for (const user of users) {
-        const removed = await admin.auth.admin.deleteUser(user);
-        if (removed.error) cleanupErrors.push(`test user: ${removed.error.message}`);
-      }
-      assert.deepEqual(cleanupErrors, [], "Disposable test fixtures must be removed");
     }
   },
 );

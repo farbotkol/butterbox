@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { testSupabaseStatus } from "./test-supabase-status.mjs";
 
@@ -13,6 +14,13 @@ const settings = testSupabaseStatus(workdir);
 if (!settings.API_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
   throw new Error("Local Supabase status is missing API or test authentication settings.");
 }
+const config = readFileSync(resolve(workdir, "supabase/config.toml"), "utf8");
+const projectId = /^project_id\s*=\s*"([a-z0-9][a-z0-9_-]*)"\s*(?:#.*)?$/m.exec(config)?.[1];
+if (!projectId) throw new Error("The disposable Supabase project ID is missing or invalid.");
+const container = `supabase_db_${projectId}`;
+if (process.env.BUTTERBOX_TEST_DB_CONTAINER && process.env.BUTTERBOX_TEST_DB_CONTAINER !== container) {
+  throw new Error("The requested database container does not match the disposable project.");
+}
 
 const result = spawnSync(
   process.execPath,
@@ -25,8 +33,11 @@ const result = spawnSync(
           "tests/auto-assignment-concurrency.integration.test.mjs",
           "tests/shared-worker-concurrency.integration.test.mjs",
           "tests/roster-copy-concurrency.integration.test.mjs",
+          "tests/roster-review-concurrency.integration.test.mjs",
+          "tests/roster-quick-changes-concurrency.integration.test.mjs",
           "tests/onboarding-demo-policy.integration.test.mjs",
           "tests/staff-invitations.integration.test.mjs",
+          "tests/business-preservation.integration.test.mjs",
           "tests/attendance-concurrency.integration.test.mjs",
           "tests/attendance-corrections-concurrency.integration.test.mjs",
           "tests/employee-correction-requests.integration.test.mjs",
@@ -50,6 +61,7 @@ const result = spawnSync(
       BUTTERBOX_TEST_SUPABASE_URL: settings.API_URL,
       BUTTERBOX_TEST_SUPABASE_ANON_KEY: settings.ANON_KEY,
       BUTTERBOX_TEST_SUPABASE_SERVICE_KEY: settings.SERVICE_ROLE_KEY,
+      BUTTERBOX_TEST_DB_CONTAINER: container,
     },
   },
 );

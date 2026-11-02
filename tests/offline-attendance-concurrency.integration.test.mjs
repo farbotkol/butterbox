@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -142,7 +142,7 @@ test("offline claims serialize retries and respect concurrent access changes", {
     assert.ifError(count.error);
     assert.deepEqual(count.data, []);
   } finally {
-    assert.ifError((await admin.from("businesses").delete().in("id", [businessId, outsideBusiness])).error);
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideBusiness]);
     for (const user of users) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
   }
 });

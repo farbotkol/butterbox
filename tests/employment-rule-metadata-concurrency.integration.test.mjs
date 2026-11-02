@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -188,7 +188,7 @@ test("employment metadata serializes competing edits and enforces live tenant sc
     assert.deepEqual(finalHistory.data.map((event) => event.revision), [1, 2]);
   } finally {
     for (const id of [businessId, outsideId]) {
-      assert.ifError((await admin.from("businesses").delete().eq("id", id)).error);
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of Object.values(users)) assert.ifError((await admin.auth.admin.deleteUser(user)).error);
   }

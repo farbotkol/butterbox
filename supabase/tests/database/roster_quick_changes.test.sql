@@ -380,12 +380,16 @@ select extensions.throws_ok(
 select extensions.throws_ok(
   $$delete from public.roster_quick_change_undos where change_id = current_setting('test.move_receipt')::uuid$$,
   'P0001', 'Roster quick change records are immutable', 'undo receipts are immutable');
-select extensions.lives_ok(
+select set_config('test.preserved_quick_change_count', (select count(*)::text from public.roster_quick_changes
+  where business_id = 'b3000000-0000-4000-8000-000000000001'), true);
+select extensions.throws_ok(
   $$delete from public.businesses where id = 'b3000000-0000-4000-8000-000000000001'$$,
-  'the existing business cascade can remove quick-change receipts');
-select extensions.is(
-  (select count(*)::integer from public.roster_quick_changes
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade quick-change receipts');
+select extensions.ok(
+  (select count(*) > 0 and count(*) = current_setting('test.preserved_quick_change_count')::bigint
+    from public.roster_quick_changes
     where business_id = 'b3000000-0000-4000-8000-000000000001'),
-  0, 'business deletion does not leave orphaned quick-change receipts');
+  'business deletion preserves all quick-change receipts');
 select * from extensions.finish();
 rollback;

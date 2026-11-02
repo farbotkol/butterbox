@@ -21,8 +21,9 @@ restricts reads to the current business owner; revocation takes effect on the
 next request. A field allowlist excludes contact email, credentials, captured
 GPS positions and arbitrary nested metadata. Owners should still treat the
 included names, identifiers and free-text reasons as sensitive personal data.
-Source-record deletion retains its audit history; deleting the entire business
-follows the existing tenant cascade lifecycle.
+Source-record deletion retains its audit history. Business deletion and
+truncation are disabled by the preservation migration, although other
+privileged operations may still remove records.
 
 ## Local development
 
@@ -297,14 +298,14 @@ records or correction. Separate authorised management access is unaffected
 by removing an employee-profile link.
 
 Original attendance, corrections, claims and payroll records are not subject
-to a configured automatic live-record expiry in this application. They are
-protected against ordinary edits and individual deletion, but a privileged
-deletion of the business can cascade its records. Hosted backups and a
-legally appropriate live-record retention/deletion policy have not been
-verified; an owner must establish and operate them before relying on this
-system. The 35-day backup proposal below is separate from employment-record
-retention. Nothing here guarantees compliance with Australian privacy or
-workplace-record requirements.
+to a configured automatic live-record expiry in this application. Ordinary
+edits and individual deletion are restricted. Business DELETE and TRUNCATE are
+disabled, including for the service role, while preservation requirements are
+unresolved; this does not protect against every privileged database or storage
+operation. Hosted backups and a legally appropriate live-record
+retention/deletion policy have not been verified. The 35-day backup proposal
+below is separate from employment-record retention. Nothing here guarantees
+compliance with Australian privacy or workplace-record requirements.
 
 Managers can use **Work time** to inspect actual attendance sessions in their
 permitted departments and venue. Calculations use elapsed instants, including
@@ -638,13 +639,14 @@ BUTTERBOX_TEST_DISPOSABLE=yes node scripts/test-tenant-isolation.mjs /path/to/di
 ```
 
 The test obtains the local keys from the CLI without printing them, creates
-two temporary users and businesses, checks concurrent roster assignments,
-and deletes those fixtures afterward. It
-refuses non-loopback URLs, but a loopback connection can still be a tunnel to
-another database: use an isolated test project, never a shared or production
-one. Without test settings, the normal `npm test` run explicitly skips this
-integration test. CI runs both the database suite and the HTTP test on a fresh
-local Supabase project.
+two synthetic users and businesses, and checks concurrent roster assignments.
+It verifies that business deletion is refused and removes the test user
+accounts; protected synthetic business records remain until an explicitly
+verified disposable project is reset. It checks the project label and API
+port and refuses non-loopback URLs: use an isolated test project, never a
+shared or production one. Without test settings, the normal `npm test` run
+explicitly skips this integration test. CI runs both the database suite and
+the HTTP test on a fresh local Supabase project.
 To also verify concurrent leave, attendance, location and sample-policy transitions,
 set `BUTTERBOX_TEST_DB_CONTAINER` to that disposable project's
 `supabase_db_<project-id>` Docker container. These tests verify the container's
@@ -666,8 +668,9 @@ starts it at `http://127.0.0.1:3117`, runs the browser tests and stops its
 server. It modifies the local `.next` build output and requires that port to
 be free. The Supabase project must have email confirmation enabled, Mailpit
 running and the application callback origin on its redirect allowlist. It
-creates and removes test users and businesses; never use a shared database or
-a loopback tunnel to a non-disposable project. The sample-data browser test
+creates and removes test users. Protected synthetic businesses remain until a
+separately verified disposable project reset; never use a shared database or a
+loopback tunnel to a non-disposable project. The sample-data browser test
 requires the policy to be disabled initially, verifies the Docker project label
 and API port, temporarily enables the policy and restores it afterward.
 Set `BUTTERBOX_TEST_APP_URL` to

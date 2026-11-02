@@ -247,11 +247,15 @@ select extensions.is((select count(*) from pg_temp.canonical_records(
   (select id from canonical_test_saved where name = 'empty'), '2024-10-14'
 )), 0::bigint, 'an explicitly finalised empty week has a valid empty record set');
 reset role;
-delete from public.businesses where id in (
+select set_config('test.preserved_canonical_count', (select count(*)::text from public.payroll_canonical_details
+  where business_id = 'b7300000-0000-4000-8000-000000000001'), true);
+select extensions.throws_ok($$delete from public.businesses where id in (
   'b7300000-0000-4000-8000-000000000001', 'b7300000-0000-4000-8000-000000000002'
-);
-select extensions.is((select count(*) from public.payroll_canonical_details
-  where business_id = 'b7300000-0000-4000-8000-000000000001'), 0::bigint,
-  'deleting a disposable business cascades to its canonical snapshots');
+)$$, 'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade canonical snapshots');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_canonical_count')::bigint
+  from public.payroll_canonical_details
+  where business_id = 'b7300000-0000-4000-8000-000000000001'),
+  'all canonical snapshots remain after the rejected deletion');
 select * from extensions.finish();
 rollback;

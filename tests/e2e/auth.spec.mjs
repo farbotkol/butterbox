@@ -9,7 +9,7 @@ import {
   stringToBase64URL,
 } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "../helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "../helpers/disposable-database.mjs";
 
 const appUrl = process.env.BUTTERBOX_TEST_APP_URL;
 const apiUrl = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -36,6 +36,7 @@ for (const value of [appUrl, apiUrl, mailUrl]) {
 
 const options = { auth: { autoRefreshToken: false, persistSession: false } };
 const admin = createClient(apiUrl, serviceKey, options);
+await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
 
 async function findUser(email) {
   const result = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
@@ -269,7 +270,7 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await expect(boh.getByRole("button", { name: /Move or duplicate Alex Quick/ })).toHaveCount(0);
   } finally {
     for (const context of contexts) await context.close();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
@@ -430,10 +431,7 @@ test("verified signup, resumable setup, cross-tab logout and recovery", async ({
         expect(memberships.error).toBeNull();
         const businesses = memberships.data.map((membership) => membership.business_id);
         if (businesses.length > 0) {
-          const shifts = await admin.from("shifts").delete().in("business_id", businesses);
-          expect(shifts.error).toBeNull();
-          const removed = await admin.from("businesses").delete().in("id", businesses);
-          expect(removed.error).toBeNull();
+          await assertBusinessFixturesPreserved(admin, businesses);
         }
         const removed = await admin.auth.admin.deleteUser(user.id);
         expect(removed.error).toBeNull();
@@ -441,7 +439,7 @@ test("verified signup, resumable setup, cross-tab logout and recovery", async ({
         if (businesses.length > 0) {
           const remaining = await admin.from("businesses").select("id").in("id", businesses);
           expect(remaining.error).toBeNull();
-          expect(remaining.data).toEqual([]);
+          expect(remaining.data.map(({ id }) => id).sort()).toEqual([...businesses].sort());
         }
       }
     }
@@ -491,7 +489,7 @@ test("a recovered session expires across signed-in tabs", async ({ page, context
     await expect(expiryTab).toHaveURL(/\/login/, { timeout: 10_000 });
     await expect(page).toHaveURL(/\/login/, { timeout: 10_000 });
   } finally {
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
@@ -691,7 +689,7 @@ test("offline attendance claims survive reconnect failures and stay scoped to th
     await context.setOffline(false);
     for (const item of contexts) await item.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -898,7 +896,7 @@ test("employees and scoped managers complete and reject shift swaps with mobile 
   } finally {
     for (const context of contexts) await context.close();
     for (const id of [businessId, outsideId]) {
-      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -1195,7 +1193,7 @@ test("prepared attendance reopens offline without crossing account or tenant ses
     await outsideContext.close();
     if (mirrored) await mirrored.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -1243,11 +1241,11 @@ async function withPermissionFixtures(initialRole, run) {
     await run({ suffix, password, userIds, businessId, venueIds, departmentIds, scopes });
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     const remaining = await admin.from("businesses").select("id").eq("id", businessId);
     expect(remaining.error).toBeNull();
-    expect(remaining.data).toEqual([]);
+    expect(remaining.data).toEqual([{ id: businessId }]);
   }
 }
 
@@ -1691,11 +1689,11 @@ test("owners configure venue geofences with protected audit and scoped access", 
         for (const context of contexts) await context.close();
       }
     } finally {
-      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
       const remaining = await admin.from("businesses").select("id").in("id", [businessId, outsideBusinessId]);
       expect(remaining.error).toBeNull();
-      expect(remaining.data).toEqual([]);
+      expect(remaining.data.map(({ id }) => id).sort()).toEqual([businessId, outsideBusinessId].sort());
     }
   }
 });
@@ -1877,7 +1875,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
   } finally {
     for (const context of contexts) await context.close();
     for (const id of [businessId, outsideId]) {
-      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -2004,7 +2002,7 @@ test("owners configure venue conflict rules with protected history and scoped ac
         for (const context of contexts) await context.close();
       }
     } finally {
-      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -2174,7 +2172,7 @@ test("configured conflict rules block assignments and publication until warnings
       }
     } finally {
       expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-      expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, businessId);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -2305,7 +2303,7 @@ test("automatic assignment respects availability while manual warnings remain ad
     await expect(page.getByText("Availability warnings do not block manual assignment or publication", { exact: false })).toBeVisible();
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   }
 });
@@ -2415,7 +2413,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
           if (employeeContext && browser.isConnected()) await employeeContext.close();
         } finally {
           expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-          expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+          await assertBusinessFixturesPreserved(admin, businessId);
           for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
         }
       }
@@ -2512,7 +2510,7 @@ test("departmental managers keep separate rosters for shared staff with an owner
           for (const context of contexts) if (browser.isConnected()) await context.close();
         } finally {
           expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-          expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+          await assertBusinessFixturesPreserved(admin, businessId);
           for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
         }
       }
@@ -2655,7 +2653,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     expect(remaining.data).toEqual([{ job_role_id: serverId, is_primary: true }]);
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
   }
 });
@@ -2790,7 +2788,7 @@ test("manual role restrictions protect open shifts without changing automatic-on
     expect(automatic.data.employee_id).toBe(qualifiedId);
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
   }
 });
@@ -2853,7 +2851,7 @@ test("new open shifts load their saved values when edited", async ({ page }) => 
     expect(new Date(shift.data.ends_at).toISOString()).toBe("2032-03-16T12:00:00.000Z");
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (ownerId) expect((await admin.auth.admin.deleteUser(ownerId)).error).toBeNull();
   }
 });
@@ -2994,7 +2992,7 @@ test("employees save recurring availability and the roster displays overnight ga
   }
   try {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   } catch (error) {
     failures.push(error);
@@ -3064,7 +3062,7 @@ async function withAvailabilityExceptionFixtures(page, browser, run) {
   }
   try {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().in("id", [businessId, otherBusinessId])).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, [businessId, otherBusinessId]);
     for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   } catch (error) {
     failures.push(error);
@@ -3628,7 +3626,7 @@ test("weekly roster groups staff by department and preserves local dates on mobi
       for (const context of contexts) if (browser.isConnected()) await context.close();
     } finally {
       expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-      expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, businessId);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -3827,7 +3825,7 @@ test("draft shifts can be created and edited with inline errors in permitted ven
   }
   try {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   } catch (error) {
     failures.push(error);
@@ -3881,7 +3879,7 @@ test("editing a draft preserves historical sub-minute timestamps", async ({ page
     expect(precise.data.ends_at).toContain("22:30:48.654321");
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
@@ -4031,7 +4029,7 @@ test("personal mobile schedules show only the member's published shifts", async 
       for (const context of contexts) if (browser.isConnected()) await context.close();
     } finally {
       expect((await admin.from("shifts").delete().in("business_id", [businessId, outsideBusinessId])).error).toBeNull();
-      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -4212,7 +4210,7 @@ test("published roster updates reach the right employees once and retain pending
       }
     } finally {
       expect((await admin.from("shifts").delete().in("business_id", [businessId, outsideBusinessId])).error).toBeNull();
-      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
       for (const id of userIds) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -4345,7 +4343,7 @@ test("required shift acknowledgements stay scoped and survive later publications
   } finally {
     if (workerContext) await workerContext.close();
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   }
 });
@@ -4459,7 +4457,7 @@ test("managers offer published open shifts to eligible staff and confirm one tim
   } finally {
     if (workerContext) await workerContext.close();
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
   }
 });
@@ -4609,7 +4607,7 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     try {
       if (managerContext && browser.isConnected()) await managerContext.close();
     } finally {
-      expect((await admin.from("businesses").delete().in("id", [businessId, outsideBusinessId])).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
       for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
     }
   }
@@ -4678,7 +4676,7 @@ test("cross-venue roster conflicts remain visible beyond 1000 shifts", async ({ 
       .toContainText("Overlaps another shift");
     await expect(page.getByText("Hidden paged conflict", { exact: true })).toHaveCount(0);
   } finally {
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
@@ -4934,7 +4932,7 @@ test("managers correct finished attendance with audit history, scoped locks and 
   } finally {
     for (const item of contexts) await item.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -5245,7 +5243,7 @@ test("managers reconcile offline claims with existing attendance and an auditabl
   } finally {
     for (const item of contexts) await item.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -5449,7 +5447,7 @@ test("employees request missed clocks and scoped managers decide without overwri
   } finally {
     for (const item of contexts) await item.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -5588,7 +5586,9 @@ test("employees view only their paginated attendance history and correction deta
     await expect(history).not.toContainText("2024-02-01T09:00:00");
     await expect(history).not.toContainText("2024-03-01T09:00:00");
     await expect(page.getByRole("region", { name: "Attendance privacy and retention" }))
-      .toContainText("A privileged business deletion can remove associated records.");
+      .toContainText("Business deletion is disabled by the preservation safeguard");
+    await expect(page.getByRole("region", { name: "Attendance privacy and retention" }))
+      .toContainText("other privileged database or storage operations could still remove records");
     expect(await page.evaluate(() => Number(sessionStorage.getItem("history-location-calls") || 0))).toBe(0);
     expect(await page.evaluate(() => Number(sessionStorage.getItem("history-location-watches") || 0))).toBe(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
@@ -5647,7 +5647,7 @@ test("employees view only their paginated attendance history and correction deta
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -5852,7 +5852,7 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
   } finally {
     if (workerContext) await workerContext.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -5914,7 +5914,7 @@ test("multi-department workers explicitly select their clock-in department", asy
     await region.getByRole("button", { name: "Clock out", exact: true }).click();
     await expect(region.getByRole("heading", { name: "Clocked out" })).toBeVisible();
   } finally {
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
@@ -6055,7 +6055,7 @@ test("employees record multiple explicitly classified breaks without assumed ded
     expect(noBreakEvents.error).toBeNull();
     expect(noBreakEvents.data.map((event) => event.event_type)).toEqual(["clock_in", "clock_out"]);
   } finally {
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
@@ -6286,7 +6286,7 @@ test("optional clock location is requested only at clock events and exceptions a
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -6455,7 +6455,7 @@ test("work time uses actual events and breaks with venue, role and exception sco
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -6768,7 +6768,7 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -6995,7 +6995,7 @@ test("department managers approve or return scoped timesheet entries for correct
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -7194,7 +7194,7 @@ test("authorised managers finalise payroll periods after exceptions and reopen t
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -7426,7 +7426,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -7535,7 +7535,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -7589,7 +7589,7 @@ test("sample teams are opt-in only after an isolated database operator enables t
       const memberships = await admin.from("business_memberships").select("business_id").eq("user_id", userId);
       expect(memberships.error).toBeNull();
       for (const membership of memberships.data) {
-        expect((await admin.from("businesses").delete().eq("id", membership.business_id)).error).toBeNull();
+        await assertBusinessFixturesPreserved(admin, membership.business_id);
       }
       expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
     }
@@ -7713,7 +7713,7 @@ test("staff invitations deliver separate-browser email and join only the intende
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     const recipient = await findUser(recipientEmail);
     if (recipient) users.push(recipient.id);
@@ -7857,7 +7857,7 @@ test("core pages pass WCAG checks, keyboard controls and screen-reader smoke tes
     expect(findings, findings.join("\n")).toEqual([]);
   } finally {
     for (const context of contexts) await context.close();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
@@ -7956,7 +7956,7 @@ test("a 25 employee by 7 day roster meets the documented performance benchmark",
     }
   } finally {
     for (const context of contexts) await context.close();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
@@ -8049,7 +8049,7 @@ test("loading, failure and missing-page states are announced and recoverable", a
     expect(saved.error).toBeNull();
     expect(saved.data.is_published).toBe(true);
   } finally {
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
@@ -8177,7 +8177,7 @@ test("owners filter immutable staffing and payroll audit history without crossin
   } finally {
     for (const context of contexts) await context.close();
     for (const id of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -8257,7 +8257,7 @@ test("published roster updates reach uninvited staff once after they accept an i
     await expect(history).not.toContainText("cannot currently see this update");
   } finally {
     for (const context of contexts) await context.close();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     const recipient = await findUser(recipientEmail);
     if (recipient) users.push(recipient.id);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
@@ -8352,7 +8352,7 @@ test("existing members of another business accept a scoped invitation and switch
     await expect(page.getByText("Casey Crossover")).toHaveCount(0);
   } finally {
     for (const business of [businessId, ownBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -8501,7 +8501,7 @@ test("staff invitations reject revocation and expiry and require consent before 
     }
   } finally {
     for (const context of contexts) await context.close();
-    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
     for (const address of Object.values(addresses)) {
       const recipient = await findUser(address);
       if (recipient) expect((await admin.auth.admin.deleteUser(recipient.id)).error).toBeNull();
@@ -8629,7 +8629,7 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
     expect((await page.context().cookies()).some((cookie) => cookie.name === "bb_business")).toBe(false);
   } finally {
     for (const business of [businessId, otherBusiness, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -8727,7 +8727,7 @@ test("owners explicitly map same-name employees to payroll destinations without 
   } finally {
     for (const context of contexts) await context.close();
     for (const id of [businessId, outsideId]) {
-      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
@@ -8950,7 +8950,7 @@ test("generic payroll CSV downloads approved hours and reconciles amended export
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
-      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+      await assertBusinessFixturesPreserved(admin, business);
     }
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }

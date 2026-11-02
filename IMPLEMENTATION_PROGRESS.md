@@ -41,11 +41,11 @@
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
-  Privileged business deletion can cascade employment records. Owner decision
-  `docs/DECISION_LOG.md` confirms a non-destructive, café-owned export model,
-  but its proposed durations, legal requirements and operational recovery
-  controls remain unapproved. Investigate safe partial preservation controls
-  without enabling deletion or claiming the last criterion is complete.
+  A new tested migration rejects business deletion and truncation, including
+  privileged attempts, but has only been applied to the disposable acceptance
+  project. Owner decision `docs/DECISION_LOG.md` confirms a non-destructive,
+  café-owned export model, but privileged child/storage operations, proposed
+  durations, legal requirements and operational recovery remain unverified.
   Partial feature commit
   `a98b1ad18abc69cf12f442e9a38db26028b46a58` was pushed and its remote SHA
   matched. See the criterion table below.
@@ -520,9 +520,30 @@
 | Criterion | Implementation evidence | Runtime verification and actual result | Status |
 | --- | --- | --- | --- |
 | RULES-005.1 Only point-in-time location captured by default | Venue verification is off by default. When enabled, only a clock-in/out requests one position; retained checks store outcomes, distance, accuracy and radius, not raw device coordinates. | Location and history pgTAP passed **71/71** and **22/22** respectively on acceptance. The production-browser location scenario verified disabled and enabled clocks, breaks and permission failures; instrumentation observed no continuous `watchPosition` calls. The history page also made no location request or watch. | Pass |
-| RULES-005.2 Visibility and retention documented | `README.md` and the employee history page identify scoped employee/manager/operator visibility, the absence of automatic expiry, privileged deletion risk and unverified hosted retention. They explicitly avoid a compliance guarantee. | Mobile production-browser history scenario **1/1** verified the visible disclosure; history pgTAP **22/22** verified personal, manager, cross-tenant and revoked access. The retention statement describes actual current behavior, not an approved legal policy. | Pass |
+| RULES-005.2 Visibility and retention documented | `README.md` and the employee history page identify scoped employee/manager/operator visibility, the absence of automatic expiry, the business-deletion guard, remaining privileged-operation risk and unverified hosted retention. They explicitly avoid a compliance guarantee. | The rebuilt mobile production-browser history scenario **1/1** verified the updated disclosure; history pgTAP **22/22** verified personal, manager, cross-tenant and revoked access. The retention statement describes the guarded version, not an approved legal policy. | Pass |
 | RULES-005.3 Employee access and correction process exists | A paginated self-only RPC and page show original and effective times, source, breaks and retained location checks, with links to existing attributable correction requests and decisions. A forward migration requires the employee profile to remain linked even for managers. | History pgTAP **22/22** on acceptance and replay; focused mobile production-browser scenario **1/1** verified 54 events across two pages, correction detail and links, invalid page, colleague/manager/tenant isolation, profile unlinking, no horizontal overflow and axe checks. Employee-request and manager-correction browser regressions both passed. | Pass |
-| RULES-005.4 Required employment records preserved | Individual original attendance and correction events are protected from ordinary edits/deletion. Normal application users cannot delete a business, but privileged deletion can cascade its employment records. | The history pgTAP verified the original timestamp is unchanged and individual event deletion is denied. These checks do **not** prevent privileged business deletion or prove that required records survive for an approved legal period. No hosted backup or restore was tested. | Blocked |
+| RULES-005.4 Required employment records preserved | Migration `20261103130000_business_record_preservation.sql` rejects business `DELETE` and `TRUNCATE`, including service-role and privileged SQL attempts, without a test bypass. Individual original attendance and correction events remain protected from ordinary edits/deletion. | The focused preservation pgTAP passed **17/17** on acceptance and in a rolled-back replay; the authenticated deletion/clock race passed across two tenants and preserved the original event. This does not protect all privileged child-table, DDL, storage or backup operations, establish the required legal period, provide portable export or prove hosted recovery. | Blocked |
+
+- **Preservation safeguard checks:** The shared deletion-policy change warranted
+  broader regression. All **2,483/2,483** pgTAP assertions passed across
+  **53** rolled-back files on the disposable acceptance project; after
+  strengthening preservation assertions, the seven changed files passed
+  **359/359** again. The serialized authenticated runner passed **25/25**,
+  its default derived-container path passed **2/2**, and an explicitly
+  mismatched container was rejected. The separate replay passed **17/17**
+  inside a rolled-back transaction without changing its ledger or leaving the
+  temporary Auth helper. The signup, eight affected workflow and six
+  permission/geofence browser scenarios passed; after the disclosure change,
+  a rebuilt production history scenario passed **1/1**. Changed-file ESLint,
+  TypeScript and the split production compile/generate build passed.
+- **Safeguard scope and deferred work:** The migration was applied and
+  recorded only in `butterbox-acceptance` (API 55421, DB 55422); no live
+  database was changed. Synthetic businesses remain in the disposable project
+  while their test users are removed. A full Node suite and full browser suite
+  were intentionally deferred; broader regression remains appropriate for a
+  release or workstream merge. Hosted backup/restore, a café-owned export,
+  legal retention durations and the remaining privileged deletion paths are
+  not verified. Do not mark the story Done.
 
 - **Additional selected checks:** Seven affected pgTAP files passed **410/410**
   assertions before the final access fix. After that fix, history, corrections
@@ -553,10 +574,10 @@
 ## Current story
 
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
-  acceptance. In response to owner decision DEC-001, inspect the existing
-  deletion cascades, preservation controls and test cleanup before selecting a
-  safe non-destructive partial safeguard. Do not enable permanent deletion or
-  assume the proposed retention periods are approved.
+  acceptance. The non-destructive partial business-deletion safeguard has
+  passed its selected verification and is being prepared for a feature
+  checkpoint. Do not enable permanent deletion or assume the proposed
+  retention periods are approved.
 - As of 2026-11-02 11:05 UTC, an uncommitted forward migration rejects
   business DELETE and TRUNCATE without a test-only bypass. It passed **17/17**
   focused pgTAP assertions inside a rolled-back transaction and is not applied.
@@ -603,6 +624,14 @@
   are created. With the correct container, **8/8** affected browser scenarios
   passed; changed-file ESLint and TypeScript also passed. The full database
   rerun remains pending.
+- At 11:29 UTC the full **53-file, 2,483-assertion** database regression,
+  strengthened **359-assertion** rerun, **25/25** authenticated integrations,
+  **2/2** default-runner tests and mismatched-container rejection passed.
+  Six additional browser permission/geofence scenarios passed after correcting
+  their retained-business expectations. The rebuilt production history
+  disclosure passed **1/1**; split build, TypeScript and changed-file ESLint
+  passed. The test project contained no Auth users and remained above 28 GiB
+  free; its synthetic businesses and disabled demo policy remain.
 - Owner decision DEC-003 was fetched and merged without rewriting history in
   `83e7ec412f6a3dbce63003c03ad97e840b85457c`, pushed and verified. It
   requires hard-isolated demonstrations and a clean, uncopied paid tenant;
@@ -1988,12 +2017,13 @@ not yet run remotely.
 
 ## Next story
 
-- Inspect **BB-RULES-005 — Privacy and retention policy** for a safe partial,
-  non-destructive preservation safeguard under DEC-001. Keep the story Blocked
-  until the required legal, duration and operational approvals and all
-  acceptance evidence exist; do not alter live records.
-- After safe preservation work, inspect the now-directed prospective
-  venue-week portion of **BB-ORG-006** under DEC-002, then
+- After the preservation checkpoint, inspect **BB-SAAS-003 — Tenant
+  onboarding and support** for a fail-closed response to DEC-003. The
+  operator-enabled sample path does not establish a separate demonstration
+  environment. Keep the story Blocked until production isolation, historical
+  data and clean conversion are actually verified; do not alter live records.
+- Then inspect the now-directed prospective venue-week portion of
+  **BB-ORG-006** under DEC-002, followed by
   **BB-ATTEND-004 — Rotating QR kiosk**. Keep ORG-006 Blocked until its
   complete criteria and external-channel dependencies are verified. Preserve
   existing immutable periods and do not silently reinterpret history.
@@ -2007,8 +2037,6 @@ not yet run remotely.
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.
   Cross-business invitations and per-request switching are complete.
-  Revisit BB-SAAS-003 only after
-  production isolation and historical sample data can be verified safely.
 - The latest payroll migrations have been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:

@@ -262,10 +262,15 @@ select extensions.throws_ok($$update public.attendance_timesheet_decisions set r
   'P0001', 'Original attendance records are immutable', 'decisions are immutable for privileged updates');
 select extensions.throws_ok($$delete from public.attendance_timesheet_decisions$$,
   'P0001', 'Original attendance records are immutable', 'decisions are immutable for privileged deletes');
-delete from public.businesses where id = 'b7100000-0000-4000-8000-000000000001';
-select extensions.is((select count(*) from public.attendance_timesheet_decisions
-  where business_id = 'b7100000-0000-4000-8000-000000000001'), 0::bigint,
-  'deleting a disposable tenant cascades its decisions');
+select set_config('test.preserved_decision_count', (select count(*)::text from public.attendance_timesheet_decisions
+  where business_id = 'b7100000-0000-4000-8000-000000000001'), true);
+select extensions.throws_ok($$delete from public.businesses where id = 'b7100000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade timesheet decisions');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_decision_count')::bigint
+  from public.attendance_timesheet_decisions
+  where business_id = 'b7100000-0000-4000-8000-000000000001'),
+  'all timesheet decisions remain after the rejected deletion');
 
 select * from extensions.finish();
 rollback;

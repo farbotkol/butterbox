@@ -3,7 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
 import { validateCanonicalPayrollRows } from "../src/lib/canonical-payroll.ts";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -219,7 +219,7 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
     }
   } finally {
     for (const id of [business, outsideBusiness]) {
-      assert.ifError((await admin.from("businesses").delete().eq("id", id)).error);
+      await assertBusinessFixturesPreserved(admin, id);
     }
     for (const id of users) assert.ifError((await admin.auth.admin.deleteUser(id)).error);
   }

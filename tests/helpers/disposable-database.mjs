@@ -108,3 +108,21 @@ export async function disposableDatabase(container, url) {
 
   return { sql, waitForLock, holdLock };
 }
+
+export async function assertBusinessFixturesPreserved(admin, businessIds) {
+  const ids = Array.isArray(businessIds) ? businessIds : [businessIds];
+  if (!ids.length) return;
+  assert.ok(ids.every((id) => typeof id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)));
+  await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, process.env.BUTTERBOX_TEST_SUPABASE_URL);
+  const existing = await admin.from("businesses").select("id").in("id", ids);
+  assert.ifError(existing.error);
+  if (!existing.data.length) return;
+  const deletion = await admin.from("businesses").delete().in("id", ids);
+  assert.equal(deletion.error?.code, "P0001");
+  assert.equal(deletion.error?.message,
+    "Business deletion is disabled while record preservation requirements remain unresolved");
+  const remaining = await admin.from("businesses").select("id").in("id", ids);
+  assert.ifError(remaining.error);
+  assert.deepEqual(remaining.data.map(({ id }) => id).sort(), existing.data.map(({ id }) => id).sort());
+}

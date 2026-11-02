@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { createClient } from "@supabase/supabase-js";
-import { disposableDatabase } from "./helpers/disposable-database.mjs";
+import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
 const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
@@ -251,7 +251,7 @@ test(
       assert.equal(afterGroupLock.data, 2);
       assert.equal((await targetShifts("2032-05-17")).length, 2);
     } finally {
-      assert.ifError((await admin.from("businesses").delete().eq("id", businessId)).error);
+      await assertBusinessFixturesPreserved(admin, businessId);
       for (const userId of users) assert.ifError((await admin.auth.admin.deleteUser(userId)).error);
     }
   },

@@ -112,11 +112,18 @@ select extensions.is((select count(*)::integer from public.sensitive_action_audi
   'revoked owner loses audit access immediately');
 reset role;
 select set_config('request.jwt.claim.sub', '', true);
-select extensions.lives_ok($$delete from public.businesses where id = 'b8800000-0000-4000-8000-000000000001'$$,
-  'existing business deletion lifecycle remains supported');
-select extensions.is((select count(*)::integer from public.sensitive_action_audit
-  where business_id = 'b8800000-0000-4000-8000-000000000001'), 0, 'only deleted tenant audit cascades');
-select extensions.ok((select count(*) > 0 from public.sensitive_action_audit
-  where business_id = 'b8800000-0000-4000-8000-000000000002'), 'other tenant audit remains intact');
+select set_config('test.preserved_audit_count', (select count(*)::text from public.sensitive_action_audit
+  where business_id = 'b8800000-0000-4000-8000-000000000001'), true);
+select set_config('test.preserved_other_audit_count', (select count(*)::text from public.sensitive_action_audit
+  where business_id = 'b8800000-0000-4000-8000-000000000002'), true);
+select extensions.throws_ok($$delete from public.businesses where id = 'b8800000-0000-4000-8000-000000000001'$$,
+  'P0001', 'Business deletion is disabled while record preservation requirements remain unresolved',
+  'business deletion cannot cascade audit history');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_audit_count')::bigint
+  from public.sensitive_action_audit where business_id = 'b8800000-0000-4000-8000-000000000001'),
+  'the tenant audit remains intact');
+select extensions.ok((select count(*) > 0 and count(*) = current_setting('test.preserved_other_audit_count')::bigint
+  from public.sensitive_action_audit where business_id = 'b8800000-0000-4000-8000-000000000002'),
+  'the other tenant audit remains intact');
 select * from extensions.finish();
 rollback;
