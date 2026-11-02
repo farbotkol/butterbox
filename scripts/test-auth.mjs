@@ -3,9 +3,10 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { cp, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { testSupabaseStatus } from "./test-supabase-status.mjs";
+import { showcaseStatus, verify } from "./showcase-environment.mjs";
 
 if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
   throw new Error(
@@ -15,12 +16,17 @@ if (process.env.BUTTERBOX_TEST_DISPOSABLE !== "yes") {
 
 const workdir = resolve(process.argv[2] ?? ".");
 const useDevServer = process.argv[3] === "--dev";
-const useSplitBuild = process.argv[3] === "--split-build";
+const serveShowcase = process.argv[3] === "--serve-showcase";
+const useSplitBuild = process.argv[3] === "--split-build" || serveShowcase;
 if (process.argv.length > 4 || (process.argv[3] && !useDevServer && !useSplitBuild)) {
-  throw new Error("Usage: node scripts/test-auth.mjs <disposable-workdir> [--dev|--split-build]");
+  throw new Error("Usage: node scripts/test-auth.mjs <disposable-workdir> [--dev|--split-build|--serve-showcase]");
 }
 
-const settings = testSupabaseStatus(workdir);
+const testFile = process.env.BUTTERBOX_TEST_FILE ?? "tests/e2e/auth.spec.mjs";
+if (!["tests/e2e/auth.spec.mjs", "tests/e2e/showcase.spec.mjs"].includes(testFile)) {
+  throw new Error("Select the established auth or isolated showcase browser test file.");
+}
+const settings = testFile === "tests/e2e/showcase.spec.mjs" ? showcaseStatus(workdir) : testSupabaseStatus(workdir);
 if (!settings.API_URL || !settings.MAILPIT_URL || !settings.ANON_KEY || !settings.SERVICE_ROLE_KEY) {
   throw new Error("Local Supabase status is missing API, Mailpit or test authentication settings.");
 }
@@ -42,6 +48,15 @@ function localOrigin(value) {
 }
 
 const appUrl = localOrigin(process.env.BUTTERBOX_TEST_APP_URL ?? "http://127.0.0.1:3117");
+if (serveShowcase) {
+  if (testFile !== "tests/e2e/showcase.spec.mjs" || process.env.NEXT_PUBLIC_BUTTERBOX_SHOWCASE !== "true" ||
+      appUrl.origin !== "http://127.0.0.1:3137" || process.env.BUTTERBOX_SHOWCASE_WORKDIR !== workdir) {
+    throw new Error("Showcase serving requires the explicit isolated showcase file, workdir, labeling and local origin.");
+  }
+  await verify(workdir);
+  const fixture = JSON.parse(await readFile(resolve(workdir, "fixture-state.json"), "utf8"));
+  if (fixture.phase !== "seeded" || fixture.simulationOnly !== true) throw new Error("Synthetic fixture is not ready.");
+}
 localOrigin(settings.API_URL);
 localOrigin(settings.MAILPIT_URL);
 const host = appUrl.hostname === "[::1]" ? "::1" : appUrl.hostname;
@@ -132,12 +147,11 @@ try {
     await cp(".next/static", ".next/standalone/.next/static", { recursive: true });
   }
 
-  const testFile = "tests/e2e/auth.spec.mjs";
   const cli = "node_modules/@playwright/test/cli.js";
   const grepArgs = process.env.BUTTERBOX_TEST_GREP
     ? ["--grep", process.env.BUTTERBOX_TEST_GREP] : [];
   let selections = [testFile];
-  if (process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes") {
+  if (process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes" && !serveShowcase) {
     const listing = spawnSync(process.execPath, [cli, "test", testFile, "--list", "--reporter=json", ...grepArgs], {
       encoding: "utf8", env: testEnv,
     });
@@ -151,7 +165,7 @@ try {
       return [...(suite.specs ?? []), ...(suite.suites ?? []).flatMap(collectSpecs)];
     }
     const specs = report.suites.flatMap(collectSpecs);
-    if (!specs.length || specs.some((spec) => !Number.isInteger(spec.line) || spec.file !== "auth.spec.mjs")) {
+    if (!specs.length || specs.some((spec) => !Number.isInteger(spec.line) || spec.file !== basename(testFile))) {
       throw new Error("Browser test discovery returned no valid test locations.");
     }
     selections = [...new Set(specs.map((spec) => `${testFile}:${spec.line}`))];
@@ -172,6 +186,23 @@ try {
         });
     await waitForApp(server);
     const serverExit = once(server, "exit");
+    if (serveShowcase) {
+      console.log(`Synthetic showcase ready at ${appUrl.origin}; local access only. Stop with Ctrl-C before resetting.`);
+      let stop;
+      const requested = new Promise((resolveStop) => { stop = resolveStop; });
+      process.once("SIGINT", stop);
+      process.once("SIGTERM", stop);
+      try {
+        await Promise.race([
+          requested,
+          serverExit.then(() => { throw new Error("The synthetic showcase server exited unexpectedly."); }),
+        ]);
+      } finally {
+        process.removeListener("SIGINT", stop);
+        process.removeListener("SIGTERM", stop);
+      }
+      break;
+    }
     const browser = spawn(
       process.execPath,
       [cli, "test", selection, ...grepArgs],

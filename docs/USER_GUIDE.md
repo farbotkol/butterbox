@@ -10,7 +10,45 @@
 [People and availability](#people-and-availability) |
 [Rostering](#rostering) | [Open shifts and swaps](#open-shifts-and-swaps) |
 [Attendance](#attendance) | [Timesheets and payroll](#timesheets-and-payroll-preparation) |
-[Hours and labour](#hours-and-labour--owners) | [Troubleshooting](#troubleshooting)
+[Hours and labour](#hours-and-labour--owners) |
+[Internal showcase](#internal-synthetic-showcase) | [Troubleshooting](#troubleshooting)
+
+## Internal synthetic showcase
+
+This is a **local internal evaluation**, not a live customer workspace.
+An authorized operator must prepare the separately verified showcase using the
+[operator procedure](../README.md#isolated-local-synthetic-showcase). Do not
+create a sample business through ordinary signup/setup or enter real names,
+contact details, attendance or payroll information. The local review app is
+`http://127.0.0.1:3137`; remote reviewer access has not been verified.
+
+- Use only the scoped review account supplied privately by the operator.
+  The private account inventory is not a public user guide or shared attachment.
+  Existing password login works; public signup is disabled. There are
+  14 fictional FOH/BOH staff, including department managers, plus the owner
+  and a separate outside-business control owner.
+- Confirm **SIMULATION ONLY** appears before reviewing. It identifies
+  fictional data, not stronger permissions. Managers retain their assigned
+  department scope; employees remain limited to their own supported workflows.
+  Owners alone can access **Hours and labour** and the generic payroll CSV.
+- The fixture includes current/prior venue-local roster weeks, availability,
+  open shifts, recorded breaks, a correction and approved/finalised time.
+  Ask the operator for the seeded dates rather than assuming a fixed week.
+  Original clock events remain preserved alongside the correction.
+- Any **Download payroll CSV** result has a `SIMULATION_ONLY-` filename and
+  **SIMULATION ONLY - NOT FOR PAYROLL** on every row. It is an approved-hours
+  sample, not a wage/award calculation, payslip or provider submission. Never
+  import it into live payroll. The operator's private CSV snapshot has the
+  same restriction.
+- External notifications and live payroll are unavailable. Do not invite
+  real workers or treat local captured mail as external delivery.
+- Sign out when finished. Ask the operator to stop the app before a reset;
+  reset discards review database edits and replaces the fictional fixture.
+  It does not convert a demo into a real customer business.
+
+Guided multi-role walkthroughs are tracked separately in BB-DEMO-002.
+This environment does not imply final branding approval, hosted reviewer
+access, production readiness or legal/payroll compliance.
 
 ## Getting started — owners
 
@@ -504,8 +542,9 @@ this Markdown guide does not claim those routes are deployed.
 ### Verification scope and feature coverage
 
 This guide was checked on 2026-11-02 against the Main Roadmap implementation
-through `c1ddaf3`. Routes, button wording, role checks and recovery paths were
-source-reviewed. The kiosk, attendance-alert and reporting workflows also have
+through `c1ddaf3`, with BB-DEMO-001 guidance added after its targeted checks.
+Routes, button wording, role checks and recovery paths were
+source-reviewed. The kiosk, attendance-alert, reporting and isolated-showcase workflows also have
 recorded targeted production-browser evidence in
 [implementation progress](../IMPLEMENTATION_PROGRESS.md). This documentation
 audit is **not** a new browser replay of every screen or a production sign-off.
@@ -522,12 +561,14 @@ Source checkpoints for maintainers:
 | Roster and exchanges | [Roster](../src/app/roster/page.tsx), [editor](../src/components/shift-editor.tsx), [quick changes](../src/components/roster-quick-changes.tsx), [copy](../src/components/copy-roster-form.tsx), [review](../src/components/roster-review-panel.tsx), [schedule](../src/app/my-schedule/page.tsx), [swaps](../src/app/shift-swaps/page.tsx) |
 | Attendance | [Clock/review](../src/app/attendance/page.tsx), [offline fallback](../src/components/offline-attendance.tsx), [offline review](../src/components/offline-claim-review.tsx), [work time](../src/app/work-time/page.tsx), [alerts](../src/app/attendance/alerts/page.tsx), [kiosk](../src/app/attendance/kiosks/page.tsx) |
 | Payroll, notices and reporting | [Timesheets](../src/app/timesheets/page.tsx), [mapping](../src/app/settings/payroll/page.tsx), [notifications](../src/app/notifications/page.tsx), [audit](../src/app/settings/audit/page.tsx), [hours](../src/app/reports/hours/page.tsx) |
+| Internal showcase | [Environment](../scripts/showcase-environment.mjs), [fixtures/reset](../scripts/showcase-fixtures.mjs), [simulation configuration](../src/lib/showcase.ts), [production browser check](../tests/e2e/showcase.spec.mjs) |
 
 Every Done story at this audit checkpoint maps to task guidance below, or to an
 explicit non-user-facing reason. Update this index when a story becomes Done.
 
 | Story | Guidance / non-user-facing reason |
 | --- | --- |
+| BB-DEMO-001 | Internal synthetic showcase — local review accounts, fictional records, sample-only CSV and reset limitations |
 | BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
 | BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
 | BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |

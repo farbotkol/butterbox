@@ -5,6 +5,7 @@ import {
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
+import { isShowcase } from "@/lib/showcase";
 
 const privateHeaders = {
   "Cache-Control": "private, no-store, max-age=0",
@@ -69,11 +70,12 @@ export async function GET(request: Request): Promise<Response> {
       checkedBatch.sessionCount !== batch.sessionCount || checkedBatch.createdAt !== batch.createdAt) {
       throw new PayrollRecordValidationError("batch: metadata changed while loading");
     }
-    return new Response(genericPayrollCsv(batch.id, entries), {
+    const simulationOnly = isShowcase();
+    return new Response(genericPayrollCsv(batch.id, entries, simulationOnly), {
       headers: {
         ...privateHeaders,
         "Content-Type": "text/csv; charset=utf-8",
-        "Content-Disposition": `attachment; filename="butterbox-hours-${batch.weekStart}-${batch.id}.csv"`,
+        "Content-Disposition": `attachment; filename="${simulationOnly ? "SIMULATION_ONLY-" : ""}butterbox-hours-${batch.weekStart}-${batch.id}.csv"`,
       },
     });
   } catch (error) {

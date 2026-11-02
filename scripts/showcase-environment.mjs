@@ -62,7 +62,7 @@ secret_key = "env(BUTTERBOX_SHOWCASE_SECRET_KEY)"
 signing_keys_path = "./signing-keys.json"
 
 [auth.email]
-enable_signup = false
+enable_signup = true
 enable_confirmations = true
 
 [analytics]
@@ -158,7 +158,7 @@ function command(executable, args, env = process.env, diagnosticDirectory) {
   if (result.status !== 0) {
     let diagnostic = "raw output withheld because it may contain credentials";
     if (diagnosticDirectory) {
-      const filename = path.join(diagnosticDirectory, `start-failure-${randomUUID()}.log`);
+      const filename = path.join(diagnosticDirectory, `${args[0]}-failure-${randomUUID()}.log`);
       privateFile(filename, `${result.stdout}\n${result.stderr}`);
       diagnostic = `private diagnostic saved to ${filename}`;
     }
@@ -177,9 +177,11 @@ export function assertNetwork(actual, id) {
 
 export function assertContainer(actual, workdir) {
   if (actual.Config?.Labels?.["com.supabase.cli.project"] !== project ||
-      actual.Config?.Labels?.["com.supabase.cli.workdir"] !== workdir ||
-      !actual.State?.Running || (actual.State.Health && actual.State.Health.Status !== "healthy")) {
-    throw new Error("Showcase container identity/health is unverified.");
+      actual.Config?.Labels?.["com.supabase.cli.workdir"] !== workdir) {
+    throw new Error("Showcase container identity is unverified.");
+  }
+  if (!actual.State?.Running || (actual.State.Health && actual.State.Health.Status !== "healthy")) {
+    throw new Error("Showcase container is not healthy yet.");
   }
   const networks = Object.keys(actual.NetworkSettings?.Networks ?? {});
   if (networks.length !== 1 || networks[0] !== network) throw new Error("Unexpected showcase network attachment.");
@@ -215,6 +217,11 @@ export async function verify(workdir) {
     if (!container.Config.Env.includes(`${variable}=${credentials.BUTTERBOX_SHOWCASE_JWT_SECRET}`)) {
       throw new Error("Showcase signing secret does not match the independently generated configuration.");
     }
+    const auth = containers.find((item) => item.Name === `/supabase_auth_${project}`);
+    if (!auth.Config.Env.includes("GOTRUE_DISABLE_SIGNUP=true") ||
+        !auth.Config.Env.includes("GOTRUE_EXTERNAL_EMAIL_ENABLED=true")) {
+      throw new Error("Showcase must allow existing email logins while refusing public signup.");
+    }
   }
   const status = showcaseStatus(workdir);
   const response = await fetch(`http://127.0.0.1:${ports.api}/auth/v1/health`, {
@@ -229,6 +236,7 @@ export async function verify(workdir) {
     headers: { apikey: status.SERVICE_ROLE_KEY, Authorization: `Bearer ${status.SERVICE_ROLE_KEY}` },
     signal: AbortSignal.timeout(5000),
   });
+  if (own.status >= 500) throw new Error("Showcase API is not ready yet.");
   if (!own.ok) throw new Error("Showcase's own signed administrative token was rejected.");
   await own.body?.cancel();
   const header = Buffer.from(JSON.stringify({ alg: "HS256", typ: "JWT" })).toString("base64url");
@@ -246,7 +254,7 @@ export async function verify(workdir) {
   });
   if (![401, 403].includes(anonymous.status)) throw new Error("Showcase exposed business records anonymously.");
   await anonymous.body?.cancel();
-  return { project, containers: containers.length, credentialsVerified: true, fixturesReady: false };
+  return { project, containers: containers.length, credentialsVerified: true };
 }
 
 export async function start(workdir) {
@@ -267,12 +275,41 @@ export async function start(workdir) {
   if (containers) return verify(workdir);
   const volumes = command("docker", ["volume", "ls", "--filter", `name=${project}`, "--format", "{{.Name}}"]).trim();
   if (volumes) {
-    throw new Error("Existing showcase volumes have no running verified project. Preserve them for operator inspection; refusing adoption.");
+    const proof = JSON.parse(fs.readFileSync(path.join(workdir, "volume-ownership.json"), "utf8"));
+    assertOwnedVolumes(proof, manifest.id, volumeSnapshot(volumes.split("\n")));
   }
   command(cli, ["start", "--workdir", workdir, "--network-id", network, "--exclude",
     "studio,postgres-meta,realtime,imgproxy,edge-runtime,logflare,vector,supavisor"],
   environment(credentials), workdir);
   return verify(workdir);
+}
+
+export function assertOwnedVolumes(proof, namespace, volumes) {
+  if (proof?.namespace !== namespace || !Array.isArray(proof.volumes) || volumes.length === 0 ||
+      JSON.stringify(proof.volumes) !== JSON.stringify(volumes)) {
+    throw new Error("Existing showcase volumes do not match verified ownership. Preserve them; refusing adoption.");
+  }
+}
+
+function volumeSnapshot(names) {
+  if (!names.length || names.some((name) => !name.endsWith(`_${project}`))) {
+    throw new Error("Unexpected showcase volume identity.");
+  }
+  return JSON.parse(command("docker", ["volume", "inspect", ...names])).map((volume) => ({
+    name: volume.Name, createdAt: volume.CreatedAt, driver: volume.Driver, mountpoint: volume.Mountpoint,
+  })).sort((first, second) => first.name.localeCompare(second.name));
+}
+
+export async function stop(workdir) {
+  await verify(workdir);
+  const { manifest, credentials } = readEnvironment(workdir);
+  const names = command("docker", ["volume", "ls", "--filter", `name=${project}`, "--format", "{{.Name}}"]).trim().split("\n");
+  fs.writeFileSync(path.join(workdir, "volume-ownership.json"), JSON.stringify({
+    namespace: manifest.id, verifiedAt: new Date().toISOString(), volumes: volumeSnapshot(names),
+  }), { mode: 0o600 });
+  command(process.env.BUTTERBOX_TEST_SUPABASE_CLI, ["stop", "--workdir", workdir, "--network-id", network],
+    environment(credentials), workdir);
+  return { project, stopped: true, volumesPreserved: true };
 }
 
 export async function proxy(workdir) {
@@ -321,20 +358,20 @@ export async function proxy(workdir) {
       process.exit(0);
     });
   }
-  return { project, loopbackPorts: Object.values(ports), fixturesReady: false };
+  return { project, loopbackPorts: Object.values(ports) };
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [action, workdir, ...extra] = process.argv.slice(2);
-    if (!workdir || extra.length || !["prepare", "start", "verify", "proxy"].includes(action)) {
-      throw new Error("Usage: node scripts/showcase-environment.mjs prepare|start|verify|proxy /private/path/butterbox-showcase");
+    if (!workdir || extra.length || !["prepare", "start", "stop", "verify", "proxy"].includes(action)) {
+      throw new Error("Usage: node scripts/showcase-environment.mjs prepare|start|stop|verify|proxy /private/path/butterbox-showcase");
     }
     if (action === "prepare") {
       prepare(workdir);
       console.log("Prepared private synthetic showcase configuration; not seeded or ready for reviewers.");
     } else {
-      console.log(JSON.stringify(await ({ start, verify, proxy })[action](workdir)));
+      console.log(JSON.stringify(await ({ start, stop, verify, proxy })[action](workdir)));
     }
   } catch (error) {
     console.error(error instanceof Error ? error.message : "Showcase environment operation failed.");

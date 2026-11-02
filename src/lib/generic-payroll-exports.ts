@@ -304,15 +304,17 @@ export function payrollCsvCell(value: string): string {
   return `"${safe.replaceAll('"', '""')}"`;
 }
 
-export function genericPayrollCsv(batchId: string, entries: readonly GenericPayrollEntry[]): string {
+export function genericPayrollCsv(batchId: string, entries: readonly GenericPayrollEntry[], simulationOnly = false): string {
   identifier(batchId, "batchId");
   const headers = [
+    ...(simulationOnly ? ["simulation_notice"] : []),
     "batch_id", "finalisation_id", "payroll_version", "business_id", "venue_id", "department_id",
     "employee_id", "employee_name", "session_id", "work_date", "venue_timezone", "clock_in_utc", "clock_out_utc",
     "elapsed_seconds", "worked_seconds", "paid_seconds", "paid_break_seconds", "unpaid_break_seconds",
     "worked_hours", "paid_hours", "approval_id", "approval_revision",
   ];
   const lines = entries.map(({ employeeName, record }) => [
+    ...(simulationOnly ? ["SIMULATION ONLY - NOT FOR PAYROLL"] : []),
     batchId, record.period.finalisationId, record.period.version, record.businessId, record.venue.id,
     record.venue.departmentId, record.worker.employeeId, employeeName, record.sessionId, record.workDate,
     record.venue.timezone, record.attendance.clockInAt, record.attendance.clockOutAt, record.hours.elapsed,

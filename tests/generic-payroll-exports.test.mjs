@@ -39,6 +39,16 @@ previous.attendance.clockOutAt = "2024-01-09T23:00:00.000000Z";
 previous.hours.elapsed = previous.hours.worked = previous.hours.paid = "3600.000000";
 const canonical = validateCanonicalPayrollRecord(source);
 
+test("simulation CSV adds a notice to every row without changing the normal export contract", () => {
+  const entries = [{ employeeName: 'Fictional Avery, "Server"', record: canonical }];
+  const ordinary = parseCsv(genericPayrollCsv(batchId, entries));
+  const simulated = parseCsv(genericPayrollCsv(batchId, entries, true));
+  assert.equal(simulated[0][0], "simulation_notice");
+  assert.equal(simulated[1][0], "SIMULATION ONLY - NOT FOR PAYROLL");
+  assert.deepEqual(simulated.map((row) => row.slice(1)), ordinary);
+  assert.deepEqual(parseCsv(genericPayrollCsv(batchId, entries, false)), ordinary);
+});
+
 function parseCsv(input) {
   const rows = [];
   let row = [];

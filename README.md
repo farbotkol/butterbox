@@ -78,8 +78,7 @@ timezone; completing setup creates the owner membership atomically.
 The owner's dashboard includes a business, venue, staff, draft-shift and
 publication checklist, with links and brief guidance for the next steps.
 
-Fictional sample staff and shifts are unavailable until a separately isolated
-demo environment and its operational safeguards are implemented. The setup
+Fictional sample staff and shifts remain unavailable in ordinary workspaces. The setup
 form, server actions and database seed functions reject sample requests;
 ordinary accounts, the service role and an operator updating the old policy
 cannot enable them. New customer workspaces start without sample staff or
@@ -89,12 +88,14 @@ Privileged direct table writes or schema changes can bypass this safeguard and
 must be governed separately. See `docs/DECISION_LOG.md` (DEC-003) for the
 remaining isolation, historical-data assessment and clean-conversion requirements.
 
-### Experimental local showcase environment
+### Isolated local synthetic showcase
 
-BB-DEMO-001 is **not ready for reviewers**. Its isolated empty backend is
-verified; fictional staff, reset, app labeling and sample payroll workflows
-are still pending. Do not seed an acceptance, ordinary local, unidentified or
-production project instead.
+BB-DEMO-001 provides a tested **local internal review** environment, not a
+production deployment or verified remote reviewer endpoint. It contains
+14 fictional FOH/BOH employees, scoped review accounts, availability, published
+rosters/open shifts, original clock/break events, an attributable correction
+and approved/finalised sample time. No production data is copied. Do not seed
+an acceptance, ordinary local, unidentified or production project instead.
 
 The operator-only helper requires the verified Supabase CLI 2.122.0 executable,
 Docker and at least 10 GiB available disk. Choose a **new absolute directory
@@ -108,9 +109,9 @@ node scripts/showcase-environment.mjs prepare /private/operator/path/butterbox-s
 Preparation creates mode-0700 directories, mode-0600 generated API/signing
 material and hashed migration snapshots. It refuses to overwrite an existing
 directory. Never commit or publish those files, private failure diagnostics or
-raw CLI status output. No automatic seed or signup is enabled.
+raw CLI status output. No automatic seed or public signup is enabled.
 
-The empty backend uses project `butterbox-showcase`, dedicated storage and an
+The backend uses project `butterbox-showcase`, dedicated storage and an
 owned **internal-only Docker network**. This Docker configuration does not
 publish container ports; fixed-target host proxies provide local access without
 giving the service containers an external default route. Start the proxy in
@@ -130,7 +131,8 @@ Proxies listen only on `127.0.0.1`: API **57421**, database **57422**, Mailpit
 forwarding. Stop the proxy with Ctrl-C when finished. Do not make these ports
 public or use this as a production/shared-host security boundary: the CLI still
 uses its standard local PostgreSQL password, and trusted local operators have
-Docker access. No app server or remote reviewer access is provisioned here.
+Docker access. Do not forward backend ports. Remote/private reviewer access
+has not been verified; the Codespaces port-visibility API returned 403.
 
 Verification checks every required service, generated signing-secret wiring,
 the real Auth endpoint, acceptance of the project's signed administrative JWT
@@ -138,11 +140,74 @@ and rejection of a foreign administrative JWT and anonymous business reads.
 Local OpenAPI discovery is anonymous; an opaque `apikey` alone is not the
 authorization test. The helper does not print tokens.
 
-Startup refuses to adopt existing volumes without a running verified project.
-If startup fails, preserve the private diagnostics and any volume for operator
-inspection; do not reset, remove or bypass health checks. There is intentionally
-no reset/fixture command yet. Continue to monitor disk during startup and tests,
-stopping safely below 10 GiB. Normal customer sample-data safeguards remain off.
+Seed only after verification, using the same private workdir:
+
+```sh
+node --experimental-strip-types scripts/showcase-fixtures.mjs seed /private/operator/path/butterbox-showcase
+```
+
+The private `fixture-state.json` contains generated review account credentials,
+role scopes, IDs, venue-local week dates and the sample batch ID. Give only the
+appropriate account to a trusted local reviewer; never print or publish the
+inventory. It includes an owner, FOH/BOH managers, employees and a separate
+outside-business control owner. The `SIMULATION_ONLY_APPROVED_TIME_*.csv`
+snapshot is also private and is **not for payroll**. There are no provider
+mappings, pay-code calculations, live payroll submission or compliance claims.
+See [the reviewer guidance](docs/USER_GUIDE.md#internal-synthetic-showcase).
+
+Start the app in a third terminal with the existing controlled production
+runner. It builds with the explicit showcase configuration, verifies the
+seeded project and binds only `127.0.0.1:3137`:
+
+```sh
+BUTTERBOX_TEST_DISPOSABLE=yes \
+BUTTERBOX_TEST_FILE=tests/e2e/showcase.spec.mjs \
+BUTTERBOX_SHOWCASE_WORKDIR=/private/operator/path/butterbox-showcase \
+BUTTERBOX_TEST_APP_URL=http://127.0.0.1:3137 \
+NEXT_PUBLIC_BUTTERBOX_SHOWCASE=true \
+node scripts/test-auth.mjs /private/operator/path/butterbox-showcase --serve-showcase
+```
+
+Keep the CLI executable variable exported in that terminal. Do not reuse a
+production build across normal/showcase origins: public configuration is
+embedded at build time. This launcher rebuilds for the selected environment.
+The app displays **SIMULATION ONLY**; every downloaded sample CSV row also
+contains **SIMULATION ONLY - NOT FOR PAYROLL**. The notice is not an
+authorization boundary; normal server permissions and RLS still apply.
+
+Stop the review app with Ctrl-C **before** reset. Keep the backend/proxy running
+and explicitly confirm the destructive reset of this synthetic project only:
+
+```sh
+node --experimental-strip-types scripts/showcase-fixtures.mjs reset /private/operator/path/butterbox-showcase --confirm-synthetic-reset=butterbox-showcase
+node --experimental-strip-types scripts/showcase-fixtures.mjs seed /private/operator/path/butterbox-showcase
+```
+
+Reset checks the exact project, private configuration, credentials, network,
+storage and known fictional Auth/business inventory first. It refuses unknown
+accounts/businesses. It archives the prior private inventory/CSV and records a
+hashed local reset receipt; it does not preserve database edits made during a
+review. Only enter fictional data. Seed never overwrites existing state or
+implicitly resets. Seed/reset share an exclusive operation lock; a partial
+inventory or interrupted lock requires private operator inspection, not
+automatic deletion or a bypass.
+
+To pause while preserving storage, use:
+
+```sh
+node scripts/showcase-environment.mjs stop /private/operator/path/butterbox-showcase
+```
+
+Then stop the proxy with Ctrl-C. The helper records exact owned-volume identity;
+restart refuses replacement, extra or unidentified volumes. Preserve private
+diagnostics and volumes after a failure; never remove them to bypass checks.
+Auth permits existing password logins but global signup is disabled. Local
+Mailpit captures test mail; backend containers have no external network route.
+Live external messaging/provider delivery remains unavailable.
+Continue to monitor disk during startup and tests, stopping safely below
+10 GiB. Ordinary customer sample-data safeguards remain disabled. Broader
+SAAS-003 production assessment and clean real-customer conversion remain
+unverified; do not copy this demo's data or configuration into a real tenant.
 
 Owners can configure each venue's latitude, longitude and clocking radius on
 **Departments**. Coordinates accept up to six meaningful decimal places and

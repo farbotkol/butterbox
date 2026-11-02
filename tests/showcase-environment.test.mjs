@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
-  assertContainer, assertNetwork, config, network, ports, prepare, project, readEnvironment,
+  assertContainer, assertNetwork, assertOwnedVolumes, config, network, ports, prepare, project, readEnvironment,
 } from "../scripts/showcase-environment.mjs";
 import { testSupabaseStatus } from "../scripts/test-supabase-status.mjs";
 
@@ -121,4 +121,15 @@ test("local status helper passes an explicit isolated environment and reports ch
   fs.writeFileSync(cli, '#!/usr/bin/env node\nconsole.error("private diagnostic");process.exit(2);\n');
   assert.throws(() => testSupabaseStatus(workdir, env), (error) =>
     error.message.includes("exit 2") && !error.message.includes("private diagnostic"));
+});
+
+test("showcase restart refuses missing, replaced, foreign or extra volume identities", () => {
+  const volumes = [{ name: `supabase_db_${project}`, createdAt: "observed", driver: "local", mountpoint: "/owned/volume" }];
+  const proof = { namespace: "owned", volumes };
+  assert.doesNotThrow(() => assertOwnedVolumes(proof, "owned", volumes));
+  for (const changed of [null, {}, { ...proof, namespace: "foreign" }, { ...proof, volumes: [] },
+    { ...proof, volumes: [{ ...volumes[0], createdAt: "replacement" }] }]) {
+    assert.throws(() => assertOwnedVolumes(changed, "owned", volumes), /refusing adoption/);
+  }
+  assert.throws(() => assertOwnedVolumes(proof, "owned", [...volumes, { ...volumes[0], name: "unidentified" }]), /refusing adoption/);
 });

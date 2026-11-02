@@ -3,8 +3,19 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **53**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **67**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **54**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **67**.
+- BB-DEMO-001 is **Done** for local internal review: separately verified
+  showcase project, independently generated signing/API keys, dedicated
+  internal network/storage, 14 fictional FOH/BOH staff, scoped accounts,
+  realistic roster/availability/attendance/correction and approved sample CSV.
+  Repeated explicit reset/reseed and volume-preserving restart passed.
+  Focused Node/HTTP/canonical/CSV **31/31**, pgTAP **74/74**, showcase
+  production browser **1/1**, ordinary report/CSV browsers **2/2**, production
+  builds, changed-code ESLint and TypeScript passed. Local-only reviewer
+  launcher health, simulation notice and loopback binding verified.
+  README and User Guide updated. Remote reviewer access, owner review,
+  final branding and broader SAAS-003 production/conversion gates remain open.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -33,8 +44,8 @@
   now documents the verified controls and limitations; all four criteria pass.
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
-  visuals, Google Ads, social media, email and sales materials. They remain
-  Backlog. The concept catalogue exists, but its referenced image binaries,
+  visuals, Google Ads, social media, email and sales materials. BRAND-001
+  asset governance is Done; the other nine remain Backlog. The concept catalogue exists, but its referenced image binaries,
   approved logos and approved campaigns are not asserted to exist.
 - BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
   all four criteria are verified. QR pgTAP passed **62/62** against the
@@ -51,9 +62,10 @@
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
   policy preserved the existing synthetic records in rollback-only tests.
-  The migration is applied only to `butterbox-acceptance`; a real isolated
-  demo, outbound controls, historical production assessment and clean demo
-  conversion remain unverified. Focused pgTAP passed **102/102**, upgrade
+  The migration is applied only to `butterbox-acceptance`; local isolated
+  demo/outbound controls are now verified in DEMO-001, but historical
+  production assessment and clean demo conversion remain unverified.
+  Focused pgTAP passed **102/102**, upgrade
   rehearsals **16/16** on each of two disposable projects, authenticated
   integrations **3/3**, and three targeted production-browser scenarios
   passed. Changed-file lint, TypeScript and split production build passed.
@@ -680,7 +692,48 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-DEMO-001 — Isolated synthetic showcase café: In Progress (Planning).**
+**BB-DEMO-001 — Isolated synthetic showcase café: Done.**
+The chronological recovery notes below retain failures and intermediate
+results; the final criterion table is authoritative for completion.
+
+| Criterion | Implementation and selected verification | Actual result | Status |
+| --- | --- | --- | --- |
+| DEMO-001-AC1: dedicated verified environment | `showcase-environment.mjs`; private independent keys, hashed migration/config snapshots, exact project/workdir, owned internal network/storage, loopback-only proxies; live own/foreign/anonymous JWT checks, six healthy services; environment unit tests and focused tenant/onboarding pgTAP | Identity/credential/network/storage checks passed; 74/74 pgTAP; isolated production app/health and loopback binding passed | Pass |
+| DEMO-001-AC2: 12–15 fictional FOH/BOH staff | Deterministic namespace-scoped planner, 14 employees (7 FOH / 7 BOH), role eligibility and 16 private scoped/control identities; unit and actual authenticated integration | Exact counts and FOH/BOH/employee/outside-tenant visibility passed | Pass |
+| DEMO-001-AC3: realistic workflow and approved sample | 98 availability intervals, 30 shifts including two open shifts, four publication receipts, 56 original clock/break events, attributable correction, 14 approved/finalised canonical records; existing RPCs and sample-only CSV; HTTP integration and production browser | Immutable original/correction provenance, complete CSV and 14 simulation notices passed; desktop/mobile axe and no horizontal page overflow passed | Pass |
+| DEMO-001-AC4: no real user/customer data | Fictional names, generated credentials, reserved `example.test` addresses, no production imports; private inventory, global app notice and every CSV row marked simulation | Fixture source/shape and actual users/records passed; login/report notice passed | Pass |
+| DEMO-001-AC5: no real messages/payroll | Internal-only backend network; signup disabled; local Mailpit; no provider credentials/mappings/pay codes or provider submission; actual signup/mail/egress tests | `signup_disabled`, zero messages and active external-route denial passed; CSV clearly not for payroll | Pass |
+| DEMO-001-AC6: guarded repeatability and target safety | Exact verified project/config/credentials/network/storage plus known Auth/business inventory before explicit reset; shared exclusive lock; prior inventory/CSV archives and hashed receipt; exact-volume restart provenance | Repeated actual reset/reseed and volume-preserving restart passed; unknown/modified targets, accidental reset, stale lock/concurrency and foreign/replaced/extra volumes refused | Pass |
+
+Final selected verification: **31/31** focused Node/HTTP/canonical/CSV tests,
+**74/74** focused new-project pgTAP, **1/1** showcase production-browser
+scenario, **2/2** ordinary acceptance report/CSV browser regressions, split
+production builds for both modes, changed-code ESLint (zero warnings),
+TypeScript and diff checks passed. The ordinary CSV scenario still verifies
+the exact normal filename and permission/stale/reconciliation failures.
+The operator `--serve-showcase` launcher was separately exercised: fresh build,
+HTTP 200 health/login, visible simulation notice and loopback-only port 3137;
+the temporary app was stopped after verification. An environment-only verifier
+no longer reports a hard-coded false fixture state; fixture readiness is
+checked by the seeded-workflow verifier/launcher instead.
+
+Changed modules: environment/fixture helpers, existing controlled browser
+runner, root layout, showcase configuration guard, generic CSV library/route,
+focused tests and containing font-source hash (fonts/artwork unchanged).
+Documentation: **updated** README operator setup/start/seed/reset/stop and
+User Guide local review/permissions/sample-download limitations.
+Full unrelated Node/pgTAP/integration/browser suites intentionally deferred.
+Broader migration/cross-tenant and release testing remains required before
+release or workstream merge. Standard local DB password means trusted-local
+containment only; remote reviewer access is unverified (port API 403).
+Final brand approval, owner review and clean real-customer conversion are
+not claimed. SAAS-003 remains Blocked for its broader production gates.
+Disk remained 29 GiB free; no existing stack, volume or worktree removed.
+Next ready Showcase P0: **BB-DEMO-002**, using these existing accounts and
+fixtures rather than recreating completed work.
+
+### Preserved DEMO-001 recovery chronology
+
 DOC-001 `db7e37c` pushed and remote SHA matched. Observed capacity:
 8 CPUs, 31 GiB total RAM / 25 GiB available, approximately 30 GB free disk.
 Existing projects remain `butterbox` (54321/54322), acceptance (55421/55422)
@@ -2574,11 +2627,11 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- After the verified **BB-ATTEND-006** checkpoint, select ready Showcase P0
-  work. Inspect **BB-REPORT-001** for scoped scheduled/actual totals while
-  maintaining the demo-isolation and owner-approval gates. Keep BRAND stories in Backlog
-  until their assets and approvals
-  exist. Keep **BB-ORG-006** Blocked until its full criteria and
+- After verified **BB-DEMO-001**, select **BB-DEMO-002** guided multi-role
+  walkthroughs using the existing isolated fixture and scoped review accounts.
+  ATTEND-006, REPORT-001, BRAND-001 and DOC-001 are Done; do not rebuild them.
+  Other BRAND delivery still requires its specific assets and approvals.
+  Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable
   periods and do not silently reinterpret history.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an
