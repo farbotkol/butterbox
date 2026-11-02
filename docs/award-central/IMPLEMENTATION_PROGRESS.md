@@ -1,27 +1,57 @@
 # Award Central implementation progress
 
-## Current checkpoint - 2026-11-02 03:31 UTC
+## Current checkpoint - 2026-11-02 03:43 UTC
 
-This report belongs only to `feature/award-central-foundation`. Current
-verified local and remote feature-branch HEAD is `5abd50df9d286ddd711c88a6584c623e49718741`;
-the worktree is clean and has no unpushed commits. It includes a merge of
-roadmap commit `024d79f663398a7fb75f1f4dbcb5c3155dbf87fd`. The roadmap branch
-has since advanced to `9bac44f9b196a72eaf47bdcd53609c5bffbc7f65`; this later
-target has not been merged or tested here.
+This report belongs only to `feature/award-central-foundation`. Latest
+committed feature HEAD is `b7f15383e54b111e169d7067a791bb171e645d9d`, and the
+remote feature ref matches. It includes a merge of roadmap commit
+`024d79f663398a7fb75f1f4dbcb5c3155dbf87fd`. The roadmap branch has since
+advanced to `9bac44f9b196a72eaf47bdcd53609c5bffbc7f65`; this later target has
+not been merged or tested here. A small backlog/report checkpoint is being
+prepared for this branch.
 
 PR #3 is open and Draft, with base `copilot/finish-roadmap-for-app` at
-`024d79f`; do not merge it. The PR metadata was checked at the current feature
-HEAD. The workstream owns only BB-PAYRULES; the latest Core statuses remain
-unchanged. Current `BACKLOG_INDEX.csv` has 109 unique stories: 38 Done,
-4 In Progress, 4 Blocked and 63 Backlog. Award Central stories 002 and 013
-are In Progress; 017 is Blocked; none is Done.
+`024d79f`; its latest GitHub metadata reports `mergeable_state: dirty`, so it
+must remain Draft and must not be merged. The workstream owns only BB-PAYRULES;
+the latest Core statuses remain unchanged. Current `BACKLOG_INDEX.csv` has
+109 unique stories: 38 Done, 4 In Progress, 4 Blocked and 63 Backlog. Award
+Central stories 002 and 013 are In Progress; 017 is Blocked; none is Done.
 
-The combined feature branch has 49 SQL migrations with unique version
+The combined feature branch has 50 SQL migrations with unique version
 filenames. Do not silently replay a renumbered Award Central migration against
 an environment whose migration history records its former version. No merge is
 currently in progress. Merged testing evidence further below is specific to
 the exact merge commit and tests named; it does not establish acceptance
 against the newer `9bac44f` roadmap tip.
+
+## BB-PAYRULES-013 branch-only coverage correction - 2026-11-02
+
+The new migration
+`supabase/migrations/20261103000500_award_central_regression_verified_coverage.sql`
+updates the privileged draft-issues report so an area counts as represented
+only when its candidate is unresolved-free, fingerprints the current draft,
+has at least one separately staged expected output, and has no contradictory
+expected outputs. This prevents a proposed, unresolved or stale scenario from
+appearing to satisfy the evidence-coverage summary. The existing unconditional
+publication block remains in force. This does not create verified golden
+cases, execute a deterministic calculation, authenticate expert reviewers or
+enable publication.
+
+The modified focused pgTAP file passed **60/60** in a transaction against
+disposable local Supabase project `butterbox-award-merged-validation-202611`
+(database port 56432; API port 56431; Docker project label matched). The
+migration, test fixtures and temporary pgTAP extension were rolled back; the
+database migration ledger stayed at 49 and the test UUID was absent afterward.
+This validates the function against the existing merged schema, but is not a
+clean 50-migration replay or testing against the current roadmap tip `9bac44f`.
+No application/unit tests were relevant to this SQL-only correction. Full
+merged-target integration, TypeScript, ESLint, production build and browser
+checks remain unverified for the current roadmap tip.
+
+**013.3 remains Blocked:** the draft issue report now reflects missing
+candidate-quality requirements, while publication remains fail-closed. Actual
+independently reviewed expected results, trusted test execution, verified
+reviewer identity and a usable publication gate are not present.
 
 ## Branch scope and merge recovery - historical checkpoints
 
@@ -120,7 +150,7 @@ integration target before treating these results as release acceptance.
 | 002.5 | Tenant-specific agreement rulesets are not implemented. | No agreement isolation test exists. | Blocked |
 | 013.1 | Central append-only draft scenarios and separately entered proposed expectations. | Regression pgTAP 59/59; no verified experts or golden calculations exist. | Blocked |
 | 013.2 | Coverage labels include DST, midnight, minimum engagement, cumulative hours and effective dates. | Regression pgTAP 59/59; actual award-boundary calculations are not implemented. | Blocked |
-| 013.3 | Every new approval, activation and draft supersession is blocked; a privileged draft report flags missing categories, conflicting expectations, unresolved and stale cases. | Foundation pgTAP 48/48 and regression pgTAP 59/59; no usable gate based on verified coverage and actual execution results exists. | Blocked |
+| 013.3 | Every new approval, activation and draft supersession remains blocked. The draft report now counts coverage only for a current-fingerprint, resolved candidate with non-conflicting staged expectations. | Regression pgTAP 60/60 in a rolled-back transaction. Actual calculation execution, verified reviewer identity and golden results are not present; merged testing against current roadmap tip is outstanding. | Blocked |
 | 013.4 | Immutable rows record source, claimed preparer/reviewer, limitations and a content fingerprint. | Regression pgTAP 59/59 and concurrency rehearsal 9/9; identity, qualification, test-run provenance and signoff are not verified. No government certification is claimed. | Blocked |
 | 017.1 | Official-host acquisition interface only. | Mocked Node tests passed; live FWC endpoints and award-document parsing remain unverified. | Blocked |
 | 017.2 | Immutable source snapshots retain bytes, hash, dates and provenance. | Merged disposable-stack integration passed 1/1; live official sources have not been tested. | Blocked |
