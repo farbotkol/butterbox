@@ -482,9 +482,14 @@
   but there is no complete self-service history for ordinary uncorrected
   events. The normal application cannot delete a business, but a privileged
   business deletion cascades attendance; no legally approved live-record
-  retention or deletion policy has been established. Implement a scoped
-  employee history and honest visibility/retention documentation, then verify
-  the criteria. Do not claim legal compliance or alter live records.
+  retention or deletion policy has been established. A self-only paginated
+  employee history and visibility/retention documentation are now implemented
+  but uncommitted. The forward migration passed **20/20** pgTAP assertions
+  in a rolled-back acceptance transaction and was applied only to the
+  verified disposable acceptance and replay projects. Focused Node tests
+  passed **12/12**, and changed-file ESLint and TypeScript passed.
+  Run affected database regressions and production-browser tests next.
+  Do not claim legal compliance or alter live records.
 - **BB-RULES-001 — Employment rule metadata** is Done and pushed as
   `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
