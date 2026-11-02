@@ -102,6 +102,16 @@ Recorded following the product owner's explicit request: *“For Butterbox BB-RU
 - Test authorization, audit, tenant separation, employee preferences and opt-outs, channel eligibility, required in-app delivery, external-provider disabled/unavailable states, idempotency, retries and race conditions. Use targeted pgTAP, Node, authenticated integration and browser checks; broader regression before release.
 - Keep `BB-ORG-006` **Blocked / Partially Complete** until accepted week-start transition semantics and notification criteria are implemented and tested; do not mark email, push, SMS or WhatsApp delivered without live end-to-end evidence.
 
+### Final owner decisions — 2026-11-02
+
+The product owner has additionally confirmed the following details, which supersede any earlier ambiguity in this entry:
+
+1. **Roster week start affects planning and display only.** A venue's selected week start controls its roster calendar/navigation and planning presentation. **Payroll-period boundaries remain independently defined and unchanged.** Do not silently change publication version boundaries or historic published records when the setting changes. Apply new display preferences prospectively.
+2. **Optional notification control uses venue defaults plus employee preferences and consent.** Owners manage channel availability and suggested defaults per venue; each employee controls their own optional delivery channels. A venue default never overrides missing consent or an opt-out. In-app essential operational notices remain on.
+3. **Quiet hours:** Defer routine **external-channel** notifications until the permitted delivery window. A narrowly classified **urgent operational** event may bypass quiet hours **only through channels enabled and lawfully permitted for that recipient**. No blanket urgency override of consent, unsubscribe or provider rules. In-app event creation is not delayed by external quiet hours.
+
+Implement a central event urgency classification, timezone-aware quiet-hour scheduling, queueing, idempotent delivery and auditability. Define initial quiet-hour clock times and the explicit list of urgent event types through separately recorded configuration/launch decisions; do not invent them as settled policy. If channel delivery is not configured, preserve the in-app notification and show external delivery as unavailable/pending, not sent.
+
 ### Remaining dependencies and open questions
 
 1. **`BB-COMMS-003`:** External email/push delivery not yet completed; decide whether week-start controls and essential in-app defaults can be accepted independently before the full story is closed.
