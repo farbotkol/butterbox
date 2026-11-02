@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **50**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **71**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **70**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -679,6 +679,24 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-REPORT-001 — Hours and labour dashboard: In Progress.** Selected ready
+Showcase P0 after verified ATTEND-006 (`6c67d10`, remote SHA matched).
+Plan: an owner-only, read-only reporting RPC reuses the weekly published
+planned-shift, worked-time and current approval helpers. Group by venue and
+department with Monday timesheet-week boundaries in each venue timezone.
+Expose approved worked/paid hours, scheduled gross hours and excluded review
+counts; do not treat pending or outdated approvals as actual approved time.
+Add a mobile-friendly report route, explicit definitions, validated filters
+and optional uniform illustrative hourly-rate estimates, never actual payroll.
+Verify reconciliation, DST/week boundaries, empty and invalid filters,
+tenant/role denial and approval changes with focused pgTAP, Node and browser
+tests, plus changed-file lint, TypeScript and a route production build.
+No existing features will be rebuilt. The dedicated showcase deployment
+remains an independent DEMO gate, not the acceptance test environment.
+Documentation: pending implementation; no report criterion is yet Pass.
+
+## Latest completed attendance story
 
 - **BB-ATTEND-006 — Late, missing and no-show alerts: Done.** Started
   2026-11-02 17:58 UTC after the QR checkpoint and BRAND planning checkpoint
