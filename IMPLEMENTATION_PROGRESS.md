@@ -3,8 +3,15 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **46**. In Progress: **1**.
-  Blocked: **4**. Not started (Backlog): **58**.
+  BB-PAYRULES stories). Verified Done: **46**. In Progress: **0**.
+  Blocked: **5**. Not started (Backlog): **58**.
+- BB-RULES-005 (privacy and retention) has a verified partial implementation
+  and is **Blocked**, not Done. Point-in-time location, visibility and
+  self-service history/correction passed focused database and browser tests.
+  Privileged business deletion can cascade employment records; an approved
+  live-record retention/deletion policy and hosted recovery are not verified.
+  The owner must specify and approve the preservation policy before the last
+  criterion can be implemented and verified. See the criterion table below.
 - BB-RULES-001 (employment rule metadata) is Done. Scoped dated history
   preserves unknown classifications and independently maintained award and
   contract references. Focused database tests passed **282/282** on acceptance,
@@ -471,30 +478,47 @@
   are unverified customer inputs and do not establish award or payroll
   compliance. The separate Award Central workstream remains isolated.
 
+## BB-RULES-005 — Acceptance evidence (Blocked)
+
+| Criterion | Implementation evidence | Runtime verification and actual result | Status |
+| --- | --- | --- | --- |
+| RULES-005.1 Only point-in-time location captured by default | Venue verification is off by default. When enabled, only a clock-in/out requests one position; retained checks store outcomes, distance, accuracy and radius, not raw device coordinates. | Location and history pgTAP passed **71/71** and **22/22** respectively on acceptance. The production-browser location scenario verified disabled and enabled clocks, breaks and permission failures; instrumentation observed no continuous `watchPosition` calls. The history page also made no location request or watch. | Pass |
+| RULES-005.2 Visibility and retention documented | `README.md` and the employee history page identify scoped employee/manager/operator visibility, the absence of automatic expiry, privileged deletion risk and unverified hosted retention. They explicitly avoid a compliance guarantee. | Mobile production-browser history scenario **1/1** verified the visible disclosure; history pgTAP **22/22** verified personal, manager, cross-tenant and revoked access. The retention statement describes actual current behavior, not an approved legal policy. | Pass |
+| RULES-005.3 Employee access and correction process exists | A paginated self-only RPC and page show original and effective times, source, breaks and retained location checks, with links to existing attributable correction requests and decisions. A forward migration requires the employee profile to remain linked even for managers. | History pgTAP **22/22** on acceptance and replay; focused mobile production-browser scenario **1/1** verified 54 events across two pages, correction detail and links, invalid page, colleague/manager/tenant isolation, profile unlinking, no horizontal overflow and axe checks. Employee-request and manager-correction browser regressions both passed. | Pass |
+| RULES-005.4 Required employment records preserved | Individual original attendance and correction events are protected from ordinary edits/deletion. Normal application users cannot delete a business, but privileged deletion can cascade its employment records. | The history pgTAP verified the original timestamp is unchanged and individual event deletion is denied. These checks do **not** prevent privileged business deletion or prove that required records survive for an approved legal period. No hosted backup or restore was tested. | Blocked |
+
+- **Additional selected checks:** Seven affected pgTAP files passed **410/410**
+  assertions before the final access fix. After that fix, history, corrections
+  and tenant isolation passed **137/137** on acceptance; history passed
+  **22/22** on replay. The earlier history, corrections and location replay
+  passed **174/174**. Replay lacks `auth.jwt()`, so the identical acceptance
+  helper was supplied only inside each rolled-back test transaction and
+  confirmed absent afterward. Four Node files passed **12/12**. Six focused
+  production-browser scenarios passed, including history, location,
+  correction requests, manager corrections, clocking and audit. The split
+  production build, changed-file ESLint, TypeScript and `git diff --check`
+  passed. The history scenario initially failed because one bulk-insert fixture
+  omitted a non-null field; it was corrected and rerun. A new manager-unlink
+  assertion first failed **1/22**, exposing the access gap; forward migration
+  `20261103100000` fixed it and both pgTAP and browser tests passed.
+- **Files:** Migrations `20261103090000_personal_attendance_history.sql` and
+  `20261103100000_personal_history_linked_profiles.sql`, the personal-history
+  pgTAP and Node tests, attendance history and clock pages, pagination/location
+  and audit helpers, browser tests and `README.md`.
+- **Deferred and risks:** Full pgTAP, Node, authenticated integration and
+  browser suites were intentionally not run; broader regression is needed at
+  workstream merge or release. The owner must approve which records and
+  retention periods are required, how privileged deletion is controlled and
+  what recovery procedure is acceptable. No live records were altered and
+  legal or payroll compliance is not claimed.
+
 ## Current story
 
-- **BB-RULES-005 — Privacy and retention policy** is In Progress, in testing.
-  The four criteria cover point-in-time location, documented visibility and
-  retention, employee access and correction, and preservation of required
-  employment records. Location verification is off by default and collects
-  a point only when clocking; the database stores derived checks rather than
-  raw device coordinates. Employees can request corrections and see decisions,
-  but there is no complete self-service history for ordinary uncorrected
-  events. The normal application cannot delete a business, but a privileged
-  business deletion cascades attendance; no legally approved live-record
-  retention or deletion policy has been established. A self-only paginated
-  employee history and visibility/retention documentation are now implemented
-  but uncommitted. The forward migration passed **20/20** pgTAP assertions
-  in a rolled-back acceptance transaction and was applied only to the
-  verified disposable acceptance and replay projects. Focused Node tests
-  passed **12/12**, and changed-file ESLint and TypeScript passed. Seven
-  affected acceptance pgTAP files passed **410/410** assertions: personal
-  history, clock events, breaks, location, corrections, employee correction
-  requests and tenant isolation. Three files passed **174/174** on the
-  separate replay database. That replay initially lacked `auth.jwt()`; the
-  acceptance project's identical helper was installed inside each test
-  transaction and confirmed rolled back afterward. Production-browser
-  verification remains. Do not claim legal compliance or alter live records.
+- **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
+  above; the verified access and visibility changes are being checkpointed.
+  Next, investigate `BB-ORG-006` prerequisites and select an independent
+  ready core story. Week boundaries are currently baked into roster
+  publications and payroll snapshots; do not silently reinterpret history.
 - **BB-RULES-001 — Employment rule metadata** is Done and pushed as
   `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
@@ -1771,10 +1795,14 @@ not yet run remotely.
 
 ## Next story
 
-- Finish **BB-RULES-005 — Privacy and retention policy** by adding and running
-  the focused production-browser scenarios, recording criterion-level evidence,
-  and resolving or documenting the approved-retention and privileged-deletion
-  blocker. Do not assume a legally approved retention period or change live records.
+- Resume **BB-RULES-005 — Privacy and retention policy** only after the owner
+  approves the required record classes, live retention/deletion controls and
+  recovery expectations. Implement and verify the resulting safeguards without
+  altering live records or assuming legal approval.
+- Investigate **BB-ORG-006 — Business configuration** prerequisites before
+  changing week boundaries, approval or notification defaults. Existing roster
+  publications and payroll snapshots assume Monday-based weeks, so prospective
+  semantics and dependent approval/notification workflows must be preserved.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the

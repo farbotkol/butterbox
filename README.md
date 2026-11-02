@@ -284,6 +284,28 @@ one occurring twice requires selecting its first or second occurrence. New
 events from requests are labelled as employee-requested, not as offline device
 clocks, and remain flagged as unverified in work time and timesheet review.
 
+Linked employees can open **View your attendance history** from the clock
+screen to see their own original and corrected clock and break events,
+including the source and retained location-check outcome. The page is scoped
+to the current business and venue; managers using it see their own events,
+not their team's. A correction link returns to the request form and existing
+attributed correction history. Owners and scoped managers can review attendance
+in their permitted departments; database operators may also have access.
+After a worker's membership or employee link is removed, access through their
+account to personal history ends and they should contact their employer for
+records or correction. Separate authorised management access is unaffected
+by removing an employee-profile link.
+
+Original attendance, corrections, claims and payroll records are not subject
+to a configured automatic live-record expiry in this application. They are
+protected against ordinary edits and individual deletion, but a privileged
+deletion of the business can cascade its records. Hosted backups and a
+legally appropriate live-record retention/deletion policy have not been
+verified; an owner must establish and operate them before relying on this
+system. The 35-day backup proposal below is separate from employment-record
+retention. Nothing here guarantees compliance with Australian privacy or
+workplace-record requirements.
+
 Managers can use **Work time** to inspect actual attendance sessions in their
 permitted departments and venue. Calculations use elapsed instants, including
 across midnight and daylight-saving transitions, and display timestamps in

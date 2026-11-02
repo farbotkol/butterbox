@@ -5134,6 +5134,204 @@ test("employees request missed clocks and scoped managers decide without overwri
   }
 });
 
+test("employees view only their paginated attendance history and correction details", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, outsideVenue, departmentId, workerId, colleagueId,
+    managerId, workerSession, colleagueSession, managerSession, originalClock] =
+    Array.from({ length: 12 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const workerApi = createClient(apiUrl, anonKey, options);
+  const managerApi = createClient(apiUrl, anonKey, options);
+  try {
+    for (const role of ["worker", "colleague", "manager", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `personal-history-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `History cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside history cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+        geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 100,
+        clock_geofence_enabled: true },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC",
+        clock_geofence_enabled: false },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[3], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[0], name: "History Worker", role_title: "Server" },
+      { id: colleagueId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[1], name: "History Colleague", role_title: "Server" },
+      { id: managerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[2], name: "History Manager", role_title: "Supervisor" },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([
+      { id: workerSession, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        employee_id: workerId, started_by: users[0] },
+      { id: colleagueSession, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        employee_id: colleagueId, started_by: users[1] },
+      { id: managerSession, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        employee_id: managerId, started_by: users[2] },
+    ])).error).toBeNull();
+    const breaks = Array.from({ length: 25 }, () => ({
+      id: randomUUID(), session_id: workerSession, business_id: businessId, classification: "unpaid",
+    }));
+    expect((await admin.from("attendance_breaks").insert(breaks)).error).toBeNull();
+    const event = (id, session, employee, actor, eventType, breakId, occurredAt, source = "server_clock") => ({
+      id, session_id: session, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      employee_id: employee, actor_id: actor, request_id: randomUUID(), event_type: eventType,
+      break_id: breakId, occurred_at: occurredAt, source,
+    });
+    const breakEvents = breaks.flatMap((item, index) => {
+      const start = Date.parse("2024-01-01T10:00:00Z") + index * 10 * 60_000;
+      return [
+        event(randomUUID(), workerSession, workerId, users[0], "break_start", item.id,
+          new Date(start).toISOString()),
+        event(randomUUID(), workerSession, workerId, users[0], "break_end", item.id,
+          new Date(start + 5 * 60_000).toISOString(), "manager_reported"),
+      ];
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(originalClock, workerSession, workerId, users[0], "clock_in", null, "2024-01-01T09:05:00Z"),
+      ...breakEvents,
+      event(randomUUID(), workerSession, workerId, users[0], "clock_out", null, "2024-01-01T17:00:00Z"),
+      event(randomUUID(), colleagueSession, colleagueId, users[1], "clock_in", null, "2024-02-01T09:00:00Z"),
+      event(randomUUID(), managerSession, managerId, users[2], "clock_in", null, "2024-03-01T09:00:00Z", "offline_claim"),
+    ])).error).toBeNull();
+    for (const [client, role] of [[workerApi, "worker"], [managerApi, "manager"]]) {
+      expect((await client.auth.signInWithPassword({
+        email: `personal-history-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+    }
+    expect((await managerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: workerSession,
+      p_event_id: originalClock, p_request_id: randomUUID(), p_expected_at: "2024-01-01T09:05:00Z",
+      p_new_at: "2024-01-01T09:00:00Z", p_reason: "Confirmed original clock was late",
+    })).error).toBeNull();
+    const started = await workerApi.rpc("clock_in_attendance_with_location", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: departmentId,
+      p_employee_id: workerId, p_request_id: randomUUID(), p_location_status: "position",
+      p_latitude: -33.8688, p_longitude: 151.2093, p_accuracy_meters: 5,
+    });
+    expect(started.error).toBeNull();
+    expect(started.data[0].location_status).toBe("verified");
+    const finished = await workerApi.rpc("clock_out_attendance_with_location", {
+      p_business_id: businessId, p_session_id: started.data[0].session_id, p_request_id: randomUUID(),
+      p_location_status: "permission_denied", p_latitude: null, p_longitude: null, p_accuracy_meters: null,
+    });
+    expect(finished.error).toBeNull();
+    expect(finished.data[0].location_status).toBe("review");
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.addInitScript(() => {
+      const original = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+      const originalWatch = navigator.geolocation.watchPosition.bind(navigator.geolocation);
+      navigator.geolocation.getCurrentPosition = (success, failure, options) => {
+        sessionStorage.setItem("history-location-calls",
+          String(Number(sessionStorage.getItem("history-location-calls") || 0) + 1));
+        return original(success, failure, options);
+      };
+      navigator.geolocation.watchPosition = (success, failure, options) => {
+        sessionStorage.setItem("history-location-watches",
+          String(Number(sessionStorage.getItem("history-location-watches") || 0) + 1));
+        return originalWatch(success, failure, options);
+      };
+    });
+    await signIn(page, `personal-history-worker-${suffix}@example.test`, password);
+    await page.goto(`/attendance?business=${businessId}&venue=${venueId}`);
+    await page.getByRole("link", { name: "View your attendance history" }).click();
+    await expect(page.getByRole("heading", { name: "Your attendance history" })).toBeVisible();
+    await expect(page.getByRole("status")).toHaveText("54 recorded events. Page 1.");
+    const history = page.getByRole("list", { name: "Your recorded clock and break events" });
+    await expect(history.getByRole("listitem")).toHaveCount(50);
+    await expect(history).toContainText("Location was verified within the venue radius.");
+    await expect(history).toContainText("Distance 0.0 m; accuracy ±5.0 m; venue radius 100 m.");
+    await expect(history).toContainText("Location review: Location permission denied. Awaiting manager review.");
+    await expect(history).toContainText("Unpaid break");
+    await expect(history).toContainText("Source: Manager-reported time");
+    await expect(history).not.toContainText("2024-02-01T09:00:00");
+    await expect(history).not.toContainText("2024-03-01T09:00:00");
+    await expect(page.getByRole("region", { name: "Attendance privacy and retention" }))
+      .toContainText("A privileged business deletion can remove associated records.");
+    expect(await page.evaluate(() => Number(sessionStorage.getItem("history-location-calls") || 0))).toBe(0);
+    expect(await page.evaluate(() => Number(sessionStorage.getItem("history-location-watches") || 0))).toBe(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile personal attendance history"));
+
+    await page.getByRole("link", { name: "Next history page" }).click();
+    await expect(page.getByRole("status")).toHaveText("54 recorded events. Page 2.");
+    await expect(history.getByRole("listitem")).toHaveCount(4);
+    const corrected = history.getByRole("listitem").filter({ hasText: "Corrected." });
+    await expect(corrected).toHaveCount(1);
+    await expect(corrected.locator("time").nth(0)).toHaveAttribute("datetime", /^2024-01-01T09:00:00/);
+    await expect(corrected.locator("time").nth(1)).toHaveAttribute("datetime", /^2024-01-01T09:05:00/);
+    await corrected.getByRole("link", { name: "View correction history" }).click();
+    await expect(page.getByRole("region", { name: "Attendance correction history" }))
+      .toContainText("Confirmed original clock was late");
+    await page.goto(`/attendance/history?business=${businessId}&venue=${venueId}`);
+    await page.getByRole("link", { name: "request a correction" }).click();
+    await expect(page.getByRole("form", { name: "Submit correction request" })).toBeVisible();
+    await page.goto(`/attendance/history?business=${businessId}&venue=${venueId}&page=0`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Invalid page number.");
+    await expect(page.getByRole("list", { name: "Your recorded clock and break events" })).toHaveCount(0);
+    await page.getByRole("link", { name: "Return to the first page." }).click();
+    await expect(page.getByRole("status")).toHaveText("54 recorded events. Page 1.");
+    const original = await admin.from("attendance_events").select("occurred_at").eq("id", originalClock).single();
+    expect(original.error).toBeNull();
+    expect(Date.parse(original.data.occurred_at)).toBe(Date.parse("2024-01-01T09:05:00Z"));
+
+    for (const [role, date] of [["colleague", "2024-02-01T09:00:00"], ["manager", "2024-03-01T09:00:00"]]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const ownPage = await context.newPage();
+      await signIn(ownPage, `personal-history-${role}-${suffix}@example.test`, password);
+      await ownPage.goto(`/attendance/history?business=${businessId}&venue=${venueId}`);
+      await expect(ownPage.getByRole("status")).toHaveText("1 recorded events. Page 1.");
+      const ownHistory = ownPage.getByRole("list", { name: "Your recorded clock and break events" });
+      await expect(ownHistory).toContainText(date);
+      await expect(ownHistory).not.toContainText("2024-01-01");
+      if (role === "manager") {
+        await expect(ownHistory).toContainText("Source: Unverified offline claim");
+        expect((await admin.from("employees").update({ auth_user_id: null }).eq("id", managerId)).error).toBeNull();
+        await ownPage.reload();
+        await expect(ownPage.getByRole("status")).toHaveText("0 recorded events. Page 1.");
+        await expect(ownHistory).toHaveCount(0);
+        const managed = await managerApi.from("attendance_events").select("id").eq("id", originalClock);
+        expect(managed.error).toBeNull();
+        expect(managed.data).toEqual([{ id: originalClock }]);
+      }
+    }
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `personal-history-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/attendance/history?business=${businessId}&venue=${venueId}`);
+    await expect(outsidePage.getByRole("heading", { name: "Attendance history unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Confirmed original clock was late")).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("employees clock in and out with scoped immutable cross-venue events", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
@@ -5601,10 +5799,16 @@ test("optional clock location is requested only at clock events and exceptions a
     await workerContext.addInitScript(() => {
       if (location.protocol !== "http:") return;
       const original = navigator.geolocation.getCurrentPosition.bind(navigator.geolocation);
+      const originalWatch = navigator.geolocation.watchPosition.bind(navigator.geolocation);
       navigator.geolocation.getCurrentPosition = (success, failure, options) => {
         sessionStorage.setItem("geolocation-calls", String(Number(sessionStorage.getItem("geolocation-calls") || 0) + 1));
         sessionStorage.setItem("geolocation-options", JSON.stringify(options));
         return original(success, failure, options);
+      };
+      navigator.geolocation.watchPosition = (success, failure, options) => {
+        sessionStorage.setItem("geolocation-watches",
+          String(Number(sessionStorage.getItem("geolocation-watches") || 0) + 1));
+        return originalWatch(success, failure, options);
       };
     });
     const workerPage = await workerContext.newPage();
@@ -5618,6 +5822,7 @@ test("optional clock location is requested only at clock events and exceptions a
     await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
     await expect(workerPage.getByRole("heading", { name: "Clocked out" })).toBeVisible();
     expect(await calls()).toBe(0);
+    expect(await workerPage.evaluate(() => Number(sessionStorage.getItem("geolocation-watches") || 0))).toBe(0);
     const disabledChecks = await admin.from("attendance_location_checks")
       .select("verification_status, reason, distance_meters").eq("business_id", businessId);
     expect(disabledChecks.error).toBeNull();
@@ -5695,6 +5900,7 @@ test("optional clock location is requested only at clock events and exceptions a
     await workerPage.getByRole("button", { name: "Clock out", exact: true }).click();
     await expect(workerPage.getByRole("status").filter({ hasText: "queued for manager review" })).toBeVisible();
     expect(await calls()).toBe(4);
+    expect(await workerPage.evaluate(() => Number(sessionStorage.getItem("geolocation-watches") || 0))).toBe(0);
     const outcomes = await admin.from("attendance_location_checks").select("reason").eq("session_id", secondSession);
     expect(outcomes.error).toBeNull();
     expect(outcomes.data.map((row) => row.reason).sort()).toEqual(["inaccurate", "outside"]);

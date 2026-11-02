@@ -19,6 +19,7 @@ import { parseAttendanceCorrections, type AttendanceCorrection } from "@/lib/att
 import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
+import { withBusiness } from "@/lib/business-selection";
 import {
   hasPriorAttendanceLink, offlineMatchKey, offlineWorkerKey, parseOfflineBreakResolutions, parseOfflineClaimReviews,
   parseOfflineMatchEvents, parseOfflineOpenBreaks, parseOfflineOpenSessions, parseSubmittedOfflineClaims,
@@ -298,6 +299,10 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           <p className="mt-2 text-sm text-muted">
             Your clock time is recorded by the server, not your device.
           </p>
+          <Link href={withBusiness(`/attendance/history?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id)}
+            className="mt-3 inline-block text-sm font-semibold text-ocean underline">
+            View your attendance history
+          </Link>
         </div>
         {venueResult.data && venueResult.data.length > 1 && (
           <form action="/attendance" className="flex items-center gap-2">
@@ -489,7 +494,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
         actorId={workspace.user.id} businessId={workspace.business.id} venueId={workspace.venue.id}
         options={options}
       />}
-      <section aria-label="Request an attendance correction" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+      <section id="request-attendance-correction" aria-label="Request an attendance correction"
+        className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="text-lg font-semibold">Request a missed clock time</h2>
         <p className="mt-2 text-sm text-muted">
           Propose a time and explain what happened. It is not a verified clock event and does not change
@@ -612,7 +618,8 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
             {formatClockTime(item.decided_at, workspace.venue.timezone)}</time></p>
         </li>)}</ul>}
       </section>
-      <section aria-label="Attendance correction history" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+      <section id="attendance-correction-history" aria-label="Attendance correction history"
+        className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="text-lg font-semibold">Attendance correction history</h2>
         <p className="mt-2 text-sm text-muted">
           Corrections retain the original event, the previous and corrected times, the reason and the person who changed it.

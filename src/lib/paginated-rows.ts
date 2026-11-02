@@ -1,6 +1,13 @@
 type PageError = { code: string; message: string };
 type Page<T> = { data: T[] | null; error: PageError | null; count: number | null };
 
+export function parsePageNumber(value: unknown): number | null {
+  if (value === undefined) return 1;
+  if (typeof value !== "string" || !/^[1-9]\d*$/.test(value)) return null;
+  const page = Number(value);
+  return Number.isSafeInteger(page) && page <= 100_000 ? page : null;
+}
+
 export async function readAllPages<T>(
   readPage: (from: number, to: number) => PromiseLike<Page<T>>,
   key: (row: T) => string,

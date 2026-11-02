@@ -1,4 +1,5 @@
 import { parseBusinessId } from "./business-selection.ts";
+import { parsePageNumber } from "./paginated-rows.ts";
 
 export const auditSources = {
   businesses: "Businesses",
@@ -85,9 +86,8 @@ export function parseAuditFilters(input: {
   const through = input.to ? utcDay(input.to) : undefined;
   if (from === null || through === null || (from && through && from > through)) return null;
   const to = through ? new Date(Date.parse(through) + 86_400_000).toISOString() : undefined;
-  const page = input.page === undefined ? 1 : Number(input.page);
-  if (!Number.isSafeInteger(page) || page < 1 || page > 100_000 ||
-    (input.page !== undefined && String(page) !== input.page)) return null;
+  const page = parsePageNumber(input.page);
+  if (page === null) return null;
   return { source: input.source || undefined, operation: input.operation || undefined, actor, from, to, page };
 }
 

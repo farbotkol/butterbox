@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readAllPages } from "../src/lib/paginated-rows.ts";
+import { parsePageNumber, readAllPages } from "../src/lib/paginated-rows.ts";
+
+test("page numbers are canonical positive integers within the supported range", () => {
+  assert.equal(parsePageNumber(undefined), 1);
+  assert.equal(parsePageNumber("1"), 1);
+  assert.equal(parsePageNumber("100000"), 100000);
+  for (const invalid of ["", "0", "-1", "01", "1.0", "1e2", "100001", null, 2, ["1"]]) {
+    assert.equal(parsePageNumber(invalid), null);
+  }
+});
 
 test("loads every row even when the server enforces a smaller page limit", async () => {
   const values = [1, 2, 3, 4, 5];

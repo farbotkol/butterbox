@@ -32,7 +32,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
-function isReviewReason(value: unknown): value is LocationReviewReason {
+export function isLocationReviewReason(value: unknown): value is LocationReviewReason {
   return typeof value === "string" && reviewReasons.some((reason) => reason === value);
 }
 
@@ -82,7 +82,7 @@ export function parseLocationClockReceipt(value: unknown) {
     (status === "not_required" && reason === "disabled") ||
     (status === "verified" && reason === "inside") ||
     (status === "historical_unverified" && reason === "historical") ||
-    (status === "review" && isReviewReason(reason))
+    (status === "review" && isLocationReviewReason(reason))
   ) return { ...receipt, locationStatus: status, locationReason: reason };
   return null;
 }
@@ -97,7 +97,7 @@ export function parseLocationExceptions(value: unknown): LocationException[] | n
       typeof row.department_name !== "string" || !row.department_name.trim() ||
       (row.event_type !== "clock_in" && row.event_type !== "clock_out") ||
       typeof row.occurred_at !== "string" || Number.isNaN(Date.parse(row.occurred_at)) ||
-      !isReviewReason(row.reason) ||
+      !isLocationReviewReason(row.reason) ||
       typeof row.radius_meters !== "number" || !Number.isInteger(row.radius_meters) ||
       row.radius_meters < 1 || row.radius_meters > 10000 ||
       (row.reviewed_by !== null && (typeof row.reviewed_by !== "string" || !uuid.test(row.reviewed_by))) ||
