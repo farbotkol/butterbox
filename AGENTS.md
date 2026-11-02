@@ -39,6 +39,16 @@ FOH/BOH delegated-management model and existing application conventions.
   Done only after every criterion is verified; record genuine blockers and
   continue with independent ready work.
 
+## User documentation as part of Definition of Done
+
+- Maintain [the role-based User Guide](docs/USER_GUIDE.md) as a living source of user-facing instructions. After implementing or changing a feature, update the appropriate owner, manager, employee or payroll section with its actual tested behavior, permissions, error cases and limitations.
+- Treat **accurate user documentation** as a story completion requirement for all user-visible changes. Update existing guides and contextual help where present, while avoiding an unnecessary duplicate guide for each feature. For backend-only changes document operational impacts and explicitly mark user guidance as not applicable.
+- Where relevant, add accessible, contextual links/help in the application that lead to task-oriented explanations; do not block completion of a fully tested feature on creating a separate all-app help center, which is tracked in DOC epic.
+- Verify route/button wording and permissions against implemented code or a supported browser walkthrough; never invent UI labels, screenshots, functionality, or legal compliance claims. Mark partially delivered or blocked work transparently.
+- When documenting features, identify whether external delivery, production data access, legal sign-off or a provider integration is not yet available. Avoid writing customer-facing procedures for capabilities only planned.
+- Include a **Documentation: updated / not applicable (reason)** line in the story's acceptance evidence and status report. Missing documentation for a changed user-facing workflow must be corrected before marking the story Done.
+- Documentation workstream stories are in the `BB-DOC` epic of `BACKLOG_INDEX.csv` and `BUTTERBOX_PRODUCT_BACKLOG.md`. Complete them as separate ready work without falsely claiming in-app contextual help is already deployed.
+
 ## Risk-based, change-focused testing
 
 The default is targeted verification, not a full regression after every story.
