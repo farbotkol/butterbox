@@ -556,6 +556,16 @@
   deletion cascades, preservation controls and test cleanup before selecting a
   safe non-destructive partial safeguard. Do not enable permanent deletion or
   assume the proposed retention periods are approved.
+- As of 2026-11-02 11:05 UTC, an uncommitted forward migration rejects
+  business DELETE and TRUNCATE without a test-only bypass. It passed **17/17**
+  focused pgTAP assertions inside a rolled-back transaction and is not applied.
+  The first run's deferred-constraint setup and expected trigger-function
+  SQLSTATE were corrected and rerun. Existing pgTAP assertions and many
+  authenticated/browser fixture teardowns expect business deletion to succeed;
+  adapt them to the new preservation behavior without weakening security or
+  pretending retained synthetic fixtures were deleted. Then run affected
+  broader regression in the verified disposable project. The guard alone does
+  not prove complete record preservation, approved retention or hosted recovery.
 
 ## Recently completed story
 
