@@ -473,7 +473,7 @@
 
 ## Current story
 
-- **BB-RULES-005 — Privacy and retention policy** is In Progress, in planning.
+- **BB-RULES-005 — Privacy and retention policy** is In Progress, in testing.
   The four criteria cover point-in-time location, documented visibility and
   retention, employee access and correction, and preservation of required
   employment records. Location verification is off by default and collects
@@ -487,9 +487,14 @@
   but uncommitted. The forward migration passed **20/20** pgTAP assertions
   in a rolled-back acceptance transaction and was applied only to the
   verified disposable acceptance and replay projects. Focused Node tests
-  passed **12/12**, and changed-file ESLint and TypeScript passed.
-  Run affected database regressions and production-browser tests next.
-  Do not claim legal compliance or alter live records.
+  passed **12/12**, and changed-file ESLint and TypeScript passed. Seven
+  affected acceptance pgTAP files passed **410/410** assertions: personal
+  history, clock events, breaks, location, corrections, employee correction
+  requests and tenant isolation. Three files passed **174/174** on the
+  separate replay database. That replay initially lacked `auth.jwt()`; the
+  acceptance project's identical helper was installed inside each test
+  transaction and confirmed rolled back afterward. Production-browser
+  verification remains. Do not claim legal compliance or alter live records.
 - **BB-RULES-001 — Employment rule metadata** is Done and pushed as
   `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
@@ -1766,10 +1771,10 @@ not yet run remotely.
 
 ## Next story
 
-- Start **BB-RULES-005 — Privacy and retention policy** by checking existing
-  point-in-time location, visibility, employee correction access and record
-  preservation against all four acceptance criteria. Do not assume a legally
-  approved retention period or change live records.
+- Finish **BB-RULES-005 — Privacy and retention policy** by adding and running
+  the focused production-browser scenarios, recording criterion-level evidence,
+  and resolving or documenting the approved-retention and privileged-deletion
+  blocker. Do not assume a legally approved retention period or change live records.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
