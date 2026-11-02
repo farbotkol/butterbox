@@ -451,7 +451,10 @@
   The authenticated integration passed **1/1**, exercising competing
   same-revision metadata edits, a profile/metadata race, idempotent retry,
   live role revocation, department denial and two-tenant isolation.
-  Production build and browser verification remain.
+  The split production build and four focused browser scenarios initially
+  passed. An added mobile boundary check then exposed horizontal overflow for
+  maximum-length unbroken classification and reference text. The display has
+  been adjusted; rebuild and rerun that scenario before completing the story.
   The separate Award Central workstream remains isolated. No criterion has
   been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
