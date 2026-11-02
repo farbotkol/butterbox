@@ -174,3 +174,120 @@ These are operational and technical proof requirements, not further open product
 ### Record provenance
 
 Recorded after the product owner's explicit direction: *“For Butterbox DEC-003 / BB-SAAS-003, I choose a dedicated isolated demo business. When converting to a paying customer, start with a completely clean real business.”*
+
+---
+
+## DEC-004 — Historical credential exposure: assessment before rotation
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-FOUND-001 — Create production-ready application`
+- **Decision owner:** Butterbox product owner
+- **Status:** Assessment and classification authorized; remediation/rotation requires separate explicit approval
+
+### Confirmed decision
+
+The Main Roadmap Agent is authorized to **inventory, assess and classify suspected historical Supabase credential exposure** in the repository and accessible development checkpoint refs. **No credential rotation or other secret changes are authorized at this stage.** The agent must deliver a redacted findings report and proposed remediation actions for owner approval before changing credentials.
+
+The known report concerns historical keys in local Git checkpoint refs despite a clean current branch/checkout scan. This does **not** yet establish that a privileged, active or production secret was exposed. Determine key type, environment, historical locations, likely scope of access, revocation status where safely verifiable, and the relevant uncertainty.
+
+### Agent authority and safety boundaries
+
+**Authorized now:**
+- Read-only examination of the Main Roadmap Git history, accessible local checkpoint refs, current checked-out files and available repository metadata/secret-scanning alerts.
+- Non-invasive classification of candidate values as expected-public/publishable, local development, privileged server-side/service role, database credential, signing secret or unknown.
+- Use offline/redacted fingerprinting to correlate duplicates; record file paths, commit/ref references and abbreviated hashes only. Never expose secret values, tokens, private keys, or credential-bearing URLs in commits, prompts, issue comments, logs, status files or report output.
+- Review gitignore patterns, secret-handling documentation and secret-scanning safeguards; propose corrective changes, but do not create new secret-containing artifacts.
+- Produce a concise risk-ranked inventory and credential-dependency/rotation plan with explicit owner decision points. If an active privileged secret is suspected, report promptly through a private approved channel without reproducing it.
+
+**Not authorized without further owner approval:**
+- Rotating, revoking, regenerating, replacing, testing live privileged access with, or modifying **any** credential (including development/staging credentials).
+- Editing production infrastructure, modifying databases/customer records, changing Supabase project security settings or configuring new remote secrets.
+- Rewriting/removing Git history, deleting refs/branches/tags, force-pushing, deleting repositories or projects, or performing destructive cleanups.
+- Sharing findings containing actual credential strings in public GitHub or other external channels.
+- Penetration testing, trying credentials against remote endpoints, or performing privileged access tests beyond authorized read-only metadata review.
+
+If a high-severity, apparently valid privileged credential is found, **stop and escalate immediately** for expedited owner approval; do not wait for ordinary story completion or take unilateral action.
+
+### Deliverables for owner review
+
+A redacted report with one row per distinct finding:
+- Non-secret finding ID and type/classification.
+- Environment and likely privilege scope (production, staging, local, unknown).
+- Repository location, relevant commit or local ref and duplicate count without secret value.
+- Exposure/access surface (e.g. branch, checkpoint ref) and evidence basis.
+- Confidence, possible impact and severity, with uncertainty clearly noted.
+- Proposed rotation/revocation and dependency-update sequence **without executing it**.
+- Whether history remediation is justified after rotation and what it would affect across Core and Award Central branches.
+
+Record what was *not* assessed (unavailable refs, private infra, unknown key validity). Mark checks as verified only where actually supported by evidence; do not claim clean history just because HEAD is clean.
+
+### Completion and next steps
+
+1. Run the authorized **read-only** inventory and classification.
+2. Submit redacted findings and recommended remediation order to the owner.
+3. Request separate explicit owner approval for any credential rotation, secret-store updates or Git history operation.
+4. After approval and execution, independently verify that affected credentials were revoked, replacement-dependent integrations work, secret scanning is in place and no unresolved privileged exposure remains.
+5. Keep `BB-FOUND-001` **Blocked** until required remediation and acceptance evidence pass. Continue unrelated ready stories safely.
+
+### Record provenance
+
+Recorded after owner instruction: *“For Butterbox DEC-004 / BB-FOUND-001, I choose assessment and classification first, with separate approval before any credential rotation. Record this decision in the Main Roadmap GitHub decision log, specify the agent's safety boundaries and next steps.”*
+
+---
+
+## DEC-005 — Backup retention and disaster recovery release gate
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-FOUND-008 — Resilience and operations`
+- **Decision owner:** Butterbox product owner
+- **Status:** Recovery and retention targets approved as objectives; hosted validation deferred to pre-production; story remains Blocked
+
+### Confirmed decision and targets
+
+The owner elects to **defer a hosted backup-restoration/disaster-recovery rehearsal until pre-production**, rather than provisioning and paying for an isolated staging restore target immediately. This postpones verification; it is **not** an exception to the production release gate.
+
+Proposed operational objectives, **not measured capabilities or contractual commitments**:
+
+- **RPO: 15 minutes** — target maximum recoverable data-loss window.
+- **RTO: 4 hours** — target time to restore usable service.
+- **PITR recovery window: 7 days**.
+- **Daily backup retention: 30 days**.
+
+All targets require validation of the selected Supabase plan, backup/PITR availability, retention implementation, cost, restore permissions and actual measured recovery performance. Do not claim a 15-minute RPO from daily backups alone; determine whether supported continuous recovery/PITR and operational procedures can meet it. If plan capabilities or costs do not support the targets, escalate with alternatives and obtain a revised owner decision. Never describe targets as already achieved.
+
+Database backups are operational recovery artifacts, **not substitutes for employee-record retention or customer exit exports** under DEC-001. Apply least privilege, encryption, monitored job failures, lifecycle expiration, tenant/privacy safeguards and evidence of backup integrity. Coordinate backup expiry and retention exceptions with the separately reviewed privacy/legal schedule.
+
+### Permitted agent work during development
+
+1. Maintain the existing health/readiness, protected metrics, idempotent retry and backup/recovery runbook work.
+2. Document the target restore architecture, prerequisites, environment separation, access roles, dependency configuration, plan cost assumptions, recovery ordering, verification queries and incident escalation.
+3. Execute **non-destructive local/disposable** clean migration replay and synthetic fixture backup/restore checks, including tenant/RLS authorization, audit history, timestamp/timezone consistency, attendance/timesheet integrity and prevention of duplicate payroll exports after retry.
+4. Add risk-based automated tests and instrumentation to measure restore steps, detect backup failures and validate recovery-state integrity. Clearly label local and mocked evidence as *not a hosted disaster recovery rehearsal*.
+5. Record what remains unverified without waiting to continue independently ready Roadmap stories.
+
+Do **not** create or incur costs for hosted staging, activate/alter production backup plans, copy production customer data, restore into production, rotate credentials, remove retention safeguards or run destructive recovery operations without separate explicit owner authorization. Never restore onto a shared or unidentified database. All destructive local testing must verify an explicitly disposable target.
+
+### Mandatory pre-production release gate
+
+Before production activation or declaring disaster recovery ready, an authorized operator must:
+
+1. Identify and authorize an **isolated hosted staging restore destination** and a genuine configured backup/PITR source. Verify project identity, environment, permissions and whether data is synthetic or adequately protected.
+2. Verify actual backup scheduling, PITR window, daily retention period, storage/provider charges, encryption, access restrictions, alerts and backup expiration behavior.
+3. Rehearse restoring an actual backup/PITR point to the isolated destination **without overwriting production or another tenant's environment**.
+4. Measure achieved **RPO and RTO** end to end and compare with the 15-minute / 4-hour objectives. Document restore-point timestamps, incident start, restoration milestones, total elapsed time, integrity checks and any deviations.
+5. Confirm application restart/connectivity, authentication, tenant isolation, RLS, audit history, employee records, attendance, finalized payroll periods, reconciled exports and idempotency after recovery.
+6. Validate operational runbook reproducibility, monitoring/alerting, failure handling and independent review of evidence.
+7. Obtain owner approval of the tested recovery model and any residual risks; if objectives are not met, remediate/retest or explicitly revise the decision before launch.
+
+**Release status:** `BB-FOUND-008` remains **Blocked / Partially Complete** until hosted rehearsal and all acceptance evidence pass. A local database replay alone cannot close the story. A production go-live must not be represented as meeting these RPO/RTO or retention targets without the verification above.
+
+### Dependencies and future authorization
+
+- Supabase plan/pricing and hosted backup/PITR support (to be checked near pre-production).
+- Owner-approved staging project, backup source and suitably protected restore target.
+- Credential/access provision and observability for test operations.
+- Legal/privacy review of backup retention/expiration relative to employee record retention and DEC-001.
+
+### Record provenance
+
+Recorded after explicit owner instruction: *“Finalize Butterbox DEC-005: Hosted disaster recovery rehearsal is deferred until pre-production. Recovery objectives: 15-minute RPO and 4-hour RTO. Backup retention target: 7 days PITR plus 30 days daily backups. These are targets subject to Supabase plan capability, cost and verification.”*
