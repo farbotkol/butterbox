@@ -476,9 +476,15 @@
 - **BB-RULES-005 — Privacy and retention policy** is In Progress, in planning.
   The four criteria cover point-in-time location, documented visibility and
   retention, employee access and correction, and preservation of required
-  employment records. Inspect existing attendance, correction, export and
-  deletion behavior before choosing changes; do not assume a legally approved
-  retention period or alter live records.
+  employment records. Location verification is off by default and collects
+  a point only when clocking; the database stores derived checks rather than
+  raw device coordinates. Employees can request corrections and see decisions,
+  but there is no complete self-service history for ordinary uncorrected
+  events. The normal application cannot delete a business, but a privileged
+  business deletion cascades attendance; no legally approved live-record
+  retention or deletion policy has been established. Implement a scoped
+  employee history and honest visibility/retention documentation, then verify
+  the criteria. Do not claim legal compliance or alter live records.
 - **BB-RULES-001 — Employment rule metadata** is Done and pushed as
   `43ab17e9b03927f83db530a30f97df20cd58efd6`.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
