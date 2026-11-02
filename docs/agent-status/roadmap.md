@@ -1,21 +1,22 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 03:04:06 UTC (14:04:06 AEDT, UTC+11), observed from the Codespace clock
+- **Last report:** 2026-11-02 03:27:47 UTC (14:27:47 AEDT, UTC+11), observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
 - **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
-- **Agent execution state:** Active at this checkpoint, finishing verified work and saving recovery state. This timestamp does not prove continued execution after the response; no background scheduling is configured.
-- **Current story:** `BB-FOUND-008 — Resilience and operations` — verified partial implementation; Blocked, not Done
-- **Acceptance criteria:** FOUND-008.1 health/error metrics: Pass; FOUND-008.2 staging restore rehearsal: Blocked; FOUND-008.3 idempotent retry behaviour: Pass through existing authenticated regressions; FOUND-008.4 documented backup retention: Pass for documentation only, not deployed retention verification
-- **Phase:** Blocked (staging restore); local implementation/testing Complete
-- **Current activity:** Saving the verified checkpoint and integrating the owner's newly added reporting requirements without overwriting concurrent work
-- **Progress since previous report:** BB-FOUND-007 is Done with all three criteria verified: atomic attributed before/after/reason history, owner-only filtering, immutable records. BB-FOUND-008 adds bounded database readiness, protected process-scoped metrics, redacted request-error instrumentation, and backup/recovery guidance.
-- **Passing tests:** Final clean 47-migration isolated replay; 2,121/2,121 pgTAP assertions across 46 files; 19/19 authenticated integrations; 146 Node tests (19 integrations skipped in the unit-only run and passed separately); ESLint; TypeScript; split production compile/generate; 57/57 serialized production-browser scenarios. A real hanging dependency verified the three-second readiness deadline with scheduling tolerance. Readiness failure/recovery, metric authentication and counters passed on the disposable project.
-- **Failing tests:** None remaining. Earlier audit validation accidentally selected legacy pre-migration rehearsal scripts; the complete transactional suite passed after selecting its explicit directory. An initial Node test used an unsupported mocking API; replaced with scoped environment restoration and reran successfully. No legitimate assertions were removed.
-- **Blockers requiring owner intervention:** FOUND-008 needs an explicitly authorised isolated hosted staging project, secure restore/backup access and approval/provisioning of recovery targets. No staging restore, retained hosted backups or external alert delivery is claimed. FOUND-001 historical credential assessment, SAAS-003 production/sample-data assessment and PAY-004 authorised AU Xero Payroll test access remain blocked.
-- **Next concrete action:** Start `BB-SHIFTS-001 — Offer open shift` independently, reusing current venue/role/availability/conflict checks; follow with BB-SHIFTS-002/003 before completing offer notifications in BB-COMMS-002. Resume staging recovery acceptance only after the owner identifies and authorises its isolated target.
-- **Latest development commit:** `b4bfd02` (operational resilience partial checkpoint); completed audit story `012e07c`
-- **Push outcome:** Initial push rejected because concurrent owner documentation advanced the branch. Merged those commits without rewriting history as `937f823`. The OAuth helper then refused the CI workflow change due to missing workflow scope; the existing authorised Codespace GitHub token successfully pushed it. Remote SHA was verified as `937f8235a04913e03d7cb8a51f61773749a39a8d` at the reported timestamp. This subsequent status-only checkpoint is committed/pushed separately.
+- **Agent execution state:** Active at this checkpoint. The timestamp does not prove later execution; no background scheduling is configured.
+- **Current story:** `BB-SHIFTS-001 — Offer open shift` (starting)
+- **Phase:** Planning
+- **Current activity:** Adopting the owner-directed risk-based, change-focused testing policy in `AGENTS.md`, then starting BB-SHIFTS-001.
+- **Progress since previous report:** `AGENTS.md` now makes targeted verification the default. It lists tests by change type, Done criteria without a full-repository run, the triggers for broader regression, and reporting of selected and deferred tests.
+- **Testing policy in effect:** Targeted verification. Documentation/status checkpoints run no tests.
+- **Tests selected for this checkpoint:** None (documentation only).
+- **Tests intentionally deferred:** All suites. The last full regression was at `b4bfd02` (2,121 pgTAP, 19 integrations, 146 Node, 57 browser).
+- **Remaining verification risks:** None introduced by documentation.
+- **Failing tests:** None known.
+- **Blockers requiring owner intervention:** FOUND-001 credential assessment/rotation; FOUND-008 authorised staging restore target; SAAS-003 production/sample-data assessment; PAY-004 Xero is deferred pending explicit owner authorisation.
+- **Next concrete action:** Read BB-SHIFTS-001 criteria and implement open-shift offers, reusing the existing eligibility, availability and conflict helpers.
+- **Latest development commit:** `b4bfd02`; latest branch commit before this checkpoint `ba1d7d3`
+- **Push outcome:** Recorded after this checkpoint is pushed.
 - **Backlog:** 109 total; 40 Done, 1 In Progress, 4 Blocked, 64 Backlog
-- **Resources/safety:** 8 CPUs, 31 GiB RAM, approximately 30 GiB free disk (disk guard stayed above 29 GiB during testing). Disposable project `butterbox-acceptance`, API 55421/database 55422; no production/shared database changes, deployment, history rewrite, volume or cache cleanup. Temporary browser servers stopped.
 
 Detailed criterion evidence and recovery steps are in `IMPLEMENTATION_PROGRESS.md`.

@@ -1541,6 +1541,17 @@ not yet run remotely.
   Original and correction timestamps retain microseconds, while displayed
   durations round only for presentation.
 
+## Testing policy (owner-directed, 2026-11-02)
+
+- Default verification is now targeted and change-focused (see `AGENTS.md`).
+  Full pgTAP, integration, browser, Node and build runs are reserved for
+  risk-based triggers such as shared authorisation, migration compatibility,
+  payroll foundations, workstream merges and release signoff.
+- Each story records the tests selected and why, actual results, tests
+  deferred, remaining risks and any later broader regression needed.
+- Last full regression baseline: `b4bfd02`, with 2,121/2,121 pgTAP
+  assertions, 19/19 integrations, 146 Node tests and 57/57 browser scenarios.
+
 ## Next story
 
 - Next independent ready workflow: **BB-SHIFTS-001 — Offer open shift**.

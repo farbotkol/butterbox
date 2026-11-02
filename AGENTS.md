@@ -26,9 +26,7 @@ FOH/BOH delegated-management model and existing application conventions.
   Include scoped server-side authorization, tenant isolation, validation,
   failure states, accessibility and mobile behaviour where relevant.
 - Test successful, invalid, unauthorized, cross-tenant and concurrency paths as
-  applicable. Run targeted Node unit, Supabase pgTAP, authenticated integration
-  and Playwright production-browser tests, plus ESLint, TypeScript and a
-  production build. Run broader regression suites at meaningful checkpoints.
+  applicable, using the risk-based testing policy below.
 - Use only an explicitly identified isolated, disposable Supabase project for
   database migrations and destructive test resets; verify its project ID and
   ports first. Never perform destructive tests on shared or production data.
@@ -40,6 +38,46 @@ FOH/BOH delegated-management model and existing application conventions.
   evidence, test, actual result and Pass, Fail or Blocked status. Mark a story
   Done only after every criterion is verified; record genuine blockers and
   continue with independent ready work.
+
+## Risk-based, change-focused testing
+
+The default is targeted verification, not a full regression after every story.
+
+- After each change, identify the affected files, components, database objects
+  and workflows. Run the smallest meaningful set of tests that verifies them and
+  their direct dependencies. Fix failures and rerun only the affected tests.
+- By change type:
+  - **Documentation or status only:** no tests.
+  - **UI only:** targeted unit tests and relevant accessibility/browser checks.
+  - **API or business logic:** relevant unit and integration tests, including
+    failure and authorisation paths.
+  - **Schema or RLS:** apply migrations safely in the isolated project, then run
+    the affected pgTAP files and tenant-isolation checks.
+  - **Attendance, timesheet or payroll:** targeted workflow, permission and
+    relevant idempotency/concurrency cases.
+  - **Shared authorisation, identity or tenant context:** a broader set of
+    impacted security and cross-tenant regressions.
+  - **Award or pay rules:** affected rule fixtures, boundaries and
+    deterministic outcomes. Never infer compliance from unrelated passing tests.
+- Run ESLint and TypeScript on the changed code. Run a production build when
+  routes, Next.js configuration or server/client boundaries change, rather than
+  for every edit.
+- A story is Done when every criterion is implemented, the relevant targeted
+  tests pass, the required negative, security and edge cases are verified, and
+  no known blocking defect remains. A full-repository run is not required.
+- Broaden testing, affected suites first, only for:
+  - major shared architectural changes;
+  - authorisation or tenant-isolation changes across modules;
+  - migration compatibility or significant shared-schema changes;
+  - payroll calculation foundation changes;
+  - merging the Award Central and Roadmap workstreams;
+  - release, deployment or production-readiness signoff;
+  - unexpected failures suggesting a larger blast radius.
+- Prefer focused pgTAP files, browser greps, small fixtures and the existing
+  environment over full resets or repeated rebuilds.
+- Record the tests selected and why, actual results, tests intentionally
+  deferred, remaining verification risks, and any need for broader regression
+  later. Never claim full regression coverage that was not run.
 
 ## Security and operational safeguards
 
