@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **51**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **69**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **52**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **69**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -680,7 +680,7 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-BRAND-001 — Organize and govern brand assets: In Progress.** Ready
+**BB-BRAND-001 — Organize and govern brand assets: Done.** Ready
 Showcase P0; REPORT-001 feature `efd9c77` pushed and remote SHA matched.
 Documentation-only scope: inventory source/derivative paths, hashes, versions,
 custodians, known provenance, unverified rights and owner-review states;
@@ -689,7 +689,27 @@ contribution, storage, release and replacement procedures. Existing app marks
 are present but not evidence of final owner identity approval. Do not generate,
 upload, rename or approve artwork. Verify every inventory path and checksum;
 no application tests are needed for unchanged runtime code.
-Documentation: operational asset guidance underway; no new user workflow.
+Delivered `branding/ASSET_INDEX.csv` and expanded `branding/README.md`.
+Verified on 2026-11-02 at 18:58 UTC: **15 records**, **10 present**, **5 missing**;
+all present SHA-256 values match, paths/IDs are unique and inside the repo,
+parent references exist, metadata fields are populated, and all seven public
+SVGs are covered. No item is marked owner-approved; ten are unreviewed and five
+are existing drafts. Current marks are distinct implementations, not a final
+approved identity. Unknown rights are explicitly unverified, not licensed by
+assumption. The five PNG references still have no binaries.
+
+| Criterion | Implementation evidence | Verification and actual result | Status |
+| --- | --- | --- | --- |
+| BRAND-001.1 — source/derivative inventory | CSV records paths, use, source commit/version, parent and custody | Checked 15 unique rows, ten source hashes, parent IDs and public SVG coverage | Pass |
+| BRAND-001.2 — provenance and approval | Known Git/catalogue origin, rights gaps, inventory reviewer and explicit owner-review pending states | All metadata populated; five missing, five draft and five other unreviewed present assets; zero approved claims | Pass |
+| BRAND-001.3 — safe procedures | README contribution/storage/privacy/release/replacement/rollback instructions | Read against owner-approval, no-secrets, preservation and separate campaign/deployment gates; no artwork or runtime changes | Pass |
+| BRAND-001.4 — existence | Reproducible presence/hash check in README | Ten present files match hashes; all five advertised absent PNGs explicitly missing | Pass |
+
+Documentation: updated — operational asset governance; User Guide not applicable
+because no user workflow changed. Runtime tests, lint, type-check and build
+intentionally not run for this documentation-only story. Remaining risk:
+owner/rights approval, missing binaries and final variants remain work for
+BRAND-002 onward, not implied complete by the inventory.
 
 ## Latest completed reporting story
 

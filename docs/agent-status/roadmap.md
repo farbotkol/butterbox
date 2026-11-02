@@ -1,24 +1,24 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 18:55 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-02 18:58 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
 - **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
 - **Agent execution state:** Active at this checkpoint. The timestamp does not prove later execution; no background scheduling is configured.
-- **Current story:** `BB-BRAND-001 — Organize and govern brand assets` (In Progress; ready Showcase P0)
+- **Current story:** `BB-BRAND-001 — Organize and govern brand assets` (Done; verified documentation checkpoint)
 - **Acceptance criteria:** BRAND-001.1 versioned ownership inventory; .2 provenance/rights/reviewer states; .3 safe contribution/storage/release/replacement; .4 existence or explicit missing designation.
-- **Phase:** Planning
-- **Current activity:** Inventorying existing app SVG, component and styling sources and absent concepts; no artwork creation or identity approval.
-- **Progress since previous report:** REPORT-001 feature committed/pushed and exact remote SHA verified. Brand criteria permit explicitly missing assets; final logos remain separately owner-gated.
+- **Phase:** Complete
+- **Current activity:** Reviewing and pushing the verified brand-governance catalogue.
+- **Progress since previous report:** Added 15-record inventory and contribution/storage/release/replacement procedures; all four criteria Pass. No artwork, app identity or owner approval changed.
 - **Testing policy in effect:** Targeted verification.
-- **Tests selected and actual results:** Report pgTAP **39/39** plus directly dependent weekly/approval/isolation **129/129**; report/weekly/approval/pagination Node **25/25**; authenticated production mobile/desktop browser **1/1** including axe and denial paths. Changed-file ESLint, TypeScript and split production build passed. ATTEND-006's earlier passing evidence is retained in implementation progress.
-- **Tests intentionally deferred:** Full repository suites were not rerun; broader migration/security regression remains appropriate at workstream merge or release.
-- **Remaining verification risks:** No hosted rollout, large-tenant performance, production payroll or compliance verification. The local acceptance project is not the isolated customer-facing demo. Disk guard stayed at 29 GiB free.
-- **Documentation:** Report User Guide updated. Current story is operational asset governance; no runtime user guidance applies.
-- **Failing tests:** None in latest runs. Corrected bulk-fixture omitted break_minutes, missing query count options and implicit-label test locator; final full scenario passed without weakening assertions.
+- **Tests selected and actual results:** Documentation inventory verification passed: 15 unique records, 10 matching source hashes, 5 explicitly missing PNGs, valid metadata/parents and all seven public SVGs covered. No runtime tests required. Report's previous 168 pgTAP/25 Node/production browser, lint, TypeScript and build evidence remains in implementation progress.
+- **Tests intentionally deferred:** Runtime suites not rerun for docs-only changes; full regressions remain reserved for meaningful triggers.
+- **Remaining verification risks:** Rights and owner approval are unverified; no binaries supplied for the five concepts. No final variants or approved guidelines are claimed. Separate demo deployment remains unverified.
+- **Documentation:** Updated — branding README and asset index; User Guide not applicable because no user workflow changed.
+- **Failing tests:** No runtime changes/tests in this story. Initial diff check found Markdown hard-break whitespace; corrected.
 - **Blockers requiring intervention:** Immediate private owner/security review of the privileged candidates; FOUND-001 remediation/rotation and history changes require separate authorization. RULES-005 legal retention and recovery remain unverified; ORG-006 external delivery decisions remain outstanding; FOUND-008 hosted restore is deferred to pre-production; SAAS-003 requires production assessment and a separate demo environment. PAY-004 remains deferred.
-- **Next concrete action:** Add traceable asset inventory and procedures, verify paths/checksums and record four criterion outcomes. No runtime tests required for docs-only changes.
+- **Next concrete action:** Commit/push the verified catalogue, then select remaining ready P0 documentation or safe isolated demo work.
 - **Latest development commit:** `efd9c774d68491417033e11ab60b9cba69b015d6`
 - **Push outcome:** Report feature pushed to assigned branch; `git ls-remote` matched its exact SHA.
-- **Backlog:** 127 total; 51 Done, 1 In Progress, 6 Blocked, 69 Backlog
+- **Backlog:** 127 total; 52 Done, 0 In Progress, 6 Blocked, 69 Backlog
 
 Detailed criterion evidence and recovery steps are in `IMPLEMENTATION_PROGRESS.md`.
