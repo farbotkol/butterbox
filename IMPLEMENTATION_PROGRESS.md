@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **57**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **64**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **63**.
 - BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
   and mobile employee baseline journeys; actual login/navigation, sample
   download and permission failures verified in **4/4** focused production
@@ -699,11 +699,19 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**Selecting the next ready P1 operational story.**
-DOC-003 is verified below. Remaining Showcase P0 identity work requires owner
-approval. Inspect configured roster-change/employment safeguards before
-scenario-driven SHIFTS-005; complete genuine prerequisites first. Preserve
-Award Central separation and all owner-dependent blockers.
+**BB-COMMS-001 — Send announcements: In Progress (Planning).**
+DOC-003 `b051a4a0d3c56b299c21ce602cc40e941caa3ef2` pushed; exact remote SHA
+verified. Remaining Showcase P0 identity work requires owner approval.
+Scenario-driven SHIFTS-005 needs employment/change-warning safeguards; those
+configuration fields/workflows are absent, so do not claim that story ready
+merely because Dependencies is blank. Select independent in-app COMMS-001 P1,
+reusing the verified COMMS-002/permission/audit foundations.
+Implement business/venue/department-scoped immutable notices, frozen recipient
+history and required acknowledgement receipts; external delivery is excluded.
+Plan focused scope/tenant/invalid/immutable/idempotency database tests, Node
+validation, authenticated races and real scoped/mobile browser checks.
+Acceptance criteria COMMS-001-AC1 through AC4 are not yet verified.
+**Documentation: pending** tested functionality; do not advertise this workflow.
 
 ## Latest completed contextual-help story
 
