@@ -122,3 +122,55 @@ Implement a central event urgency classification, timezone-aware quiet-hour sche
 ### Record provenance
 
 Recorded after the product owner's explicit instruction: *“For Butterbox DEC-002 / BB-ORG-006, my roster week configuration choice is configurable by venue, Monday default, prospective changes. My notification choice is essential in-app on by default and optional email/push. Additional requirements: SMS AND WhatsApp Are additional options.”*
+
+---
+
+## DEC-003 — Isolated demonstration business and clean customer conversion
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-SAAS-003 — Tenant onboarding and support`
+- **Decision owner:** Butterbox product owner
+- **Status:** Product direction approved; production isolation and legacy-data verification outstanding
+
+### Confirmed product decision
+
+1. Butterbox will offer **a dedicated, clearly labeled, isolated demo business** for demonstration and evaluation. Demo/sample records must not be inserted into genuine customer operating businesses.
+2. When a demo prospect becomes a paying customer, they **start with a completely clean real business** using the standard onboarding flow. **No demo data or configuration is migrated** to the production customer tenant: no example employees, rosters, timesheets, payroll records, approvals, roles, venue settings or other simulated records.
+3. The existence of a demo must never auto-enable sample-data generation for real tenants. Existing sample-data behavior is disabled by default, and only explicitly authorized demonstration operations may create demo records.
+4. Demo data must be visibly marked as fictional and must never be processed as genuine attendance, payroll, employment compliance evidence, production reports or messages to real workers.
+
+### Main Roadmap Agent implementation instructions
+
+- Establish and document an **isolated demo boundary**. Prefer a separately configured demonstration deployment/database/project, with different credentials, integrations and storage from live customer production. A specially labeled tenant alone is not sufficient proof of hard environmental isolation. If hosting isolation is not yet available, retain fail-closed disabled status rather than implying deployment is ready.
+- Restrict demo creation, resets and access to authorized users. Tag demo records and environments explicitly; guard all API, onboarding, invitation, reporting, job, payroll, outbound notification, export and integration paths against accidental production use.
+- Hard-disable real payroll exports, live worker invitations and any external email/SMS/push/WhatsApp delivery in the demo unless a deliberately isolated test provider/recipient configuration is in place. Use synthetic people and test credentials only.
+- In production, default sample generation **off** with server/database enforcement, not merely a hidden button. Remove or constrain any operator override that could enable sample insertion into live customer tenants without the approved isolation controls.
+- On conversion, create a **new clean real tenant** through normal business → venue → staff → shift → publish onboarding. Do not copy the demo business, its configurations or any records; establish fresh permissions and tenant identity. No demo-tenant foreign keys, derived records or artifacts should remain linked to the new tenant.
+- Make demo status prominent in the UI and any exports; record audited demo provisioning/reset/deletion and clean real-tenant creation.
+- Keep the existing onboarding checklist and inline help functioning for genuine new tenants.
+
+### Acceptance and evidence required
+
+Run focused tests in disposable/authorized environments for:
+
+1. Distinct demo vs production project/database, credentials and storage boundaries; no shared write path.
+2. Two-tenant authorization/RLS and scoped demonstration access.
+3. Attempted sample insertion into live customer businesses, including privileged paths and direct API access: deny by default.
+4. Demo signup/invitation and external provider paths: no real outbound delivery, payroll or financial processing.
+5. Demo-to-paid conversion creating a fresh, blank operational tenant; assert zero demo employees, roles, configuration, shifts, attendance, timesheets, payroll records and links are copied.
+6. Concurrent/retried conversion, idempotent provisioning and recovery from partial failures.
+7. Onboarding checklist and help remaining usable; visible demo labels and accessible UI.
+8. Existing production historical-data assessment: check whether any sample data was already inserted. Do not assume an empty historical state or perform unapproved deletion; document findings and safely quarantine/remediate under owner authorization.
+
+### Remaining verification blockers
+
+- **Production access/owner authorization:** No verified production environment inventory or evidence that historic sample/demo records are absent. A scoped, read-only assessment is required before claiming clean production separation.
+- **Demo infrastructure:** Confirm provisioning, credentials, permissions, storage, integration keys and an actual separate demo environment. Do not copy production datasets or secrets into demo.
+- **Operational safeguards:** Demonstrate that privileged operator controls cannot bypass sample restrictions or route outbound effects into real providers.
+- **Migration/conversion acceptance:** Prove new real customers start with an entirely clean tenant and no sample configuration copied.
+
+These are operational and technical proof requirements, not further open product-preference questions. Maintain `BB-SAAS-003` as **Blocked / Partially Complete** until the full acceptance criteria and production-isolation evidence pass. Continue unrelated ready roadmap work.
+
+### Record provenance
+
+Recorded after the product owner's explicit direction: *“For Butterbox DEC-003 / BB-SAAS-003, I choose a dedicated isolated demo business. When converting to a paying customer, start with a completely clean real business.”*
