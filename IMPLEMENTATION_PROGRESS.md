@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **53**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **68**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **67**.
 - At 18:25 UTC, owner commits added a separate Showcase priority overlay and
   five internal-demo stories while preserving original roadmap priorities and
   statuses. Finish or safely checkpoint the active attendance-alert story,
@@ -679,6 +679,29 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-DEMO-001 — Isolated synthetic showcase café: In Progress (Planning).**
+DOC-001 `db7e37c` pushed and remote SHA matched. Observed capacity:
+8 CPUs, 31 GiB total RAM / 25 GiB available, approximately 30 GB free disk.
+Existing projects remain `butterbox` (54321/54322), acceptance (55421/55422)
+and fresh-migration replay (56422). None is a ready user-facing demo.
+No volumes, worktrees, databases or existing uncommitted work removed.
+
+Next: verify a distinct local showcase project configuration, independently
+generated credentials/signing boundaries, unused ports and private reviewer
+endpoint before any fixture seed. Local Mailpit only; no external delivery,
+provider credentials or actual payroll transmission. A differently named
+project with shared default development keys is not adequate credential
+isolation. Use the supported CLI configuration rather than modifying or
+rotating existing stack credentials. No paid hosted infrastructure is authorized.
+Only after that proof, implement resettable 12–15-person FOH/BOH fixtures,
+availability, roster, attendance/correction and approved sample CSV workflows,
+visible simulation labels and targeted isolation/reset checks. Preserve the
+broader SAAS-003 production assessment/conversion gates.
+Documentation: operational guidance pending implemented and tested setup.
+No DEMO-001 criterion is Pass yet.
+
+## Latest completed documentation story
 
 **BB-DOC-001 — Validate and expand role-based user guide: Done.**
 Selected ready Showcase P0 after BRAND-001 `c1ddaf3` was pushed with its remote
