@@ -378,18 +378,20 @@
   publication and acknowledgement assertions fail. A new uncommitted
   forward-only migration now follows the existing shared-worker and employee
   lock order. With that replacement applied only inside a rolled-back
-  transaction, the expanded swap pgTAP file passed **58/58** on the
-  identified isolated acceptance database, including response-profile
-  authorisation. The committed migration was not changed, and the correction
-  has not yet been permanently applied to the test project. Employee and
-  manager interfaces, selected-business notification links and validated
-  response parsing are implemented but uncommitted and not browser-tested.
-  Four targeted Node test files passed **14/14**, changed-file ESLint and
-  TypeScript passed. The tracked lint cache removed by ESLint was restored to
-  its unchanged original state. Next: safely apply the migration to the
-  disposable project; add authenticated cross-workflow concurrency and mobile
-  browser tests; run neighbouring publication, acknowledgement and
-  notification checks. Full suites were intentionally deferred. No swap
+  transaction, the expanded swap pgTAP file passed **58/58**, including
+  response-profile authorisation. The correction was then applied with the
+  Supabase CLI to the verified disposable acceptance project only. The swap,
+  acknowledgement, publication-version, publication-notification, open-offer
+  and shared-worker pgTAP files passed **345/345 assertions**. The targeted
+  authenticated integration passed **1/1**, covering cross-tenant/BOH denial,
+  concurrent manager approvals and both directions of linked-venue scheduling
+  races. Employee and manager interfaces, selected-business notification
+  links and validated response parsing are implemented but uncommitted and not
+  browser-tested. Four targeted Node test files passed **14/14**, changed-file
+  ESLint and TypeScript passed. The tracked lint cache removed by ESLint was
+  restored to its unchanged original state. Next: run the isolated serialized
+  production build and new mobile/desktop browser scenario, fix failures and
+  verify every criterion. Full suites were intentionally deferred. No swap
   criterion is yet marked Pass end-to-end.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
