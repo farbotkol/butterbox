@@ -6,11 +6,12 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:29 UTC, an uncommitted migration and focused test implement
-  the initial device and clock transactions; a rollback-only database
-  preflight passed **55/55** assertions. The migration has not been applied.
-  Device and employee UI, authenticated concurrency, browser acceptance and
-  final verification remain outstanding; no full criterion is yet Passed.
+  2026-11-02 12:38 UTC, the uncommitted device and employee UI and transaction
+  migration are implemented but not runtime-verified end to end. A rollback-only
+  database preflight passed **59/59**, focused kiosk/audit Node tests **8/8**,
+  changed-file ESLint and TypeScript passed. The migration has not been applied;
+  authenticated concurrency, browser acceptance and final verification remain
+  outstanding. No full criterion is yet Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -646,7 +647,7 @@ settings/delivery still require their own implementation and verification.
 
 - **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
   `20261103160000_attendance_qr_kiosks.sql` and
-  `attendance_qr_kiosks.test.sql` passed **55/55** assertions in a rolled-back
+  `attendance_qr_kiosks.test.sql` passed **59/59** assertions in a rolled-back
   preflight on the verified disposable acceptance project. Owners create a
   device-specific, one-use 15-minute activation credential; the device gets a
   separate 30-day credential, not an owner session. Codes are HMAC-signed,
@@ -658,15 +659,19 @@ settings/delivery still require their own implementation and verification.
   - **004.2 (replay denied):** sequential database preflight passed;
     **Blocked** on concurrent and end-to-end verification.
   - **004.3 (controlled display):** owner/device authorization preflight
-    passed; **Blocked** on the device UI and browser verification.
+    passed; **Blocked** on device UI browser verification.
   - **004.4 (server clock validation):** state, tenant, timestamp and geofence
     preflight passed; **Blocked** on integration and employee UI verification.
   A short-lived code can still be photographed and relayed; this does not
   establish physical presence or replace configured geofence review.
   **Documentation:** pending; update the role-based user guide after the
   implemented UI and its tested wording are verified.
-  Next implement device activation/display and authenticated employee clocking,
-  then test races, authorization and browser/mobile failure paths. Full
+  Device activation/display and authenticated employee clocking are written
+  but not yet browser-tested. An audit-source parser gap affecting both this
+  story and the preceding planning-week slice is also fixed in uncommitted
+  code. The initial package command and first lint attempts failed; their
+  manifest and React-lifecycle issues were corrected and the selected checks
+  passed. Next test races, authorization and browser/mobile failure paths. Full
   repository suites are deferred; affected attendance and tenant suites will
   run after the migration is safely applied to the isolated project.
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
