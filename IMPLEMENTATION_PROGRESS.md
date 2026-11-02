@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **55**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **66**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **65**.
 - BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
   and mobile employee baseline journeys; actual login/navigation, sample
   download and permission failures verified in **4/4** focused production
@@ -698,6 +698,22 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-DOC-002 — Searchable in-app HTML help center: In Progress (Planning).**
+DEMO-002 `769b5b93659eeb59622edf7a4913e3e8ae7a8bad` pushed with exact remote
+SHA verified. Remaining Showcase P0 branding/UI work lacks final owner-approved
+identity. Select independent ready P1 DOC-002 (DOC-001 prerequisite Done).
+Render repository-maintained guide sections, not a separately hand-coded HTML
+copy. Authenticate and resolve current membership server-side; whitelist task
+visibility by effective role, ignore user-supplied role overrides and preserve
+business scoping. Provide accessible native search/category/navigation,
+controlled Markdown rendering and explicit empty/invalid/denied states.
+Use existing app shell/navigation; no database or shared authorization changes.
+Targeted parser/rendering/scope tests, lint/types, production build and real
+mobile/browser search/permission checks planned. Documentation update pending
+actual tested behavior. No DOC-002 criterion verified yet.
+
+## Latest completed guided showcase story
 
 **BB-DEMO-002 — Guided owner, manager and employee showcase journeys: Done.**
 Selected next ready Showcase P0 after DEMO-001 `a984d6c6563cb324cf6c3bcb3c21a67b5e329f91`
