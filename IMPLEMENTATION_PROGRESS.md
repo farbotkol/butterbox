@@ -12,7 +12,7 @@
   verified isolated environment and synthetic data; it is not production
   approval, paid infrastructure authorization or legal/payroll sign-off.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
-  2026-11-02 18:23 UTC. Its database implementation is applied only to the
+  2026-11-02 18:29 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
   seven adjacent files passed **440/440**, and a scheduled worker invocation
   succeeded. A follow-up notification-read migration passed **66/66** focused
@@ -23,8 +23,9 @@
   project; **66/66** focused and **285/285** adjacent assertions passed.
   The authenticated scheduler/concurrency integration passed **1/1** after
   correcting an earlier scan-time expectation; it verified real cron alert
-  creation, scope, retries, revocation and locking races. Production build
-  and browser acceptance remain outstanding. No
+  creation, scope, retries, revocation and locking races. The split production
+  build passed; the new alert browser scenario timed out and must be
+  diagnosed and rerun. No
   acceptance criterion is yet claimed complete.
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
@@ -722,8 +723,12 @@ settings/delivery still require their own implementation and verification.
   priority and the locally updated ATTEND-006 evidence; uncommitted feature
   files were not overwritten. Merge checkpoint
   `f1100dbc066aa4c0c097e0183ff13498f0f838bd` was pushed and its remote SHA
-  matched. The split production build and serialized focused alert,
-  notification, shift-swap and kiosk browser tests are running.
+  matched. The split production build passed. The first serialized alert
+  browser scenario timed out after 150 seconds; its exact blocking step is
+  under investigation. The selected QR kiosk, shift-swap and two
+  published-roster notification browser regressions passed (4/4). A retained browser fixture
+  had no enabled monitoring policy; cleanup and the scenario must be
+  investigated before completion.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
