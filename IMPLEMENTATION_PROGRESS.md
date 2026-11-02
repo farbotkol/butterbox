@@ -3,8 +3,16 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **37**. In Progress: **3**.
+  BB-PAYRULES stories). Verified Done: **38**. In Progress: **2**.
   Blocked: **3**. Not started (Backlog): **66**.
+- BB-ROSTER-008 (publish and notify) is Done. With invitations available, a
+  publication to an uninvited worker stays pending. The worker receives exactly
+  one unread in-app update after accepting, and the manager warning links to
+  People to invite them. Email/push delivery remains BB-COMMS-003. Regressions:
+  **2,085/2,085** pgTAP assertions (77 notification assertions), **136** Node
+  tests, ESLint, TypeScript and **52/52** production-browser scenarios,
+  including the split production build. No migration or integration-relevant
+  code changed after the 19/19 integration run.
 - BB-FOUND-005 (invitations) is Done. Verified existing members of another
   business can now accept a scoped invitation; they gain only an employee
   membership for the invited venue and department and keep their other
@@ -24,7 +32,7 @@
 - Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-005, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
-  BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
+  BB-ROSTER-007, BB-ROSTER-008, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
   BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002 and BB-PAY-003.
 - BB-ORG-005's remaining approval/export attribution criterion is now verified,
@@ -329,8 +337,12 @@
   former cross-business rejection was removed by a new migration now that
   BB-FOUND-006 resolves the business per request. Manager-page permission
   redirects now keep the business context, so multi-business users see the
-  intended business instead of the chooser. Next: **BB-ROSTER-008 — Publish
-  and notify**.
+  intended business instead of the chooser. Committed as
+  `540ed3f3e650f83e3a17c6dfe88bbfc2702e812f`; the remote SHA matched.
+- **BB-ROSTER-008 — Publish and notify** is Done. The final open criterion
+  (ROSTER-008.3) is verified for invited staff. In-app delivery is the
+  notification channel; email/push belongs to BB-COMMS-003. Next:
+  **BB-SAAS-004 — Performance and accessibility**.
 - **BB-FOUND-006 — Switch between business memberships** is Done (evidence
   below), committed as `92f4841d21c89b4bfbf3e3c5d7bbf678aac70bc3`; the remote
   SHA matched.
@@ -447,7 +459,8 @@
 - **BB-ORG-005 — Multiple venues** is Done: scoped selection, cross-venue
   conflicts and approval/export attribution are verified in the final
   2,072-assertion, 18-integration and 50-browser-scenario regressions.
-- **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
+- **BB-ROSTER-008 — Publish and notify** is now Done (see the Current story
+  section). Earlier checkpoint notes: configured local
   and cross-venue blockers prevent publication atomically, and concurrent conflicting edits
   return an explicit retry. Numbered versions, complete protected snapshots and
   a scoped manager history are verified. In-app publication updates now reach
@@ -1054,13 +1067,13 @@ and README. Enforcement is opt-in; new same-profile overlaps remain blocked by
 existing rules. Link changes and scheduling use coordinated locks; workers are
 never matched automatically or granted access by a link.
 
-### BB-ROSTER-008 — Publish and notify (In Progress)
+### BB-ROSTER-008 — Publish and notify (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ROSTER-008.1 Draft changes stay private until publication | RLS restricts drafts to authorized managers and the personal schedule reads only published assignments. | Existing two-tenant/scoped SQL and production-browser schedule tests passed in the 708-assertion and 25-scenario regressions. | Pass |
 | ROSTER-008.2 Published version is recorded | Each successful publication atomically creates a per-department/week version and complete shift snapshot, with actor and venue-local context. Managers see their scoped history; no-op and blocked publications create no version. Pre-existing publications are not retroactively fabricated. | 47 focused pgTAP assertions pass for snapshots, immutability, permissions, no-op and blocked cases; simultaneous publication integration produces ordered complete snapshots; production Chromium verifies history and two versions. | Pass |
-| ROSTER-008.3 Impacted employees are notified once | Each new publication creates one in-app update per affected account, deduplicating multiple shifts and profiles. Unlinked profiles retain a pending update; managers see inaccessible-profile counts. Email/push and staff invitation are not implemented. | 69 isolated SQL assertions cover deduplication, later linking, revoked access, tenant/role scope, no-op/blocked publication and read state. Concurrent publication and duplicate reads pass. Production Chromium verifies mobile notices, read state, pending linking and own-schedule deep links. | In Progress |
+| ROSTER-008.3 Impacted employees are notified once | Each new publication creates one in-app update per affected account, deduplicating multiple shifts and profiles. Unlinked profiles retain a pending update. Managers see inaccessible-profile counts, with a link to People to send a staff invitation (BB-FOUND-005). In-app delivery is the notification channel; email/push is BB-COMMS-003. | 77 isolated SQL assertions cover deduplication, later linking by owner or invitation acceptance, revoked access, tenant/role scope, no-op/blocked publication and read state. Concurrent publication and duplicate reads pass. Production Chromium verifies mobile notices, read state, pending linking and own-schedule deep links. A new Chromium scenario publishes to an uninvited worker, follows the warning link to invite them, accepts the emailed invitation on mobile and sees exactly one unread update that opens the schedule; the warning then clears. | Pass |
 | ROSTER-008.4 Unresolved blockers prevent publishing | Configured venue availability, local/cross-venue overlap and duration blockers atomically reject publication; concurrent roster changes return a retry. | 53 policy and 26 shared-worker SQL assertions, authenticated ordered races and production-browser resolution of local and cross-venue blockers passed. | Pass |
 
 Files for the version slice: `supabase/migrations/20261101210000_roster_publication_versions.sql`,
@@ -1068,6 +1081,9 @@ Files for the version slice: `supabase/migrations/20261101210000_roster_publicat
 `tests/auto-assignment-concurrency.integration.test.mjs`,
 `src/app/roster/page.tsx`, `tests/e2e/auth.spec.mjs` and `README.md`.
 Migration applied only to the isolated test project.
+
+Completion files: `supabase/tests/database/roster_publication_notifications.test.sql`,
+`src/app/roster/page.tsx`, `tests/e2e/auth.spec.mjs` and `README.md` (no migration).
 
 Notification slice files: `supabase/migrations/20261101220000_roster_publication_notifications.sql`,
 `supabase/tests/database/roster_publication_notifications.test.sql`,
@@ -1405,10 +1421,8 @@ not yet run remotely.
 
 ## Next story
 
-- Next ready implementation: **BB-ROSTER-008 — Publish and notify** (P0, In
-  Progress). Review its remaining criteria against the existing publication,
-  versioning and in-app notification work, then implement only what remains.
-  Then BB-SAAS-004, BB-COMMS-002 and BB-FOUND-007.
+- Next ready implementation: **BB-SAAS-004 — Performance and accessibility**
+  (P0, In Progress), then BB-COMMS-002 and BB-FOUND-007.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.

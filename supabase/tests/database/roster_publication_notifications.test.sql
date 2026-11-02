@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon;
 grant execute on all functions in schema extensions to authenticated, anon;
-select extensions.plan(69);
+select extensions.plan(77);
 
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a4000000-0000-4000-8000-000000000001', 'notice-owner@example.test', '{}'::jsonb),
@@ -425,6 +425,50 @@ select extensions.is(
   (select count(*)::integer from public.roster_publication_notification_reads
     where publication_id = current_setting('test.multiple_profiles_publication')::uuid),
   2, 'distinct accounts retain separate read records for the same publication');
+
+reset role;
+insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
+  ('a4000000-0000-4000-8000-000000000008', 'notice-invited@example.test', now(), '{}'::jsonb);
+insert into public.employees (id, business_id, venue_id, department_id, auth_user_id, name, role_title) values
+  ('e4000000-0000-4000-8000-000000000007', 'b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', null, 'Invited worker', 'Server');
+insert into public.shifts (id, business_id, venue_id, department_id, employee_id, role_title, starts_at, ends_at) values
+  ('f4000000-0000-4000-8000-000000000009', 'b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', 'e4000000-0000-4000-8000-000000000007',
+   'Invited assigned', '2032-04-05 00:00+00', '2032-04-05 01:00+00');
+select set_config('request.jwt.claim.sub', 'a4000000-0000-4000-8000-000000000001', true);
+set local role authenticated;
+select extensions.is(
+  public.publish_roster('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', '2032-04-05'),
+  1, 'a roster can be published to a profile whose worker has not been invited yet');
+select extensions.is(
+  (select inaccessible_count from public.list_roster_notification_reachability('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', '2032-04-05')),
+  1, 'managers see the uninvited impacted profile as pending');
+select extensions.lives_ok(
+  $$select set_config('test.invited_notice', public.create_staff_invitation(
+    'b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', 'e4000000-0000-4000-8000-000000000007', 'notice-invited@example.test')::text, true)$$,
+  'the pending worker can be invited after publication');
+reset role;
+select set_config('request.jwt.claim.sub', 'a4000000-0000-4000-8000-000000000008', true);
+set local role authenticated;
+select extensions.throws_ok(
+  $$select * from public.list_roster_notifications('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001')$$,
+  'P0001', 'Permission denied', 'an invited account cannot read venue notices before accepting');
+select extensions.is(
+  public.accept_staff_invitation(current_setting('test.invited_notice')::uuid),
+  'b4000000-0000-4000-8000-000000000001'::uuid, 'the invited worker accepts and is linked to the impacted profile');
+select extensions.is(
+  (select count(*)::integer from public.list_roster_notifications('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001')
+    where week_start = '2032-04-05' and unread),
+  1, 'accepting the invitation delivers the pending roster update once, unread');
+select extensions.is(
+  (select count(*)::integer from public.list_roster_notifications('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001')),
+  1, 'the invited worker sees only updates for their own published shifts');
+reset role;
+select set_config('request.jwt.claim.sub', 'a4000000-0000-4000-8000-000000000001', true);
+set local role authenticated;
+select extensions.is(
+  (select inaccessible_count from public.list_roster_notification_reachability('b4000000-0000-4000-8000-000000000001', 'c4000000-0000-4000-8000-000000000001', 'd4000000-0000-4000-8000-000000000001', '2032-04-05')),
+  0, 'the manager warning clears once the invitation is accepted');
+reset role;
 
 set local role anon;
 select extensions.throws_ok(
