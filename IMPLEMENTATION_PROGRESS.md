@@ -537,19 +537,33 @@
 
 ## Current story
 
-- **BB-ROSTER-005 — Drag and drop roster changes** is In Progress, in planning.
-  Existing editable draft shifts, conflict policies, scoped scheduling and
-  roster-review snapshots are prerequisites. Inspect those paths before
-  designing a visible date/worker preview, move/duplicate operation,
-  keyboard-accessible alternative and concurrency-safe undo. Published shifts
-  and immutable review snapshots must not be silently changed.
+- **BB-ROSTER-005 — Drag and drop roster changes** is In Progress, in testing.
+  An uncommitted migration, test fixture, server actions and roster controls
+  implement a target preview, scoped move/duplicate, keyboard selection and
+  guarded undo. The source and preview are rechecked when applying; new
+  warnings require another preview. Published shifts can be duplicated as
+  drafts but not moved. Undo refuses changed or published results. The pending
+  review workflow still rechecks its immutable snapshot. The implementation is
+  local and uncommitted as of 2026-11-02 10:44 UTC; a loss of this workspace
+  before a code checkpoint would lose these changes.
+
+  Focused results so far: **49/49** quick-change pgTAP assertions passed with
+  migration and fixtures rolled back on the disposable acceptance project;
+  **10/10** related Node tests, changed-file ESLint and TypeScript passed.
+  The first database run exposed an immutable undo-trigger error, which was
+  corrected and rerun. A later review identified that warnings could change
+  after preview; the mutation now requires an unchanged preview and the
+  corresponding database assertion passes. The migration is not yet applied
+  to the disposable test project's ledger. Browser, authenticated concurrency,
+  publication/review regression and production build checks are outstanding.
+  Full suites remain deferred under the targeted testing policy.
 
   | Criterion | Implementation evidence | Test and actual result | Status |
   | --- | --- | --- | --- |
-  | ROSTER-005.1 — preview shows target date and worker | Not yet implemented | No story-specific test run | Blocked pending implementation |
-  | ROSTER-005.2 — conflicts block or warn appropriately | Existing scheduling policy exists; quick-change integration not yet implemented | No story-specific test run | Blocked pending implementation |
-  | ROSTER-005.3 — keyboard-accessible alternative | Existing full editor exists; equivalent quick operation not yet implemented | No story-specific test run | Blocked pending implementation |
-  | ROSTER-005.4 — undo is offered | Not yet implemented | No story-specific test run | Blocked pending implementation |
+  | ROSTER-005.1 — preview shows target date and worker | Scoped preview RPC and roster quick-change panel | Relevant pgTAP and parser assertions passed; browser drag/preview pending | Blocked pending browser verification |
+  | ROSTER-005.2 — conflicts block or warn appropriately | Preview and apply recheck overlap, eligibility, availability and venue policy | Relevant pgTAP and Node assertions passed; authenticated concurrency and UI pending | Blocked pending concurrency and browser verification |
+  | ROSTER-005.3 — keyboard-accessible alternative | Selectable action, target day and worker in the quick-change panel | TypeScript and lint passed; keyboard, mobile and axe checks pending | Blocked pending browser verification |
+  | ROSTER-005.4 — undo is offered | Actor-scoped, idempotent undo rejects changed snapshots | Relevant pgTAP assertions passed; race, publication and UI checks pending | Blocked pending integration and browser verification |
 
 ## Recently completed story
 
@@ -1883,8 +1897,10 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Continue **BB-ROSTER-005** by tracing draft edit, conflict and review
-  transactions, then implement the target preview and safe undo.
+- Continue **BB-ROSTER-005** by safely applying its migration to the identified
+  disposable acceptance project, adding authenticated race and browser
+  scenarios, running focused publication/review regressions and completing
+  the production build. Do not mark the story Done before all criteria pass.
 - Resume **BB-ORG-006** only after owner-approved roster/payroll transition
   and notification-default semantics and the necessary delivery capability
   are available. Preserve existing immutable periods and do not silently
