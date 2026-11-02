@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **45**. In Progress: **0**.
-  Blocked: **4**. Not started (Backlog): **60**.
+  BB-PAYRULES stories). Verified Done: **45**. In Progress: **1**.
+  Blocked: **4**. Not started (Backlog): **59**.
 - BB-SHIFTS-004 (shift swaps) is Done. Both employees consent, scoped managers
   review, and approval rechecks eligibility and conflicts before recording
   new publication snapshots and in-app outcomes. The affected pgTAP files
@@ -12,8 +12,9 @@
   the 67 swap assertions also passed on a separate fresh-replay project.
   The race/tenant integration, 14 unit tests and five targeted production
   browser scenarios passed, as did changed-file lint, TypeScript and the
-  production build. Full suites were intentionally deferred. The feature
-  checkpoint and remote verification are pending.
+  production build. Full suites were intentionally deferred. Feature commit
+  `de39307dcfed4b121ee8417d93622b408c0a86c9` was pushed and its remote SHA
+  matched.
 - BB-SHIFTS-001/002/003 (open-shift offers, responses and transactional
   confirmation) are Done under the targeted testing policy: 78 open-offer
   pgTAP assertions plus five neighbouring rostering suites, one lock-gated
@@ -422,8 +423,16 @@
 
 ## Current story
 
-- **BB-SHIFTS-004 — Request shift swap** is Done, subject to the feature
-  checkpoint and push below. The recovered migration and initial test had
+- **BB-RULES-001 — Employment rule metadata** is In Progress, in planning.
+  Its P0 criteria require maintainable employment basis and award/contract
+  references, explicit unknown classifications, and effective-dated changes.
+  Next inspect existing employee schema, editing workflow, tenant permissions
+  and tests; design the smallest compatible history model before coding.
+  This core story is a prerequisite for the separate Award Central workstream,
+  which must remain isolated. No criterion has been verified yet.
+- **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
+  `de39307dcfed4b121ee8417d93622b408c0a86c9` was pushed and the remote SHA
+  matched. The recovered migration and initial test had
   already been pushed as `9ec5e6f033e8e95e1d17624beb7c7f5d38321604`.
   The first isolated run had 23 passing and 10 failing assertions before an
   SQL error: approval called nonexistent or incorrectly signed locking
@@ -1695,11 +1704,10 @@ not yet run remotely.
 
 ## Next story
 
-- After committing and pushing BB-SHIFTS-004, start **BB-RULES-001 — Employment
-  rule metadata**. Its P0 criteria require maintainable employment basis and
-  award/contract references, explicit unknown classifications, and
-  effective-dated changes. It is a core prerequisite for the separate Award
-  Central workstream; do not modify that branch or imply payroll compliance.
+- Continue **BB-RULES-001 — Employment rule metadata**: inspect existing
+  employee schema, editing workflow, tenant permissions and tests, then
+  implement and verify an appropriately scoped effective-dated history. Do
+  not modify the Award Central branch or imply payroll compliance.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
