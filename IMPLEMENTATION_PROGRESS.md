@@ -6,7 +6,7 @@
   three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **57**.
 - BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:50 UTC, the uncommitted device and employee UI and transaction
+  2026-11-02 12:53 UTC, the uncommitted device and employee UI and transaction
   migration are implemented but not runtime-verified end to end. On the
   isolated applied schema, QR pgTAP passed **62/62** and seven neighboring
   attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
@@ -16,10 +16,11 @@
   additions. Migration `20261103160000` is
   applied and recorded only in `butterbox-acceptance` (API 55421, DB 55422);
   do not edit the applied migration in place. The split production build passed.
-  Browser testing exposed a defect: a separate anonymous tab's session-end
-  announcement redirects the independently activated kiosk to login. A fix,
-  focused cross-tab regression and browser acceptance remain outstanding. No full
-  criterion is yet Passed.
+  Browser testing exposed and fixed an unrelated account-session announcement
+  redirecting the independently activated kiosk to login. The decoded-QR mobile
+  scenario and both existing cross-tab session regressions passed (**3/3**).
+  Final documentation and verification remain outstanding; no full criterion is
+  yet marked Passed.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -668,14 +669,16 @@ settings/delivery still require their own implementation and verification.
   venue-bound, expire within 45 seconds and are consumed atomically with the
   existing server clock and geofence checks. Exact retries return the original
   receipt; other replays are denied. Consumed code links are immutable.
-  - **004.1 (signed, expiring, venue-bound):** database preflight passed;
-    **Blocked** on display and end-to-end verification.
-  - **004.2 (replay denied):** sequential database preflight passed;
-    **Blocked** on concurrent and end-to-end verification.
-  - **004.3 (controlled display):** owner/device authorization preflight
-    passed; **Blocked** on device UI browser verification.
+  - **004.1 (signed, expiring, venue-bound):** applied pgTAP and decoded
+    production-browser display passed; **Blocked** pending final review.
+  - **004.2 (replay denied):** applied pgTAP, concurrent workers and browser
+    replay denial passed; **Blocked** pending final review.
+  - **004.3 (controlled display):** applied authorization pgTAP, concurrent
+    activation and mobile device setup/revocation passed; **Blocked** pending
+    final review.
   - **004.4 (server clock validation):** state, tenant, timestamp and geofence
-    preflight passed; **Blocked** on integration and employee UI verification.
+    pgTAP, integrations and employee mobile clock-in/out passed; **Blocked**
+    pending final review.
   A short-lived code can still be photographed and relayed; this does not
   establish physical presence or replace configured geofence review.
   **Documentation:** pending; update the role-based user guide after the
@@ -688,10 +691,12 @@ settings/delivery still require their own implementation and verification.
   passed. Next test races, authorization and browser/mobile failure paths. The
   migration was applied only to the verified isolated acceptance project;
   any schema fix now requires a forward migration. Full repository suites are
-  deferred. The split production compile/type/generate build passed; the first
-  browser attempt failed on an ambiguous test selector, which was corrected.
-  The second browser attempt exposed the kiosk/session-end defect described
-  above; fix it and rerun both kiosk and existing cross-tab session scenarios. The
+  deferred. The split production compile/type/generate build passed. Browser
+  attempts exposed an ambiguous test selector, the kiosk/session-end defect
+  and a test expectation that wrongly assumed immutable attendance events were
+  updated after location verification. The selector and expectation were
+  corrected, the session-sync defect was fixed, and the affected kiosk and
+  cross-tab scenarios passed. The
   test-only Apache-2.0 `jsqr` decoder was added because this Chromium build
   does not expose a native barcode decoder; browser tests must decode the
   rendered SVG rather than merely reading the generated URL.
