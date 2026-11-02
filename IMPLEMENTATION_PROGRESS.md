@@ -6,16 +6,19 @@
   BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **66**.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
-  2026-11-02 18:16 UTC. Its database implementation is applied only to the
+  2026-11-02 18:21 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
   seven adjacent files passed **440/440**, and a scheduled worker invocation
   succeeded. A follow-up notification-read migration passed **66/66** focused
   assertions in rollback preflight. Manager UI, owner settings, notification
   integration and audit labels are implemented but not yet browser-tested;
   focused Node tests passed **12/12**, changed-file ESLint and TypeScript
-  passed. Applied forward-migration testing, real scheduled alert creation,
-  production build and concurrency checks remain outstanding. No acceptance
-  criterion is yet claimed complete.
+  passed. The forward migration is now applied only in the same disposable
+  project; **66/66** focused and **285/285** adjacent assertions passed.
+  Real cron alert creation was observed, but the overall integration failed
+  on a scan-time expectation and is being rerun with an explicit following-scan
+  check. Production build and browser acceptance remain outstanding. No
+  acceptance criterion is yet claimed complete.
 - The requested **BRAND** epic and ten P2 planning stories now cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
@@ -694,9 +697,15 @@ settings/delivery still require their own implementation and verification.
   the ledger remains at `20261103170000`. Manager review, owner settings,
   notification UI, parser and audit-label changes are implemented locally.
   Focused alert, kiosk and audit Node tests passed **12/12**; changed-file
-  ESLint and TypeScript passed. Next apply the forward migration only to the
-  verified disposable project and verify scheduled creation, authorization,
-  concurrent operations, the production build and browser workflows.
+  ESLint and TypeScript passed. The forward migration was then applied only
+  to `butterbox-acceptance`, and the focused test passed **66/66** with five
+  affected notification, swap, tenant and audit files passing **285/285**.
+  An authenticated test observed a real cron-created alert and exclusion of
+  draft/disabled-tenant shifts; the overall run failed when it expected a
+  scan to include a clock recorded after its captured scan time. The revised
+  test checks both the as-of-start result and the subsequent update and is
+  running. Synthetic monitoring was disabled during cleanup. Next finish
+  concurrency verification, production build and browser workflows.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
