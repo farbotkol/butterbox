@@ -55,6 +55,18 @@ FOH/BOH delegated-management model and existing application conventions.
   relevant. Document compliance assumptions without claiming unverified
   Australian award or payroll compliance.
 
+## Agent Progress Reporting and Visibility
+
+- During an actively executing agent session, update the workstream-specific status file approximately every **10 minutes of active work**. The Roadmap Agent owns `docs/agent-status/roadmap.md`; the Award Central Agent owns `docs/agent-status/award-central.md`. Never modify the other workstream's status document.
+- Commit and push the current status report approximately every **15 minutes of active work**, including when a story is incomplete. Use a separate documentation-only checkpoint from unverified development changes wherever practical. Verify the remote push and record push failures.
+- Update and push a status checkpoint **immediately** when starting a story, completing a meaningful milestone, encountering a blocker, completing testing, or finishing a story, subject to the safety exceptions below.
+- Every status report must provide: actual update timestamp and timezone; current story ID/title and acceptance criteria; current phase (Planning, Coding, Testing, Debugging, Blocked or Complete); specific activity underway; progress since the previous report; actual passing and failing tests; blockers requiring intervention; the next concrete action; and the latest development commit SHA (or explicitly `unknown`).
+- State what was observed and when. Never fabricate progress, test results, timestamps, push outcomes or active status. A last-updated timestamp is **not** proof an agent is still running. When the execution state is unverified, say so clearly.
+- Do not interrupt database operations, sensitive Git operations, or long-running tests just to meet a reporting interval. Record the deferred report and update/push immediately after it is safe.
+- Never commit secrets, credentials, unrelated files or unverified code as a consequence of status reporting. Do not launch background loops, polling services or monitoring infrastructure solely to satisfy these intervals.
+- These intervals apply **only during active execution** and are best-effort when timing cannot be reliably measured. Report at meaningful steps instead of claiming false timed updates.
+- Maintain the existing story-selection, acceptance-testing, branch-isolation, safety and delivery instructions below and above; status reporting does not replace implementation work.
+
 ## Tracking and Git workflow
 
 - Keep `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md` consistent. Record
