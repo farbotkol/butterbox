@@ -17,6 +17,8 @@
   passed. Changed-file lint, TypeScript and split production build passed.
   Full Node, pgTAP, integration and browser suites were intentionally deferred;
   broader migration and cross-tenant regression is required at release.
+  Partial safeguard commit `b45439e8d23a6d2257684fe7fe7ba6eeadbf5825` was
+  pushed and its remote SHA matched.
 - BB-ROSTER-005 (drag and drop roster changes) is Done. Managers can preview
   and apply scoped moves or draft duplicates by drag or keyboard, with guarded
   undo. Quick-change pgTAP passed **56/56** on the disposable acceptance
@@ -599,10 +601,15 @@
   review under DEC-004. No credential was used, changed or reproduced.
 - **BB-SAAS-003 — Tenant onboarding and support** remains Blocked for full
   acceptance. The independent DEC-003 fail-closed safeguard is implemented
-  and verified only in the isolated disposable project. This work does not
-  imply credential-remediation approval or evidence that security review
-  occurred. Finish the partial checkpoint and then continue with the
-  independent prospective venue-week slice of BB-ORG-006.
+  and verified only in the isolated disposable project. Commit
+  `b45439e8d23a6d2257684fe7fe7ba6eeadbf5825` was pushed and verified. This
+  work does not imply credential-remediation approval or evidence that
+  security review occurred.
+- **BB-ORG-006 — Business configuration** is the current independent work:
+  inspect prospective per-venue roster display-week configuration under
+  DEC-002. Approval mode already exists; external notification dependencies
+  remain Blocked and must not be activated. Preserve historical publication,
+  payroll and timesheet boundaries, and use audited owner-authorized changes.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
