@@ -6,12 +6,16 @@
   BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **66**.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
-  2026-11-02 18:12 UTC. Its database implementation is applied only to the
+  2026-11-02 18:16 UTC. Its database implementation is applied only to the
   identified disposable acceptance project. Focused pgTAP passed **55/55**,
   seven adjacent files passed **440/440**, and a scheduled worker invocation
-  succeeded. A follow-up notification-read migration, real scheduled alert
-  creation, user interface and concurrency checks remain unverified. No
-  acceptance criterion is yet claimed complete.
+  succeeded. A follow-up notification-read migration passed **66/66** focused
+  assertions in rollback preflight. Manager UI, owner settings, notification
+  integration and audit labels are implemented but not yet browser-tested;
+  focused Node tests passed **12/12**, changed-file ESLint and TypeScript
+  passed. Applied forward-migration testing, real scheduled alert creation,
+  production build and concurrency checks remain outstanding. No acceptance
+  criterion is yet claimed complete.
 - The requested **BRAND** epic and ten P2 planning stories now cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
@@ -684,10 +688,15 @@ settings/delivery still require their own implementation and verification.
   **440/440**. At 18:10 UTC its local cron job ran successfully and updated
   the worker heartbeat; actual alert creation by the scheduler remains
   unverified. The implementation and tests remain uncommitted. A new
-  untested forward migration separates each manager's notification read
-  state from the team's acknowledgement state. Next preflight that migration
-  and its expanded tests, build the management and notification interfaces,
-  and verify scheduled creation, authorization and concurrent operations.
+  forward migration separates each manager's notification read state from
+  the team's acknowledgement state. At 18:16 UTC this forward migration and
+  expanded tests passed **66/66** assertions in a rolled-back preflight;
+  the ledger remains at `20261103170000`. Manager review, owner settings,
+  notification UI, parser and audit-label changes are implemented locally.
+  Focused alert, kiosk and audit Node tests passed **12/12**; changed-file
+  ESLint and TypeScript passed. Next apply the forward migration only to the
+  verified disposable project and verify scheduled creation, authorization,
+  concurrent operations, the production build and browser workflows.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
