@@ -720,7 +720,10 @@ settings/delivery still require their own implementation and verification.
   remote branch. The incoming Showcase overlay and five DEMO stories were
   fetched and the CSV conflict was resolved by preserving every incoming
   priority and the locally updated ATTEND-006 evidence; uncommitted feature
-  files were not overwritten. The merge and push are pending at this report.
+  files were not overwritten. Merge checkpoint
+  `f1100dbc066aa4c0c097e0183ff13498f0f838bd` was pushed and its remote SHA
+  matched. The split production build and serialized focused alert,
+  notification, shift-swap and kiosk browser tests are running.
   Full suites are intentionally deferred; broader migration/security
   regression is appropriate at workstream merge or release. Documentation:
   user guide update pending the tested workflow.
