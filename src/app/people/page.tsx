@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   createStaffInvitationAction,
@@ -12,6 +13,9 @@ import {
   unlinkSharedWorkerAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import {
+  employmentBases, parseEmploymentMetadataSnapshots, type EmploymentMetadataSnapshot,
+} from "@/lib/employment-rule-metadata";
 import type { PendingStaffInvitation } from "@/lib/invitations";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
@@ -131,11 +135,16 @@ function EmployeeInvitationForm({ employee, invitation, venueId, departmentActiv
   );
 }
 
-function EmployeeForm({ employee, departments, venueId }: { employee?: Employee; departments: Department[]; venueId: string }) {
+function EmployeeForm({ employee, departments, venueId, businessId, employment }: {
+  employee?: Employee; departments: Department[]; venueId: string; businessId: string;
+  employment?: EmploymentMetadataSnapshot;
+}) {
   const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink";
   return (
     <form action={saveEmployeeAction} className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <input type="hidden" name="business_id" value={businessId} />
       <input type="hidden" name="venue_id" value={venueId} />
+      <input type="hidden" name="employment_revision" value={employment?.revision ?? 0} />
       {employee && <input type="hidden" name="employee_id" value={employee.id} />}
       <label className="text-sm">Name
         <input name="name" required maxLength={100} defaultValue={employee?.name} className={fieldClass} />
@@ -152,13 +161,19 @@ function EmployeeForm({ employee, departments, venueId }: { employee?: Employee;
       <label className="text-sm">Job role
         <input name="role_title" required maxLength={80} defaultValue={employee?.role_title} className={fieldClass} />
       </label>
-      <label className="text-sm">Employment type
-        <select name="employment_type" defaultValue={employee?.employment_type ?? "casual"} className={fieldClass}>
-          <option value="casual">Casual</option>
-          <option value="part_time">Part time</option>
-          <option value="full_time">Full time</option>
-        </select>
-      </label>
+      <div>
+        <label className="text-sm">Employment type
+          <select name="employment_type" defaultValue={employment?.employment_basis ?? employee?.employment_type ?? "casual"} className={fieldClass}>
+            <option value="unknown">Unknown</option>
+            <option value="casual">Casual</option>
+            <option value="part_time">Part time</option>
+            <option value="full_time">Full time</option>
+          </select>
+        </label>
+        <p className="mt-1 text-xs text-muted">
+          This profile label is not an award classification. Changing it for an existing profile records a basis effective today.
+        </p>
+      </div>
       <label className="text-sm">Status
         <select name="active" defaultValue={employee?.active === false ? "false" : "true"} className={fieldClass}>
           <option value="true">Active</option>
@@ -408,7 +423,7 @@ export default async function PeoplePage({
   if (params.status && params.status !== "all") employeesQuery = employeesQuery.eq("active", params.status === "active");
   if (query) employeesQuery = employeesQuery.ilike("name", `%${query.replace(/[\\%_]/g, "\\$&")}%`);
   const employees = await employeesQuery;
-  const [links, otherEmployees, sharedProfiles] = await Promise.all([
+  const [links, otherEmployees, sharedProfiles, employmentMetadata] = await Promise.all([
     workspace.supabase.from("employee_departments").select("employee_id, department_id")
       .in("employee_id", employees.data?.map((employee) => employee.id) ?? []),
     workspace.membership.role === "owner"
@@ -423,14 +438,27 @@ export default async function PeoplePage({
       }, { count: "exact" }).order("employee_id").order("linked_employee_id").range(from, to),
       (profile) => `${profile.employee_id}:${profile.linked_employee_id}`)
       : Promise.resolve({ data: [], error: null }),
+    readAllPages<unknown>((from, to) =>
+      workspace.supabase.rpc("list_current_employee_employment_metadata", {
+        p_business_id: workspace.business.id, p_venue_id: venueId,
+      }, { count: "exact" }).order("employee_id").range(from, to), (row) =>
+      typeof row === "object" && row !== null && "employee_id" in row && typeof row.employee_id === "string"
+        ? row.employee_id : ""),
   ]);
+  const employmentSnapshots = parseEmploymentMetadataSnapshots(employmentMetadata.data);
+  const missingEmploymentSnapshot = employees.data?.some((employee) =>
+    departments.data?.some((department) => department.id === employee.department_id) &&
+    !employmentSnapshots?.some((snapshot) => snapshot.employee_id === employee.id));
+  const employmentError = employmentMetadata.error ?? (!employmentSnapshots || missingEmploymentSnapshot
+    ? { code: "invalid_employment_metadata", message: "Employment metadata was incomplete or invalid." }
+    : null);
   const linkedDepartments = (employeeId: string) =>
     links.data?.filter((link) => link.employee_id === employeeId).map((link) => link.department_id) ?? [];
   const departmentName = (id: string) => departments.data?.find((department) => department.id === id)?.name;
   const canAssignDepartments = ["owner", "admin", "general_manager"].includes(workspace.membership.role);
   const loadError = venues.error || departments.error || profileRoles.error || jobRoles.error ||
     qualifications.error || preferences.error || members.error || filterError || employees.error || links.error ||
-    otherEmployees.error || sharedProfiles.error || invitations.error;
+    otherEmployees.error || sharedProfiles.error || invitations.error || employmentError;
   if (loadError) console.error("Could not load employee profiles.", { code: loadError.code, message: loadError.message });
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -459,6 +487,8 @@ export default async function PeoplePage({
           : params.error === "invite-send" ? "The invitation was saved, but its email could not be requested. Check your email configuration or try Resend email later."
           : params.error === "invite-expired" ? "That invitation has expired. Send a new invitation instead."
           : params.error === "invite" ? "Could not change the invitation. Check your access and the employee's status, then try again."
+          : params.error === "employment-stale" ? "Employment metadata changed. Refresh and review the current details before saving."
+          : params.error === "employment-invalid" ? "Could not save employment metadata. Check all dates and details and try again."
           : params.error === "filter"
           ? "That directory filter is unavailable. Choose a permitted venue, department and role."
           : "Could not save employee. Check the details and try again."}
@@ -508,7 +538,8 @@ export default async function PeoplePage({
         {departments.data?.some((department) => department.active) ? (
           <section aria-label="New employee" className="mt-6 rounded-xl border border-line bg-white p-5">
             <h2 className="font-semibold">Add employee</h2>
-            <EmployeeForm departments={departments.data.filter((department) => department.active)} venueId={venueId} />
+            <EmployeeForm departments={departments.data.filter((department) => department.active)} venueId={venueId}
+              businessId={workspace.business.id} />
           </section>
         ) : <p className="mt-6">No manageable departments are available.</p>}
         {workspace.membership.role === "owner" && selectedVenue && (
@@ -518,6 +549,7 @@ export default async function PeoplePage({
         <div className="mt-6 space-y-4">
           {employees.data?.map((employee) => {
             const employeePreferences = preferences.data?.find((item) => item.employee_id === employee.id);
+            const employment = employmentSnapshots?.find((item) => item.employee_id === employee.id);
             return (
               <section key={employee.id}
                 aria-label={`Employee ${employee.name}`} className="rounded-xl border border-line bg-white p-5">
@@ -545,7 +577,20 @@ export default async function PeoplePage({
                     invitation={invitations.data?.find((invitation) => invitation.employee_id === employee.id)} />
                 )}
                 {departments.data?.some((department) => department.id === employee.department_id) ? <>
-                  <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId} />
+                  <section aria-label={`Employment metadata for ${employee.name}`} className="mt-4 rounded-lg border border-line p-4 text-sm">
+                    <h3 className="font-semibold">Dated employment metadata</h3>
+                    <p className="mt-2 text-muted">
+                      {employment?.employment_basis
+                        ? `Current recorded basis: ${employmentBases[employment.employment_basis]} (from ${employment.effective_on}).`
+                        : "No current dated employment details are recorded; classification is unknown."}
+                    </p>
+                    <Link href={withBusiness(`/people/${employee.id}/employment?venue=${encodeURIComponent(venueId)}`, workspace.business.id)}
+                      className="mt-2 inline-block font-semibold text-ocean underline">
+                      Review employment metadata
+                    </Link>
+                  </section>
+                  <EmployeeForm employee={employee} departments={departments.data ?? []} venueId={venueId}
+                    businessId={workspace.business.id} employment={employment} />
                   {canAssignDepartments && <DepartmentMembershipForm employee={employee} departments={departments.data ?? []}
                     linkedIds={linkedDepartments(employee.id)} venueId={venueId} />}
                 </> : <p className="mt-3 text-sm text-muted">Profile details are managed by this worker&apos;s primary department.</p>}

@@ -3,8 +3,16 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **45**. In Progress: **1**.
+  BB-PAYRULES stories). Verified Done: **46**. In Progress: **0**.
   Blocked: **4**. Not started (Backlog): **59**.
+- BB-RULES-001 (employment rule metadata) is Done. Scoped dated history
+  preserves unknown classifications and independently maintained award and
+  contract references. Focused database tests passed **282/282** on acceptance,
+  **98/98** on replay and **5/5** on an upgrade fixture; the authenticated
+  race/tenant integration, **13/13** Node tests and four production-browser
+  scenarios passed. Changed-file lint, TypeScript and the split production
+  build passed. Full suites were intentionally deferred. See criterion evidence
+  below; the feature checkpoint has not yet been committed or pushed.
 - BB-SHIFTS-004 (shift swaps) is Done. Both employees consent, scoped managers
   review, and approval rechecks eligibility and conflicts before recording
   new publication snapshots and in-app outcomes. The affected pgTAP files
@@ -79,8 +87,8 @@
   BB-ROSTER-007, BB-ROSTER-008, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
   BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002, BB-PAY-003,
-  BB-SHIFTS-001, BB-SHIFTS-002, BB-SHIFTS-003, BB-SHIFTS-004, BB-COMMS-002
-  and BB-SAAS-004.
+  BB-SHIFTS-001, BB-SHIFTS-002, BB-SHIFTS-003, BB-SHIFTS-004, BB-COMMS-002,
+  BB-RULES-001 and BB-SAAS-004.
 - BB-ORG-005's remaining approval/export attribution criterion is now verified,
   without recreating the existing venue workflow. The authenticated integration
   finalises and exports Sydney and Perth separately for linked worker profiles;
@@ -421,42 +429,52 @@
   open-shift offers do not gain retroactive notifications. Email/push delivery
   remains BB-COMMS-003; no external delivery is claimed.
 
+## BB-RULES-001 — Acceptance evidence
+
+| Criterion | Implementation evidence | Runtime verification and actual result | Status |
+| --- | --- | --- | --- |
+| RULES-001.1 Maintain employment basis and award/contract references | Scoped managers record basis, classification and independent references in append-only events; People and the dated editor expose the current values and history. Profile edits preserve references. | Metadata pgTAP **49/49** including field validation and scoped writes; authenticated two-tenant/race integration **1/1**; mobile production-browser scenario **1/1** exercises edits, audit and role restrictions. | Pass |
+| RULES-001.2 Unknown classification stays explicit | Null classification is shown as Unknown; legacy employment type and role are never inferred as a classification or historical dated fact. | Metadata pgTAP **49/49**, focused Node validation tests and the mobile browser scenario verify unknown values, including existing legacy profiles. | Pass |
+| RULES-001.3 Changes are effective-dated | Venue-local dates select the applicable event; same-date corrections append revisions and future entries remain inactive until due. Optimistic revisions reject stale editor and profile submissions. | Metadata pgTAP **49/49** covers dates and corrections; authenticated lock-gated integration **1/1** covers concurrent edits, retries and revocation; focused Node date tests and production browser **1/1** verify history, future entries and stale forms. | Pass |
+
+- **Additional selected checks:** Employee profiles, preferences, role
+  eligibility, business permissions, tenant isolation and audit pgTAP plus
+  metadata passed **282/282** on the isolated acceptance project; metadata,
+  profiles and audit passed **98/98** on a separate replay project. A
+  rolled-back upgrade fixture with existing history passed **5/5**. Four
+  relevant Node files passed **13/13**. The production split
+  compile/generate, changed-file ESLint, TypeScript and `git diff --check`
+  passed. Three neighbouring serialized browser scenarios passed for the
+  People directory, protected audit and core accessibility; the metadata
+  scenario also passed, including maximum-length current and historical text
+  at 375px. Tests were selected for changed database objects, profile
+  compatibility, authorisation, audit and the new route.
+- **Resolved failures:** An employee-deletion audit regression was fixed with
+  forward migration `20261103080000`; the affected suites were rerun. A
+  maximum-length mobile overflow assertion initially failed; wrapping was
+  added and the production build and expanded browser scenario passed. An
+  uppercase UUID route initially failed to match canonical database IDs;
+  normalization now passes both unit and browser coverage.
+  VS Code test discovery did not identify these `node:test` files, so the
+  repository's Node runner was used directly.
+- **Files:** Migrations `20261103070000_employment_rule_metadata.sql` and
+  `20261103080000_retain_employment_metadata_history.sql`, the metadata pgTAP
+  and concurrency tests, People and employment pages, server actions,
+  employment metadata and audit helpers, Node and browser tests, integration
+  runner and `README.md`.
+- **Deferred and risks:** Full pgTAP, Node, authenticated integration and
+  browser suites were not run; broader regression is needed at a workstream
+  merge or release checkpoint. A legacy profile's employment type is not an
+  inferred dated fact. Future events can make that legacy physical field
+  stale; consumers must use the date-aware metadata, not the cache. References
+  are unverified customer inputs and do not establish award or payroll
+  compliance. The separate Award Central workstream remains isolated.
+
 ## Current story
 
-- **BB-RULES-001 — Employment rule metadata** is In Progress, in coding.
-  Its P0 criteria require maintainable employment basis and award/contract
-  references, explicit unknown classifications, and effective-dated changes.
-  Existing `employees.employment_type` is mutable, has a legacy casual default
-  and is edited by scoped managers; it cannot establish a classification,
-  award or effective date retroactively. Add append-only scoped metadata
-  history, without inventing backdated facts, and keep the legacy edit
-  compatible by recording an effective-today entry when its basis is changed.
-  Date-aware reads must select the active version, including future changes,
-  and optimistic revisions must protect the new editor from stale submissions.
-  The new migration and pgTAP file are uncommitted. On the verified isolated
-  acceptance database, a rolled-back migration/test transaction passed
-  **47/47** metadata assertions and a separate rolled-back transaction passed
-  the existing employee-profile suite **18/18**. No schema change was retained
-  by those runs. The migration was subsequently applied only to the verified
-  disposable acceptance project. Seven focused pgTAP files then produced
-  **249 passing assertions** across six files; `sensitive_action_audit`
-  aborted when deleting a profile because the new immutable history cascaded
-  from the employee. Forward migration `20261103080000` now retains historical
-  employee IDs while allowing the existing profile-deletion lifecycle; both
-  migrations were applied to the verified acceptance and fresh-replay projects.
-  The affected acceptance suites passed **282/282** assertions across seven
-  files; metadata, profiles and audit also passed **98/98** on the replay.
-  A rolled-back upgrade fixture with pre-existing history passed **5/5**.
-  Twelve targeted Node tests, changed-file ESLint and TypeScript passed.
-  The authenticated integration passed **1/1**, exercising competing
-  same-revision metadata edits, a profile/metadata race, idempotent retry,
-  live role revocation, department denial and two-tenant isolation.
-  The split production build and four focused browser scenarios initially
-  passed. An added mobile boundary check then exposed horizontal overflow for
-  maximum-length unbroken classification and reference text. The display has
-  been adjusted; rebuild and rerun that scenario before completing the story.
-  The separate Award Central workstream remains isolated. No criterion has
-  been verified yet.
+- **BB-RULES-001 — Employment rule metadata** is Done; the tested feature
+  checkpoint is awaiting commit and push. The next selected P0 story is
+  **BB-RULES-005 — Privacy and retention policy**.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
   `de39307dcfed4b121ee8417d93622b408c0a86c9` was pushed and the remote SHA
   matched. The recovered migration and initial test had
@@ -1731,10 +1749,10 @@ not yet run remotely.
 
 ## Next story
 
-- Continue **BB-RULES-001 — Employment rule metadata**: implement the
-  tenant-scoped history, compatible profile edits and dated UI, then run
-  targeted pgTAP, tenant/concurrency, unit and browser tests. Do not modify the
-  Award Central branch or imply payroll compliance.
+- Start **BB-RULES-005 — Privacy and retention policy** by checking existing
+  point-in-time location, visibility, employee correction access and record
+  preservation against all four acceptance criteria. Do not assume a legally
+  approved retention period or change live records.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the

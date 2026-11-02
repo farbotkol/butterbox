@@ -7,6 +7,7 @@ export const auditSources = {
   job_roles: "Job roles",
   business_memberships: "Permissions",
   employees: "Employee profiles",
+  employee_employment_metadata_events: "Employment metadata",
   employee_departments: "Employee departments",
   employee_job_roles: "Employee role eligibility",
   employee_availability_patterns: "Availability patterns",

@@ -92,6 +92,26 @@ The directory searches names and filters by permitted venue, department,
 job title and active/archive status. Select **All roles** and **All departments**
 when switching venues if the previous filters are not available there.
 
+From a worker's **People** card, authorised managers can open **Review
+employment metadata** to record an effective date, employment basis, optional
+classification and independent award and contract references. A blank
+classification explicitly means **Unknown**. References are supplied by the
+venue; Butterbox does not interpret them, calculate award pay or certify
+compliance. Existing profile employment types, including the legacy default,
+do not establish a dated basis or classification; record dated details
+explicitly when they are known.
+
+The current entry is selected using the venue's calendar; future entries
+remain in history until their effective date. Later corrections for the same
+date supersede earlier entries without deleting them. Changing the employment
+type on an existing profile records a basis effective today and carries
+forward the current references; a stale edit must be refreshed. Employment
+history records the actor and is retained if the employee profile is deleted.
+The profile's legacy employment-type field is synchronized when a current
+change is saved, but may be stale when a future change becomes effective:
+date-aware consumers must read the employment metadata history or
+`list_current_employee_employment_metadata` instead.
+
 Managers can invite an active, unlinked employee from their primary department
 on **People**. The recipient verifies the email in their own browser and can
 choose their own password; the manager never sets it. Invitations expire after

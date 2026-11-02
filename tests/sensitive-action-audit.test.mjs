@@ -47,6 +47,12 @@ test("every audited source has a documented label and a database trigger", () =>
   const migration = readFileSync(new URL("../supabase/migrations/20261103010000_sensitive_action_audit.sql", import.meta.url), "utf8");
   const loop = migration.split("foreach v_table in array array[")[1].split("] loop")[0];
   const sources = [...loop.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
+  const metadataMigration = readFileSync(new URL("../supabase/migrations/20261103070000_employment_rule_metadata.sql", import.meta.url), "utf8");
+  const metadataTrigger = metadataMigration.match(
+    /create trigger sensitive_action_audit\s+after insert on public\.([a-z_]+)\s+for each row execute function public\.record_sensitive_action_audit\(\)/,
+  );
+  assert.ok(metadataTrigger);
+  sources.push(metadataTrigger[1]);
   assert.deepEqual(sources.sort(), Object.keys(auditSources).sort());
   for (const label of Object.values(auditSources)) assert.ok(label.length > 0);
 });

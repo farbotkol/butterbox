@@ -1259,6 +1259,143 @@ test("employee profiles and filtered team directory", async ({ page }) => {
   });
 });
 
+test("employment metadata keeps dated history, unknown classifications and scoped access", async ({ page, browser }) => {
+  test.setTimeout(180_000);
+  await withPermissionFixtures("foh_manager", async ({ suffix, password, userIds, businessId, venueIds }) => {
+    const employees = await admin.from("employees").select("id, name")
+      .eq("business_id", businessId).in("name", ["FOH directory worker", "BOH directory worker"]);
+    expect(employees.error).toBeNull();
+    const fohEmployee = employees.data.find((employee) => employee.name === "FOH directory worker");
+    const bohEmployee = employees.data.find((employee) => employee.name === "BOH directory worker");
+    expect(fohEmployee).toBeTruthy();
+    expect(bohEmployee).toBeTruthy();
+    const peopleUrl = `/people?venue=${venueIds[0]}&business=${businessId}`;
+    const metadataUrl = `/people/${fohEmployee.id}/employment?venue=${venueIds[0]}&business=${businessId}`;
+    const futureDate = `${new Date().getUTCFullYear() + 2}-01-01`;
+    const longClassification = "L".repeat(100);
+    const longReference = "R".repeat(255);
+    const contexts = [];
+    try {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await signIn(page, `owner-${suffix}@example.test`, password);
+      await page.goto(peopleUrl);
+      const profile = page.getByRole("region", { name: "Employee FOH directory worker", exact: true });
+      await expect(profile.getByRole("region", { name: "Employment metadata for FOH directory worker" }))
+        .toContainText("classification is unknown");
+      await profile.getByRole("link", { name: "Review employment metadata" }).click();
+      await expect(page.getByRole("heading", { name: "Employment metadata for FOH directory worker" })).toBeVisible();
+      const current = page.getByRole("region", { name: "Current employment metadata" });
+      await expect(current).toContainText("Employment basis and classification are unknown");
+      let form = page.getByRole("form", { name: "Record employment metadata" });
+      await expect(form.getByLabel("Employment basis")).toHaveValue("unknown");
+      await expect(form.getByLabel("Classification (optional)")).toHaveValue("");
+      findingsMustBeEmpty(await accessibilityFindings(page, "employment metadata mobile"));
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+      async function submitDetails(targetPage) {
+        await Promise.all([
+          targetPage.waitForResponse((response) =>
+            response.request().method() === "POST" && new URL(response.url()).pathname.endsWith("/employment")),
+          targetPage.getByRole("button", { name: "Record employment details" }).click(),
+        ]);
+        await expect(targetPage.getByRole("main").getByRole("status"))
+          .toHaveText("Employment metadata recorded.");
+        await targetPage.goto(metadataUrl);
+      }
+
+      await form.getByLabel("Effective date").fill("2020-01-01");
+      await form.getByLabel("Employment basis").selectOption("part_time");
+      await form.getByLabel("Award reference (optional)").fill("Award reference A");
+      await form.getByLabel("Contract reference (optional)").fill(longReference);
+      await submitDetails(page);
+      await expect(current).toContainText("Employment basis: Part time");
+      await expect(current).toContainText("Classification: Unknown");
+      await expect(current).toContainText("Award reference: Award reference A");
+      await expect(current).toContainText(`Contract reference: ${longReference}`);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await page.goto(metadataUrl.replace(fohEmployee.id, fohEmployee.id.toUpperCase()));
+      await expect(page.getByRole("heading", { name: "Employment metadata for FOH directory worker" })).toBeVisible();
+      await expect(current).toContainText(`Contract reference: ${longReference}`);
+      await page.goto(metadataUrl);
+
+      form = page.getByRole("form", { name: "Record employment metadata" });
+      await form.getByLabel("Effective date").fill("2020-01-01");
+      await form.getByLabel("Employment basis").selectOption("full_time");
+      await form.getByLabel("Classification (optional)").fill("Level 2");
+      await submitDetails(page);
+      await expect(current).toContainText("Employment basis: Full time");
+      await expect(current).toContainText("Classification: Level 2");
+      const history = page.getByRole("region", { name: "Employment metadata history" });
+      await expect(history.getByRole("listitem")).toHaveCount(2);
+      await expect(history).toContainText("Classification: Unknown");
+
+      form = page.getByRole("form", { name: "Record employment metadata" });
+      await form.getByLabel("Effective date").fill(futureDate);
+      await form.getByLabel("Employment basis").selectOption("casual");
+      await form.getByLabel("Classification (optional)").fill(longClassification);
+      await form.getByLabel("Contract reference (optional)").fill(longReference);
+      await submitDetails(page);
+      await expect(current).toContainText("Employment basis: Full time");
+      await expect(history).toContainText(`Effective ${futureDate}`);
+      await expect(history).toContainText(longClassification);
+      await expect(history).toContainText(longReference);
+      await expect(history.getByRole("listitem")).toHaveCount(3);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+      await page.goto(peopleUrl);
+      const updatedProfile = page.getByRole("region", { name: "Employee FOH directory worker", exact: true });
+      await expect(updatedProfile.getByRole("combobox", { name: "Employment type", exact: true })).toHaveValue("full_time");
+      await updatedProfile.getByRole("combobox", { name: "Employment type", exact: true }).selectOption("part_time");
+      await Promise.all([
+        page.waitForURL(/saved=1/),
+        updatedProfile.getByRole("button", { name: "Save employee" }).click(),
+      ]);
+      await page.goto(metadataUrl);
+      await expect(current).toContainText("Employment basis: Part time");
+      await expect(current).toContainText("Classification: Level 2");
+      await expect(current).toContainText("Award reference: Award reference A");
+      await expect(history).toContainText("profile edit");
+      await expect(history.getByRole("listitem")).toHaveCount(4);
+
+      const stale = await page.context().newPage();
+      await stale.goto(metadataUrl);
+      form = page.getByRole("form", { name: "Record employment metadata" });
+      await form.getByLabel("Effective date").fill("2021-01-01");
+      await form.getByLabel("Employment basis").selectOption("unknown");
+      await form.getByLabel("Classification (optional)").fill("");
+      await submitDetails(page);
+      const staleForm = stale.getByRole("form", { name: "Record employment metadata" });
+      await staleForm.getByLabel("Effective date").fill("2022-01-01");
+      await staleForm.getByRole("button", { name: "Record employment details" }).click();
+      await expect(stale.getByRole("main").getByRole("alert"))
+        .toContainText("Employment details changed while this form was open");
+      await expect(stale.getByRole("region", { name: "Employment metadata history" }).getByRole("listitem"))
+        .toHaveCount(5);
+      await stale.close();
+
+      await page.goto(`/settings/audit?business=${businessId}`);
+      await page.getByRole("combobox", { name: "Change category" }).selectOption("employee_employment_metadata_events");
+      await page.getByRole("button", { name: "Apply audit filters" }).click();
+      await expect(page.getByRole("heading", { name: "Employment metadata · INSERT" })).toHaveCount(5);
+
+      const managerContext = await browser.newContext({ baseURL: appUrl });
+      contexts.push(managerContext);
+      const manager = await managerContext.newPage();
+      await signIn(manager, `member-${suffix}@example.test`, password);
+      await manager.goto(metadataUrl);
+      await expect(manager.getByRole("heading", { name: "Employment metadata for FOH directory worker" })).toBeVisible();
+      await manager.goto(`/people/${bohEmployee.id}/employment?venue=${venueIds[0]}&business=${businessId}`);
+      await expect(manager.getByRole("main").getByRole("alert")).toContainText("cannot manage that department");
+      expect((await admin.from("business_memberships").update({ role: "employee" }).eq("user_id", userIds[1])
+        .eq("business_id", businessId)).error).toBeNull();
+      await manager.goto(metadataUrl);
+      await expect(manager).toHaveURL(/error=permission/);
+    } finally {
+      for (const context of contexts) await context.close();
+    }
+  });
+});
+
 test("owners configure venue geofences with protected audit and scoped access", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

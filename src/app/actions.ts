@@ -14,6 +14,7 @@ import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { employmentMetadataFailure, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import {
   isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
@@ -335,11 +336,13 @@ export async function saveEmployeeAction(formData: FormData) {
   const destination = `/people?venue=${encodeURIComponent(venueId || workspace.venue.id)}`;
 
   const active = formData.get("active");
-  if (active !== "true" && active !== "false") {
-    console.error("Invalid employee status submitted.");
+  const revisions = formData.getAll("employment_revision");
+  const employmentRevision = revisions.length === 1 ? payrollMappingRevision(revisions[0]) : null;
+  if ((active !== "true" && active !== "false") || employmentRevision === null) {
+    console.error("Invalid employee status or employment revision submitted.");
     redirect(`${destination}&error=save`);
   }
-  const { error } = await workspace.supabase.rpc("save_employee_profile", {
+  const { error } = await workspace.supabase.rpc("save_employee_profile_checked", {
     p_business_id: workspace.business.id,
     p_department_id: text(formData, "department_id", 36),
     p_employee_id: text(formData, "employee_id", 36) || null,
@@ -348,12 +351,69 @@ export async function saveEmployeeAction(formData: FormData) {
     p_role_title: text(formData, "role_title", 80),
     p_employment_type: text(formData, "employment_type", 16),
     p_active: active === "true",
+    p_expected_employment_revision: employmentRevision,
   });
   if (error) {
     console.error("Employee profile save failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "save"}`);
+    const code = error.message === "Employment metadata changed; refresh before saving" ? "employment-stale"
+      : error.message === "Permission denied" ? "permission" : "save";
+    redirect(`${destination}&error=${code}`);
   }
   redirect(`${destination}&saved=1`);
+}
+
+export async function saveEmployeeEmploymentMetadataAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  if (venues?.length !== 1) {
+    console.error("Invalid employment metadata venue.");
+    redirect("/people?error=employment-invalid");
+  }
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load employment metadata workspace.", { message: workspace.message });
+    redirect("/people?error=permission");
+  }
+  const one = (key: string) => {
+    const values = formData.getAll(key);
+    return values.length === 1 ? values[0] : null;
+  };
+  const input = parseEmploymentMetadataInput({
+    employeeId: one("employee_id"), effectiveOn: one("effective_on"), employmentBasis: one("employment_basis"),
+    classification: one("classification"), awardReference: one("award_reference"),
+    contractReference: one("contract_reference"), revision: one("revision"), requestId: one("request_id"),
+  });
+  if (!input) {
+    console.error("Invalid employment metadata submitted.");
+    redirect(withBusiness(`/people?venue=${encodeURIComponent(workspace.venue.id)}&error=employment-invalid`,
+      workspace.business.id));
+  }
+  const destination = withBusiness(
+    `/people/${encodeURIComponent(input.employeeId)}/employment?venue=${encodeURIComponent(workspace.venue.id)}`,
+    workspace.business.id,
+  );
+  if (!["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"]
+    .includes(workspace.membership.role)) {
+    console.error("Employment metadata management denied.");
+    redirect(`${destination}&error=permission`);
+  }
+  const { data, error } = await workspace.supabase.rpc("save_employee_employment_metadata", {
+    p_business_id: workspace.business.id, p_employee_id: input.employeeId,
+    p_effective_on: input.effectiveOn, p_employment_basis: input.employmentBasis,
+    p_classification: input.classification, p_award_reference: input.awardReference,
+    p_contract_reference: input.contractReference, p_expected_revision: input.revision,
+    p_request_id: input.requestId,
+  });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Employment metadata save failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid employment metadata receipt.",
+    });
+    redirect(`${destination}&error=${employmentMetadataFailure(error?.message)}`);
+  }
+  revalidatePath("/people");
+  revalidatePath(`/people/${input.employeeId}/employment`);
+  redirect(`${destination}&saved=metadata`);
 }
 
 const organisationErrors: Record<string, string> = {

@@ -38,6 +38,7 @@ const result = spawnSync(
           "tests/weekly-timesheet-bulk-locks.integration.test.mjs",
           "tests/timesheet-approvals.integration.test.mjs",
           "tests/payroll-period-finalisation.integration.test.mjs",
+          "tests/employment-rule-metadata-concurrency.integration.test.mjs",
           "tests/shift-offers-concurrency.integration.test.mjs",
           "tests/shift-swaps-concurrency.integration.test.mjs",
         ] : []),
