@@ -2,9 +2,14 @@
 
 ## Execution summary
 
-- Total stories: **112** (including 22 Award Central BB-PAYRULES stories and
-  three owner-added BB-DOC stories). Verified Done: **49**. In Progress: **0**.
-  Blocked: **6**. Not started (Backlog): **57**.
+- Total stories: **122** (including 22 Award Central BB-PAYRULES, three
+  BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **0**.
+  Blocked: **6**. Not started (Backlog): **67**.
+- The requested **BRAND** epic and ten P2 planning stories now cover an asset
+  library, logo variants, guidelines, homepage and login imagery, marketing
+  visuals, Google Ads, social media, email and sales materials. They remain
+  Backlog. The concept catalogue exists, but its referenced image binaries,
+  approved logos and approved campaigns are not asserted to exist.
 - BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
   all four criteria are verified. QR pgTAP passed **62/62** against the
   isolated applied migration and **62/62** in the earlier rollback replay;
@@ -2216,9 +2221,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Add the requested BRAND planning epic without inventing approved assets,
-  then assess the highest-priority ready core story, including
-  **BB-ATTEND-006**. Keep **BB-ORG-006** Blocked until its full criteria and
+- Assess the highest-priority ready core story, including **BB-ATTEND-006**.
+  Keep the new BRAND stories in Backlog until their assets and approvals
+  exist. Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable
   periods and do not silently reinterpret history.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an

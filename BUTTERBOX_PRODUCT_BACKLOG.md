@@ -1400,6 +1400,144 @@ The canonical help content is maintained in `docs/USER_GUIDE.md` and any task-sp
 3. Help content has a review/version history; broken internal links, stale feature labels and accessibility regressions are caught by lightweight automated checks.
 4. Screenshots and in-app help are verified against actual application behavior; optional AI assistance is not represented as available until separately implemented and tested.
 
+## Epic BRAND — Brand identity and asset library (P2)
+
+Plan a consistent and accessible Butterbox identity across the product,
+website and marketing materials. Operational product functionality remains
+the higher priority. `branding/README.md` catalogs proposed concepts, but the
+referenced image binaries are not present and no logo, styling or campaign is
+represented as approved. Each deliverable requires appropriate asset-rights
+checks and owner review; these stories do not authorize publishing, ad spend
+or production deployment.
+
+### BB-BRAND-001 — Organize and govern brand assets [P2]
+
+**User story:** As a product owner, I want an organized asset library with traceable provenance and approval.
+
+**Acceptance criteria**
+
+1. Inventory source files and derivatives with descriptive names, intended use, version and ownership.
+2. Record provenance, license/permission, reviewer and approval state; distinguish missing, draft and approved assets.
+3. Document contribution, storage, release and replacement procedures without including customer data or secrets.
+4. Verify that every advertised library item exists or is explicitly marked missing.
+
+### BB-BRAND-002 — Create approved logo variants [P2]
+
+**User story:** As a product owner, I want consistent logo variants for digital and print use.
+
+**Acceptance criteria**
+
+1. Produce editable standalone vector masters and documented horizontal, stacked, mark-only, light, dark and monochrome variants where appropriate.
+2. Record owner approval and rights; do not treat a rasterized concept-board crop as an approved master.
+3. Document clear space, minimum sizes, background usage and prohibited alterations.
+4. Verify legibility at intended small and large sizes and retain suitable source/export formats.
+
+**Dependencies:** BB-BRAND-001
+
+### BB-BRAND-003 — Publish brand guidelines [P2]
+
+**User story:** As a designer, I want an approved visual and written identity guide.
+
+**Acceptance criteria**
+
+1. Document approved logo use, color palette, typography and licensing, voice and imagery principles.
+2. Provide practical digital and print examples, including incorrect usage and accessibility guidance.
+3. Verify contrast for documented interface text combinations and record owner approval and version history.
+4. Keep concept-only or unapproved styling explicitly labeled.
+
+**Dependencies:** BB-BRAND-002
+
+### BB-BRAND-004 — Prepare homepage imagery [P2]
+
+**User story:** As a prospective customer, I want accurate and accessible website imagery.
+
+**Acceptance criteria**
+
+1. Select approved, rights-cleared imagery and clearly distinguish illustrations from actual application screenshots.
+2. Provide appropriately sized responsive sources and optimized formats without removing the originals.
+3. Supply meaningful alternative text for informative images and empty alt text for decorative images.
+4. Verify mobile/desktop presentation and loading behavior before deployment.
+
+**Dependencies:** BB-BRAND-001;BB-BRAND-003
+
+### BB-BRAND-005 — Prepare login artwork [P2]
+
+**User story:** As a user, I want a welcoming and accessible sign-in experience.
+
+**Acceptance criteria**
+
+1. Use approved, rights-cleared artwork without obscuring or changing the authentication workflow.
+2. Support mobile, desktop and low-bandwidth presentation with appropriate image optimization.
+3. Verify contrast, keyboard access and suitable alternative-text treatment.
+4. Record the approved source and test the actual login screen before deployment.
+
+**Dependencies:** BB-BRAND-001;BB-BRAND-003
+
+### BB-BRAND-006 — Create reusable marketing visuals [P2]
+
+**User story:** As a marketer, I want reusable and truthful visual templates.
+
+**Acceptance criteria**
+
+1. Supply approved editable templates and exports for agreed common formats.
+2. Use rights-cleared assets and distinguish illustrations from real product evidence.
+3. Verify accessible color and text legibility; substantiate product claims.
+4. Preserve source files, versions and approval history in the asset library.
+
+**Dependencies:** BB-BRAND-001;BB-BRAND-003
+
+### BB-BRAND-007 — Prepare Google Ads creative [P2]
+
+**User story:** As a marketer, I want approved advertising assets sized for supported placements.
+
+**Acceptance criteria**
+
+1. Prepare editable and exported variants for selected supported placements.
+2. Review readability, rights, truthful claims and applicable platform policies.
+3. Record owner approval and intended campaign use before publishing.
+4. Do not create a campaign, enable billing or incur spend without separate authorization.
+
+**Dependencies:** BB-BRAND-006
+
+### BB-BRAND-008 — Prepare social media templates [P2]
+
+**User story:** As a marketer, I want consistent accessible social media materials.
+
+**Acceptance criteria**
+
+1. Provide editable templates and appropriately sized exports for selected platforms.
+2. Include accessible copy and alternative-text guidance.
+3. Review rights, factual accuracy and owner approval before publication.
+4. Keep source versions and platform-specific limitations in the asset library.
+
+**Dependencies:** BB-BRAND-006
+
+### BB-BRAND-009 — Prepare branded email templates [P2]
+
+**User story:** As a recipient, I want accessible and trustworthy Butterbox emails.
+
+**Acceptance criteria**
+
+1. Provide responsive HTML and plain-text templates using approved, rights-cleared assets.
+2. Distinguish transactional and marketing messages and document applicable consent and opt-out requirements.
+3. Verify readable rendering, alternative text and links in representative email clients.
+4. Record approval without implying that an email provider or delivery channel is operational.
+
+**Dependencies:** BB-BRAND-003;BB-BRAND-006
+
+### BB-BRAND-010 — Prepare sales materials [P2]
+
+**User story:** As a sales representative, I want accurate and consistent product materials.
+
+**Acceptance criteria**
+
+1. Provide approved editable presentation and one-page templates with appropriate export formats.
+2. Verify feature, availability and compliance claims against actual evidence; label illustrations.
+3. Record rights, version, reviewer and approval before distribution.
+4. Keep materials accessible and maintain their sources in the asset library.
+
+**Dependencies:** BB-BRAND-003;BB-BRAND-006
+
 ## Reusable GitHub Copilot / coding-agent task template
 
 > Implement **[STORY ID] — [TITLE]** in `farbotkol/butterbox`. Inspect the repository and identify relevant existing patterns. First write a short plan including schema, security/tenant isolation, UI states, APIs and tests. Implement only this story and any necessary small dependencies. Follow Butterbox's light-first brand tokens. Do not rewrite unrelated modules. For each acceptance criterion, add or update tests and show how it was verified. Include loading, empty, error, permission-denied and mobile states where relevant. Run lint, typecheck, tests and build; report commands and outcomes truthfully. Deliver a concise changed-file summary and any migrations or manual setup. Do not claim completion where credentials, infrastructure or external API access are missing.
