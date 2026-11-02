@@ -375,10 +375,17 @@
   acceptance run reached **23 passing and 10 failing assertions** before a
   later SQL error aborted the suite: approval calls nonexistent
   `public.lock_shared_worker_links(uuid)` and downstream approval, assignment,
-  publication and acknowledgement assertions fail. No swap UI is present.
-  Next: preserve the committed migration, add a forward-only correction using
-  established scheduling locks, rerun the suite, and implement the employee,
-  manager and notification interfaces. No swap criterion is marked Pass.
+  publication and acknowledgement assertions fail. A new uncommitted
+  forward-only migration now follows the existing shared-worker and employee
+  lock order. With that replacement applied only inside a rolled-back
+  transaction, the complete swap pgTAP file passed **53/53** on the
+  identified isolated acceptance database. The committed migration was not
+  changed, and the correction has not yet been permanently applied to the test
+  project. No swap UI is present. Next: implement employee, manager and
+  notification interfaces; test cross-tenant and cross-workflow concurrency;
+  apply the correction safely and rerun targeted acceptance and neighbouring
+  publication/acknowledgement checks. No full regression was run and no swap
+  criterion is yet marked Pass end-to-end.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
   notifications. The targeted checks passed; see the criterion evidence below.
