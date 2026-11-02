@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **59**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **62**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **61**.
 - BB-ROSTER-011 is **Done**: opt-in keyboard shortcuts, scoped display-only
   team-member search, guarded draft-deletion confirmation and existing quick
   undo. Focused Node **21/21**, applied pgTAP **190/190**, authenticated
@@ -709,21 +709,23 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-No story is currently In Progress. BB-ROSTER-011 is verified below. Select
-the next ready Showcase P0 story if its owner-approval prerequisites are met;
-otherwise inspect the remaining P1 stories and their actual policy/data
-dependencies before starting. Do not treat unapproved brand concepts or
-unvalidated employment rules as approved inputs.
+**BB-REPORT-002 — Overtime and exceptions report: In Progress (Planning).**
+BB-ROSTER-011 is verified below. Select a scoped, read-only report of
+overlapping shifts, hours and missing attendance events, with source drill-down
+and no award-breach inference. Use a user-entered operational weekly threshold
+with no fixed default, comparing published scheduled hours and approved worked
+hours separately; an unset threshold must be visibly unevaluated. This is a
+pragmatic implementation choice after the user was unavailable for the
+definition, not an owner-approved employment or payroll rule.
 
 Next-selection check at 2026-11-02 23:23 UTC: Showcase P0 BRAND-002 has no
 owner-approved vector or verified rights; downstream branding and DEMO-003/004
 depend on it. P1 employment-change and minimum-engagement stories lack
-validated configured restrictions. REPORT-002 is a possible independent P1
-slice, but the existing product has no definition for "excessive hours":
-the threshold and whether to compare scheduled or worked hours require an
-owner/product decision. Do not infer an overtime or award rule. Ask for the
-report definition before starting; if deferred, reassess independent ready
-work rather than changing the story's status or claiming acceptance.
+validated configured restrictions. The product has no existing definition
+for "excessive hours"; the report must not manufacture one or imply wage
+calculation. First inspect existing permission, overlap, attendance, shared
+worker and reporting primitives; record any genuine implementation blocker.
+**Documentation: pending.** No REPORT-002 criterion has been verified.
 
 ## Latest completed roster productivity story
 
