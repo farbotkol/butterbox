@@ -585,6 +585,11 @@
   origin, but signature validity, current use, remote exposure and production
   connection are unverified. Assessment is paused for private owner/security
   review under DEC-004. No credential was used, changed or reproduced.
+- **BB-SAAS-003 — Tenant onboarding and support** remains Blocked for full
+  acceptance. Following the user's subsequent instruction to continue,
+  investigate the independent DEC-003 fail-closed safeguard using only the
+  isolated disposable project; do not treat that instruction as credential
+  remediation approval or evidence that security review occurred.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
@@ -663,8 +668,12 @@
   Candidate validity and current exposure were not tested. Assessment and
   unrelated development are paused for owner/security review as required by
   DEC-004; no secrets, key changes, privileged-access tests or history
-  changes were made. Exact next action: deliver the redacted classifications
-  privately and await the owner's security decision.
+  changes were made. The redacted classifications were presented privately;
+  the owner/security decision remains outstanding.
+- At 11:38 UTC, after the user's subsequent request to continue, independent
+  DEC-003 demo-safety work resumed in the verified disposable environment.
+  Credential assessment remains paused pending owner/security review, and
+  no credential access, rotation or history changes are authorized.
 
 ## Recently completed story
 
@@ -2044,11 +2053,10 @@ but has not yet run remotely.
 
 ## Next story
 
-- Await private owner/security review of the redacted **BB-FOUND-001**
-  credential findings before resuming the assessment or unrelated development.
-  Do not use a candidate credential for access, rotate it or alter history
-  without the required separate authorization.
-- Then inspect **BB-SAAS-003 — Tenant
+- Await private owner/security review before resuming the **BB-FOUND-001**
+  credential assessment. Do not use a candidate credential for access, rotate
+  it or alter history without the required separate authorization.
+- Independently inspect **BB-SAAS-003 — Tenant
   onboarding and support** for a fail-closed response to DEC-003. The
   operator-enabled sample path does not establish a separate demonstration
   environment. Keep the story Blocked until production isolation, historical
