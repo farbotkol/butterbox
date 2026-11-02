@@ -84,11 +84,26 @@ session is verified and its refresh token exchanged before matching it to the
 invitation. Before replacing an existing session, the recipient is asked for
 confirmation and shown the invited account.
 
-An account already belonging to another business cannot accept an invitation
-until safe business switching is implemented. Accounts with multiple existing
-memberships currently see a workspace-unavailable message rather than silently
-entering an arbitrary business. Contact an administrator; do not remove a
-membership merely to bypass this safeguard.
+An account that already belongs to another business can accept an invitation.
+It gains only an employee membership for the invited venue and department, and
+its other memberships keep their existing roles. After accepting, **Open
+workspace** opens the invited business; the account then switches businesses
+explicitly (see below).
+
+### Switching businesses
+
+An account with more than one business membership chooses a business at
+`/choose-business`, which lists only the account's current memberships. The
+sidebar shows **Switch business** and keeps navigation links pinned to the
+business shown in that tab (`?business=`). Every page, form submission and
+payroll download re-reads the caller's current memberships and resolves the
+business from explicit request context: the `business` URL parameter, a form's
+`business_id`, or a requested venue. Conflicting, invalid, revoked or outside
+businesses fail closed. A per-browser, HTTP-only preference cookie only
+chooses the default business for pages opened without context; mutations never
+use it, so a form submitted from another tab still acts on the business it was
+rendered for. Authenticated pages are dynamic and `no-store`; sign-out clears
+the preference.
 
 Managers can record each worker's eligible job roles in their linked
 departments and choose a qualified primary role. An existing free-text job
@@ -291,6 +306,109 @@ is kept as an immutable, attributed record. Approval does not finalise payroll
 or verify award compliance. Apply the current migrations before using this
 screen.
 
+A **payroll period** is the venue's Monday-to-Sunday week in its current
+timezone. The **Payroll period** panel on **Timesheets** lists outstanding
+exceptions: entries awaiting approval, returned or changed since approval,
+incomplete attendance, unreviewed location exceptions, and offline claims or
+employee time requests awaiting review. Department managers see the exceptions
+for their departments. Only an owner, admin or general manager with access to
+every department in the venue can finalise a week. It must have ended and have
+no exceptions; an optional note can be added. Finalising snapshots each
+session's worked and paid time and approval. Until the week is reopened, the
+server refuses corrections, edit-lock changes, approvals, breaks, clock events
+and location reviews in it. Employees can still submit time requests, which
+appear as exceptions. Reopening requires a reason. Each finalisation and
+reopening is kept as an immutable, attributed history entry with its totals, and
+earlier snapshots are retained. Finalising does not export payroll or verify
+award compliance.
+
+Owners and admins can open **Manage payroll employee mapping** from the
+**Payroll period** panel. Register a mapping destination using the provider's
+account/organisation ID and a display label, then enter each employee's exact,
+case-sensitive payroll ID. Destinations belong to the business; the employee
+list is scoped to the selected venue. A worker can have different IDs in
+different destinations, but an ID cannot identify two workers in the same
+destination. Identical employee names are not matched or copied automatically.
+Leave an ID blank to remove it. Each save requires a reason, checks the reviewed
+revision and appends an attributed audit event; retries do not duplicate events.
+
+The `list_provider_payroll_records` RPC is the provider-adapter input boundary:
+it checks current finalisation, venue authority, exceptions, destination tenant
+and complete explicit mappings before returning any records. It adds mapping
+metadata only to detached records; original snapshots and generic CSV batches
+remain unchanged. Provider-ready reads serialize with mapping changes and
+refuse a missing or removed mapping rather than returning a partial payroll.
+An adapter must persist the mapping it uses in its own immutable delivery
+record. **Mapping setup does not authenticate, connect or enable Xero, MYOB,
+Employment Hero or QuickBooks.** No provider credentials are collected and no
+payroll is sent by this workflow; provider-specific sandbox acceptance remains
+required.
+
+For newly finalised weeks, **Finalised payroll records** is a whole-venue,
+read-only preview available to those same full-venue payroll managers. Each
+versioned record retains the employee and venue IDs, venue-local work date,
+corrected clock-event IDs and timestamps, individual paid and unpaid breaks,
+worked and paid time, and the approving decision and revision. Timestamps and
+decimal seconds retain microsecond precision; displayed durations are rounded.
+Provider employee mappings and pay codes remain unassigned until explicitly
+configured by future payroll work. The preview is not an export, provider
+integration or award calculation, and outstanding exceptions still need
+resolution before any export.
+
+Finalisations created before detailed snapshots were introduced cannot safely
+be reconstructed from subsequently changed attendance. If their details are
+missing, the preview explains that an authorised manager must reopen the period
+with a reason, review it and finalise it again. The earlier finalisation and
+original attendance remain in the audit history. Provider preparation validates
+explicit employee mapping and pay-code totals on a detached, immutable copy;
+it never updates source attendance or approval records.
+
+### Generic payroll CSV
+
+On **Timesheets**, a full-venue payroll manager may prepare a CSV for the
+current finalised week after all exceptions are resolved. It covers the whole
+venue, regardless of the employee filter. Only approved sessions that have
+never appeared in a previous batch are included. Preparing a batch records its
+actor, time, finalisation and individual immutable source records; it does not
+prove that a file was downloaded or imported. An existing current batch may be
+downloaded again, but importing it twice can pay workers twice. Check the
+external payroll system before importing or retrying. Correct a blank or
+excessively long employee name before preparing a batch; the batch is not
+created if a name cannot be represented safely.
+
+Reopening a period prevents downloading the old batch. If a previously
+exported session changes, the manager must review its before/after records,
+handle any necessary adjustment in external payroll, and record a reason and
+explicit confirmation before preparing another batch. Butterbox does not
+create or transmit that adjustment. A previously exported session is never
+automatically emitted again, even if it moves to another week; only newly
+added approved sessions can appear in a later batch. History shows each
+batch's session, exact worked and paid seconds, and finalisation version, as
+well as the before/after reconciliation records. This read-only audit remains
+available to full-venue payroll managers after reopening. A new outstanding
+claim also blocks downloads until it is resolved.
+
+The UTF-8 CSV has a byte-order mark, a header, CRLF line endings and
+double-quoted cells; embedded quotes are doubled. Spreadsheet-formula-like
+values are prefixed with an apostrophe, including values preceded by whitespace
+or control characters. Keep IDs and versions as text when importing into
+spreadsheet software, which may otherwise coerce large numbers or dates.
+
+| Columns | Format and meaning |
+| --- | --- |
+| `batch_id`, `finalisation_id`, `business_id`, `venue_id`, `department_id`, `employee_id`, `session_id`, `approval_id` | Butterbox UUIDs; `employee_id` is not an external payroll ID. |
+| `payroll_version` | Exact decimal finalisation version, represented as text. |
+| `employee_name` | Name captured when the batch was prepared, for human review only; never use it to infer a payroll ID. |
+| `work_date`, `venue_timezone` | Corrected clock-in date as `YYYY-MM-DD` in the named IANA venue timezone. |
+| `clock_in_utc`, `clock_out_utc` | Corrected UTC instants as `YYYY-MM-DDTHH:mm:ss.ffffffZ`, with six fractional digits. |
+| `elapsed_seconds`, `worked_seconds`, `paid_seconds`, `paid_break_seconds`, `unpaid_break_seconds` | Exact non-negative decimal seconds, with up to six fractional digits. Worked time excludes all breaks; paid time excludes unpaid breaks. |
+| `worked_hours`, `paid_hours` | Decimal hours rounded half-up to six decimal places from the exact seconds; use the seconds columns when that rounding is unsuitable. |
+| `approval_revision` | The approved attendance revision as a lowercase SHA-256 hexadecimal value. |
+
+This file contains no external employee mappings, pay rates, award
+interpretation or pay codes. The venue remains responsible for confirming
+payroll import, any manual adjustments and applicable award obligations.
+
 Linked active employees can also record an optional preferred number of weekly
 hours (0–168 in quarter-hour increments) and separate email choices for schedule
 updates and leave decisions on **Availability**. These preferences are not
@@ -394,6 +512,25 @@ The Supabase CLI applies the local migrations when starting a new local
 project. Database tests require Docker and use the local database. Use a
 separate Supabase project and credentials for each environment; do not point
 local tests or destructive reset commands at staging or production.
+
+To rehearse the canonical-record migration against a real pre-migration
+finalisation, copy the repository migrations into an isolated disposable
+Supabase workdir. Verify its project ID and its published database and API
+ports, and set `WORKDIR` and `DISPOSABLE_DB_CONTAINER` to that project.
+**These resets erase that project's database**:
+
+```sh
+npx --yes supabase@2.122.0 db reset --local --no-seed --version 20261102180000 --workdir "$WORKDIR"
+docker exec -i "$DISPOSABLE_DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres \
+  < supabase/tests/migrations/canonical_payroll_legacy_setup.sql
+npx --yes supabase@2.122.0 migration up --local --workdir "$WORKDIR"
+docker exec -i "$DISPOSABLE_DB_CONTAINER" psql -X -v ON_ERROR_STOP=1 -U postgres -d postgres -At -q \
+  < supabase/tests/migrations/canonical_payroll_legacy_verify.sql
+npx --yes supabase@2.122.0 db reset --local --no-seed --workdir "$WORKDIR"
+```
+
+Check the pgTAP output for the full plan and any `not ok` lines; a successful
+`psql` exit alone does not establish that the assertions passed.
 
 For the HTTP tenant-isolation test, start a **disposable** local Supabase
 project in its own work directory, with distinct ports and the repository's

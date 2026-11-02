@@ -19,6 +19,7 @@ const result = spawnSync(
   [
     "--experimental-strip-types", "--test", "--test-concurrency=1",
     "tests/tenant-isolation.integration.test.mjs",
+    "tests/business-switching.integration.test.mjs",
     ...(process.env.BUTTERBOX_TEST_DB_CONTAINER
       ? [
           "tests/auto-assignment-concurrency.integration.test.mjs",
@@ -36,6 +37,7 @@ const result = spawnSync(
           "tests/weekly-timesheet.integration.test.mjs",
           "tests/weekly-timesheet-bulk-locks.integration.test.mjs",
           "tests/timesheet-approvals.integration.test.mjs",
+          "tests/payroll-period-finalisation.integration.test.mjs",
         ] : []),
   ],
   {

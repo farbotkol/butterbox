@@ -11,6 +11,7 @@ import {
 import { AppShell } from "@/components/app-shell";
 import type { ConflictPolicyValues } from "@/lib/conflict-policy";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace } from "@/lib/workspace";
 
 type Department = { id: string; name: string; active: boolean };
@@ -101,20 +102,20 @@ function StatusSelect({ active, label }: { active: boolean; label: string }) {
 
 export default async function OrganisationPage({
   searchParams,
-}: { searchParams: Promise<{ error?: string; saved?: string; venue?: string }> }) {
+}: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; business?: string }> }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace();
+  const params = await searchParams;
+  const workspace = await getWorkspace(undefined, { businessId: params.business, venueHint: params.venue, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
-  if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
-  const params = await searchParams;
   const venues = await workspace.supabase.from("venues")
     .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
     .eq("business_id", workspace.business.id).order("name");
   const selectedVenue = venues.data?.find((venue) => venue.id === (params.venue ?? workspace.venue.id));
-  if (!venues.error && !selectedVenue) redirect("/settings/organisation?error=filter");
+  if (!venues.error && !selectedVenue) redirect(withBusiness("/settings/organisation?error=filter", workspace.business.id));
   const venueId = selectedVenue?.id ?? workspace.venue.id;
 
   const canManageGeofence = workspace.membership.role === "owner";
@@ -167,7 +168,7 @@ export default async function OrganisationPage({
   const canManageDepartments = departmentManagerRoles.includes(workspace.membership.role);
 
   return (
-    <AppShell businessName={workspace.business.name} venueName={selectedVenue?.name ?? workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={selectedVenue?.name ?? workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-3xl font-semibold">Departments and roles</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
@@ -180,6 +181,7 @@ export default async function OrganisationPage({
 
       {(venues.data?.length ?? 0) > 1 && (
         <form action="/settings/organisation" className="mt-5 flex items-end gap-3">
+          <input type="hidden" name="business" value={workspace.business.id} />
           <label className="text-sm">Venue
             <select name="venue" defaultValue={venueId} className={fieldClass}>
               {venues.data?.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}

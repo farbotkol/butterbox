@@ -3,12 +3,13 @@ import { acceptStaffInvitationAction, signOutAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
 import { InvitationSession } from "@/components/invitation-session";
 import { isEndedSession } from "@/lib/auth-errors";
+import { parseBusinessId, withBusiness } from "@/lib/business-selection";
 import { isInvitationId, parseInvitationPreview } from "@/lib/invitations";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 
 type InvitationPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string }>;
+  searchParams: Promise<{ error?: string; business?: string }>;
 };
 
 export default async function InvitationPage({ params, searchParams }: InvitationPageProps) {
@@ -32,6 +33,7 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
       message: authError?.message ?? result?.error?.message ?? "The server returned invalid invitation data.",
     });
   }
+  const invitedBusiness = parseBusinessId(query.business);
   const unavailable = !configured || !validId || authError || result?.error || invalidResult;
 
   return (
@@ -48,13 +50,11 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
           JavaScript is required to verify the invitation email on this device.
         </p></noscript>
         {query.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
-          {query.error === "business"
-            ? "This account already belongs to another business. Safe business switching is not available yet."
-            : query.error === "scope"
-              ? "Your existing membership cannot access this venue or department. Ask your manager for help."
-              : query.error === "authentication"
-                ? "Your session ended. Ask your manager to send the invitation email again."
-                : "This invitation could not be accepted. Ask your manager for help."}
+          {query.error === "scope"
+            ? "Your existing membership cannot access this venue or department. Ask your manager for help."
+            : query.error === "authentication"
+              ? "Your session ended. Ask your manager to send the invitation email again."
+              : "This invitation could not be accepted. Ask your manager for help."}
         </p>}
         {unavailable ? (
           <p role="alert" className="mt-5 text-sm text-red-800">
@@ -92,7 +92,9 @@ export default async function InvitationPage({ params, searchParams }: Invitatio
               </p>
               <div className="flex flex-wrap gap-4">
                 <Link href="/reset-password" className="font-semibold text-ocean underline">Choose a password</Link>
-                <Link href="/" className="font-semibold text-ocean underline">Open workspace</Link>
+                <Link href={invitedBusiness ? withBusiness("/", invitedBusiness) : "/"} className="font-semibold text-ocean underline">
+                  Open workspace
+                </Link>
               </div>
             </> : <p role="alert" className="rounded-lg bg-red-50 p-4 text-red-800">
               This invitation is {preview.status}. Ask your manager for a new invitation.

@@ -1,4 +1,4 @@
-import { CircleHelp, LogOut } from "lucide-react";
+import { ArrowLeftRight, CircleHelp, LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOutAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
@@ -7,6 +7,8 @@ import { MainNavigation } from "@/components/main-navigation";
 type AppShellProps = {
   children: React.ReactNode;
   businessName: string;
+  businessId?: string;
+  businessCount?: number;
   venueName: string;
   email: string;
   role: string;
@@ -15,21 +17,30 @@ type AppShellProps = {
 export function AppShell({
   children,
   businessName,
+  businessId,
+  businessCount = 1,
   venueName,
   email,
   role,
 }: AppShellProps) {
+  const pinnedBusiness = businessCount > 1 ? businessId : undefined;
   return (
     <div className="min-h-screen bg-[#f5f9f8] md:flex">
       <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:border-b-0 md:border-r">
-        <Link href="/" className="flex items-center gap-3 px-5 py-5 md:px-6 md:py-6">
+        <Link href={pinnedBusiness ? `/?business=${encodeURIComponent(pinnedBusiness)}` : "/"}
+          className="flex items-center gap-3 px-5 py-5 md:px-6 md:py-6">
           <BrandLockup compact />
         </Link>
         <div className="mx-4 mb-3 rounded-lg border border-line bg-cloud px-4 py-3 md:mb-5">
           <p className="truncate text-sm font-semibold text-ink">{businessName}</p>
           <p className="mt-1 truncate text-xs text-muted">{venueName}</p>
+          {businessCount > 1 && <Link href="/choose-business"
+            className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-md text-xs font-semibold text-ocean underline-offset-2 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean">
+            <ArrowLeftRight size={14} aria-hidden="true" />
+            Switch business
+          </Link>}
         </div>
-        <MainNavigation role={role} />
+        <MainNavigation role={role} businessId={pinnedBusiness} />
         <div className="mt-auto hidden space-y-1 px-3 pb-5 md:block">
           <a
             href="mailto:support@butterbox.app"

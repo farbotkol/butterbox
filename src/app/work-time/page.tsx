@@ -12,6 +12,7 @@ import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { formatWorkedDuration, parseWorkedTime, workTimeExceptionLabels, type WorkedTime } from "@/lib/worked-time";
 import { getWorkspace } from "@/lib/workspace";
+import { withBusiness } from "@/lib/business-selection";
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const errors: Record<string, string> = {
@@ -21,6 +22,7 @@ const errors: Record<string, string> = {
   "correction-time": "The corrected time must differ from the current time and cannot be in the future.",
   "correction-stale": "Attendance changed. Review the refreshed values before correcting again.",
   "correction-locked": "Attendance edits are locked. Ask an owner or general manager to unlock them.",
+  "period-finalised": "This week's payroll period is finalised. An owner, admin or general manager must reopen it with a reason before attendance can change.",
   "correction-overlap": "The corrected attendance overlaps another session for this worker.",
   "correction-unfinished": "Only finished attendance sessions can be corrected.",
   "correction-venue": "The selected venue is unavailable. Check your access and try again.",
@@ -42,11 +44,11 @@ function duration(value: number | null): string {
 }
 
 export default async function WorkTimePage({ searchParams }: {
-  searchParams: Promise<{ venue?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ business?: string; venue?: string; error?: string; saved?: string }>;
 }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(params.venue);
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -63,7 +65,7 @@ export default async function WorkTimePage({ searchParams }: {
       </main>
     );
   }
-  if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const [venues, result, eventResult, historyResult, lockResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")
@@ -109,7 +111,7 @@ export default async function WorkTimePage({ searchParams }: {
   }
 
   return (
-    <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>

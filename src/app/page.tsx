@@ -29,7 +29,7 @@ import {
 } from "@/lib/workspace";
 
 type HomePageProps = {
-  searchParams: Promise<{ week?: string }>;
+  searchParams: Promise<{ week?: string; business?: string }>;
 };
 
 function SetupNotice() {
@@ -96,27 +96,30 @@ function MetricCard({
 export default async function HomePage({ searchParams }: HomePageProps) {
   if (!isSupabaseConfigured()) return <SetupNotice />;
 
-  const workspace = await getWorkspace();
+  const params = await searchParams;
+  const workspace = await getWorkspace(undefined, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
-    const multipleMemberships = "reason" in workspace && workspace.reason === "multiple_memberships";
+    const businessUnavailable = "reason" in workspace && workspace.reason === "business_unavailable";
     return (
       <main className="mx-auto mt-20 max-w-lg rounded-2xl bg-white p-8">
         <h1 className="text-xl font-semibold">Workspace unavailable</h1>
         <p className="mt-3 text-sm leading-6 text-muted">
-          {multipleMemberships
-            ? "Your account belongs to more than one business. Safe business switching is not available yet. Contact your administrator before continuing."
+          {businessUnavailable
+            ? "This business is no longer available to your account. Choose another business or contact your administrator."
             : "We couldn't verify your session or load your workspace. Check your connection and account settings, then try again."}
         </p>
-        {multipleMemberships && <form action={signOutAction} className="mt-4">
-          <button type="submit" className="rounded-lg border border-line px-4 py-2 text-sm font-semibold">Sign out</button>
-        </form>}
+        {businessUnavailable && <div className="mt-4 flex flex-wrap gap-3">
+          <Link href="/choose-business" className="rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">Choose a business</Link>
+          <form action={signOutAction}>
+            <button type="submit" className="rounded-lg border border-line px-4 py-2 text-sm font-semibold">Sign out</button>
+          </form>
+        </div>}
       </main>
     );
   }
 
-  const params = await searchParams;
   const week = getWeekStart(params.week, workspace.venue.timezone);
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
@@ -177,7 +180,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
 
   return (
     <AppShell
-      businessName={workspace.business.name}
+      businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length}
       email={workspace.user.email ?? ""}
       role={workspace.membership.role}
       venueName={workspace.venue.name}

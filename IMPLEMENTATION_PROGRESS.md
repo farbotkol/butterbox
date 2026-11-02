@@ -2,14 +2,79 @@
 
 ## Execution summary
 
-- Feature-branch tracker snapshot (`feature/award-central-foundation`, before
-  roadmap integration): **109** stories; Done: **29**; In Progress: **8**;
-  Blocked: **3**; Backlog: **69**. Recalculate after merging the roadmap.
-- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-ORG-001, BB-ORG-002, BB-ORG-003,
-  BB-ORG-004,   BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
+- Combined tracker on `feature/award-central-foundation`: **109** stories;
+  Done: **37**; In Progress: **5**; Blocked: **4**; Backlog: **63**.
+  These counts retain Core's latest statuses plus Award Central's
+  branch-only updates (002/013 In Progress; 017 Blocked). They do not imply
+  merged runtime acceptance. Award Central evidence, decisions and pending
+  merged validation are in [its development report](docs/award-central/IMPLEMENTATION_PROGRESS.md).
+- Core checkpoint totals before the Award Central status overlay: **109** (the owner's merged PR #2 added 22 Award Central
+  BB-PAYRULES stories). Verified Done: **37**. In Progress: **3**.
+  Blocked: **3**. Not started (Backlog): **66**.
+- BB-FOUND-005 (invitations) is Done. Verified existing members of another
+  business can now accept a scoped invitation; they gain only an employee
+  membership for the invited venue and department and keep their other
+  memberships. A clean isolated replay of all 45 migrations passed
+  **2,077/2,077** pgTAP assertions across 44 files (71 invitation
+  assertions). All **19/19** authenticated integrations passed, plus **136**
+  Node tests with 19 integration tests skipped in that invocation. ESLint,
+  TypeScript, the split production build and **51/51** serialized
+  production-browser scenarios also passed.
+- BB-FOUND-006 (business switching) is Done: explicit per-request business
+  selection, a membership-only chooser and per-tab pinning. Regressions:
+  **136** Node tests (19 integration tests skipped in that invocation),
+  **19/19** authenticated integrations including the new per-business
+  authorisation/revocation test, **50/50** serialized production-browser
+  scenarios, ESLint, TypeScript and the split production build. No SQL changed,
+  so pgTAP was not rerun for this checkpoint.
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-005, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
+  BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
-  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003 and BB-TIME-004.
+  BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
+  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002 and BB-PAY-003.
+- BB-ORG-005's remaining approval/export attribution criterion is now verified,
+  without recreating the existing venue workflow. The authenticated integration
+  finalises and exports Sydney and Perth separately for linked worker profiles;
+  the production browser downloads the Perth CSV and excludes the other
+  venue's sessions and profile. Final regressions passed **2,072/2,072**
+  pgTAP assertions across 44 files, **18/18** authenticated integrations,
+  **131** Node tests, ESLint, TypeScript, split production compile/generate
+  and **50/50** serialized production-browser scenarios. The 18 integrations
+  skipped in the Node-only invocation passed separately. Disposable fixtures
+  were removed and temporary app servers stopped; disk remained above 30 GiB.
+- BB-PAY-003 was committed and pushed as
+  `17d91e22d32df0ea989c58c2f413c4c5e2afc094`; the remote SHA matched.
+- BB-PAY-004 is Blocked by missing secure OAuth and explicitly authorised
+  isolated Australian payroll organisation access. No provider delivery or
+  sandbox acceptance is claimed. Next ready prerequisite: BB-FOUND-006.
+- BB-PAY-003's final clean 44-migration disposable replay passed
+  **2,072/2,072** pgTAP assertions across 44 files, including 29 mapping
+  assertions. All **18/18** authenticated integrations, **131** Node tests,
+  ESLint, TypeScript and split production compile/generate passed. The 18
+  integrations skipped in the Node-only run passed separately. All **50/50**
+  serialized production-browser scenarios passed, including explicit mapping
+  of two employees with identical names and mobile layout. Free disk remained
+  above 30 GiB.
+- BB-PAY-002 and BB-TIME-006's final clean 43-migration disposable replay
+  passed **2,043/2,043** pgTAP assertions across 43 files, including 64
+  export-ledger assertions. All **18/18** authenticated tenant/concurrency
+  integrations, **128** Node tests, full ESLint, TypeScript and the split
+  production build passed. The 18 integrations skipped in the Node-only run
+  passed separately. All **49/49** serialized production-browser scenarios
+  passed on the final schema. Free disk remained above 31 GiB; no cache,
+  database, volume or worktree deletion was needed.
+- BB-PAY-001's final 42-migration disposable replay passed **1,979/1,979**
+  pgTAP assertions across 42 files, including 45 canonical-record assertions.
+  An independent real pre-migration finalisation rehearsal passed **11/11**
+  assertions after applying the new migration. All **18/18** authenticated
+  tenant/concurrency integrations and **121** serialized Node tests passed;
+  the 18 integrations skipped in the Node-only run were run separately. Full
+  ESLint, TypeScript and split production compile/generate passed. The full
+  **48/48** low-memory browser regression passed before the final timezone
+  lock; a rebuilt focused payroll scenario passed against the final schema.
+  The disposable users and businesses were removed, the test server stopped and
+  free disk remained at approximately 32 GB.
 - The latest serialized Node run passed **60 tests**, with five integration
   tests skipped in that invocation and subsequently passed separately against
   the isolated project. The complete isolated pgTAP regression passed
@@ -266,9 +331,56 @@
 
 ## Current story
 
-- **BB-TIME-004 — Department approval** is Done (verification below).
-  Next: **BB-TIME-005 — Finalise payroll period**, then BB-TIME-006 and
-  BB-PAY-001/002/003 (payroll-ready export) before Xero (BB-PAY-004).
+- **BB-FOUND-005 — Invite and onboard users** is Done (evidence below). The
+  former cross-business rejection was removed by a new migration now that
+  BB-FOUND-006 resolves the business per request. Manager-page permission
+  redirects now keep the business context, so multi-business users see the
+  intended business instead of the chooser. Next: **BB-ROSTER-008 — Publish
+  and notify**.
+- **BB-FOUND-006 — Switch between business memberships** is Done (evidence
+  below), committed as `92f4841d21c89b4bfbf3e3c5d7bbf678aac70bc3`; the remote
+  SHA matched.
+- **BB-ORG-005 — Multiple venues** is Done. All three criteria are verified:
+  scoped venue selection, shared-worker overlap detection and actual venue
+  attribution through timesheet approval, finalisation and CSV export.
+  Only tests and tracking changed in this checkpoint; the existing payroll
+  implementation already preserved attribution. Next implementation:
+  **BB-FOUND-006 — Switch between business memberships**.
+- **BB-PAY-004 — Xero Payroll adapter** is Blocked. Configuration-key presence
+  checks found no `XERO_` keys in runtime, repository environment files or
+  Codespace shared secrets; no values were printed. No explicitly authorised
+  isolated Australian payroll organisation is available. Official OpenAPI
+  confirms the Payroll AU v2 `/Timesheets` endpoint and POST
+  `payroll.timesheets` scope, not working OAuth refresh or sandbox delivery.
+  The provider-ready mapping gate remains closed to actual sending.
+- **BB-PAY-003 — Payroll employee mapping** is Done. Owner/admin
+  setup creates business-wide mapping destinations, not authenticated provider
+  connections. Explicit case-sensitive employee IDs are unique per destination;
+  versioned saves/removals append attributed audit events. Provider-ready
+  records use detached canonical records, refuse incomplete mappings and
+  serialize with mapping edits. All criteria and final clean replay/regressions
+  passed (evidence below). No provider is connected or enabled by this feature.
+  BB-PAY-004 requires external access and is Blocked; continue independent
+  foundation work rather than claiming delivery works.
+- **BB-PAY-002 — Generic CSV export** and **BB-TIME-006 — Timesheet export
+  traceability** are Done (criterion evidence below). Immutable scoped batches
+  contain approved finalised records, protect spreadsheet cells and never
+  automatically export a previously exported session again. Amended hours
+  require explicit manual reconciliation with a reason and confirmation of
+  any necessary external adjustment. Final-schema verification includes the
+  employee-name race and reconciliation-reason boundaries, including BOM
+  whitespace and non-BMP characters. BB-PAY-003 is now complete.
+  No external payroll access or award compliance is
+  implied by a generic CSV download. Verified checkpoint `109df0b` was pushed;
+  the remote SHA matched `109df0b3c1a576569d3a569e3f41020e3e9a07de`.
+- **BB-PAY-001 — Canonical payroll record** is Done (verification below).
+  Its verified checkpoint is `90f29fd`, pushed to the development branch.
+- **BB-TIME-005 — Finalise payroll period** is Done (verification below).
+  Canonical records, generic CSV, export traceability and employee mapping
+  have now been completed before Xero (BB-PAY-004).
+  The new BB-PAYRULES award stories depend on
+  BB-RULES-001/003 and should follow reliable export.
+- **BB-TIME-004 — Department approval** is Done.
 - **BB-TIME-003 — Employee correction request** is Done. It was recovered
   from pushed checkpoint commits after the Codespace upgrade (8 CPU, 31 GiB
   RAM, 63 GB disk) and verified on a clean isolated replay.
@@ -290,7 +402,8 @@
   edit-lock transitions are immutable, attributed and visible to permitted
   users; corrected work time, daylight-saving handling, precision, linked-worker
   overlap and concurrent account relinking are verified below.
-- **BB-FOUND-005 — Invite and onboard users** is In Progress. The committed
+- **BB-FOUND-005 — Invite and onboard users** is now Done (see above). Earlier
+  checkpoint notes: the committed
   database migration implements scoped, seven-day invitations, verified-email
   acceptance, duplicate and revocation handling, and protected event history.
   A clean isolated replay of all 30 migrations passed **1,352/1,352** pgTAP
@@ -303,10 +416,6 @@
   business switching is safe. A local Supabase proof confirmed that an
   implicit-flow email redirect reaches a separate recipient browser with
   session tokens in the URL fragment; no tokens were printed.
-- **BB-FOUND-006 — Switch between business memberships** is In Progress. The
-  application now fails closed instead of silently choosing the first of
-  multiple memberships; a stale-form and cross-page browser scenario passed.
-  Actual selection, independent request context and switching remain unimplemented.
 - **BB-SAAS-003 — Tenant onboarding and support** is Blocked. The owner
   checklist, contextual help and default-off protected sample policy are
   implemented and tested in the disposable environment. Production isolation
@@ -341,9 +450,9 @@
   hidden shifts; automatic assignment avoids cross-venue overlaps, and
   configurable publication blockers cover them. All three criteria and the
   complete regression checks passed.
-- **BB-ORG-005 — Multiple venues** remains In Progress: venue selection,
-  cross-venue overlap detection and attendance venue attribution are verified,
-  but the timesheet workflow is still needed.
+- **BB-ORG-005 — Multiple venues** is Done: scoped selection, cross-venue
+  conflicts and approval/export attribution are verified in the final
+  2,072-assertion, 18-integration and 50-browser-scenario regressions.
 - **BB-ROSTER-008 — Publish and notify** remains In Progress. Configured local
   and cross-venue blockers prevent publication atomically, and concurrent conflicting edits
   return an explicit retry. Numbered versions, complete protected snapshots and
@@ -362,23 +471,48 @@
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
 
-### BB-FOUND-005 — Invite and onboard users (In Progress)
+### BB-FOUND-006 — Switch between business memberships (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| FOUND-006.1 Switch shows only active memberships | `/choose-business` and `switchBusinessAction` list and accept only businesses with a current `business_memberships` row for the caller (RLS-scoped); the sidebar link appears only with more than one membership. | Browser: chooser listed exactly the two member businesses, never the outside business; after revocation it listed one and hid the revoked business. Integration: RLS returns only member businesses and memberships. | Pass |
+| FOUND-006.2 API checks each request independently of UI selection | `getWorkspace` re-reads memberships per request and resolves the business only from explicit context (URL `business`, form `business_id`, requested venue); conflicting, invalid, revoked and outside values fail closed. Mutations never read the preference cookie. RPCs authorise the role held in the targeted business. | Unit: 5 selection tests. Integration: owner rights in one business were denied in an employee-only and an outside business, and with mismatched venues; revocation took effect for the same token. Browser: a stale form submitted after revocation created no employee; conflicting, invalid and outside business URLs showed "Workspace unavailable". | Pass |
+| FOUND-006.3 No data leaks across tabs or cached pages | Navigation and post-action redirects stay pinned to the tab's business; forms carry their venue/business; pages are dynamic and `no-store`; sign-out deletes the preference cookie. | Browser: tab 1 stayed on business A after tab 2 switched to B, and its form created the employee only in A; `/people` returned `Cache-Control` containing `no-store`; the preference cookie was absent after sign-out. | Pass |
+
+Files: `src/lib/business-selection.ts`, `src/lib/workspace.ts`,
+`src/app/choose-business/page.tsx`, `src/app/actions.ts`,
+`src/components/app-shell.tsx`, `src/components/main-navigation.tsx`, all
+workspace pages (business parameter), `tests/business-selection.test.mjs`,
+`tests/business-switching.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs` (the former
+fail-closed scenario was replaced by a stricter switching scenario covering
+the same stale-form and cross-page protections) and `README.md`.
+Decision: the HTTP-only `bb_business` preference cookie is only a default for
+pages opened without context; it is never authorisation and never used by
+mutations.
+
+### BB-FOUND-005 — Invite and onboard users (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | FOUND-005.1 Invitation expires and cannot be reused | Database-time expiry and atomic acceptance reject expired or already-consumed invitations. | The 66-assertion invitation pgTAP suite and authenticated acceptance races passed; production Chromium showed expired invitations cannot be accepted. | Pass |
-| FOUND-005.2 Recipient joins only the intended business and venue | Verified email acceptance links the intended employee and creates only its scoped membership; an existing same-business member retains their role and scope. Existing members of another business are explicitly rejected until safe switching exists. | pgTAP and authenticated cross-tenant/concurrency tests passed; separate-browser Chromium confirmed the intended business, venue and department and denied an unrelated user. The existing-other-business case is intentionally unavailable. | Blocked |
+| FOUND-005.2 Recipient joins only the intended business and venue | Verified email acceptance links the intended employee and creates only its scoped membership. An existing same-business member retains their role and scope. An existing member of another business (`20261103000000_cross_business_invitations.sql`) gains only an employee membership for the invited venue and department, keeping their other memberships. Acceptance then opens the invited business explicitly. | 71 pgTAP assertions verified the new scoped membership, the unchanged other-business membership, the employee link, no access to another department and no reuse. The authenticated integration covered concurrent cross-business acceptance, a setup/acceptance race, refused invitation creation and owned-business visibility. Separate-browser Chromium covered intended scope and unrelated-user denial. A new Chromium scenario had an existing owner accept, open the invited business, get refused manager pages and switch back without seeing the invited profile. All passed. | Pass |
 | FOUND-005.3 Duplicates and revocation are handled | Unique pending indexes and transaction locks prevent duplicate employee/email invitations; managers can resend or revoke; expired invitations can be replaced. | pgTAP and concurrent duplicate/revocation tests passed; Chromium verified resend preserves one pending invitation and revoked links cannot be accepted. | Pass |
 | FOUND-005.4 Audit entry is stored | Protected append-only events record invitation creation and status changes with tenant, department, actor and time. | pgTAP verified scoped access and mutation protection; authenticated and browser tests confirmed creation and acceptance actors. | Pass |
 
 Files: `supabase/migrations/20261102070000_staff_invitations.sql`,
+`supabase/migrations/20261103000000_cross_business_invitations.sql`,
 `supabase/tests/database/staff_invitations.test.sql`,
 `tests/staff-invitations.integration.test.mjs`, `scripts/test-tenant-isolation.mjs`,
 `src/app/actions.ts`, `src/app/people/page.tsx`, `src/app/invitations/[id]/page.tsx`,
 `src/components/invitation-session.tsx`, `src/lib/invitations.ts`,
 `src/lib/auth-urls.ts`, `src/lib/workspace.ts`, `src/app/page.tsx`,
 `src/app/setup/page.tsx`, `tests/invitations.test.mjs`,
-`tests/auth-urls.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`.
+`tests/auth-urls.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`. The
+cross-business completion also changed the permission redirects in
+`src/app/work-time/page.tsx`, `src/app/timesheets/page.tsx` and
+`src/app/settings/{permissions,payroll,organisation}/page.tsx` to keep the
+business context.
 The recipient refresh token is exchanged in an isolated client, and the
 resulting session is verified against the invitation before an existing
 browser session can be replaced. This rejects mismatched access and refresh
@@ -465,6 +599,148 @@ removing assertions. A rebuilt focused run and all 34 full browser scenarios
 then passed. At that checkpoint the result was a calculation view, not a payroll approval,
 award interpretation, correction or export workflow. Corrections were added
 later under BB-ATTEND-007; payroll approval and export are still unavailable.
+
+### BB-PAY-001 — Canonical payroll record (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-001.1 Schema includes worker mapping, venue, date, hours, breaks, codes and approval/version | The finalisation transaction captures immutable tenant-associated details alongside each approved `payroll_period_entries` row. Version 1 records contain the Butterbox employee ID, explicitly null provider mapping and pay codes, venue/department/timezone, local date, exact corrected event times, elapsed/worked/paid seconds, individual paid/unpaid breaks, approval revision and finalisation ID/sequence. Venue timezone is locked and checked against the period before a snapshot is inserted. Only a scoped full-venue payroll manager may call the preview RPC. | 45/45 canonical pgTAP assertions passed, covering exact corrected microseconds, Sydney's overnight DST transition, break classifications and totals, approval/version, empty weeks, scoped denial, immutable old versions, cross-tenant association and stale/incomplete periods. The authenticated integration passed owner/GM access, FOH/employee/other-tenant denial, direct-table denial, and both orders of the venue-timezone/finalisation race. Production Chromium verified the owner preview and mobile layout, FOH denial and removal after reopening. | Pass |
+| PAY-001.2 Malformed records fail clearly | `validateCanonicalPayrollRecord` checks exact shapes, IDs, timezone/local date and week bounds, timestamp precision, break order/provenance, integer-microsecond totals, approved revisions, provider mapping and pay-code totals. Collection validation rejects duplicate, incomplete, cross-tenant or mixed-version rows. The RPC and UI explicitly reject stale and incomplete snapshots. | All 7 canonical Node tests passed, including malformed fields, mismatched totals, duplicate and cross-tenant rows, stale versions, DST and invalid mapping/codes. The 45 pgTAP assertions passed invalid input and stale/incomplete snapshot cases. A genuine pre-migration finalisation was created before applying the migration: all 11 legacy assertions passed, including the clear missing-details error, reasoned reopen/refinalise and preservation of original entries and events. | Pass |
+| PAY-001.3 Provider adapters never mutate source timesheets | The provider-preparation boundary has no database write capability, requires an explicit matching employee mapping and assigned codes, and returns a detached deeply frozen validated record. Attendance events, approvals and finalisation snapshots remain immutable; a provider-specific integration is not yet implemented and must use and retest this boundary. | The provider-boundary unit tests passed mutation attempts, detached nested records, explicit mapping, missing/mismatched IDs and pay-code validation. The authenticated integration prepared a real finalised record, rejected mutation of its copy and re-read the unchanged persisted record. Database and legacy tests confirmed original attendance and historical snapshots remain unchanged. | Pass |
+
+Files: `supabase/migrations/20261102190000_canonical_payroll_records.sql`,
+`supabase/tests/database/canonical_payroll_records.test.sql`,
+`supabase/tests/migrations/canonical_payroll_legacy_setup.sql`,
+`supabase/tests/migrations/canonical_payroll_legacy_verify.sql`,
+`src/lib/canonical-payroll.ts`, `src/app/timesheets/page.tsx`,
+`tests/canonical-payroll.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+The full test counts and final browser rerun are recorded in the execution
+summary above.
+
+Decisions and limits: older finalisations without detailed snapshots are not
+reconstructed from live data; an authorised manager must reopen with a reason,
+review and finalise again. Seconds retain microsecond precision, while display
+durations round. Provider mappings and codes are unassigned, not inferred.
+The preview is not an export, Xero integration or award calculation. A future
+export must atomically recheck the finalisation, exceptions, mapping and
+reconciliation under appropriate locks.
+
+### BB-PAY-003 — Payroll employee mapping (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-003.1 Mapping unique per connection and employee | Business-scoped mapping destinations have immutable provider/account identity. One mapping per destination/employee and one employee per external ID are enforced by constraints and the owner/admin-only RPC. Saves/removals require a reason, expected revision and idempotent request; changes append immutable audit events. Destinations are mapping setup, not OAuth authentication or an enabled adapter. | 29-assertion pgTAP suite passed uniqueness, independent destinations, role/tenant denials, invalid IDs, request retries, stale edits, removals and audit immutability. Authenticated integration passed eight competing edits with one winner and six retries returning one audit receipt. Production Chromium verified owner setup, duplicate-ID refusal, successful distinct IDs and removal with incremented revisions. Passed. | Pass |
+| PAY-003.2 Missing mappings block provider export | `list_provider_payroll_records` is the adapter input boundary: full-venue authorization, current finalisation/exceptions and destination tenant are checked, then mapping reads serialize with edits. It refuses to return any records if any employee is unmapped. Generic CSV remains provider-neutral. No external adapter is enabled by mapping setup. | pgTAP verified missing/partial mappings, removal and a different destination each refuse all provider-ready records. Authenticated integration verified an in-flight mapping removal blocks the provider read until commit, then it fails with `Missing payroll employee mappings`. Complete reads returned two validated records for the exact explicit connection; employees, FOH and outsiders were denied. Passed. | Pass |
+| PAY-003.3 Worker IDs not inferred from names | The UI requires explicit case-sensitive IDs next to stable Butterbox employee UUIDs. The adapter boundary joins only by employee/connection IDs and attaches mapping metadata to detached canonical records, leaving original attendance, snapshots and CSV unchanged. | pgTAP verified two identical names produce their separately entered payroll IDs and original snapshots retain null provider mapping. Production Chromium verified saving one same-name employee leaves the other unmapped, and after saving both, removing one preserves the other's explicit ID. Unit tests passed input, revision and malformed/duplicate-response checks. Passed. | Pass |
+
+Files: `supabase/migrations/20261102210000_payroll_employee_mapping.sql`,
+`supabase/tests/database/payroll_employee_mapping.test.sql`,
+`src/lib/payroll-mapping.ts`, `src/app/settings/payroll/page.tsx`,
+`src/app/actions.ts`, `src/app/timesheets/page.tsx`,
+`tests/payroll-mapping.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+
+Verification: clean replay of all 44 migrations on the identity/port-verified
+disposable project; **2,072/2,072** database assertions across 44 files;
+**18/18** authenticated integrations; **131** Node tests (18 integrations
+skipped only in that invocation and run separately); full ESLint, TypeScript,
+split production compile/generate and **50/50** production-browser scenarios.
+The first focused browser run exposed a provider select whose implicit label
+included option text; an explicit label/control association fixed it, and
+the rebuilt focused and complete regressions passed without dropping assertions.
+Owner/admin management is intentionally business-wide; full-venue GMs can read
+mapped provider-ready records but cannot change business-wide destinations.
+No provider credentials are stored or external payroll calls made. A future
+adapter must snapshot the mapping used in its immutable delivery record and
+pass its own sandbox acceptance; this story does not claim Xero delivery.
+Temporary browser servers stopped, fixtures were cleaned up and free disk
+stayed above 30 GiB. Main development and production databases were untouched.
+
+### BB-PAY-002 — Generic CSV export (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-002.1 Columns and date/time formats documented | README specifies all 22 columns, UTF-8 BOM, quoted CRLF CSV, venue-local work dates, UTC clock timestamps, exact decimal seconds and half-up hours rounded to six places. Stable employee UUIDs are explicit; display names are not payroll mappings. | Node tests checked exact headers, timestamp/date values, escaping and decimal rounding, including large and sub-second values. Production Chromium downloaded the actual attachment and verified its headers, identifiers, times and hours. Both passed. | Pass |
+| PAY-002.2 Only approved records included | Batch creation and each download recheck full-venue authority, current finalisation, complete canonical snapshots, timezone and unresolved exceptions. The authenticated route validates every paginated record and rechecks the batch before responding with private/no-store headers. | 64-assertion export pgTAP suite passed unfinished/reopened/stale-period, pending-exception, employee, FOH, cross-tenant and direct-table denials. Authenticated integration passed finalisation/reopening, revocation, timezone, claim submission/review and employee-name races. Production Chromium verified owner download, FOH/outsider refusals, reopened batch refusal and late-request refusal. | Pass |
+| PAY-002.3 Formula injection mitigated | Every cell is quoted and embedded quotes doubled. Formula-like prefixes, including whitespace/control/bidi-prefixed formulas, receive an apostrophe. | Node tests verified dangerous prefixes, quoted names and line breaks. Production Chromium verified the formula-like employee name in the downloaded CSV is neutralised. Passed. | Pass |
+| PAY-002.4 Export logged | Preparing the file creates an immutable attributed batch and per-session records linked to its finalisation/version. Scoped history retains entries after reopening; preparing a batch is not represented as proof of browser download or external import. | pgTAP passed append-only and access checks. Integration verified repeated/competing preparation returns one batch. Production Chromium verified the prepared batch, actual download and persistent audit detail after reopening. Passed. | Pass |
+
+### BB-TIME-006 — Timesheet export traceability (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-006.1 Each entry links to batch and version | Immutable export entries reference a batch, finalisation and session, retaining the validated canonical record, approval ID/revision and payroll version. CSV and manager history expose these links. | pgTAP verified the stored snapshot and IDs. Node tests rejected incomplete, duplicate, malformed and incorrectly scoped rows. Production Chromium verified downloaded IDs/version and historical per-session detail. Passed. | Pass |
+| TIME-006.2 Amended entries trigger explicit reconciliation | Payroll-fact changes against the last exported/reconciled baseline block preparation/download. An authorised manager reviews before/after records, submits the exact review hash, a reason and explicit confirmation of any adjustment outside Butterbox. Reconciliation appends immutable records; it never silently rewrites source time or emits an adjustment payment. | pgTAP passed missing confirmation/reason, stale hash, idempotency, changed time, cross-week movement, history and reason boundary tests (including 500 UTF-16 units). Production Chromium verified changed-hours review, refusal before reconciliation, recorded reason/confirmation, and before/after historical values. Passed. | Pass |
+| TIME-006.3 Duplicates prevented | A business/session uniqueness constraint and serialized batch preparation prevent re-export across requests, versions and weeks. Only new sessions enter later batches; reconciliation never automatically resends paid hours. | pgTAP verified repeated requests and cross-week movement cannot create duplicate exports. Authenticated integration passed competing preparations. Production Chromium verified only the new session is downloaded after reconciliation and the original session remains in its first batch. Passed. | Pass |
+
+Files: `supabase/migrations/20261102200000_generic_payroll_exports.sql`,
+`supabase/tests/database/generic_payroll_exports.test.sql`,
+`src/lib/generic-payroll-exports.ts`,
+`src/app/timesheets/payroll-export/route.ts`, `src/app/timesheets/page.tsx`,
+`src/app/actions.ts`, `src/app/attendance/page.tsx`,
+`src/components/offline-attendance.tsx`, `src/lib/offline-attendance.ts`,
+`tests/generic-payroll-exports.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `README.md` and the backlog/progress files.
+
+Final verification: clean replay of all 43 migrations on the explicitly
+verified disposable `butterbox-acceptance` project (API 55421, DB 55422);
+**2,043/2,043** database assertions across 43 files (64 export assertions);
+**18/18** authenticated integrations; **128** Node tests (18 integrations
+skipped only in that invocation and run separately); full ESLint, TypeScript,
+split production compile/generate and **49/49** production-browser scenarios.
+Temporary browser servers stopped and disposable users/businesses were removed.
+Disk remained above 31 GiB. Main development/production databases were not
+modified by this work.
+
+Defects fixed during verification: CSV rounding test expectation independently
+checked against decimal arithmetic; browser scenario restored to top-level
+registration; details-state test respects navigation preserving the open state;
+claim/export lock ordering corrected and tested against timezone updates;
+immutable captured employee names validated after insertion so a concurrent
+profile edit cannot create an undownloadable committed batch; SQL reason
+validation aligned with the UI's UTF-16 length limit. No legitimate assertions
+were removed. Generic CSV cannot prevent someone manually importing a downloaded
+file twice into an external system; the UI and README warn about that limitation.
+
+### BB-TIME-005 — Finalise payroll period (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| TIME-005.1 Only authorised roles can finalise | `finalise_payroll_period` and `reopen_payroll_period` validate the venue week, lock the caller's membership and require an owner, admin or general manager who can view the venue and manages every department in it. An exclusive per-period advisory lock and idempotent request IDs serialize decisions. The event and entry tables are append-only, readable only under RLS, and have no direct grants for writes. | 57-assertion pgTAP suite passed anonymous, employee, cross-tenant, department-manager and other-venue GM refusals, invalid input, non-Monday and not-yet-ended weeks, idempotent and conflicting retries, double finalisation and immutability. The authenticated integration passed FOH/employee/outsider HTTP refusals and 8 competing owner/GM finalisations with exactly one winner. Production Chromium verified the FOH manager's read-only panel (no buttons, mobile width), FOH API refusal and the outside owner's unavailable page. | Pass |
+| TIME-005.2 Outstanding exceptions are surfaced | `list_payroll_period_exceptions` reports pending, returned, resubmitted and outdated approvals, incomplete attendance, unreviewed location exceptions, and offline claims or employee time requests awaiting review. Department managers see only their departments. Finalising recomputes the list under the period lock and refuses while any remain. The **Payroll period** panel lists them and disables finalising. | pgTAP verified each exception code (including a geofence `review` check), resolution by approval, clock-out, location review and claim rejection, and that a request submitted after finalisation is surfaced. The integration verified that a finalisation waiting behind an in-flight unlock sees the outdated approval and is refused. Production Chromium verified three listed exceptions, the disabled button and the server error when the disabled control was forced. | Pass |
+| TIME-005.3 Reopening requires a reason and logs an event | Reopening requires a trimmed reason of 1–500 characters and a currently finalised period, and appends an attributed `reopened` event. Earlier snapshots are retained. While finalised, BEFORE INSERT guards on attendance events, breaks, corrections, edit-lock events, location checks and reviews, and timesheet decisions refuse changes to any session or target time in the week, including privileged writes. Writers take shared period locks so they serialize with finalisation. | pgTAP verified the reason requirement, trimming, idempotency, the not-finalised refusal, history order, preserved snapshots, unlock after reopen and refusal of corrections that move time into a finalised week. The integration verified that an unlock waiting on a committed finalisation is refused, a rolled-back finalisation does not block it, and six idempotent reopen retries return one event. Production Chromium verified a stale **Work time** unlock refused with the payroll message, the missing-reason error, reopening with a reason, and history showing both events to the owner and FOH manager. | Pass |
+
+Files: `supabase/migrations/20261102180000_payroll_period_finalisation.sql`,
+`supabase/tests/database/payroll_period_finalisation.test.sql`,
+`src/lib/payroll-periods.ts`, `src/app/actions.ts`,
+`src/app/timesheets/page.tsx`, `src/app/work-time/page.tsx`,
+`src/app/attendance/page.tsx`, `tests/payroll-periods.test.mjs`,
+`tests/payroll-period-finalisation.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs`, `README.md`
+and the backlog/progress files. A clean isolated replay of 41 migrations passed
+**1,934/1,934** pgTAP assertions across 41 files. **18/18** authenticated
+integrations passed, as did 114 Node tests (18 integrations skipped in that
+run and run separately), full ESLint, TypeScript and the production build. The
+focused browser scenarios passed 4/4 and the complete serialized low-memory
+regression passed **48/48**. Disk stayed at 32 GB free. One validation command
+mistakenly ran `supabase test db` against the main development stack because a
+guard had a wrong container name. pgTAP files run inside `begin`/`rollback`, and
+afterwards there were no open transactions and its migration history was
+unchanged.
+
+Assumptions:
+
+- A payroll period is a venue-local Monday-to-Sunday week, using the same
+  session-week rule as weekly review.
+- An empty week can be finalised.
+- Requests received after finalisation are recorded and surfaced; applying them
+  requires reopening.
+- Finalising snapshots worked and paid seconds; it does not export payroll or
+  interpret awards.
 
 ### BB-TIME-004 — Department approval (Done)
 
@@ -639,13 +915,21 @@ lint, TypeScript, split production build and the focused final-schema browser
 scenario passed. The full 33-scenario browser regression passed immediately
 before the final tenant/venue safeguard and review-error wording change.
 
-### BB-ORG-005 — Multiple venues (In Progress)
+### BB-ORG-005 — Multiple venues (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | ORG-005.1 Venue selector scopes views | Roster and people views select only permitted venues; requests are checked server-side. | Scoped permission pgTAP and authenticated browser role/venue scenarios passed in the full 953-assertion and 29-scenario regressions. | Pass |
 | ORG-005.2 Detect shared-staff cross-venue overlap | Owners explicitly confirm profile links; generic overlap results contain only manageable shift IDs. Automatic assignment and configured publication blocking use the same linked-worker identity. | 44 shared-profile and 26 conflict pgTAP assertions, authenticated link/assignment/publication races, and the shared-worker and 1,001-shift browser scenarios passed. | Pass |
-| ORG-005.3 Timesheets retain actual venue attribution | Attendance and work-time calculations preserve the actual venue, but the complete timesheet workflow is not yet implemented. | Work-time attribution passed pgTAP and venue-switching browser tests; timesheet approval and export attribution remain unverified. | In Progress |
+| ORG-005.3 Timesheets retain actual venue attribution | Attendance, weekly review, approvals, venue-specific finalisations, canonical records and export ledger retain the actual venue, timezone, department and employment profile rather than a linked home profile. | Extended weekly HTTP integration finalises and exports Sydney (28,800 paid seconds) and Perth (7,200) separately, checks exact session sets and denies wrong-venue batch access. Production Chromium switches to Perth, approves/finalises and downloads a real CSV containing the actual venue/department/profile/session and excluding primary-venue records. All 18 integrations, 50 browser scenarios and 2,072 pgTAP assertions passed. | Pass |
+
+Files changed for final acceptance: `tests/weekly-timesheet.integration.test.mjs`,
+`tests/e2e/auth.spec.mjs`, `BACKLOG_INDEX.csv`, `IMPLEMENTATION_PROGRESS.md`.
+No schema or application changes were needed. The first focused browser run
+tried to click a download inside collapsed export history and timed out;
+opening the disclosure as a user would fixed the test without weakening any
+assertion. Rebuilt focused and full regressions passed. Final evidence in the
+session files: `multivenue-final-{pgtap,integrations,unit,eslint,typescript,browser}.log`.
 
 ### BB-ORG-002 — Configure venue and geofence (Done)
 
@@ -1034,6 +1318,23 @@ environment. HTTP test fixtures were removed and their absence verified.
 
 ## Blocked stories
 
+### BB-PAY-004 — Xero Payroll adapter (Blocked)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| PAY-004.1 Current AU endpoints/scopes confirmed | The official Xero OpenAPI source lists Payroll AU v2, `/Timesheets`, POST `payroll.timesheets` and the GET timesheet scopes. Complete OAuth consent/refresh requirements still need verification against the intended test organisation. | Retrieved the official YAML, not just generated search prose. No configured OAuth client or explicitly isolated AU payroll organisation is available, so no live API verification is claimed. | Blocked |
+| PAY-004.2 OAuth refresh and permission failure handled | No authenticated adapter or token storage/refresh workflow is implemented; generic mapping destinations deliberately do not connect providers. | No runtime acceptance executed. Secure OAuth client configuration and authorised test-organisation access are missing. | Blocked |
+| PAY-004.3 Sandbox end-to-end validates mapping, retries and duplicate prevention | Existing canonical records and explicit mapping gate are verified prerequisites, not proof of provider delivery. Future delivery must persist the exact mapping used in an immutable delivery record. | No Xero sandbox export executed. Do not send live payroll or assume the ordinary demo company supports AU payroll testing. | Blocked |
+
+Official contract consulted:
+https://raw.githubusercontent.com/XeroAPI/Xero-OpenAPI/master/xero-payroll-au-v2.yaml
+(reported version 19.1.0; server `https://api.xero.com/payroll.xro/2.0`).
+Configuration presence checks only found no `XERO_` keys in runtime,
+repository environment files or Codespace shared secrets. No values were
+printed. Resume after an owner securely provisions OAuth access and identifies
+an explicitly isolated AU payroll organisation authorised for testing.
+Continue BB-FOUND-006 independently while this access is missing.
+
 ### BB-FOUND-001 — Create production-ready application (Blocked)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
@@ -1098,24 +1399,29 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Timesheet approval, cross-business employee invitation and email/push
+- Provider payroll delivery, cross-business employee invitation and email/push
   notification remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
-- Attendance edit locks are not timesheet approvals; future payroll
-  finalisation must explicitly integrate the relevant period and lock rules.
+- Attendance edit locks are not timesheet approvals. Payroll period
+  finalisation (BB-TIME-005) is the gate for export, and exports should read the
+  immutable `payroll_period_entries` snapshot rather than live attendance.
   Original and correction timestamps retain microseconds, while displayed
   durations round only for presentation.
 
 ## Next story
 
-- Implement **BB-TIME-004 — Department approval**: scoped FOH/BOH approval of
-  valid weekly timesheets with explicit exceptions, immutable approval
-  records, and reopening rules, building on weekly review and edit locks.
+- Next ready implementation: **BB-ROSTER-008 — Publish and notify** (P0, In
+  Progress). Review its remaining criteria against the existing publication,
+  versioning and in-app notification work, then implement only what remains.
+  Then BB-SAAS-004, BB-COMMS-002 and BB-FOUND-007.
+  **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
+  client/test-organisation access. Generic CSV and mapping destinations do
+  not enable provider delivery.
   Completing invitations for existing other-business users requires
   **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.
-- The latest bulk-lock migration has been tested only on the isolated stack. The
+- The latest payroll migrations have been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.
 - Isolated workdir:
   `/home/codespace/.copilot/session-state/7476d757-d2b0-401f-90ff-d6ab4307efc9/files/butterbox-acceptance`.
@@ -1126,71 +1432,3 @@ not yet run remotely.
   directory in `LD_LIBRARY_PATH` if Chromium reports missing system libraries.
   `BUTTERBOX_TEST_SUPABASE_CLI` accepts the cached native CLI path.
 - No background execution or scheduling is promised after this session ends.
-
-## Award Central feature-branch checkpoint — 2026-11-01
-
-**Branch-specific only:** this section records work on
-`feature/award-central-foundation`, based on local checkpoint `ca88f93`. It is
-not a status update for `copilot/finish-roadmap-for-app` or `main`. The roadmap
-branch's separate next-story notes above remain unchanged. After the Award
-Central changes are merged with the then-current roadmap branch, repeat the
-merged migration replay, database and authenticated integration tests, Node
-tests, TypeScript, ESLint and production build before treating any result here
-as integration acceptance.
-
-| Story | Feature-branch status | Current evidence and remaining work |
-| --- | --- | --- |
-| BB-PAYRULES-002 | In Progress | Shared versioned tables and source linkage exist; new publication now fails closed. Authorised tenant reads, governed publication, calculation provenance and separately scoped agreements remain incomplete. |
-| BB-PAYRULES-013 | In Progress | Immutable draft candidates and separately staged expectations retain source and version fingerprints; a privileged draft report identifies gaps and conflicts. No authenticated specialist signoff, independently established golden cases, deterministic runner or verified coverage evaluation exists. |
-| BB-PAYRULES-017 | Blocked | Original source bytes, hashes and known API limitations can be staged; live FWC access, source-specific parsing and ambiguity handling remain unverified. |
-
-### Criterion-level evidence
-
-| Criterion | Implementation evidence | Test and actual result | Status |
-| --- | --- | --- | --- |
-| 002.1 | Shared effective-dated versions and immutable existing publications; new publication is blocked. | Isolated foundation pgTAP 48/48; pre-gate legacy rehearsal 10/10. The read policy does not verify tenant membership. | Blocked |
-| 002.2 | Draft lifecycle, source references and declared evidence fields exist. | Foundation pgTAP 48/48; authenticated specialist approval and mandatory validation evidence remain unimplemented. | Blocked |
-| 002.3 | Customer write grants are revoked. | Foundation pgTAP 48/48; tenant-specific award configuration and its isolation tests are not yet implemented. | Blocked |
-| 002.4 | No calculation-result provenance exists yet. | No calculation service or historical-reproduction test exists. | Blocked |
-| 002.5 | Tenant-specific agreement rulesets are not implemented. | No agreement isolation test exists. | Blocked |
-| 013.1 | Central append-only draft scenarios and separately entered proposed expectations. | Regression pgTAP 59/59; no verified experts or golden calculations exist. | Blocked |
-| 013.2 | Coverage labels include DST, midnight, minimum engagement, cumulative hours and effective dates. | Regression pgTAP 59/59; actual award-boundary calculations are not implemented. | Blocked |
-| 013.3 | Every new approval, activation and draft supersession is blocked; a privileged draft report flags missing categories, conflicting expectations, unresolved and stale cases. | Foundation pgTAP 48/48 and regression pgTAP 59/59; no usable gate based on verified coverage and actual execution results exists. | Blocked |
-| 013.4 | Immutable rows record source, claimed preparer/reviewer, limitations and a content fingerprint. | Regression pgTAP 59/59 and concurrency rehearsal 9/9; identity, qualification, test-run provenance and signoff are not verified. No government certification is claimed. | Blocked |
-| 017.1 | Official-host acquisition interface only. | Mocked Node tests passed; live FWC endpoints and award-document parsing remain unverified. | Blocked |
-| 017.2 | Immutable source snapshots retain bytes, hash, dates and provenance. | Prior disposable-stack integration passed 1/1; live official sources have not been tested. | Blocked |
-| 017.3 | Mandatory MAPD coverage-gap metadata. | Prior source Node tests 6/6 and database gap assertion passed. | Pass |
-| 017.4 | Invalid, unavailable, oversized and redirected acquisitions reject; sources remain staged. | Prior source Node tests 6/6; source-specific ambiguity detection is not implemented. | Blocked |
-
-**Files:** `supabase/migrations/20261102220000_award_central_regression_evidence.sql`,
-`supabase/tests/database/award_central_foundation.test.sql`,
-`supabase/tests/database/award_central_regression_evidence.test.sql`,
-`tests/fixtures/award-central-pre-gate.sql`,
-`tests/fixtures/award-central-post-gate.test.sql`,
-`tests/fixtures/award-central-concurrency.test.sql`, and
-`docs/award-central-foundation.md`.
-
-**Validation and limitations:** On a verified disposable, locally bound
-Supabase PostgreSQL container, the three Award Central migrations replayed;
-the foundation suite passed 48/48, regression evidence suite 59/59,
-pre-upgrade/upgrade legacy rehearsal 10/10, and concurrent edit/duplicate
-rehearsal 9/9. The feature-branch Node suite passed 113 tests with 18
-integration tests skipped using the low-memory single-process runner.
-Authenticated-role checks use two synthetic JWT identities, not full tenant
-membership fixtures. A previous temporary merge of `ca88f93` with
-roadmap commit `90f29fd` passed 43 database files / 2,026 assertions and 146
-Node tests, but did **not** contain the new regression migration and must be
-repeated for the current changes. The full local Supabase stack could not be
-started reliably under host memory pressure; the current checkpoint's
-full-stack integration, merged testing, full ESLint, TypeScript and production
-build are not verified for this checkpoint; attempted full checks were
-interrupted by external process termination.
-Feature-branch push was previously blocked by unavailable GitHub credentials.
-
-**Decision and exact next action:** Keep all publication transitions blocked
-until real independently established expected results, trusted deterministic
-test execution, coverage/conflict checks and authenticated specialist approval
-exist. Push this feature branch when credentials are available; refresh and
-rehearse a merge against the current roadmap, then complete those BB-PAYRULES-013
-prerequisites and the tenant-scoped BB-PAYRULES-001/003 foundations. Never use
-the staged evidence as payroll results or represent it as award certification.

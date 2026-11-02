@@ -1,4 +1,5 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { expect, test } from "@playwright/test";
 import {
   combineChunks,
@@ -408,6 +409,17 @@ test("offline attendance claims survive reconnect failures and stay scoped to th
     let rows = await workerApi.from("attendance_offline_claims").select("id");
     expect(rows.error).toBeNull();
     expect(rows.data).toEqual([]);
+
+    await context.unroute("**/rest/v1/rpc/submit_attendance_offline_claim");
+    await context.route("**/rest/v1/rpc/submit_attendance_offline_claim", (route) => route.fulfill({
+      status: 400, contentType: "application/json",
+      body: JSON.stringify({ code: "P0001", message: "Venue timezone changed; retry attendance claim" }),
+    }));
+    await recovered.getByRole("button", { name: "Retry upload" }).click();
+    await expect(recovered.getByRole("alert")).toContainText("venue timezone changed");
+    await expect(recovered.getByRole("status")).toContainText("2 claims pending on this device");
+    await context.unroute("**/rest/v1/rpc/submit_attendance_offline_claim");
+    await context.route("**/rest/v1/rpc/submit_attendance_offline_claim", (route) => route.abort());
 
     await recoveryPage.getByRole("button", { name: "Sign out" }).click();
     await expect(recoveryPage).toHaveURL(/\/login\?message=signed-out/);
@@ -5648,6 +5660,37 @@ test("weekly timesheet review filters, discrepancies, source events and scoped h
     await page.getByRole("button", { name: "Apply filters" }).click();
     await expect(page.getByRole("heading", { name: "Riverside Worker · Riverside service" })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Weekly Worker · FOH" })).toHaveCount(0);
+    expect((await ownerApi.rpc("link_shared_worker_profiles", {
+      p_business_id: businessId, p_venue_id: venueId,
+      p_employee_id: workerId, p_other_employee_id: secondWorkerId,
+    })).error).toBeNull();
+    await page.reload();
+    const riversideRow = page.locator(`#timesheet-session-${secondSession}`);
+    await riversideRow.getByRole("button", { name: "Approve time" }).click();
+    await expect(riversideRow).toContainText("Approved by department manager");
+    const riversidePeriod = page.getByRole("region", { name: "Payroll period" });
+    await riversidePeriod.getByRole("button", { name: "Finalise payroll period" }).click();
+    await expect(riversidePeriod).toContainText("Finalised for payroll");
+    const riversideExport = riversidePeriod.getByRole("region", { name: "Generic payroll CSV" });
+    await riversideExport.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(riversideExport.getByRole("status")).toContainText("Batch");
+    const riversideHistory = riversideExport.getByText("Payroll export history (1)");
+    if (!(await riversideHistory.evaluate((summary) => summary.parentElement.open))) {
+      await riversideHistory.click();
+    }
+    const riversideDownload = riversideExport.getByRole("link", { name: "Download payroll CSV" });
+    const [download] = await Promise.all([page.waitForEvent("download"), riversideDownload.click()]);
+    const riversideCsv = await readFile(await download.path(), "utf8");
+    expect(riversideCsv).toContain(`"${secondVenue}"`);
+    expect(riversideCsv).toContain(`"${secondDepartment}"`);
+    expect(riversideCsv).toContain(`"${secondWorkerId}"`);
+    expect(riversideCsv).toContain('"Australia/Perth"');
+    expect(riversideCsv).toContain(secondSession);
+    for (const foreignSession of [completeSession, bohSession, cookSession, historicSession]) {
+      expect(riversideCsv).not.toContain(foreignSession);
+    }
+    expect(riversideCsv).not.toContain(`"${venueId}"`);
+    expect(riversideCsv).not.toContain(`"${workerId}"`);
     await page.goto(`/timesheets?venue=${venueId}&week=bad&employee=bad`);
     await expect(page.locator("main").getByRole("alert")).toContainText("Enter a valid date");
     await page.goto(`/timesheets?venue=${venueId}&week=2024-09-30&employee=${randomUUID()}`);
@@ -5927,6 +5970,205 @@ test("department managers approve or return scoped timesheet entries for correct
     await outsidePage.goto(`/timesheets?venue=${venueId}&week=2024-09-30`);
     await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
     await expect(outsidePage.getByText("Split Worker", { exact: false })).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("authorised managers finalise payroll periods after exceptions and reopen them with a recorded reason", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, fohId, workerId, completeSession, openSession] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "gm", "foh", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `payroll-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Payroll cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside payroll cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: fohId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[3], name: "Payroll Worker", role_title: "Server",
+    })).error).toBeNull();
+    const sessions = [completeSession, openSession].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId, started_by: users[3],
+    }));
+    expect((await admin.from("attendance_sessions").insert(sessions)).error).toBeNull();
+    const event = (session, eventType, occurredAt) => ({
+      session_id: session.id, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: workerId, actor_id: users[3], request_id: randomUUID(), event_type: eventType,
+      occurred_at: occurredAt, source: "server_clock",
+    });
+    expect((await admin.from("attendance_events").insert([
+      event(sessions[0], "clock_in", "2024-09-30T22:00:00Z"),
+      event(sessions[0], "clock_out", "2024-10-01T02:00:00Z"),
+      event(sessions[1], "clock_in", "2024-10-02T22:00:00Z"),
+    ])).error).toBeNull();
+    const signedIn = async (role) => {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `payroll-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      return client;
+    };
+    const fohApi = await signedIn("foh");
+    const gmApi = await signedIn("gm");
+    const outsideApi = await signedIn("outside");
+    const scope = { p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30" };
+    const permissionMessage =
+      "Only an owner, admin or general manager with full venue access can finalise or reopen payroll";
+    expect((await fohApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error?.message)
+      .toBe(permissionMessage);
+    expect((await outsideApi.rpc("get_payroll_period", scope)).error?.message).toBe("Permission denied");
+
+    const ownerPage = page;
+    await signIn(ownerPage, `payroll-owner-${suffix}@example.test`, password);
+    const timesheetUrl = `/timesheets?venue=${venueId}&week=2024-09-30`;
+    await ownerPage.goto(timesheetUrl);
+    const period = ownerPage.getByRole("region", { name: "Payroll period" });
+    await expect(period).toContainText("Open — not finalised");
+    const exceptions = period.getByRole("list", { name: "Outstanding payroll exceptions" });
+    await expect(exceptions.getByRole("listitem")).toHaveCount(3);
+    await expect(exceptions).toContainText("Payroll Worker · FOH · Awaiting department approval");
+    await expect(exceptions).toContainText("Payroll Worker · FOH · Incomplete or invalid attendance");
+    const finaliseButton = period.getByRole("button", { name: "Finalise payroll period" });
+    await expect(finaliseButton).toBeDisabled();
+    await finaliseButton.evaluate((button) => { button.disabled = false; });
+    await finaliseButton.click();
+    await expect(ownerPage.locator("main").getByRole("alert"))
+      .toContainText("Resolve every outstanding exception before finalising");
+
+    expect((await admin.from("attendance_events").insert(event(sessions[1], "clock_out", "2024-10-03T03:00:00Z")))
+      .error).toBeNull();
+    const rows = await fohApi.rpc("list_weekly_worked_time_for_edit", scope);
+    expect(rows.error).toBeNull();
+    for (const row of rows.data) {
+      expect((await fohApi.rpc("decide_attendance_timesheet", {
+        p_business_id: businessId, p_venue_id: venueId, p_session_id: row.session_id, p_request_id: randomUUID(),
+        p_expected_revision: row.edit_revision, p_decision: "approved", p_reason: null,
+      })).error).toBeNull();
+    }
+
+    const staleContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(staleContext);
+    const stalePage = await staleContext.newPage();
+    stalePage.setDefaultTimeout(20_000);
+    await signIn(stalePage, `payroll-owner-${suffix}@example.test`, password);
+    await stalePage.goto(`/work-time?venue=${venueId}`);
+    const staleCard = stalePage.locator(`#attendance-session-${completeSession}`);
+    await staleCard.locator("summary").click();
+    const staleUnlock = staleCard.getByRole("form", { name: "Unlock attendance edits" });
+    await staleUnlock.getByLabel("Reason to unlock attendance edits").fill("Change after payroll");
+
+    await ownerPage.goto(timesheetUrl);
+    await expect(period.getByText("No outstanding exceptions in your scope.")).toBeVisible();
+    await period.getByLabel("Finalisation note (optional)").fill("Week checked against roster");
+    await finaliseButton.click();
+    await expect(ownerPage.locator("main").getByRole("status"))
+      .toContainText("Payroll period finalised. Attendance in this week cannot change until it is reopened.");
+    await expect(period).toContainText("Finalised for payroll");
+    await expect(period).toContainText("Finalised by you (owner)");
+    await expect(period).toContainText("2 sessions, worked 9h");
+    await ownerPage.setViewportSize({ width: 375, height: 812 });
+    await period.getByText("Finalised payroll records (2)", { exact: true }).click();
+    const payrollRecords = period.getByRole("list", { name: "Finalised payroll records" });
+    await expect(payrollRecords.getByRole("listitem")).toHaveCount(2);
+    await expect(payrollRecords).toContainText("Payroll Worker");
+    await expect(payrollRecords).toContainText("Worked 4h 0m 0s · paid 4h 0m 0s");
+    await expect(payrollRecords).toContainText("Worked 5h 0m 0s · paid 5h 0m 0s");
+    await expect(payrollRecords).toContainText("0 recorded breaks");
+    await expect(period).toContainText("Provider employee mappings and pay codes are not assigned yet");
+    await expect(period).toContainText("this preview is not an export or an award calculation");
+    expect(await ownerPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+    await expect(finaliseButton).toHaveCount(0);
+    await expect(ownerPage.getByRole("button", { name: "Lock selected sessions" })).toBeDisabled();
+    await expect(ownerPage.locator(`#timesheet-session-${completeSession}`))
+      .toContainText("Decisions are unavailable while the payroll period is finalised");
+
+    await staleUnlock.getByRole("button", { name: "Unlock attendance edits" }).click();
+    await expect(stalePage.locator("main").getByRole("alert"))
+      .toContainText("This week's payroll period is finalised. An owner, admin or general manager must reopen it");
+    expect((await gmApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error?.message)
+      .toBe("Payroll period is already finalised");
+
+    const fohContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    fohPage.setDefaultTimeout(20_000);
+    await signIn(fohPage, `payroll-foh-${suffix}@example.test`, password);
+    await fohPage.goto(timesheetUrl);
+    const fohPeriod = fohPage.getByRole("region", { name: "Payroll period" });
+    await expect(fohPeriod).toContainText("Finalised for payroll");
+    await expect(fohPeriod).toContainText("Only an owner, admin or general manager with access to every department");
+    await expect(fohPeriod.getByRole("button")).toHaveCount(0);
+    await expect(fohPeriod.getByText("Finalised payroll records", { exact: false })).toHaveCount(0);
+    expect(await fohPage.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+    expect((await fohApi.rpc("reopen_payroll_period", {
+      ...scope, p_request_id: randomUUID(), p_reason: "Not allowed",
+    })).error?.message).toBe(permissionMessage);
+
+    const reopenReason = period.getByLabel("Reason for reopening");
+    await reopenReason.evaluate((input) => { input.required = false; });
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(ownerPage.locator("main").getByRole("alert"))
+      .toContainText("Enter a reason of up to 500 characters before reopening");
+    await expect(period).toContainText("Finalised for payroll");
+    await period.getByLabel("Reason for reopening").fill("Late tip adjustment approved by owner");
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(ownerPage.locator("main").getByRole("status"))
+      .toContainText("Payroll period reopened. The previous finalisation and your reason remain in its history.");
+    await expect(period).toContainText("Reopened — not finalised");
+    await expect(period.getByText("Finalised payroll records", { exact: false })).toHaveCount(0);
+    await expect(finaliseButton).toBeEnabled();
+    await period.getByText("Payroll period history (2)").click();
+    const history = period.getByRole("list", { name: "Payroll period history" }).getByRole("listitem");
+    await expect(history.nth(0)).toContainText("Reopened by you (owner)");
+    await expect(history.nth(0)).toContainText("Reason: Late tip adjustment approved by owner");
+    await expect(history.nth(1)).toContainText("Finalised by you (owner)");
+    await expect(history.nth(1)).toContainText("Note: Week checked against roster");
+
+    await fohPage.reload();
+    await expect(fohPeriod).toContainText("Reopened — not finalised");
+    await fohPeriod.getByText("Payroll period history (2)").click();
+    await expect(fohPeriod.getByRole("list", { name: "Payroll period history" }).getByRole("listitem").nth(0))
+      .toContainText("Reopened by an owner");
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `payroll-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(timesheetUrl);
+    await expect(outsidePage.getByRole("heading", { name: "Timesheets unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Payroll Worker", { exact: false })).toHaveCount(0);
   } finally {
     for (const context of contexts) await context.close();
     for (const business of [businessId, outsideBusiness]) {
@@ -6457,6 +6699,100 @@ test("staff invitations deliver separate-browser email and join only the intende
   }
 });
 
+test("existing members of another business accept a scoped invitation and switch explicitly", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const managerEmail = `cross-invite-manager-${suffix}@example.test`;
+  const ownerEmail = `cross-invite-owner-${suffix}@example.test`;
+  const [businessId, ownBusiness, venueId, ownVenue, departmentId, bohDepartment, ownDepartment, employeeId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  try {
+    for (const email of [managerEmail, ownerEmail]) {
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Inviting cross cafe" },
+      { id: ownBusiness, name: "Own cross cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Inviting venue", timezone: "UTC" },
+      { id: ownVenue, business_id: ownBusiness, name: "Own venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohDepartment, business_id: businessId, venue_id: venueId, name: "Back of House" },
+      { id: ownDepartment, business_id: ownBusiness, venue_id: ownVenue, name: "Own team" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: ownBusiness, user_id: users[1], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "Casey Crossover", email: ownerEmail, role_title: "Server",
+    })).error).toBeNull();
+
+    await signIn(page, managerEmail, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const form = page.getByRole("form", { name: "Invite Casey Crossover" });
+    await expect(form.getByLabel("Invitation email")).toHaveValue(ownerEmail);
+    await form.getByRole("button", { name: "Send invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation email requested");
+    const manager = createClient(apiUrl, anonKey, options);
+    expect((await manager.auth.signInWithPassword({ email: managerEmail, password })).error).toBeNull();
+    const invitation = await manager.from("staff_invitations").select("id")
+      .eq("employee_id", employeeId).eq("status", "pending").single();
+    expect(invitation.error).toBeNull();
+    await page.context().clearCookies();
+
+    await signIn(page, ownerEmail, password);
+    await expect(page.locator("aside").getByText("Own cross cafe", { exact: true })).toBeVisible();
+    await page.goto(`/invitations/${invitation.data.id}`);
+    await expect(page.getByText(/Inviting cross cafe invited Casey Crossover to Inviting venue \/ Front of House/))
+      .toBeVisible();
+    await page.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("invitation has been accepted");
+    await expect(page).toHaveURL(new RegExp(`accepted=1&business=${businessId}$`));
+    const memberships = await admin.from("business_memberships")
+      .select("business_id, venue_id, department_id, role").eq("user_id", users[1]);
+    expect(memberships.error).toBeNull();
+    expect(memberships.data.sort((a, b) => a.role.localeCompare(b.role))).toEqual([
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, role: "employee" },
+      { business_id: ownBusiness, venue_id: null, department_id: null, role: "owner" },
+    ]);
+
+    await page.getByRole("link", { name: "Open workspace" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${businessId}$`));
+    const shell = page.locator("aside");
+    await expect(shell.getByText("Inviting cross cafe", { exact: true })).toBeVisible();
+    await expect(page.getByText("Own cross cafe", { exact: true })).toHaveCount(0);
+    await page.goto(`/people?business=${businessId}`);
+    await expect(page).toHaveURL(new RegExp(`/\\?error=permission&business=${businessId}$`));
+    await expect(shell.getByText("Inviting cross cafe", { exact: true })).toBeVisible();
+
+    await page.goto(`/?business=${businessId}`);
+    await shell.getByRole("link", { name: "Switch business" }).click();
+    const choices = page.getByRole("list", { name: "Your businesses" });
+    await expect(choices.getByRole("listitem")).toHaveCount(2);
+    await page.getByRole("button", { name: "Open Own cross cafe" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${ownBusiness}$`));
+    await expect(shell.getByText("Own cross cafe", { exact: true })).toBeVisible();
+    await page.goto(`/people?business=${ownBusiness}`);
+    await expect(page.getByRole("heading", { name: "Employee profiles" })).toBeVisible();
+    await expect(page.locator("main")).toContainText("Own venue");
+    await expect(page.locator("main")).not.toContainText("Inviting venue");
+    await expect(page.getByText("Casey Crossover")).toHaveCount(0);
+  } finally {
+    for (const business of [businessId, ownBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("staff invitations reject revocation and expiry and require consent before switching sessions", async ({ page, browser }) => {
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
   const suffix = randomUUID();
@@ -6609,59 +6945,448 @@ test("staff invitations reject revocation and expiry and require consent before 
   }
 });
 
-test("ambiguous business memberships fail closed in stale forms and workspace pages", async ({ page }) => {
+test("multi-business members switch explicitly with per-tab isolation, revocation and private pages", async ({ page }) => {
+  page.setDefaultTimeout(20_000);
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const email = `multiple-businesses-${suffix}@example.test`;
-  const [businessId, otherBusiness, venueId, otherVenue, departmentId, otherDepartment] =
-    Array.from({ length: 6 }, () => randomUUID());
-  let userId;
+  const outsideEmail = `multiple-businesses-outside-${suffix}@example.test`;
+  const [businessId, otherBusiness, outsideBusiness, venueId, otherVenue, outsideVenue,
+    departmentId, otherDepartment, outsideDepartment] = Array.from({ length: 9 }, () => randomUUID());
+  const users = [];
   try {
-    const user = await admin.auth.admin.createUser({ email, password, email_confirm: true });
-    expect(user.error).toBeNull();
-    userId = user.data.user.id;
+    for (const address of [email, outsideEmail]) {
+      const user = await admin.auth.admin.createUser({ email: address, password, email_confirm: true });
+      expect(user.error).toBeNull();
+      users.push(user.data.user.id);
+    }
     expect((await admin.from("businesses").insert([
       { id: businessId, name: "First private business" }, { id: otherBusiness, name: "Second private business" },
+      { id: outsideBusiness, name: "Outside private business" },
     ])).error).toBeNull();
     expect((await admin.from("venues").insert([
       { id: venueId, business_id: businessId, name: "First", timezone: "UTC" },
       { id: otherVenue, business_id: otherBusiness, name: "Second", timezone: "UTC" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside", timezone: "UTC" },
     ])).error).toBeNull();
     expect((await admin.from("departments").insert([
       { id: departmentId, business_id: businessId, venue_id: venueId, name: "First FOH" },
       { id: otherDepartment, business_id: otherBusiness, venue_id: otherVenue, name: "Second FOH" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside FOH" },
     ])).error).toBeNull();
-    expect((await admin.from("business_memberships").insert({
-      business_id: businessId, user_id: userId, role: "owner",
-    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: otherBusiness, user_id: users[1], role: "owner" },
+      { business_id: otherBusiness, user_id: users[0], role: "admin" },
+      { business_id: outsideBusiness, user_id: users[1], role: "owner" },
+    ])).error).toBeNull();
+
     await signIn(page, email, password);
-    await page.goto(`/people?venue=${venueId}`);
-    const newEmployee = page.getByRole("region", { name: "New employee" });
-    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Stale staff");
+    await expect(page).toHaveURL(/\/choose-business$/);
+    const choices = page.getByRole("list", { name: "Your businesses" });
+    await expect(choices.getByRole("listitem")).toHaveCount(2);
+    await expect(choices).toContainText("First private business");
+    await expect(choices).toContainText("Second private business");
+    await expect(page.getByText("Outside private business")).toHaveCount(0);
+    await page.getByRole("button", { name: "Open First private business" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${businessId}$`));
+    const shell = page.locator("aside");
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(shell.getByRole("link", { name: "Switch business" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "People" })).toHaveAttribute("href", `/people?business=${businessId}`);
+
+    const secondTab = await page.context().newPage();
+    secondTab.setDefaultTimeout(20_000);
+    await secondTab.goto("/choose-business");
+    await secondTab.getByRole("button", { name: "Open Second private business" }).click();
+    await expect(secondTab).toHaveURL(new RegExp(`/\\?business=${otherBusiness}$`));
+    await expect(secondTab.locator("aside").getByText("Second private business", { exact: true })).toBeVisible();
+
+    await page.getByRole("link", { name: "People" }).click();
+    await expect(page).toHaveURL(new RegExp(`/people\\?business=${businessId}$`));
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+    let newEmployee = page.getByRole("region", { name: "New employee", exact: true });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("First tab staff");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
-    expect((await admin.from("business_memberships").insert({
-      business_id: otherBusiness, user_id: userId, role: "employee",
-      venue_id: otherVenue, department_id: otherDepartment,
-    })).error).toBeNull();
     await newEmployee.getByRole("button", { name: "Add employee" }).click();
-    await expect(page.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
-    await expect(page.getByText(/Safe business switching is not available yet/)).toBeVisible();
-    await expect(page.getByText("First private business", { exact: true })).toHaveCount(0);
-    await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
-    const stale = await admin.from("employees").select("id").eq("business_id", businessId).eq("name", "Stale staff");
-    expect(stale.error).toBeNull();
-    expect(stale.data).toEqual([]);
-    await page.goto(`/roster?venue=${otherVenue}`);
+    await expect(page.locator("main").getByRole("status")).toBeVisible();
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    const placed = await admin.from("employees").select("business_id").eq("name", "First tab staff")
+      .in("business_id", [businessId, otherBusiness, outsideBusiness]);
+    expect(placed.error).toBeNull();
+    expect(placed.data).toEqual([{ business_id: businessId }]);
+
+    const privateResponse = await page.goto(`/people?business=${businessId}`);
+    expect(privateResponse?.headers()["cache-control"] ?? "").toContain("no-store");
+    for (const path of [`/?business=${outsideBusiness}`, `/?business=${businessId}&business=${otherBusiness}`,
+      "/?business=not-a-business"]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
+      await expect(page.getByText("Outside private business", { exact: true })).toHaveCount(0);
+    }
+    await page.goto(`/roster?venue=${outsideVenue}`);
+    await expect(page.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
+    await expect(page.getByText("Outside private business", { exact: true })).toHaveCount(0);
+    await page.goto(`/roster?business=${businessId}&venue=${otherVenue}`);
     await expect(page.getByRole("heading", { name: "Roster unavailable" })).toBeVisible();
     await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+
+    await secondTab.getByRole("link", { name: "People" }).click();
+    await expect(secondTab).toHaveURL(new RegExp(`/people\\?business=${otherBusiness}$`));
+    newEmployee = secondTab.getByRole("region", { name: "New employee", exact: true });
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Revoked tab staff");
+    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
+    await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(otherDepartment);
+    expect((await admin.from("business_memberships").delete()
+      .eq("business_id", otherBusiness).eq("user_id", users[0])).error).toBeNull();
+    await newEmployee.getByRole("button", { name: "Add employee" }).click();
+    await expect(secondTab.locator("aside").getByText("First private business", { exact: true })).toBeVisible();
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    const revoked = await admin.from("employees").select("id").eq("name", "Revoked tab staff");
+    expect(revoked.error).toBeNull();
+    expect(revoked.data).toEqual([]);
+    await secondTab.goto(`/people?business=${otherBusiness}`);
+    await expect(secondTab).toHaveURL(/\/\?error=workspace$/);
+    await expect(secondTab.locator("aside").getByText("First private business", { exact: true })).toBeVisible();
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await secondTab.goto("/choose-business");
+    await expect(secondTab.getByRole("list", { name: "Your businesses" }).getByRole("listitem")).toHaveCount(1);
+    await expect(secondTab.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await secondTab.close();
+
     await page.goto("/");
+    await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
+    await expect(shell.getByRole("link", { name: "Switch business" })).toHaveCount(0);
     await page.getByRole("button", { name: "Sign out" }).click();
     await expect(page).toHaveURL(/\/login\?message=signed-out/);
+    expect((await page.context().cookies()).some((cookie) => cookie.name === "bb_business")).toBe(false);
   } finally {
-    for (const business of [businessId, otherBusiness]) {
+    for (const business of [businessId, otherBusiness, outsideBusiness]) {
       expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
     }
-    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("owners explicitly map same-name employees to payroll destinations without connecting a provider", async ({ page, browser }) => {
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, departmentId, firstEmployee, secondEmployee] =
+    Array.from({ length: 7 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    for (const role of ["owner", "foh", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `mapping-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Explicit payroll mapping cafe" }, { id: outsideId, name: "Outside mapping cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideId, user_id: users[2], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([firstEmployee, secondEmployee].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "Same Name", role_title: "Server",
+    })))).error).toBeNull();
+
+    await signIn(page, `mapping-owner-${suffix}@example.test`, password);
+    await page.goto(`/timesheets?venue=${venueId}&week=2024-01-08`);
+    await page.getByRole("link", { name: "Manage payroll employee mapping" }).click();
+    await expect(page.getByRole("heading", { name: "Payroll employee mapping", exact: true })).toBeVisible();
+    const add = page.getByRole("region", { name: "Add payroll destination" });
+    await add.getByLabel("Provider", { exact: true }).selectOption("xero");
+    await add.getByLabel("Destination name").fill("Test Xero account");
+    await add.getByLabel("Payroll account ID").fill("explicit-account-id");
+    await add.getByRole("button", { name: "Add mapping destination" }).click();
+    await expect(page.locator("main").getByRole("status"))
+      .toContainText("Payroll mapping destination created. No provider has been connected.");
+    const first = page.locator(`#payroll-employee-${firstEmployee}`);
+    const second = page.locator(`#payroll-employee-${secondEmployee}`);
+    await expect(first).toContainText("Missing payroll mapping");
+    await expect(second).toContainText("Missing payroll mapping");
+    await first.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
+    await first.getByLabel("Reason for mapping change").fill("Copied exact employee ID from payroll account");
+    await first.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(first.locator('input[name="revision"]')).toHaveValue("1");
+    await expect(first.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-001");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("");
+    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
+    await second.getByLabel("Reason for mapping change").fill("Attempt duplicate ID");
+    await second.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("already assigned to another employee");
+    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-002");
+    await second.getByLabel("Reason for mapping change").fill("Distinct ID despite same name");
+    await second.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(second.locator('input[name="revision"]')).toHaveValue("1");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await page.reload();
+    await first.getByLabel("Payroll employee ID", { exact: true }).fill("");
+    await first.getByLabel("Reason for mapping change").fill("Remove incorrect assignment");
+    await first.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(first.locator('input[name="revision"]')).toHaveValue("2");
+    await expect(first).toContainText("Missing payroll mapping");
+    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const fohContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(fohContext);
+    const fohPage = await fohContext.newPage();
+    await signIn(fohPage, `mapping-foh-${suffix}@example.test`, password);
+    await fohPage.goto(`/settings/payroll?venue=${venueId}`);
+    await expect(fohPage).toHaveURL(/error=permission/);
+    await expect(fohPage.getByRole("button", { name: "Save payroll ID" })).toHaveCount(0);
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsidePage = await outsideContext.newPage();
+    await signIn(outsidePage, `mapping-outside-${suffix}@example.test`, password);
+    await outsidePage.goto(`/settings/payroll?venue=${venueId}`);
+    await expect(outsidePage.getByRole("heading", { name: "Payroll mappings unavailable" })).toBeVisible();
+    await expect(outsidePage.getByText("Staff-002")).toHaveCount(0);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const id of [businessId, outsideId]) {
+      expect((await admin.from("businesses").delete().eq("id", id)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("generic payroll CSV downloads approved hours and reconciles amended exports", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  page.setDefaultTimeout(20_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, fohId, workerId, firstSession, secondSession, thirdSession,
+    firstIn, firstOut, secondIn, secondOut, thirdIn, thirdOut] = Array.from({ length: 14 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const employeeName = "=SUM(1,2)";
+  const scope = { p_business_id: businessId, p_venue_id: venueId, p_week_start: "2024-09-30" };
+  try {
+    for (const role of ["owner", "gm", "foh", "worker", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `payroll-csv-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `CSV cafe ${suffix}` },
+      { id: outsideBusiness, name: `Outside CSV cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: fohId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: users[2], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideBusiness, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      auth_user_id: users[3], name: employeeName, role_title: "Server",
+    })).error).toBeNull();
+    const addSessions = async (rows) => {
+      expect((await admin.from("attendance_sessions").insert(rows.map(([id]) => ({
+        id, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: workerId,
+        started_by: users[3],
+      })))).error).toBeNull();
+      expect((await admin.from("attendance_events").insert(rows.flatMap(([session, startId, endId, start, end]) =>
+        [[startId, "clock_in", start], [endId, "clock_out", end]].map(([id, eventType, occurredAt]) => ({
+          id, session_id: session, business_id: businessId, venue_id: venueId, department_id: fohId,
+          employee_id: workerId, actor_id: users[3], request_id: randomUUID(), event_type: eventType,
+          occurred_at: occurredAt, source: "server_clock",
+        }))))).error).toBeNull();
+    };
+    await addSessions([
+      [firstSession, firstIn, firstOut, "2024-09-30T22:00:00Z", "2024-10-01T02:00:00Z"],
+      [secondSession, secondIn, secondOut, "2024-10-02T22:00:00Z", "2024-10-03T02:00:00Z"],
+    ]);
+    const signedIn = async (role) => {
+      const client = createClient(apiUrl, anonKey, options);
+      expect((await client.auth.signInWithPassword({
+        email: `payroll-csv-${role}-${suffix}@example.test`, password,
+      })).error).toBeNull();
+      return client;
+    };
+    const ownerApi = await signedIn("owner");
+    const fohApi = await signedIn("foh");
+    const workerApi = await signedIn("worker");
+    const approve = async (sessionIds) => {
+      const rows = await fohApi.rpc("list_weekly_worked_time_for_edit", scope);
+      expect(rows.error).toBeNull();
+      for (const sessionId of sessionIds) {
+        const row = rows.data.find((item) => item.session_id === sessionId);
+        expect(row).toBeDefined();
+        expect((await fohApi.rpc("decide_attendance_timesheet", {
+          p_business_id: businessId, p_venue_id: venueId, p_session_id: sessionId, p_request_id: randomUUID(),
+          p_expected_revision: row.edit_revision, p_decision: "approved", p_reason: null,
+        })).error).toBeNull();
+      }
+    };
+    await approve([firstSession, secondSession]);
+    expect((await ownerApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error).toBeNull();
+
+    await signIn(page, `payroll-csv-owner-${suffix}@example.test`, password);
+    const timesheetUrl = `/timesheets?venue=${venueId}&week=2024-09-30`;
+    await page.goto(timesheetUrl);
+    const period = page.getByRole("region", { name: "Payroll period" });
+    const exportSection = period.getByRole("region", { name: "Generic payroll CSV" });
+    await expect(exportSection).toContainText("2 new approved sessions available");
+    await expect(exportSection).toContainText("Re-downloading and importing the same batch again may pay people twice");
+    await exportSection.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("Batch");
+    let history = await ownerApi.rpc("list_generic_payroll_export_history", scope);
+    expect(history.error).toBeNull();
+    const firstBatch = history.data.find((event) => event.kind === "batch");
+    expect(firstBatch.entry_count).toBe(2);
+    const firstHistorySummary = exportSection.getByText("Payroll export history (1)");
+    if (!(await firstHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await firstHistorySummary.click();
+    }
+    const downloadLink = exportSection.getByRole("link", { name: "Download payroll CSV" });
+    const downloadUrl = await downloadLink.getAttribute("href");
+    const [download] = await Promise.all([page.waitForEvent("download"), downloadLink.click()]);
+    expect(download.suggestedFilename()).toBe(`butterbox-hours-2024-09-30-${firstBatch.id}.csv`);
+    const csv = await readFile(await download.path(), "utf8");
+    expect(csv.startsWith('\uFEFF"batch_id","finalisation_id"')).toBe(true);
+    expect(csv).toContain(`"'${employeeName}"`);
+    expect(csv).toContain(firstSession);
+    expect(csv).toContain(secondSession);
+    expect(csv).not.toContain(thirdSession);
+    const ownerDownload = await page.request.get(downloadUrl);
+    expect(ownerDownload.status()).toBe(200);
+    expect(ownerDownload.headers()["cache-control"]).toContain("no-store");
+    expect(ownerDownload.headers()["x-content-type-options"]).toBe("nosniff");
+
+    for (const [role, expectedStatus] of [["gm", 200], ["foh", 404], ["worker", 404], ["outside", 404]]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const rolePage = await context.newPage();
+      await signIn(rolePage, `payroll-csv-${role}-${suffix}@example.test`, password);
+      expect((await rolePage.request.get(downloadUrl)).status(), role).toBe(expectedStatus);
+      if (role === "foh") {
+        await rolePage.goto(timesheetUrl);
+        await expect(rolePage.getByRole("region", { name: "Generic payroll CSV" })).toHaveCount(0);
+      }
+    }
+    const anonymousContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(anonymousContext);
+    expect((await anonymousContext.request.get(downloadUrl)).status()).toBe(401);
+
+    await period.getByLabel("Reason for reopening").fill("Correct an exported finish time");
+    await period.getByRole("button", { name: "Reopen payroll period" }).click();
+    await expect(period).toContainText("Reopened — not finalised");
+    expect((await page.request.get(downloadUrl)).status()).toBe(409);
+    const reopenedHistorySummary = exportSection.getByText("Payroll export history (1)");
+    if (!(await reopenedHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await reopenedHistorySummary.click();
+    }
+    const oldEntries = exportSection.getByRole("list", { name: `Entries for batch ${firstBatch.id}` });
+    await expect(oldEntries.getByRole("listitem")).toHaveCount(2);
+    await expect(oldEntries).toContainText(firstSession);
+    await expect(oldEntries).toContainText("paid 14400.000000 seconds");
+    await expect(oldEntries).toContainText("finalisation version");
+    await expect(exportSection.getByRole("link", { name: "Download payroll CSV" })).toHaveCount(0);
+    expect((await ownerApi.rpc("set_attendance_edit_lock", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: firstSession, p_request_id: randomUUID(),
+      p_locked: false, p_reason: "Worker confirmed a later finish",
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("correct_attendance_event", {
+      p_business_id: businessId, p_venue_id: venueId, p_session_id: firstSession, p_event_id: firstOut,
+      p_request_id: randomUUID(), p_expected_at: "2024-10-01T02:00:00Z",
+      p_new_at: "2024-10-01T03:00:00Z", p_reason: "Worker confirmed a later finish",
+    })).error).toBeNull();
+    await addSessions([[thirdSession, thirdIn, thirdOut, "2024-10-04T22:00:00Z", "2024-10-05T00:00:00Z"]]);
+    await approve([firstSession, thirdSession]);
+    expect((await ownerApi.rpc("finalise_payroll_period", { ...scope, p_request_id: randomUUID() })).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto(timesheetUrl);
+    const changes = exportSection.getByRole("list", { name: "Payroll changes requiring reconciliation" });
+    await expect(changes.getByRole("listitem")).toHaveCount(1);
+    await expect(changes).toContainText("paid 14400.000000 seconds");
+    await expect(changes).toContainText("paid 18000.000000 seconds");
+    await expect(exportSection.getByRole("button", { name: "Prepare payroll CSV" })).toHaveCount(0);
+    await expect(exportSection).toContainText("Butterbox does not create or send that adjustment");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth))
+      .toBe(true);
+
+    await exportSection.getByLabel("Reconciliation reason").fill("   ");
+    await exportSection.getByLabel("Reconciliation reason").evaluate((input) => { input.required = false; });
+    await exportSection.getByRole("checkbox", { name: /I reviewed all changes/ })
+      .evaluate((input) => { input.required = false; });
+    await exportSection.getByRole("button", { name: "Record manual reconciliation" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("Enter a reason");
+    await exportSection.getByLabel("Reconciliation reason").fill("Adjustment entered in external payroll");
+    await exportSection.getByRole("checkbox", { name: /I reviewed all changes/ }).check();
+    await exportSection.getByRole("button", { name: "Record manual reconciliation" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("manual reconciliation is recorded");
+    await expect(exportSection).toContainText("1 new approved session available");
+    await exportSection.getByRole("button", { name: "Prepare payroll CSV" }).click();
+    await expect(exportSection.getByRole("status")).toContainText("1 approved session");
+    history = await ownerApi.rpc("list_generic_payroll_export_history", scope);
+    expect(history.error).toBeNull();
+    expect(history.data.filter((event) => event.kind === "batch")).toHaveLength(2);
+    const reconciliation = history.data.find((event) => event.kind === "reconciliation");
+    expect(reconciliation.reason).toBe("Adjustment entered in external payroll");
+    const finalHistorySummary = exportSection.getByText("Payroll export history (3)");
+    if (!(await finalHistorySummary.evaluate((summary) => summary.parentElement.open))) {
+      await finalHistorySummary.click();
+    }
+    const reconciledEntries = exportSection.getByRole("list", { name: `Entries for reconciliation ${reconciliation.id}` });
+    await expect(reconciledEntries).toContainText("paid 14400.000000 seconds");
+    await expect(reconciledEntries).toContainText("paid 18000.000000 seconds");
+    const newDownload = exportSection.getByRole("link", { name: "Download payroll CSV" });
+    await expect(newDownload).toHaveCount(1);
+    const newUrl = await newDownload.getAttribute("href");
+    const [secondDownload] = await Promise.all([page.waitForEvent("download"), newDownload.click()]);
+    const newCsv = await readFile(await secondDownload.path(), "utf8");
+    expect(newCsv).toContain(thirdSession);
+    expect(newCsv).not.toContain(firstSession);
+    expect(newCsv).not.toContain(secondSession);
+    expect((await page.request.get(downloadUrl)).status()).toBe(409);
+
+    const claim = await workerApi.rpc("submit_attendance_offline_claim", {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: fohId, p_employee_id: workerId,
+      p_actor_id: users[3], p_request_id: randomUUID(), p_event_type: "clock_out",
+      p_claimed_at: "2024-10-05T00:10:00Z",
+    });
+    expect(claim.error).toBeNull();
+    expect((await page.request.get(newUrl)).status()).toBe(409);
+    expect((await ownerApi.rpc("review_attendance_offline_claim", {
+      p_business_id: businessId, p_venue_id: venueId, p_claim_id: claim.data[0].claim_id,
+      p_request_id: randomUUID(), p_decision: "rejected", p_event_id: null, p_expected_at: null,
+      p_reason: "Already included",
+    })).error).toBeNull();
+    expect((await page.request.get(newUrl)).status()).toBe(200);
+  } finally {
+    for (const context of contexts) await context.close();
+    for (const business of [businessId, outsideBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });

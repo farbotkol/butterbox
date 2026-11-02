@@ -1,6 +1,7 @@
 "use server";
 
 import { createClient as createAuthClient } from "@supabase/supabase-js";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { parseBreakClassification, parseClockOptionValue, parseClockReceipt } from "@/lib/attendance";
@@ -13,17 +14,25 @@ import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { isPayrollUuid } from "@/lib/generic-payroll-exports";
+import {
+  isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
+} from "@/lib/payroll-mapping";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
-import { parseOfflineClaimReceipt, parseOfflineMatchOption } from "@/lib/offline-attendance";
+import {
+  attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
+} from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
+import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage } from "@/lib/payroll-periods";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
 import {
   parseBulkLockReceipt, parseBulkLockSelections, parseTimesheetEmployeeFilter, timesheetWeek,
 } from "@/lib/weekly-timesheet";
-import { getWorkspace } from "@/lib/workspace";
+import { BUSINESS_PREFERENCE_COOKIE, parseBusinessId, withBusiness } from "@/lib/business-selection";
+import { getWorkspace, listBusinessMemberships } from "@/lib/workspace";
 
 function text(formData: FormData, key: string, maxLength: number) {
   const value = formData.get(key);
@@ -47,6 +56,17 @@ function uuidList(formData: FormData, key: string, maxCount: number) {
     result.push(value);
   }
   return result;
+}
+
+function businessContext(formData: FormData) {
+  const values = formData.getAll("business_id");
+  return { businessId: values.length > 1 ? "invalid" : values[0] };
+}
+
+function contextVenue(formData: FormData) {
+  const values = formData.getAll("venue_id");
+  if (values.length === 0 || (values.length === 1 && values[0] === "")) return undefined;
+  return values.length === 1 && typeof values[0] === "string" ? values[0] : "invalid";
 }
 
 function collapsedRosterQuery(formData: FormData) {
@@ -139,8 +159,31 @@ export async function signOutAction() {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const supabase = await createClient();
   const { error } = await supabase.auth.signOut();
+  (await cookies()).delete(BUSINESS_PREFERENCE_COOKIE);
   if (error) redirect("/login?error=signout");
   redirect("/login?message=signed-out");
+}
+
+export async function switchBusinessAction(formData: FormData) {
+  const values = formData.getAll("business_id");
+  const businessId = values.length === 1 ? parseBusinessId(values[0]) : null;
+  if (!businessId) {
+    console.error("Invalid business selection submitted.");
+    redirect("/choose-business?error=business");
+  }
+  const result = await listBusinessMemberships();
+  if (result.status === "anonymous") redirect("/login?message=session-ended");
+  if (result.status !== "ready") redirect("/choose-business?error=load");
+  // The preference is only a page default; every later request re-validates membership.
+  if (!result.businesses.some((business) => business.id === businessId)) {
+    console.error("Business selection is not an active membership.");
+    redirect("/choose-business?error=business");
+  }
+  (await cookies()).set(BUSINESS_PREFERENCE_COOKIE, businessId, {
+    httpOnly: true, sameSite: "lax", secure: (process.env.NEXT_PUBLIC_SITE_URL ?? "").startsWith("https://"),
+    path: "/", maxAge: 60 * 60 * 24 * 30,
+  });
+  redirect(withBusiness("/", businessId));
 }
 
 async function sendInvitationEmail(email: string, invitationId: string): Promise<boolean> {
@@ -173,7 +216,7 @@ export async function createStaffInvitationAction(formData: FormData) {
     redirect("/people?error=invite");
   }
   const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const rawEmail = formData.get("email");
@@ -203,7 +246,7 @@ async function findManageableInvitation(formData: FormData) {
     redirect("/people?error=invite");
   }
   const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const { data, error } = await workspace.supabase.rpc("list_pending_staff_invitations", {
@@ -249,23 +292,23 @@ export async function acceptStaffInvitationAction(formData: FormData) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect(`${destination}?error=authentication`);
-  const { error } = await supabase.rpc("accept_staff_invitation", { p_invitation_id: invitationId });
+  const { data, error } = await supabase.rpc("accept_staff_invitation", { p_invitation_id: invitationId });
   if (error) {
     console.error("Could not accept an invitation.", { code: error.code, message: error.message });
-    const reason = error.message === "Business switching is not yet available for this account" ? "business"
-      : error.message === "Your existing membership cannot access this department" ? "scope"
-        : "unavailable";
+    const reason = error.message === "Your existing membership cannot access this department" ? "scope"
+      : "unavailable";
     redirect(`${destination}?error=${reason}`);
   }
   revalidatePath("/");
-  redirect(`${destination}?accepted=1`);
+  const businessId = parseBusinessId(typeof data === "string" ? data : undefined);
+  redirect(businessId ? `${destination}?accepted=1&business=${businessId}` : `${destination}?accepted=1`);
 }
 
 export async function assignMemberRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
-  if (workspace.membership.role !== "owner") redirect("/?error=permission");
+  if (workspace.membership.role !== "owner") redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const { error } = await workspace.supabase.rpc("assign_business_member_role", {
     p_business_id: workspace.business.id,
@@ -277,13 +320,13 @@ export async function assignMemberRoleAction(formData: FormData) {
   if (error) {
     console.error("Role assignment failed.", { code: error.code, message: error.message });
     const code = error.message === "A business must retain an owner" ? "last-owner" : "scope";
-    redirect(`/settings/permissions?error=${code}`);
+    redirect(withBusiness(`/settings/permissions?error=${code}`, workspace.business.id));
   }
-  redirect("/settings/permissions?saved=1");
+  redirect(withBusiness("/settings/permissions?saved=1", workspace.business.id));
 }
 
 export async function saveEmployeeAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36);
@@ -329,7 +372,7 @@ export async function saveVenueGeofenceAction(formData: FormData) {
     console.error("Invalid venue submitted for geofence configuration.");
     redirect("/settings/organisation?error=geofence");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -381,7 +424,7 @@ export async function setVenueClockGeofenceAction(formData: FormData) {
     console.error("Invalid clock location policy submitted.");
     redirect("/settings/organisation?error=location-policy");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -412,7 +455,7 @@ export async function saveVenueConflictPolicyAction(formData: FormData) {
     console.error("Invalid venue submitted for conflict policy.");
     redirect("/settings/organisation?error=conflict-policy");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -446,7 +489,7 @@ export async function saveVenueConflictPolicyAction(formData: FormData) {
 }
 
 export async function saveDepartmentAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -469,7 +512,7 @@ export async function saveDepartmentAction(formData: FormData) {
 }
 
 export async function saveJobRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -492,7 +535,7 @@ export async function saveJobRoleAction(formData: FormData) {
 }
 
 async function setJobRoleRestriction(formData: FormData, mode: "automatic" | "manual") {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -524,7 +567,7 @@ export async function setJobRoleManualRestrictionAction(formData: FormData) {
 }
 
 export async function setEmployeeDepartmentsAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -551,7 +594,7 @@ export async function setEmployeeDepartmentsAction(formData: FormData) {
 }
 
 export async function setEmployeeEligibleRolesAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -577,7 +620,7 @@ export async function setEmployeeEligibleRolesAction(formData: FormData) {
 }
 
 export async function setEmployeePrimaryRoleAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -595,7 +638,7 @@ export async function setEmployeePrimaryRoleAction(formData: FormData) {
 }
 
 export async function setEmployeeAuthUserAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
@@ -629,7 +672,7 @@ async function sharedWorkerActionContext(formData: FormData) {
     console.error("Invalid shared-worker venue submitted.");
     redirect("/people?error=shared");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -695,7 +738,7 @@ async function attendanceActionContext(formData: FormData) {
     console.error("Invalid attendance request.");
     redirect("/attendance?error=invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -732,6 +775,7 @@ function attendanceFailureReason(message: string | undefined) {
     case "End the open break before clocking out": return "break-open";
     case "Invalid break request":
     case "Invalid clock request": return "invalid";
+    case payrollFinalisedMessage: return "period-finalised";
     default: return "save";
   }
 }
@@ -803,7 +847,7 @@ export async function reviewAttendanceLocationAction(formData: FormData) {
     console.error("Invalid attendance location review.");
     redirect("/attendance?error=review-invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -842,7 +886,7 @@ export async function submitAttendanceCorrectionRequestAction(formData: FormData
     console.error("Invalid employee attendance correction request.");
     redirect("/attendance?error=request-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -870,6 +914,7 @@ export async function submitAttendanceCorrectionRequestAction(formData: FormData
       "Employee not found or permission denied": "permission",
       "Employee or department is unavailable": "unavailable",
       "Permission denied": "permission",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "request-save"}`);
@@ -893,7 +938,7 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
     console.error("Invalid offline attendance review.");
     redirect("/attendance?error=claim-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -926,9 +971,11 @@ export async function reviewOfflineAttendanceClaimAction(formData: FormData) {
       "Attendance changed; refresh before reconciling": "claim-stale",
       "Attendance changed; refresh before correcting": "claim-stale",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Corrected attendance overlaps another session": "claim-overlap",
       "Invalid attendance correction time": "claim-time",
       "The event does not match the requested time": "request-mismatch",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -952,7 +999,7 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
     console.error("Invalid offline attendance creation request.");
     redirect("/attendance?error=claim-pair-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -978,6 +1025,8 @@ export async function createAttendanceFromOfflineClaimsAction(formData: FormData
       "A claim has already been reviewed": "claim-pair-used",
       "A claim was already linked to attendance": "claim-pair-used",
       "Claimed attendance overlaps another session": "claim-overlap",
+      [payrollFinalisedMessage]: "period-finalised",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1000,7 +1049,7 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
     console.error("Invalid offline clock-out completion request.");
     redirect("/attendance?error=claim-open-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1025,9 +1074,11 @@ export async function completeAttendanceFromOfflineClaimAction(formData: FormDat
       "End the open break before clocking out": "claim-open-break",
       "Server clock is earlier than the previous attendance event": "claim-open-order",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1056,7 +1107,7 @@ export async function completeAttendanceWithOfflineBreakAction(formData: FormDat
     console.error("Invalid offline break resolution request.");
     redirect("/attendance?error=claim-break-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1087,9 +1138,11 @@ export async function completeAttendanceWithOfflineBreakAction(formData: FormDat
       "Claimed clock-out time is invalid": "claim-pair-time",
       "Server clock is earlier than the previous attendance event": "claim-open-order",
       "Attendance edits are locked": "claim-locked",
+      [payrollFinalisedMessage]: "period-finalised",
       "Claimed attendance overlaps another session": "claim-overlap",
       "Claim has already been reviewed": "claim-reviewed",
       "A claim was already linked to attendance": "claim-pair-used",
+      [attendanceClaimTimezoneChangedMessage]: "claim-timezone",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "claim-save"}`);
@@ -1107,7 +1160,7 @@ async function correctionActionContext(formData: FormData) {
     console.error("Invalid attendance correction scope.");
     redirect("/work-time?error=correction-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1130,6 +1183,7 @@ function correctionFailureReason(message: string | undefined) {
     case "Only an owner or general manager can unlock attendance edits": return "unlock-permission";
     case "Incomplete or invalid attendance cannot be locked": return "lock-invalid";
     case "Attendance edit lock is already in that state": return "lock-stale";
+    case payrollFinalisedMessage: return "period-finalised";
     default: return "correction-save";
   }
 }
@@ -1204,7 +1258,7 @@ export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
     console.error("Invalid weekly attendance lock scope.");
     redirect("/timesheets?error=bulk-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1246,6 +1300,7 @@ export async function bulkLockWeeklyAttendanceAction(formData: FormData) {
       "Selected attendance not found or permission denied": "bulk-scope",
       "Permission denied": "bulk-scope",
       "Request identifier already used": "bulk-retry",
+      [payrollFinalisedMessage]: "period-finalised",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "bulk-save"}`);
@@ -1264,7 +1319,7 @@ export async function decideTimesheetAction(formData: FormData) {
     console.error("Invalid timesheet decision scope.");
     redirect("/timesheets?error=decision-invalid");
   }
-  const workspace = await getWorkspace(venues[0]);
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1311,6 +1366,7 @@ export async function decideTimesheetAction(formData: FormData) {
       "Timesheet entry is already returned for correction": "decision-stale",
       "Incomplete or invalid attendance cannot be approved": "decision-incomplete",
       "Unlock attendance before returning it for correction": "decision-locked",
+      [payrollFinalisedMessage]: "period-finalised",
     };
     redirect(`${destination}&error=${error?.message && Object.hasOwn(failureReasons, error.message)
       ? failureReasons[error.message] : "decision-save"}#timesheet-session-${sessions[0]}`);
@@ -1319,6 +1375,220 @@ export async function decideTimesheetAction(formData: FormData) {
   revalidatePath("/work-time");
   revalidatePath("/attendance");
   redirect(`${destination}&decided=${input.decision}#timesheet-session-${sessions[0]}`);
+}
+
+export async function decidePayrollPeriodAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid payroll period scope.");
+    redirect("/timesheets?error=period-invalid");
+  }
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the payroll period workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const actions = formData.getAll("period_action");
+  const reasons = formData.getAll("reason");
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  const input = actions.length === 1 && reasons.length <= 1
+    ? parsePayrollPeriodInput(actions[0], reasons.length === 1 ? reasons[0] : null) : null;
+  if (!week || weeks[0] !== week || employee === undefined || !input) {
+    console.error("Invalid payroll period request.");
+    redirect(`${destination}&error=${actions[0] === "reopened" ? "period-reason" : "period-invalid"}#payroll-period`);
+  }
+
+  const { data, error } = input.action === "finalised"
+    ? await workspace.supabase.rpc("finalise_payroll_period", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      p_request_id: requests[0], p_note: input.reason,
+    })
+    : await workspace.supabase.rpc("reopen_payroll_period", {
+      p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+      p_request_id: requests[0], p_reason: input.reason,
+    });
+  if (error || typeof data !== "string" ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(data)) {
+    console.error("Payroll period decision failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid payroll period receipt.",
+    });
+    redirect(`${destination}&error=${payrollFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  revalidatePath("/work-time");
+  revalidatePath("/attendance");
+  redirect(`${destination}&period=${input.action}#payroll-period`);
+}
+
+async function payrollExportActionContext(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  const finalisations = uuidList(formData, "finalisation_id", 1);
+  if (venues?.length !== 1 || requests?.length !== 1 || finalisations?.length !== 1) {
+    console.error("Invalid payroll export scope.");
+    redirect("/timesheets?error=export-invalid");
+  }
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the payroll export workspace.", { message: workspace.message });
+    redirect("/timesheets?error=bulk-venue");
+  }
+  const weeks = formData.getAll("week");
+  const employees = formData.getAll("employee_id");
+  const week = weeks.length === 1 ? timesheetWeek(weeks[0], workspace.venue.timezone) : null;
+  const employee = employees.length === 1 ? parseTimesheetEmployeeFilter(employees[0]) : undefined;
+  const query = new URLSearchParams({ venue: workspace.venue.id });
+  if (week && weeks[0] === week) query.set("week", week);
+  if (employee) query.set("employee", employee);
+  const destination = `/timesheets?${query}`;
+  if (!week || weeks[0] !== week || employee === undefined) {
+    console.error("Invalid payroll export filters.");
+    redirect(`${destination}&error=export-invalid#payroll-period`);
+  }
+  return {
+    workspace, week, destination, requestId: requests[0], finalisationId: finalisations[0],
+  };
+}
+
+function payrollExportFailureReason(message: string | undefined): string {
+  const reasons: Record<string, string> = {
+    "Permission denied": "export-permission",
+    "Payroll period changed; refresh before exporting": "export-stale",
+    "Venue timezone changed; reopen and review payroll before exporting": "export-stale",
+    "Resolve outstanding payroll exceptions before exporting": "export-exceptions",
+    "Previously exported time requires reconciliation": "export-reconciliation",
+    "Payroll reconciliation changed; refresh and review again": "export-stale",
+    "No payroll reconciliation is required": "export-stale",
+    "No new approved sessions are available for export": "export-empty",
+    "Employee name is too long or blank; correct the employee profile before preparing payroll": "export-name",
+    "Request identifier already used": "export-retry",
+    "Invalid payroll reconciliation request": "export-reconcile-invalid",
+  };
+  return message && Object.hasOwn(reasons, message) ? reasons[message] : "export-save";
+}
+
+export async function prepareGenericPayrollExportAction(formData: FormData) {
+  const { workspace, week, destination, requestId, finalisationId } = await payrollExportActionContext(formData);
+  const { data, error } = await workspace.supabase.rpc("create_generic_payroll_export", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+    p_finalisation_id: finalisationId, p_request_id: requestId,
+  });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Preparing the payroll export failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid batch receipt.",
+    });
+    redirect(`${destination}&error=${payrollExportFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  redirect(`${destination}&export_batch=${data}#payroll-period`);
+}
+
+export async function reconcileGenericPayrollExportAction(formData: FormData) {
+  const { workspace, week, destination, requestId, finalisationId } = await payrollExportActionContext(formData);
+  const hashes = formData.getAll("review_hash");
+  const reasons = formData.getAll("reason");
+  const confirmations = formData.getAll("confirmed");
+  const hash = hashes.length === 1 ? hashes[0] : null;
+  const reason = reasons.length === 1 && typeof reasons[0] === "string" ? reasons[0].trim() : "";
+  if (typeof hash !== "string" || !/^[0-9a-f]{64}$/.test(hash) || reason.length === 0 || reason.length > 500 ||
+    confirmations.length !== 1 || confirmations[0] !== "yes") {
+    console.error("Invalid payroll reconciliation details.");
+    redirect(`${destination}&error=export-reconcile-invalid#payroll-period`);
+  }
+  const { data, error } = await workspace.supabase.rpc("reconcile_generic_payroll_export", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id, p_week_start: week,
+    p_finalisation_id: finalisationId, p_request_id: requestId, p_review_hash: hash,
+    p_reason: reason, p_confirmed: true,
+  });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Payroll reconciliation failed.", {
+      code: error?.code, message: error?.message ?? "The server returned an invalid reconciliation receipt.",
+    });
+    redirect(`${destination}&error=${payrollExportFailureReason(error?.message)}#payroll-period`);
+  }
+  revalidatePath("/timesheets");
+  redirect(`${destination}&export_reconciliation=${data}#payroll-period`);
+}
+
+export async function savePayrollMappingAction(formData: FormData) {
+  const venues = uuidList(formData, "venue_id", 1);
+  const connections = uuidList(formData, "connection_id", 1);
+  const requests = uuidList(formData, "request_id", 1);
+  if (venues?.length !== 1 || connections?.length !== 1 || requests?.length !== 1) {
+    console.error("Invalid payroll mapping scope.");
+    redirect("/settings/payroll?error=invalid");
+  }
+  const workspace = await getWorkspace(venues[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load payroll mapping workspace.", { message: workspace.message });
+    redirect("/settings/payroll?error=venue");
+  }
+  const query = new URLSearchParams({ venue: workspace.venue.id, connection: connections[0] });
+  const destination = `/settings/payroll?${query}`;
+  if (!["owner", "admin"].includes(workspace.membership.role)) {
+    console.error("Payroll mapping management denied.");
+    redirect(`${destination}&error=permission`);
+  }
+  const one = (key: string) => {
+    const values = formData.getAll(key);
+    return values.length === 1 ? values[0] : null;
+  };
+  const operation = one("operation");
+  let result;
+  if (operation === "connection") {
+    const provider = one("provider");
+    const accountId = payrollMappingText(one("account_id"), 255);
+    const name = payrollMappingText(one("name"), 100);
+    if (!isPayrollProvider(provider) || !accountId || !name) {
+      console.error("Invalid payroll mapping connection.");
+      redirect(`${destination}&error=invalid`);
+    }
+    result = await workspace.supabase.rpc("create_payroll_mapping_connection", {
+      p_business_id: workspace.business.id, p_connection_id: connections[0],
+      p_provider: provider, p_account_id: accountId, p_name: name,
+    });
+  } else {
+    const employees = uuidList(formData, "employee_id", 1);
+    const revision = payrollMappingRevision(one("revision"));
+    const reason = payrollMappingText(one("reason"), 500);
+    const external = one("external_employee_id");
+    const externalId = typeof external === "string" && external.trim() === "" ? null
+      : payrollMappingText(external, 255);
+    if (operation !== "mapping" || employees?.length !== 1 || revision === null || !reason ||
+      typeof external !== "string" || (external.trim() !== "" && externalId === null)) {
+      console.error("Invalid payroll employee mapping.");
+      redirect(`${destination}&error=invalid`);
+    }
+    result = await workspace.supabase.rpc("set_payroll_employee_mapping", {
+      p_business_id: workspace.business.id, p_connection_id: connections[0], p_employee_id: employees[0],
+      p_expected_revision: revision, p_external_employee_id: externalId, p_reason: reason, p_request_id: requests[0],
+    });
+  }
+  if (result.error || !isPayrollUuid(result.data)) {
+    console.error("Payroll mapping save failed.", {
+      code: result.error?.code, message: result.error?.message ?? "Invalid mapping receipt.",
+    });
+    redirect(`${destination}&error=${payrollMappingFailure(result.error?.message)}`);
+  }
+  revalidatePath("/settings/payroll");
+  revalidatePath("/timesheets");
+  if (operation === "connection") query.set("connection", result.data);
+  redirect(`/settings/payroll?${query}&saved=${operation}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {
@@ -1376,7 +1646,7 @@ async function availabilityActionContext(formData: FormData) {
     console.error("Invalid availability venue submitted.");
     redirect("/availability?error=invalid");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1552,7 +1822,7 @@ export async function reviewLeaveRequestAction(formData: FormData) {
 }
 
 export async function saveBusinessDraftAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
 
@@ -1572,7 +1842,7 @@ export async function saveBusinessDraftAction(formData: FormData) {
 }
 
 export async function createBusinessAction(formData: FormData) {
-  const workspace = await getWorkspace();
+  const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
 
@@ -1615,7 +1885,7 @@ export async function saveShiftAction(_previous: ShiftFormState, formData: FormD
     break: text(formData, "break_minutes", 100),
   };
   const state = { ...validateShiftForm(values, editing), values };
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1717,7 +1987,7 @@ export async function copyRosterWeekAction(_previous: RosterCopyState, formData:
     state.errors.sourceWeek = "Choose a different source week.";
     return state;
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1745,7 +2015,7 @@ export async function copyRosterWeekAction(_previous: RosterCopyState, formData:
 
 export async function deleteShiftAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1780,7 +2050,7 @@ export async function setShiftAcknowledgementRequirementAction(formData: FormDat
     console.error("Invalid shift acknowledgement requirement request.");
     redirect("/roster?error=acknowledgement");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1809,7 +2079,7 @@ export async function setShiftAcknowledgementRequirementAction(formData: FormDat
 
 export async function publishRosterAction(formData: FormData) {
   const venueIds = uuidList(formData, "venue_id", 1);
-  const workspace = await getWorkspace(venueIds?.[0]);
+  const workspace = await getWorkspace(venueIds?.[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1855,7 +2125,7 @@ export async function acknowledgeShiftAction(formData: FormData) {
     console.error("Invalid shift acknowledgement request.");
     redirect("/my-schedule?error=acknowledgement");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -1893,7 +2163,7 @@ export async function markRosterNotificationReadAction(formData: FormData) {
     console.error("Invalid notification read request.");
     redirect("/notifications?error=read");
   }
-  const workspace = await getWorkspace(venueIds[0]);
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {

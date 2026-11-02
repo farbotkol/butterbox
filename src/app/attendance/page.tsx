@@ -32,7 +32,7 @@ import {
 import { getWorkspace } from "@/lib/workspace";
 
 type AttendancePageProps = {
-  searchParams: Promise<{ venue?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ business?: string; venue?: string; error?: string; saved?: string }>;
 };
 
 const errors: Record<string, string> = {
@@ -56,9 +56,11 @@ const errors: Record<string, string> = {
   "claim-match": "The matching finished clock event is unavailable. Refresh and check its scope.",
   "claim-stale": "Attendance changed. Refresh and review the current event time.",
   "claim-locked": "Attendance edits are locked. Ask an owner or general manager to unlock them.",
+  "period-finalised": "This week's payroll period is finalised. An owner, admin or general manager must reopen it with a reason before attendance can change.",
   "claim-overlap": "The claimed time would overlap another attendance session.",
   "claim-time": "The claimed time must be in the past and different from the event. If it is already correct, match without changing it.",
   "claim-save": "We could not save the claim decision. Your access may have changed; refresh and try again.",
+  "claim-timezone": "The venue timezone changed while you were working. Refresh and retry the attendance request.",
   "claim-pair-invalid": "Choose matching clock-in and clock-out claims, confirm the warning, and enter a reason.",
   "claim-pair-time": "The clock-out time must be after clock-in and in the past.",
   "claim-pair-used": "A claim was already reviewed or used to create attendance. Refresh and check its history.",
@@ -86,7 +88,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!supabaseUrl || !supabaseAnonKey) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(params.venue);
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -287,7 +289,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const breakRequestId = randomUUID();
 
   return (
-    <AppShell businessName={workspace.business.name} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
