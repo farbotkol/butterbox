@@ -76,7 +76,10 @@
   regression was run for this story; see the story section for deferred suites.
 - BB-FOUND-008 (resilience and operations) has a verified partial checkpoint
   and is **Blocked**, not Done: an explicitly authorised isolated hosted
-  staging project and backup destination are unavailable. Implemented readiness,
+  staging project and backup destination are unavailable. DEC-005 sets
+  unverified objectives of 15-minute RPO, four-hour RTO, seven-day PITR and
+  30-day daily backups, with hosted rehearsal deferred to the mandatory
+  pre-production gate. Implemented readiness,
   process-scoped health/error counters, protected operator metrics and a
   backup/recovery runbook. Final regression passed **2,121/2,121** pgTAP
   assertions across 46 files after a clean 47-migration replay, **19/19**
@@ -566,18 +569,25 @@
 - **Deferred and risks:** Full pgTAP, Node, authenticated integration and
   browser suites were intentionally not run; broader regression is needed at
   workstream merge or release. The owner has confirmed the non-destructive
-  direction in `docs/DECISION_LOG.md`, but the proposed durations, legal
-  preservation requirements and operational recovery controls still need
-  approval. No live records were altered and legal or payroll compliance is
-  not claimed.
+  direction in `docs/DECISION_LOG.md`, but employment-record durations and
+  legal requirements remain unapproved, and operational recovery remains
+  unverified. No live records were altered and legal or payroll compliance
+  is not claimed.
 
 ## Current story
 
+- **BB-FOUND-001 — Create production-ready application** remains Blocked on
+  historical credential findings. DEC-004 authorizes a read-only, redacted
+  assessment and classification; no credential rotation, privileged access
+  test or history modification is authorized. The next action is to inventory
+  accessible local refs and classify the existing findings without exposing
+  secret values.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
-  acceptance. The non-destructive partial business-deletion safeguard has
-  passed its selected verification and is being prepared for a feature
-  checkpoint. Do not enable permanent deletion or assume the proposed
-  retention periods are approved.
+  acceptance. Its verified partial business-deletion safeguard was committed
+  as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
+  `205004f9da812c0c981814849f481f34913d6818`; the remote SHA matched. Do not
+  enable permanent deletion or assume proposed employment-record periods are
+  approved.
 - As of 2026-11-02 11:05 UTC, an uncommitted forward migration rejects
   business DELETE and TRUNCATE without a test-only bypass. It passed **17/17**
   focused pgTAP assertions inside a rolled-back transaction and is not applied.
@@ -638,6 +648,11 @@
   the current operator-enabled sample policy is insufficient. After completing
   the retention checkpoint, investigate fail-closed sample protection before
   other optional configuration work.
+- At 11:31 UTC owner decisions DEC-004 and DEC-005 were merged and pushed with
+  the preservation feature in `205004f9da812c0c981814849f481f34913d6818`.
+  Credential assessment is authorized read-only; rotations and history changes
+  need separate approval. Recovery objectives are approved as targets only;
+  actual hosted configuration and restoration remain unverified.
 
 ## Recently completed story
 
@@ -2017,7 +2032,10 @@ not yet run remotely.
 
 ## Next story
 
-- After the preservation checkpoint, inspect **BB-SAAS-003 — Tenant
+- Complete the authorized redacted **BB-FOUND-001** historical credential
+  assessment first. Do not use any candidate credential for access, rotate it
+  or alter history; escalate a potentially active privileged finding.
+- Then inspect **BB-SAAS-003 — Tenant
   onboarding and support** for a fail-closed response to DEC-003. The
   operator-enabled sample path does not establish a separate demonstration
   environment. Keep the story Blocked until production isolation, historical
@@ -2027,10 +2045,10 @@ not yet run remotely.
   **BB-ATTEND-004 — Rotating QR kiosk**. Keep ORG-006 Blocked until its
   complete criteria and external-channel dependencies are verified. Preserve
   existing immutable periods and do not silently reinterpret history.
-- Resume **BB-FOUND-008** only after the owner identifies and authorises an
+- Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
-  access. Approve the proposed retention/recovery targets, rehearse the
-  README procedure and record actual results. Do not run destructive tests
+  access. Rehearse the DEC-005 recovery targets using the README procedure and
+  record actual results. Do not run destructive tests
   against shared development or production and do not claim local replay as
   a successful staging restore.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth

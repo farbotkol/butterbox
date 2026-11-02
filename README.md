@@ -303,8 +303,8 @@ edits and individual deletion are restricted. Business DELETE and TRUNCATE are
 disabled, including for the service role, while preservation requirements are
 unresolved; this does not protect against every privileged database or storage
 operation. Hosted backups and a legally appropriate live-record
-retention/deletion policy have not been verified. The 35-day backup proposal
-below is separate from employment-record retention. Nothing here guarantees
+retention/deletion policy have not been verified. The backup objectives
+below are separate from employment-record retention. Nothing here guarantees
 compliance with Australian privacy or workplace-record requirements.
 
 Managers can use **Work time** to inspect actual attendance sessions in their
@@ -777,27 +777,28 @@ protected metric reads and failure-counter increments on the disposable stack.
 ### Backup retention and recovery runbook
 
 **Status:** no hosted staging/production backup configuration or retained
-backup has been verified. This is a pilot-readiness operating policy and
-rehearsal procedure, not evidence that recovery works in a deployed project.
-The owner must explicitly identify an isolated staging Supabase project and
-authorise a restore there before this story can be marked Done. Never restore,
+backup has been verified. The owner has deferred a hosted rehearsal to
+pre-production; it remains a mandatory production release gate, not evidence
+that recovery works in a deployed project. The owner must explicitly identify
+an isolated staging Supabase project and authorise a restore there before this
+story can be marked Done. Never restore,
 reset or alter a shared/live database while following local test instructions.
 
-Proposed pilot recovery policy, requiring owner approval, provisioning and verification:
+Owner-directed recovery objectives (DEC-005), requiring provisioning and verification:
 
-- Retain encrypted daily recovery points for **35 days** in restricted operator
-  storage, with monitored backup success and deletion/expiry controls. This
-  recovery-window policy is not a statutory employee/payroll record retention
-  policy; do not delete live timekeeping or audit records when backups expire.
-- Target at most **24 hours** of data loss and a **four-hour** restore time.
-  These are targets, not measured guarantees. The staging rehearsal must
-  record actual RPO/RTO and owner sign-off before pilot use.
-- Verify the hosted plan and actual recovery-point history. Supabase documents
-  plan-dependent daily retention (Pro 7 days, Team 14, Enterprise up to 30);
-  these defaults alone do not satisfy the 35-day operating target. An
-  authorised operator must provision the additional encrypted recovery points
-  and storage rather than assume they exist. Free-plan projects do not have
-  the same automatic daily-backup guarantee.
+- Target **seven days** of point-in-time recovery and **30 days** of encrypted
+  daily backups in restricted operator storage, with monitored backup success
+  and deletion/expiry controls. This recovery policy is not a statutory
+  employee/payroll record retention policy; do not delete live timekeeping or
+  audit records when backups expire.
+- Target at most **15 minutes** of data loss and a **four-hour** restore time.
+  These are objectives, not measured guarantees; daily backups alone do not
+  establish the 15-minute target. The hosted staging rehearsal must record
+  actual RPO/RTO and owner sign-off before production use.
+- Verify the selected hosted plan, actual recovery-point history, PITR
+  availability, retention implementation and costs before claiming the
+  objectives are achievable. Escalate unsupported capabilities or costs for
+  an owner decision rather than assuming a plan provides them.
 - Back up Storage objects separately; database backups contain their metadata,
   not their contents. Preserve environment configuration, migrations, auth
   redirect settings and external integration configuration through their
