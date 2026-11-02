@@ -3,8 +3,17 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **36**. In Progress: **4**.
+  BB-PAYRULES stories). Verified Done: **37**. In Progress: **3**.
   Blocked: **3**. Not started (Backlog): **66**.
+- BB-FOUND-005 (invitations) is Done. Verified existing members of another
+  business can now accept a scoped invitation; they gain only an employee
+  membership for the invited venue and department and keep their other
+  memberships. A clean isolated replay of all 45 migrations passed
+  **2,077/2,077** pgTAP assertions across 44 files (71 invitation
+  assertions). All **19/19** authenticated integrations passed, plus **136**
+  Node tests with 19 integration tests skipped in that invocation. ESLint,
+  TypeScript, the split production build and **51/51** serialized
+  production-browser scenarios also passed.
 - BB-FOUND-006 (business switching) is Done: explicit per-request business
   selection, a membership-only chooser and per-tab pinning. Regressions:
   **136** Node tests (19 integration tests skipped in that invocation),
@@ -12,7 +21,7 @@
   authorisation/revocation test, **50/50** serialized production-browser
   scenarios, ESLint, TypeScript and the split production build. No SQL changed,
   so pgTAP was not rerun for this checkpoint.
-- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
+- Done: BB-FOUND-002, BB-FOUND-003, BB-FOUND-004, BB-FOUND-005, BB-FOUND-006, BB-ORG-001, BB-ORG-002, BB-ORG-003,
   BB-ORG-004, BB-ORG-005, BB-PEOPLE-001, BB-PEOPLE-002, BB-PEOPLE-003, BB-PEOPLE-004, BB-PEOPLE-005,
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
@@ -316,9 +325,15 @@
 
 ## Current story
 
+- **BB-FOUND-005 — Invite and onboard users** is Done (evidence below). The
+  former cross-business rejection was removed by a new migration now that
+  BB-FOUND-006 resolves the business per request. Manager-page permission
+  redirects now keep the business context, so multi-business users see the
+  intended business instead of the chooser. Next: **BB-ROSTER-008 — Publish
+  and notify**.
 - **BB-FOUND-006 — Switch between business memberships** is Done (evidence
-  below). Next: finish **BB-FOUND-005** by allowing existing members of another
-  business to accept a scoped invitation now that selection is per-request.
+  below), committed as `92f4841d21c89b4bfbf3e3c5d7bbf678aac70bc3`; the remote
+  SHA matched.
 - **BB-ORG-005 — Multiple venues** is Done. All three criteria are verified:
   scoped venue selection, shared-worker overlap detection and actual venue
   attribution through timesheet approval, finalisation and CSV export.
@@ -381,7 +396,8 @@
   edit-lock transitions are immutable, attributed and visible to permitted
   users; corrected work time, daylight-saving handling, precision, linked-worker
   overlap and concurrent account relinking are verified below.
-- **BB-FOUND-005 — Invite and onboard users** is In Progress. The committed
+- **BB-FOUND-005 — Invite and onboard users** is now Done (see above). Earlier
+  checkpoint notes: the committed
   database migration implements scoped, seven-day invitations, verified-email
   acceptance, duplicate and revocation handling, and protected event history.
   A clean isolated replay of all 30 migrations passed **1,352/1,352** pgTAP
@@ -469,23 +485,28 @@ Decision: the HTTP-only `bb_business` preference cookie is only a default for
 pages opened without context; it is never authorisation and never used by
 mutations.
 
-### BB-FOUND-005 — Invite and onboard users (In Progress)
+### BB-FOUND-005 — Invite and onboard users (Done)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | FOUND-005.1 Invitation expires and cannot be reused | Database-time expiry and atomic acceptance reject expired or already-consumed invitations. | The 66-assertion invitation pgTAP suite and authenticated acceptance races passed; production Chromium showed expired invitations cannot be accepted. | Pass |
-| FOUND-005.2 Recipient joins only the intended business and venue | Verified email acceptance links the intended employee and creates only its scoped membership; an existing same-business member retains their role and scope. Existing members of another business are explicitly rejected until safe switching exists. | pgTAP and authenticated cross-tenant/concurrency tests passed; separate-browser Chromium confirmed the intended business, venue and department and denied an unrelated user. The existing-other-business case is intentionally unavailable. | Blocked |
+| FOUND-005.2 Recipient joins only the intended business and venue | Verified email acceptance links the intended employee and creates only its scoped membership. An existing same-business member retains their role and scope. An existing member of another business (`20261103000000_cross_business_invitations.sql`) gains only an employee membership for the invited venue and department, keeping their other memberships. Acceptance then opens the invited business explicitly. | 71 pgTAP assertions verified the new scoped membership, the unchanged other-business membership, the employee link, no access to another department and no reuse. The authenticated integration covered concurrent cross-business acceptance, a setup/acceptance race, refused invitation creation and owned-business visibility. Separate-browser Chromium covered intended scope and unrelated-user denial. A new Chromium scenario had an existing owner accept, open the invited business, get refused manager pages and switch back without seeing the invited profile. All passed. | Pass |
 | FOUND-005.3 Duplicates and revocation are handled | Unique pending indexes and transaction locks prevent duplicate employee/email invitations; managers can resend or revoke; expired invitations can be replaced. | pgTAP and concurrent duplicate/revocation tests passed; Chromium verified resend preserves one pending invitation and revoked links cannot be accepted. | Pass |
 | FOUND-005.4 Audit entry is stored | Protected append-only events record invitation creation and status changes with tenant, department, actor and time. | pgTAP verified scoped access and mutation protection; authenticated and browser tests confirmed creation and acceptance actors. | Pass |
 
 Files: `supabase/migrations/20261102070000_staff_invitations.sql`,
+`supabase/migrations/20261103000000_cross_business_invitations.sql`,
 `supabase/tests/database/staff_invitations.test.sql`,
 `tests/staff-invitations.integration.test.mjs`, `scripts/test-tenant-isolation.mjs`,
 `src/app/actions.ts`, `src/app/people/page.tsx`, `src/app/invitations/[id]/page.tsx`,
 `src/components/invitation-session.tsx`, `src/lib/invitations.ts`,
 `src/lib/auth-urls.ts`, `src/lib/workspace.ts`, `src/app/page.tsx`,
 `src/app/setup/page.tsx`, `tests/invitations.test.mjs`,
-`tests/auth-urls.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`.
+`tests/auth-urls.test.mjs`, `tests/e2e/auth.spec.mjs` and `README.md`. The
+cross-business completion also changed the permission redirects in
+`src/app/work-time/page.tsx`, `src/app/timesheets/page.tsx` and
+`src/app/settings/{permissions,payroll,organisation}/page.tsx` to keep the
+business context.
 The recipient refresh token is exchanged in an isolated client, and the
 resulting session is verified against the invitation before an existing
 browser session can be replaced. This rejects mismatched access and refresh
@@ -1384,10 +1405,10 @@ not yet run remotely.
 
 ## Next story
 
-- Next ready implementation: finish **BB-FOUND-005** — allow verified
-  existing members of another business to accept a scoped invitation (new
-  migration replacing `accept_staff_invitation`'s cross-business rejection),
-  then verify the new membership is scoped and the existing one unchanged.
+- Next ready implementation: **BB-ROSTER-008 — Publish and notify** (P0, In
+  Progress). Review its remaining criteria against the existing publication,
+  versioning and in-app notification work, then implement only what remains.
+  Then BB-SAAS-004, BB-COMMS-002 and BB-FOUND-007.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.

@@ -118,7 +118,7 @@ function EmployeeInvitationForm({ employee, invitation, venueId, departmentActiv
         </label>
         <p className="mt-2 text-xs text-muted">
           The recipient verifies their email and chooses their own password. Invitations expire after seven days.
-          Accounts already linked to another business cannot join until business switching is available.
+          People who already use Butterbox elsewhere join this business with employee access only.
         </p>
         <button type="submit" className="mt-3 rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">
           Send invitation
@@ -345,7 +345,7 @@ export default async function PeoplePage({
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
   if (!["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"].includes(workspace.membership.role)) {
-    redirect("/?error=permission");
+    redirect(withBusiness("/?error=permission", workspace.business.id));
   }
   const venues = await readAllPages((from, to) => workspace.supabase.from("venues")
     .select("id, name", { count: "exact" }).eq("business_id", workspace.business.id)

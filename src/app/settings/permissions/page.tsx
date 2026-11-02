@@ -3,6 +3,7 @@ import { assignMemberRoleAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace, type BusinessMember } from "@/lib/workspace";
+import { withBusiness } from "@/lib/business-selection";
 
 export default async function PermissionsPage({
   searchParams,
@@ -15,7 +16,7 @@ export default async function PermissionsPage({
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
-  if (workspace.membership.role !== "owner") redirect("/?error=permission");
+  if (workspace.membership.role !== "owner") redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const [members, venues, departments] = await Promise.all([
     workspace.supabase.rpc("list_business_members", { p_business_id: workspace.business.id }),

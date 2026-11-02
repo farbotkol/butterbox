@@ -84,9 +84,11 @@ session is verified and its refresh token exchanged before matching it to the
 invitation. Before replacing an existing session, the recipient is asked for
 confirmation and shown the invited account.
 
-An account already belonging to another business cannot yet accept an
-invitation (BB-FOUND-005 follow-up); do not remove a membership merely to
-bypass this safeguard.
+An account that already belongs to another business can accept an invitation.
+It gains only an employee membership for the invited venue and department, and
+its other memberships keep their existing roles. After accepting, **Open
+workspace** opens the invited business; the account then switches businesses
+explicitly (see below).
 
 ### Switching businesses
 

@@ -6699,6 +6699,100 @@ test("staff invitations deliver separate-browser email and join only the intende
   }
 });
 
+test("existing members of another business accept a scoped invitation and switch explicitly", async ({ page }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const managerEmail = `cross-invite-manager-${suffix}@example.test`;
+  const ownerEmail = `cross-invite-owner-${suffix}@example.test`;
+  const [businessId, ownBusiness, venueId, ownVenue, departmentId, bohDepartment, ownDepartment, employeeId] =
+    Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  try {
+    for (const email of [managerEmail, ownerEmail]) {
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Inviting cross cafe" },
+      { id: ownBusiness, name: "Own cross cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Inviting venue", timezone: "UTC" },
+      { id: ownVenue, business_id: ownBusiness, name: "Own venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohDepartment, business_id: businessId, venue_id: venueId, name: "Back of House" },
+      { id: ownDepartment, business_id: ownBusiness, venue_id: ownVenue, name: "Own team" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: ownBusiness, user_id: users[1], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "Casey Crossover", email: ownerEmail, role_title: "Server",
+    })).error).toBeNull();
+
+    await signIn(page, managerEmail, password);
+    await page.goto(`/people?venue=${venueId}`);
+    const form = page.getByRole("form", { name: "Invite Casey Crossover" });
+    await expect(form.getByLabel("Invitation email")).toHaveValue(ownerEmail);
+    await form.getByRole("button", { name: "Send invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation email requested");
+    const manager = createClient(apiUrl, anonKey, options);
+    expect((await manager.auth.signInWithPassword({ email: managerEmail, password })).error).toBeNull();
+    const invitation = await manager.from("staff_invitations").select("id")
+      .eq("employee_id", employeeId).eq("status", "pending").single();
+    expect(invitation.error).toBeNull();
+    await page.context().clearCookies();
+
+    await signIn(page, ownerEmail, password);
+    await expect(page.locator("aside").getByText("Own cross cafe", { exact: true })).toBeVisible();
+    await page.goto(`/invitations/${invitation.data.id}`);
+    await expect(page.getByText(/Inviting cross cafe invited Casey Crossover to Inviting venue \/ Front of House/))
+      .toBeVisible();
+    await page.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("invitation has been accepted");
+    await expect(page).toHaveURL(new RegExp(`accepted=1&business=${businessId}$`));
+    const memberships = await admin.from("business_memberships")
+      .select("business_id, venue_id, department_id, role").eq("user_id", users[1]);
+    expect(memberships.error).toBeNull();
+    expect(memberships.data.sort((a, b) => a.role.localeCompare(b.role))).toEqual([
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, role: "employee" },
+      { business_id: ownBusiness, venue_id: null, department_id: null, role: "owner" },
+    ]);
+
+    await page.getByRole("link", { name: "Open workspace" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${businessId}$`));
+    const shell = page.locator("aside");
+    await expect(shell.getByText("Inviting cross cafe", { exact: true })).toBeVisible();
+    await expect(page.getByText("Own cross cafe", { exact: true })).toHaveCount(0);
+    await page.goto(`/people?business=${businessId}`);
+    await expect(page).toHaveURL(new RegExp(`/\\?error=permission&business=${businessId}$`));
+    await expect(shell.getByText("Inviting cross cafe", { exact: true })).toBeVisible();
+
+    await page.goto(`/?business=${businessId}`);
+    await shell.getByRole("link", { name: "Switch business" }).click();
+    const choices = page.getByRole("list", { name: "Your businesses" });
+    await expect(choices.getByRole("listitem")).toHaveCount(2);
+    await page.getByRole("button", { name: "Open Own cross cafe" }).click();
+    await expect(page).toHaveURL(new RegExp(`/\\?business=${ownBusiness}$`));
+    await expect(shell.getByText("Own cross cafe", { exact: true })).toBeVisible();
+    await page.goto(`/people?business=${ownBusiness}`);
+    await expect(page.getByRole("heading", { name: "Employee profiles" })).toBeVisible();
+    await expect(page.locator("main")).toContainText("Own venue");
+    await expect(page.locator("main")).not.toContainText("Inviting venue");
+    await expect(page.getByText("Casey Crossover")).toHaveCount(0);
+  } finally {
+    for (const business of [businessId, ownBusiness]) {
+      expect((await admin.from("businesses").delete().eq("id", business)).error).toBeNull();
+    }
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("staff invitations reject revocation and expiry and require consent before switching sessions", async ({ page, browser }) => {
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
   const suffix = randomUUID();

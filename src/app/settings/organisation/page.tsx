@@ -109,7 +109,7 @@ export default async function OrganisationPage({
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") redirect("/?error=workspace");
-  if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const venues = await workspace.supabase.from("venues")
     .select("id, name, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")

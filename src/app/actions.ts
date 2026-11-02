@@ -292,16 +292,16 @@ export async function acceptStaffInvitationAction(formData: FormData) {
   const supabase = await createClient();
   const { data: { user }, error: authError } = await supabase.auth.getUser();
   if (authError || !user) redirect(`${destination}?error=authentication`);
-  const { error } = await supabase.rpc("accept_staff_invitation", { p_invitation_id: invitationId });
+  const { data, error } = await supabase.rpc("accept_staff_invitation", { p_invitation_id: invitationId });
   if (error) {
     console.error("Could not accept an invitation.", { code: error.code, message: error.message });
-    const reason = error.message === "Business switching is not yet available for this account" ? "business"
-      : error.message === "Your existing membership cannot access this department" ? "scope"
-        : "unavailable";
+    const reason = error.message === "Your existing membership cannot access this department" ? "scope"
+      : "unavailable";
     redirect(`${destination}?error=${reason}`);
   }
   revalidatePath("/");
-  redirect(`${destination}?accepted=1`);
+  const businessId = parseBusinessId(typeof data === "string" ? data : undefined);
+  redirect(businessId ? `${destination}?accepted=1&business=${businessId}` : `${destination}?accepted=1`);
 }
 
 export async function assignMemberRoleAction(formData: FormData) {

@@ -3,7 +3,7 @@ set local search_path = public, extensions;
 create extension if not exists pgtap with schema extensions;
 grant usage on schema extensions to authenticated, anon, service_role;
 grant execute on all functions in schema extensions to authenticated, anon, service_role;
-select extensions.plan(66);
+select extensions.plan(71);
 
 insert into auth.users (id, email, email_confirmed_at, raw_user_meta_data) values
   ('a4000000-0000-4000-8000-000000000001', 'invite-owner@example.test', now(), '{}'::jsonb),
@@ -281,13 +281,38 @@ select extensions.throws_ok(
   $$select public.accept_staff_invitation(current_setting('test.unverified')::uuid)$$,
   'P0001', 'Invitation is unavailable', 'an unverified address cannot accept the invitation');
 select set_config('request.jwt.claim.sub', 'a4000000-0000-4000-8000-000000000009', true);
-select extensions.throws_ok(
-  $$select public.accept_staff_invitation(current_setting('test.outside')::uuid)$$,
-  'P0001', 'Business switching is not yet available for this account',
-  'an existing other-business account is rejected until switching is safe');
+select extensions.is(
+  public.accept_staff_invitation(current_setting('test.outside')::uuid),
+  'b4000000-0000-4000-8000-000000000001'::uuid,
+  'an existing member of another business can accept a scoped invitation');
 select extensions.is(
   (select count(*)::integer from public.business_memberships where user_id = auth.uid()),
-  1, 'rejected acceptance leaves the existing membership unchanged');
+  2, 'cross-business acceptance adds exactly one membership');
+select extensions.is(
+  (select count(*)::integer from public.business_memberships
+    where user_id = auth.uid() and business_id = 'b4000000-0000-4000-8000-000000000001'
+      and role = 'employee' and venue_id = 'c4000000-0000-4000-8000-000000000001'
+      and department_id = 'd4000000-0000-4000-8000-000000000001'),
+  1, 'the new membership is an employee scoped to the invited venue and department');
+select extensions.is(
+  (select count(*)::integer from public.business_memberships
+    where user_id = auth.uid() and business_id = 'b4000000-0000-4000-8000-000000000002'
+      and role = 'employee' and venue_id = 'c4000000-0000-4000-8000-000000000003'
+      and department_id = 'd4000000-0000-4000-8000-000000000004'),
+  1, 'the existing other-business membership keeps its role and scope');
+select extensions.is(
+  (select count(*)::integer from public.employees
+    where id = 'e4000000-0000-4000-8000-000000000004' and auth_user_id = auth.uid()),
+  1, 'the cross-business account is linked only to the invited employee profile');
+select extensions.ok(
+  public.can_view_department('b4000000-0000-4000-8000-000000000001',
+    'd4000000-0000-4000-8000-000000000001')
+  and not public.can_view_department('b4000000-0000-4000-8000-000000000001',
+    'd4000000-0000-4000-8000-000000000002'),
+  'the cross-business account gains only the invited department');
+select extensions.throws_ok(
+  $$select public.accept_staff_invitation(current_setting('test.outside')::uuid)$$,
+  'P0001', 'Invitation is unavailable', 'a consumed cross-business invitation cannot be reused');
 
 select set_config('request.jwt.claim.sub', 'a4000000-0000-4000-8000-000000000001', true);
 select extensions.lives_ok(

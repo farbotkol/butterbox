@@ -35,6 +35,7 @@ import {
 } from "@/lib/weekly-timesheet";
 import { formatWorkedDuration, workTimeExceptionLabels } from "@/lib/worked-time";
 import { getWorkspace } from "@/lib/workspace";
+import { withBusiness } from "@/lib/business-selection";
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const errors: Record<string, string> = {
@@ -123,7 +124,7 @@ export default async function TimesheetsPage({ searchParams }: {
       </Link>
     </main>;
   }
-  if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const week = timesheetWeek(params.week, workspace.venue.timezone);
   const employee = parseTimesheetEmployeeFilter(params.employee);

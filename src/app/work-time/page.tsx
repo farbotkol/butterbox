@@ -12,6 +12,7 @@ import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { formatWorkedDuration, parseWorkedTime, workTimeExceptionLabels, type WorkedTime } from "@/lib/worked-time";
 import { getWorkspace } from "@/lib/workspace";
+import { withBusiness } from "@/lib/business-selection";
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
 const errors: Record<string, string> = {
@@ -64,7 +65,7 @@ export default async function WorkTimePage({ searchParams }: {
       </main>
     );
   }
-  if (!managerRoles.includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!managerRoles.includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
 
   const [venues, result, eventResult, historyResult, lockResult] = await Promise.all([
     readAllPages((from, to) => workspace.supabase.from("venues")

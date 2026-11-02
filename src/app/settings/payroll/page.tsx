@@ -11,6 +11,7 @@ import {
 } from "@/lib/payroll-mapping";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
+import { withBusiness } from "@/lib/business-selection";
 
 const errors: Record<string, string> = {
   invalid: "Choose valid IDs and enter a reason. Account and employee IDs must be 255 characters or fewer.",
@@ -37,7 +38,7 @@ export default async function PayrollMappingPage({ searchParams }: {
     return <main className="m-5"><h1 className="text-xl font-semibold">Payroll mappings unavailable</h1>
       <p role="alert">Check your venue access and try again.</p></main>;
   }
-  if (!["owner", "admin"].includes(workspace.membership.role)) redirect("/?error=permission");
+  if (!["owner", "admin"].includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
   const connectionsResult = await readAllPages<PayrollMappingConnection>((from, to) =>
     workspace.supabase.rpc("list_payroll_mapping_connections", {
       p_business_id: workspace.business.id,

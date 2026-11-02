@@ -32,7 +32,7 @@ test(
     const outsideVenueId = randomUUID();
     const departmentId = randomUUID();
     const outsideDepartmentId = randomUUID();
-    const employeeIds = Array.from({ length: 6 }, () => randomUUID());
+    const employeeIds = Array.from({ length: 7 }, () => randomUUID());
     const users = {};
     const businesses = new Set([businessId, outsideBusinessId]);
     const email = (name) => `invitation-${name}-${suffix}@example.test`;
@@ -149,17 +149,51 @@ test(
           p_venue_address: "10 Test Street", p_timezone: "UTC", p_include_sample_data: false,
         }),
       ]);
-      assert.equal(setupRace.filter((result) => !result.error).length, 1);
-      const failedSetupRace = setupRace.find((result) => result.error);
-      assert.ok([
-        "Workspace already exists",
-        "Business switching is not yet available for this account",
-      ].includes(failedSetupRace.error.message));
-      const thirdMembership = await admin.from("business_memberships").select("business_id")
-        .eq("user_id", users.worker3);
+      // Both RPCs share one per-account lock: acceptance always succeeds, and setup
+      // only succeeds when it ran first (setup is limited to accounts without a business).
+      assert.ifError(setupRace[0].error);
+      assert.equal(setupRace[0].data, businessId);
+      if (setupRace[1].error) assert.equal(setupRace[1].error.message, "Workspace already exists");
+      const thirdMembership = await admin.from("business_memberships")
+        .select("business_id, venue_id, department_id, role").eq("user_id", users.worker3);
       assert.ifError(thirdMembership.error);
-      assert.equal(thirdMembership.data.length, 1);
+      assert.equal(thirdMembership.data.length, setupRace[1].error ? 1 : 2);
+      assert.deepEqual(thirdMembership.data.filter((row) => row.business_id === businessId), [{
+        business_id: businessId, venue_id: venueId, department_id: departmentId, role: "employee",
+      }]);
       for (const membershipRow of thirdMembership.data) businesses.add(membershipRow.business_id);
+
+      const crossBusiness = await clients.manager.rpc("create_staff_invitation", invite(6, email("outside")));
+      assert.ifError(crossBusiness.error);
+      const crossAcceptances = await Promise.all(Array.from({ length: 3 }, () =>
+        clients.outside.rpc("accept_staff_invitation", { p_invitation_id: crossBusiness.data })));
+      assert.equal(crossAcceptances.filter((result) => !result.error).length, 1);
+      assert.equal(crossAcceptances.find((result) => !result.error).data, businessId);
+      for (const result of crossAcceptances.filter((item) => item.error)) {
+        assert.equal(result.error.message, "Invitation is unavailable");
+      }
+      const outsideMemberships = await admin.from("business_memberships")
+        .select("business_id, venue_id, department_id, role").eq("user_id", users.outside);
+      assert.ifError(outsideMemberships.error);
+      assert.deepEqual(outsideMemberships.data.sort((a, b) => a.role.localeCompare(b.role)), [
+        { business_id: businessId, venue_id: venueId, department_id: departmentId, role: "employee" },
+        { business_id: outsideBusinessId, venue_id: null, department_id: null, role: "owner" },
+      ]);
+      const outsideProfile = await admin.from("employees").select("auth_user_id").eq("id", employeeIds[6]).single();
+      assert.ifError(outsideProfile.error);
+      assert.equal(outsideProfile.data.auth_user_id, users.outside);
+      assert.equal(
+        (await clients.outside.rpc("create_staff_invitation", invite(5, `escalate-${suffix}@example.test`)))
+          .error?.message,
+        "Permission denied",
+      );
+      const invitedVisibility = await clients.outside.from("staff_invitations").select("id")
+        .eq("business_id", businessId);
+      assert.ifError(invitedVisibility.error);
+      assert.deepEqual(invitedVisibility.data, []);
+      const ownedVenue = await clients.outside.from("venues").select("id").eq("id", outsideVenueId);
+      assert.ifError(ownedVenue.error);
+      assert.deepEqual(ownedVenue.data, [{ id: outsideVenueId }]);
 
       const duplicateEmail = `duplicate-${suffix}@example.test`;
       const emailRace = await Promise.all([
