@@ -4,7 +4,7 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **54**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **67**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **66**.
 - BB-DEMO-001 is **Done** for local internal review: separately verified
   showcase project, independently generated signing/API keys, dedicated
   internal network/storage, 14 fictional FOH/BOH staff, scoped accounts,
@@ -691,6 +691,23 @@ settings/delivery still require their own implementation and verification.
   is not claimed.
 
 ## Current story
+
+**BB-DEMO-002 — Guided owner, manager and employee showcase journeys:
+In Progress (Planning).**
+Selected next ready Showcase P0 after DEMO-001 `a984d6c6563cb324cf6c3bcb3c21a67b5e329f91`
+was committed/pushed with the remote SHA verified. Reuse the existing isolated
+fixture and private scoped accounts; do not rebuild them. Add repeatable
+task-oriented owner/setup, manager, employee/mobile and payroll-preparation
+walkthroughs to the existing User Guide, backed by actual navigation and
+negative/permission browser checks. The baseline walkthrough should not mutate
+the fixture; setup is already provisioned, signup disabled and fresh-customer
+conversion remains outside this story. Clearly distinguish pre-existing
+approved time from taking a new approval action and sample CSV from wages or
+live delivery. No new production/shared authorization or database changes.
+Documentation: existing guide update underway. Targeted production-browser
+navigation/scope/accessibility checks planned; full suites not justified.
+
+## Latest completed showcase story
 
 **BB-DEMO-001 — Isolated synthetic showcase café: Done.**
 The chronological recovery notes below retain failures and intermediate
