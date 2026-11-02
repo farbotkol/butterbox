@@ -6699,6 +6699,87 @@ test("staff invitations deliver separate-browser email and join only the intende
   }
 });
 
+test("published roster updates reach uninvited staff once after they accept an invitation", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const ownerEmail = `roster-invite-owner-${suffix}@example.test`;
+  const recipientEmail = `roster-invite-recipient-${suffix}@example.test`;
+  const [businessId, venueId, departmentId, employeeId] = Array.from({ length: 4 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  try {
+    const owner = await admin.auth.admin.createUser({ email: ownerEmail, password, email_confirm: true });
+    expect(owner.error).toBeNull();
+    users.push(owner.data.user.id);
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Invite notices ${suffix}` })).error)
+      .toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Invite notice cafe", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: users[0], role: "owner",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "Uninvited worker", email: recipientEmail, role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: employeeId,
+      role_title: "Invited service", starts_at: "2032-03-15T09:00:00Z", ends_at: "2032-03-15T10:00:00Z",
+      is_published: false,
+    })).error).toBeNull();
+
+    await signIn(page, ownerEmail, password);
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    await page.goto(roster);
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
+    const history = page.getByRole("region", { name: "Publication history" });
+    await expect(history).toContainText("1 affected employee profile cannot currently see this update");
+    await history.getByRole("link", { name: "Invite staff from People" }).click();
+    await expect(page).toHaveURL(new RegExp(
+      `/people\\?venue=${venueId}&department=${departmentId}&business=${businessId}$`,
+    ));
+    const form = page.getByRole("form", { name: "Invite Uninvited worker" });
+    await expect(form.getByLabel("Invitation email")).toHaveValue(recipientEmail);
+    await form.getByRole("button", { name: "Send invitation" }).click();
+    await expect(page.getByRole("status")).toContainText("Invitation email requested");
+
+    const recipientContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(recipientContext);
+    const recipientPage = await recipientContext.newPage();
+    await openInvitationMail(recipientPage, recipientEmail);
+    await recipientPage.getByRole("button", { name: "Accept invitation" }).click();
+    await expect(recipientPage.getByRole("status")).toContainText("invitation has been accepted");
+    await recipientPage.getByRole("link", { name: "Open workspace" }).click();
+    const banner = recipientPage.getByRole("region", { name: "Unread roster updates" });
+    await expect(banner).toContainText("1 unread roster update");
+    await banner.getByRole("link", { name: "View notifications" }).click();
+    const notice = recipientPage.getByRole("article");
+    await expect(notice).toHaveCount(1);
+    await expect(notice).toHaveAccessibleName("Roster update for week starting 2032-03-15");
+    await expect(notice.getByText("Unread", { exact: true })).toBeVisible();
+    await notice.getByRole("button", { name: "View schedule" }).click();
+    await expect(recipientPage.getByRole("region", { name: "Weekly schedule" })).toContainText("Invited service");
+    await recipientPage.goto(`/notifications?venue=${venueId}`);
+    await expect(recipientPage.getByRole("article")).toHaveCount(1);
+    await expect(recipientPage.getByRole("article").getByText("Read", { exact: true })).toBeVisible();
+
+    await page.goto(roster);
+    await expect(history.getByRole("listitem")).toHaveCount(1);
+    await expect(history).not.toContainText("cannot currently see this update");
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    const recipient = await findUser(recipientEmail);
+    if (recipient) users.push(recipient.id);
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("existing members of another business accept a scoped invitation and switch explicitly", async ({ page }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

@@ -594,7 +594,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             Existing shifts are not replaced. Availability, approved leave, qualifications and overlaps
             are rechecked and block the whole copy if any assigned shift conflicts, even when manual
             assignments normally warn. In-app updates are recorded only when you publish; unlinked
-            employees cannot see them until their accounts are linked.
+            employees see them once they accept a staff invitation or their accounts are linked.
           </p>
           <CopyRosterForm key={`${workspace.venue.id}:${selectedDepartment}:${week}`}
             week={week} previousWeek={previousWeek} venueId={workspace.venue.id}
@@ -647,7 +647,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                     ) : !reachabilityError && inaccessible !== undefined && inaccessible > 0 ? (
                       <p className="mt-1 text-xs font-medium text-amber-900">
                         {inaccessible} affected employee {inaccessible === 1 ? "profile cannot" : "profiles cannot"}
-                        {" "}currently see this update. Link their account and check their venue and department access.
+                        {" "}currently see this update. They will see it after accepting a staff invitation or
+                        {" "}having their account linked; check their venue and department access.{" "}
+                        <Link className="underline"
+                          href={`/people?venue=${workspace.venue.id}&department=${selectedDepartment}&business=${workspace.business.id}`}>
+                          Invite staff from People
+                        </Link>
                       </p>
                     ) : null}
                   </li>

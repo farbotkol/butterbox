@@ -142,8 +142,9 @@ meets the applicable manual role restriction. These checks block copying even
 when manual scheduling is configured to warn. Times that do not exist at a
 clock change, and source or copied shifts spanning a clock change, must be
 created manually instead. Retrying the same request does not create duplicates.
-Publication records in-app updates; unlinked employees cannot see them until
-their accounts are linked. Email and push delivery are not yet implemented.
+Publication records in-app updates; unlinked employees see them once they accept
+a staff invitation or an owner links their account. Email and push delivery are
+not yet implemented (BB-COMMS-003).
 
 Owners can link an existing business member to an employee profile on
 **People**; the member's venue and department scope must permit that profile.
@@ -464,7 +465,7 @@ when several shifts or linked profiles are involved. Employees can review and
 mark updates read in **Notifications**, or open their own schedule directly.
 Unlinked profiles retain their update until linked; managers are warned when
 affected profiles lack a linked account, eligible membership or department
-link. An in-app update is visible when the employee next signs in; this does
+link, and the warning links to **People** to send a staff invitation. An in-app update is visible when the employee next signs in; this does
 not verify external delivery. Updates are not retroactively generated for
 older publications, and email and push delivery are not yet available.
 

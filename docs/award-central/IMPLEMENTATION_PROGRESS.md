@@ -7,11 +7,13 @@ implementation status and historical validation remain in
 [the root report](../../IMPLEMENTATION_PROGRESS.md). No Award Central story
 is Done. The local merge validation below is not release acceptance.
 
-The merge joins Award Central checkpoint `1c51ca71544c5dfe1ce48d007a53603c873c343b`
-with roadmap checkpoint `540ed3f3e650f83e3a17c6dfe88bbfc2702e812f`.
-The combined tracker retains all 109 stories: 37 Done, 5 In Progress,
-4 Blocked and 63 Backlog. All Core statuses and the Award Central status
-overlay below are retained.
+The first merge joined Award Central checkpoint
+`1c51ca71544c5dfe1ce48d007a53603c873c343b` with roadmap checkpoint
+`540ed3f3e650f83e3a17c6dfe88bbfc2702e812f`. A follow-on merge incorporates
+roadmap checkpoint `024d79f663398a7fb75f1f4dbcb5c3155dbf87fd`. The combined
+tracker retains all 109 stories: 38 Done, 4 In Progress, 4 Blocked and
+63 Backlog. All Core statuses and the Award Central status overlay below
+are retained.
 
 The following checkpoint is preserved as historical evidence from `49d36b6`.
 The later preservation commit `1c51ca7` also contains the member-read migration,
@@ -58,13 +60,22 @@ with a disposable Supabase project on separate local ports:
   interrupted by SIGTERM under host memory pressure. Production-browser
   tests were not run.
 
+For the follow-on merge with `024d79f`, the same 49 migrations were present
+on the disposable database. Targeted pgTAP passed the updated roster
+notification suite 77/77 and the Award Central foundation, member-read and
+regression suites 48/48, 19/19 and 59/59. The Node unit run passed 142 tests
+with 21 integration tests skipped. A full pgTAP rerun and targeted ESLint
+were interrupted by SIGTERM; full authenticated integration, TypeScript,
+ESLint, production build and browser checks remain outstanding for this merge.
+
 The feature branch was subsequently verified on the remote at merge commit
 `49f8048`; this validation report is a later checkpoint. The available
 GitHub credential in this session was rejected, so later local commits still
 need an authenticated push. PR #3 was confirmed open and draft. The roadmap
-branch subsequently advanced beyond `540ed3f` to `024d79f`; these results do
-not cover that newer revision. Repeat outstanding checks and validation
-against the actual integration target before release. Do not merge PR #3.
+branch subsequently advanced beyond `540ed3f` to `024d79f`; the follow-on
+merge incorporates that revision, with only the targeted verification noted
+above. Repeat outstanding checks and validation against the actual integration
+target before release. Do not merge PR #3.
 
 ## Current Award Central story status
 
