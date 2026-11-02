@@ -3,27 +3,19 @@
 ## Execution summary
 
 - Total stories: **112** (including 22 Award Central BB-PAYRULES stories and
-  three owner-added BB-DOC stories). Verified Done: **48**. In Progress: **1**.
+  three owner-added BB-DOC stories). Verified Done: **49**. In Progress: **0**.
   Blocked: **6**. Not started (Backlog): **57**.
-- BB-ATTEND-004 (rotating QR kiosk) is **In Progress**. As of
-  2026-11-02 12:59 UTC, the uncommitted device and employee UI and transaction
-  migration are implemented but not runtime-verified end to end. On the
-  isolated applied schema and rolled-back migration replay, QR pgTAP each passed
-  **62/62**; seven neighboring
-  attendance/geofence/audit/tenant files passed **367/367**. Rollback-only
-  preflight also passed **62/62**; five authenticated QR/attendance/location/
-  tenant concurrency integrations and **8/8** focused kiosk/audit Node tests
-  passed. Changed-file ESLint and TypeScript passed before the latest test
-  additions. Migration `20261103160000` is
-  applied and recorded only in `butterbox-acceptance` (API 55421, DB 55422);
-  do not edit the applied migration in place. The split production build passed.
-  Browser testing exposed and fixed an unrelated account-session announcement
-  redirecting the independently activated kiosk to login. The decoded-QR mobile
-  scenario and both existing cross-tab session regressions passed (**3/3**).
-  An additional negative-path browser check exposed an unsigned-in scan's
-  short-lived code remaining in the login URL fragment. Redirect and denied-page
-  cleanup were fixed and the expanded QR browser scenario passed. Final
-  documentation and verification remain; no full criterion is yet marked Passed.
+- BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
+  all four criteria are verified. QR pgTAP passed **62/62** against the
+  isolated applied migration and **62/62** in the earlier rollback replay;
+  seven related files passed **367/367**. Five authenticated concurrency and
+  tenant integrations, **8/8** focused Node tests and **3/3** serialized
+  production-browser scenarios passed, including mobile, invalid links and
+  cross-tab session regressions. Changed-file ESLint, TypeScript and the split
+  production build passed. Migration `20261103160000` is applied and recorded
+  only in `butterbox-acceptance` (API 55421, DB 55422); do not edit it in place.
+  The user guide is updated. Full suites were intentionally deferred; a
+  photographed or relayed code is not proof of physical presence.
 - BB-SAAS-003 (tenant onboarding) remains **Blocked**. A partial DEC-003
   safeguard now fails closed for sample setup and the historical seed helpers,
   even after attempts to enable the old policy. An upgrade from an enabled
@@ -657,66 +649,58 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-- **Recovery, 2026-11-02 17:50 UTC:** Branch and fetched remote both point to
-  `025ec1f166fd3814087c47ec0736f365c06ada4d`; uncommitted QR code and user
-  guidance survived. The disposable acceptance project is healthy and its
-  migration ledger includes `20261103160000`. Previous test results below
-  are historical; final review, the latest invalid-link browser assertion,
-  lint, TypeScript and focused unit tests remain to be rerun. No development
-  files were overwritten. The owner-requested BRAND epic is not yet present;
-  add planning stories without inventing approved assets after the QR checkpoint.
-- **BB-ATTEND-004 — Rotating QR kiosk** is In Progress. The uncommitted
-  `20261103160000_attendance_qr_kiosks.sql` and
-  `attendance_qr_kiosks.test.sql` passed **62/62** assertions both against the
-  applied migration on the verified disposable acceptance project and in an
-  ordered rolled-back migration replay on `butterbox-fresh-migration-check`
-  (DB 56422). The replay left its ledger and temporary Auth helper unchanged.
-  An initial replay attempt failed to assume the administrative role; connecting
-  as the verified local administrative role fixed it and the retry passed.
-  Neighboring clock (**72/72**), break
-  (**79/79**), location (**71/71**), geofence (**60/60**), personal history
-  (**22/22**), audit (**31/31**) and tenant isolation (**32/32**) pgTAP
-  assertions passed on the applied schema. Five authenticated integrations
-  passed, including concurrent device activation, competing workers, exact
-  retries, cross-tenant denial and locked membership/device revocation. Owners create a
-  device-specific, one-use 15-minute activation credential; the device gets a
-  separate 30-day credential, not an owner session. Codes are HMAC-signed,
-  venue-bound, expire within 45 seconds and are consumed atomically with the
-  existing server clock and geofence checks. Exact retries return the original
-  receipt; other replays are denied. Consumed code links are immutable.
-  - **004.1 (signed, expiring, venue-bound):** applied pgTAP and decoded
-    production-browser display passed; **Blocked** pending final review.
-  - **004.2 (replay denied):** applied pgTAP, concurrent workers and browser
-    replay denial passed; **Blocked** pending final review.
-  - **004.3 (controlled display):** applied authorization pgTAP, concurrent
-    activation and mobile device setup/revocation passed; **Blocked** pending
-    final review.
-  - **004.4 (server clock validation):** state, tenant, timestamp and geofence
-    pgTAP, integrations and employee mobile clock-in/out passed; **Blocked**
-    pending final review.
-  A short-lived code can still be photographed and relayed; this does not
-  establish physical presence or replace configured geofence review.
-  **Documentation:** pending; update the role-based user guide after the
-  implemented UI and its tested wording are verified.
-  Device activation/display and authenticated employee clocking are written
-  but not yet browser-tested. An audit-source parser gap affecting both this
-  story and the preceding planning-week slice is also fixed in uncommitted
-  code. The initial package command and first lint attempts failed; their
-  manifest and React-lifecycle issues were corrected and the selected checks
-  passed. Next test races, authorization and browser/mobile failure paths. The
-  migration was applied only to the verified isolated acceptance project;
-  any schema fix now requires a forward migration. Full repository suites are
-  deferred. The split production compile/type/generate build passed. Browser
-  attempts exposed an ambiguous test selector, the kiosk/session-end defect
-  and a test expectation that wrongly assumed immutable attendance events were
-  updated after location verification. The selector and expectation were
-  corrected, the session-sync defect was fixed, and the affected kiosk and
-  cross-tab scenarios passed. A later negative-path test exposed fragment
-  retention on the login redirect; redirect and denied-page cleanup were fixed,
-  and the expanded QR scenario passed. The
-  test-only Apache-2.0 `jsqr` decoder was added because this Chromium build
-  does not expose a native barcode decoder; browser tests must decode the
-  rendered SVG rather than merely reading the generated URL.
+- **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
+  implementation and guide survived, and the disposable acceptance project
+  remained healthy. The recovery status checkpoint `d8e9229` was pushed
+  before feature verification; no development files were overwritten.
+- **BB-ATTEND-004 — Rotating QR kiosk: Done**, verified 2026-11-02 17:54 UTC.
+  Owners create a device-specific, one-use 15-minute activation credential;
+  the device receives a separate 30-day credential rather than an owner
+  session. The server signs venue-bound codes and atomically consumes them
+  with existing clock and geofence validation. Exact retries return the
+  original receipt, while other replays are denied.
+  - **004.1 — QR is venue-bound, signed and expires: Pass.** Implemented in
+    `20261103160000_attendance_qr_kiosks.sql` and the kiosk display. Focused
+    pgTAP passed **62/62**, including signature, tenant/venue and expiry
+    failures; the production-browser test decoded and scanned the rendered QR.
+  - **004.2 — Replay is denied: Pass.** The same pgTAP run checks replay and
+    exact retry; `attendance-kiosk-concurrency.integration.test.mjs` verifies
+    competing users and retries; the mobile browser scenario denied a second
+    worker after consumption. All passed.
+  - **004.3 — Kiosk display access is controlled: Pass.** Owner-only
+    create/list/revoke, single-use activation and a separate secure device
+    cookie are implemented. The focused pgTAP, concurrent activation/revocation
+    integration and browser setup, cookie, unauthorized issue, manager denial
+    and revocation checks passed.
+  - **004.4 — Clocks are validated server-side: Pass.** The kiosk transaction
+    calls the existing server clock and geofence functions under scoped
+    membership and identity locks. The focused pgTAP, concurrency/tenant
+    integrations and browser clock-in/out with location-review and verified
+    location checks passed.
+  - **Documentation: updated.** `docs/USER_GUIDE.md` now describes the tested
+    owner and employee workflow, permissions, expiry, failure paths and relay
+    limitation; it also preserves the tested partial planning-week guidance.
+  - **Selected checks and rationale:** QR pgTAP ran on the applied disposable
+    schema and passed **62/62** again after recovery; the earlier ordered
+    rollback replay on `butterbox-fresh-migration-check` (DB 56422) also passed
+    **62/62** without changing its ledger or Auth helper. Seven adjacent
+    attendance/geofence/audit/tenant files previously passed **367/367**.
+    Five focused authenticated QR/attendance/location/tenant concurrency
+    integrations and **8/8** kiosk/audit Node tests passed after recovery.
+    Changed-file ESLint (24 files), TypeScript and the production
+    compile/type/generate build passed. Three serialized production-browser
+    scenarios passed: the decoded QR workflow, including mobile accessibility,
+    invalid-link cleanup and isolation, plus two cross-tab session regressions.
+  - **Failures corrected:** Earlier package/lint attempts, replay role setup,
+    ambiguous browser selector, an immutable-event test expectation, kiosk
+    redirection on session change and a sign-in URL-fragment leak were fixed;
+    their affected checks passed. Test-only `jsqr` decodes the rendered SVG.
+  - **Deferred and risks:** Full Node, pgTAP, integration and browser suites
+    were not rerun; broader migration/security regression remains appropriate
+    at workstream merge or release. A code can be photographed or relayed
+    during its lifetime and does not prove presence; configured geofence review
+    remains important. Production kiosk use requires a secure connection.
+    The applied disposable migration must not be edited in place.
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
   historical credential findings. DEC-004 authorizes a read-only, redacted
   assessment and classification; no credential rotation, privileged access
@@ -2232,8 +2216,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- Continue **BB-ATTEND-004 — Rotating QR kiosk** by tracing attendance and
-  authorization. Keep **BB-ORG-006** Blocked until its full criteria and
+- Add the requested BRAND planning epic without inventing approved assets,
+  then assess the highest-priority ready core story, including
+  **BB-ATTEND-006**. Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable
   periods and do not silently reinterpret history.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an

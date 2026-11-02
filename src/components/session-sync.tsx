@@ -7,6 +7,7 @@ import { announceSessionChange, discardOfflinePreparation } from "@/lib/session-
 
 const publicAuthPages = new Set(["/login", "/signup", "/forgot-password"]);
 const authFormPages = new Set([...publicAuthPages, "/reset-password"]);
+const sessionIndependentPages = new Set([...publicAuthPages, "/kiosk"]);
 
 export function SessionSync() {
   const router = useRouter();
@@ -16,7 +17,7 @@ export function SessionSync() {
     function onStorage(event: StorageEvent) {
       if (event.key === sessionEventKey && event.newValue) {
         discardOfflinePreparation();
-        if (!publicAuthPages.has(pathname)) window.location.replace("/login");
+        if (!sessionIndependentPages.has(pathname)) window.location.replace("/login");
       }
     }
 

@@ -35,7 +35,15 @@
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
 - If roster approval is enabled, a distinct authorized reviewer can approve or reject a submitted roster snapshot. Rejection requires a reason, and approval rechecks current blockers.
 
-**Week-start setting:** The owner-approved direction is to allow a per-venue, Monday-default *planning/display week* without changing operational publication or payroll periods. This feature is not yet fully accepted; do not assume the existing editable roster has changed from its established week behavior.
+**Week-start setting:** In organisation settings, an owner can set the
+**Roster planning week** for each venue; the default is Monday. Changes take
+effect after the current planning week, and a transition may be shorter than
+seven days. Once a transition starts, wait until its scheduled date before
+changing it again. **Open venue planning view** shows permitted shifts in a
+read-only view. Editing, publication, timesheets and payroll retain their
+existing Monday-based operational weeks. The broader organisation-settings
+story remains incomplete because notification settings and delivery are not
+yet accepted.
 
 ### Open shifts and swaps
 
@@ -48,7 +56,32 @@
 - Employees can clock in and out and record breaks through supported workflows.
 - Location verification is a configurable point-in-time check, not continuous tracking by default; exceptions and corrections have review processes.
 - Where applicable, employees can view their own attendance history and correction decisions.
-- The QR kiosk and automated late/no-show alerts are **not yet complete**.
+- Automated late/no-show alerts are **not yet complete**.
+
+#### Set up a QR clock kiosk
+
+1. As a business owner, open **Attendance**, select the venue and choose
+   **Manage kiosk devices**. Enter a device name and select **Create activation
+   code**. Only an owner can create, list or revoke these devices.
+2. On the venue device, use a separate guest or managed browser without an
+   owner's account signed in. Scan the setup QR, or open `/kiosk` and enter
+   the one-time activation code. Keep the code private; it is shown once and
+   expires after 15 minutes. Activation requires a secure connection.
+3. Keep the venue kiosk page open. Its device access lasts up to 30 days; create
+   and activate a new device when access expires. The display is independent
+   of the owner's signed-in session.
+4. Staff sign in on their own phones, scan the displayed QR and confirm their
+   clock. Each code works once and expires within 45 seconds; the display
+   refreshes after use or expiry.
+5. In **Kiosk devices**, revoke a lost or shared device immediately. Removing a
+   device from its browser alone does not revoke it; an owner should also use
+   **Revoke** in kiosk settings. Revocation prevents unused codes from being
+   used.
+
+A QR can be photographed or relayed before expiry, so it is not proof of
+physical presence. If the venue enables location verification, a clock with
+unavailable or denied location may still be recorded and queued for review.
+The usual attendance screen remains available when scanning is not possible.
 
 ### Timesheets and payroll preparation
 
@@ -69,7 +102,7 @@ Business owners can review sensitive staffing, permission, roster, attendance an
 2. Open your own roster/schedule to see assigned shifts and publication updates.
 3. Set weekly availability and enter date-specific unavailability or leave requests. Track status rather than assuming a request was approved.
 4. Respond to open-shift offers or propose shift swaps if your business uses those workflows.
-5. Clock in/out, record breaks, review personal attendance history and request corrections where needed.
+5. Clock in/out, record breaks, review personal attendance history and request corrections where needed. At a configured kiosk, sign in on your own phone first, scan the current code, check the venue and confirm the QR clock. If a code has expired or was used, wait for the display to refresh and scan again. End an open break in **Attendance** before using a QR to clock out.
 6. Use the in-app notification centre for relevant outcomes and updates.
 
 External email, push, SMS and WhatsApp notifications are **planned optional channels**, not currently guaranteed live delivery. Recipient preferences and consent govern any future activation.
@@ -83,6 +116,7 @@ External email, push, SMS and WhatsApp notifications are **planned optional chan
 | Shift cannot be assigned | Check active employee status, eligible department/role, availability and conflicting shifts. |
 | Roster not visible to staff | Confirm that the correct draft has been published or approved, and that the employee is assigned to the venue. |
 | Clocking/location fails | Check device permission and the venue's location policy; use the supported exception/correction workflow. |
+| Kiosk code was used or expired | Sign in on your own phone, wait for a fresh kiosk code and scan again. If the device is unavailable or revoked, ask an owner to activate a new one or use the attendance screen. |
 | Timesheet differs from expected | Review break facts, corrections and approval status; request a correction instead of editing finalized history. |
 | No SMS/WhatsApp/email alert | These channels are not yet guaranteed operational. Check the in-app notification centre. |
 | Payroll rates appear missing | The central award intelligence and external payroll adapters are not yet production-verified. |
@@ -93,7 +127,7 @@ Butterbox's agreed product direction is customer-owned export of employment reco
 
 ## Features not yet generally available or accepted
 
-- QR clocking kiosk and automated late/no-show alerts
+- Automated late/no-show alerts
 - External notification channel delivery (email/push; SMS/WhatsApp additional planned options)
 - Direct payroll provider adapters (including deferred Xero)
 - Independent approved Award Central rule calculations

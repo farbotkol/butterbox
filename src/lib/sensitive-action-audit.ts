@@ -21,6 +21,8 @@ export const auditSources = {
   roster_publications: "Roster publications",
   roster_review_requests: "Roster review submissions",
   roster_review_decisions: "Roster review decisions",
+  venue_roster_week_events: "Venue planning week changes",
+  attendance_kiosks: "Attendance kiosk devices",
   attendance_sessions: "Attendance sessions",
   attendance_events: "Clock and break events",
   attendance_breaks: "Break classifications",

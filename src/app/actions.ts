@@ -9,6 +9,7 @@ import {
   correctionInstant, correctionLocalWithMicroseconds, isCorrectionTimestamp,
 } from "@/lib/attendance-corrections";
 import { parseLocationCapture, parseLocationClockReceipt } from "@/lib/attendance-location";
+import { isKioskCredential, singleFormString } from "@/lib/attendance-kiosk";
 import { authCallbackUrl, invitationEmailUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
@@ -984,6 +985,50 @@ export async function clockOutAction(formData: FormData) {
   const saved = receipt.locationStatus === "review" ? "location-review"
     : receipt.locationStatus === "historical_unverified" ? "location-historical" : "recorded";
   redirect(`${destination}&saved=${saved}`);
+}
+
+export async function clockWithKioskAction(formData: FormData) {
+  const { workspace, requestId } = await attendanceActionContext(formData);
+  const query = new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id });
+  const destination = `/attendance/qr?${query}`;
+  const qrCode = singleFormString(formData, "qr_code");
+  const eventType = singleFormString(formData, "event_type");
+  const option = eventType === "clock_in" ? parseClockOptionValue(singleFormString(formData, "clock_option")) : null;
+  const sessions = eventType === "clock_out" ? uuidList(formData, "session_id", 1) : null;
+  if (!isKioskCredential(qrCode) || (eventType !== "clock_in" && eventType !== "clock_out") ||
+    (eventType === "clock_in" && !option) ||
+    (eventType === "clock_out" && (!sessions || sessions.length !== 1))) {
+    console.error("Invalid QR clock request.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const location = parseLocationCapture(formData);
+  if (location.status === "invalid") console.warn("Invalid QR clock location data will be flagged for review.");
+  const { data, error } = await workspace.supabase.rpc("clock_attendance_with_kiosk_code", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_qr_code: qrCode,
+    p_event_type: eventType,
+    p_employee_id: option?.employeeId ?? null,
+    p_department_id: option?.departmentId ?? null,
+    p_session_id: sessions?.[0] ?? null,
+    p_request_id: requestId,
+    p_location_status: location.status,
+    p_latitude: location.latitude,
+    p_longitude: location.longitude,
+    p_accuracy_meters: location.accuracyMeters,
+  });
+  const receipt = parseLocationClockReceipt(data);
+  if (error || !receipt || (sessions && receipt.sessionId.toLowerCase() !== sessions[0].toLowerCase())) {
+    console.error("QR clock failed.", { code: error?.code, message: error?.message });
+    const reason = error?.message === "Kiosk code was already used" ? "qr-used"
+      : error?.message === "Kiosk code is invalid or expired" ? "qr-expired"
+        : attendanceFailureReason(error?.message);
+    redirect(`${destination}&error=${reason}`);
+  }
+  revalidatePath("/attendance");
+  const saved = receipt.locationStatus === "review" ? "qr-location-review"
+    : receipt.locationStatus === "historical_unverified" ? "location-historical" : "qr-recorded";
+  redirect(withBusiness(`/attendance?venue=${encodeURIComponent(workspace.venue.id)}&saved=${saved}`, workspace.business.id));
 }
 
 export async function reviewAttendanceLocationAction(formData: FormData) {

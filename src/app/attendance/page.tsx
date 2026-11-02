@@ -303,6 +303,12 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
             className="mt-3 inline-block text-sm font-semibold text-ocean underline">
             View your attendance history
           </Link>
+          {workspace.membership.role === "owner" && (
+            <Link href={withBusiness(`/attendance/kiosks?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id)}
+              className="ml-4 mt-3 inline-block text-sm font-semibold text-ocean underline">
+              Manage kiosk devices
+            </Link>
+          )}
         </div>
         {venueResult.data && venueResult.data.length > 1 && (
           <form action="/attendance" className="flex items-center gap-2">
@@ -326,6 +332,16 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
       {params.saved === "recorded" && (
         <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
           Clock request recorded. Your current state is shown below.
+        </p>
+      )}
+      {params.saved === "qr-recorded" && (
+        <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-sm text-ocean">
+          QR clock request recorded. Your current state is shown below.
+        </p>
+      )}
+      {params.saved === "qr-location-review" && (
+        <p role="status" className="mt-5 rounded-lg bg-amber-50 p-4 text-sm text-amber-900">
+          QR clock request recorded. Your location could not be verified and is queued for manager review.
         </p>
       )}
       {params.saved === "break-recorded" && (

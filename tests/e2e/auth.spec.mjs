@@ -101,6 +101,250 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("QR kiosk devices rotate decoded codes and protect mobile attendance", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusinessId, venueId, outsideVenueId, departmentId, outsideDepartmentId,
+    workerId, colleagueId] = Array.from({ length: 8 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+
+  async function decodeQr(target, svg) {
+    await expect(svg).toBeVisible();
+    await target.addScriptTag({ path: "node_modules/jsqr/dist/jsQR.js" });
+    const value = await svg.evaluate(async (element) => {
+      const image = new Image();
+      image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(element))}`;
+      await image.decode();
+      const canvas = document.createElement("canvas");
+      canvas.width = image.naturalWidth;
+      canvas.height = image.naturalHeight;
+      const context = canvas.getContext("2d", { willReadFrequently: true });
+      if (!context) throw new Error("Could not render the QR image");
+      context.drawImage(image, 0, 0);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height);
+      return window.jsQR(pixels.data, canvas.width, canvas.height)?.data ?? null;
+    });
+    expect(typeof value, "The rendered QR image must be decodable").toBe("string");
+    const result = new URL(value);
+    expect(result.origin).toBe(appUrl);
+    return result;
+  }
+
+  async function openScan(context, scanned) {
+    const scannedPage = await context.newPage();
+    await scannedPage.addInitScript(({ pathname, fragment }) => {
+      if (location.pathname === pathname && !sessionStorage.getItem("test-qr-opened")) {
+        sessionStorage.setItem("test-qr-opened", "yes");
+        history.replaceState(null, "", location.pathname + location.search + fragment);
+      }
+    }, { pathname: scanned.pathname, fragment: scanned.hash });
+    await scannedPage.goto(scanned.pathname + scanned.search);
+    return scannedPage;
+  }
+
+  async function waitForNewCode(kioskPage, oldPath) {
+    const foreground = kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg path").last();
+    await expect.poll(async () => (await foreground.getAttribute("d")) !== oldPath, {
+      timeout: 15_000, message: "The kiosk must display a fresh QR after consumption",
+    }).toBe(true);
+    return decodeQr(kioskPage, kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg"));
+  }
+
+  try {
+    for (const role of ["owner", "worker", "colleague", "manager", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `qr-browser-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `QR cafe ${suffix}` },
+      { id: outsideBusinessId, name: `Outside QR cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour QR", timezone: "Australia/Sydney",
+        geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 100 },
+      { id: outsideVenueId, business_id: outsideBusinessId, name: "Outside QR", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: outsideDepartmentId, business_id: outsideBusinessId, venue_id: outsideVenueId, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[3], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusinessId, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[1], name: "QR Worker", role_title: "Server" },
+      { id: colleagueId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[2], name: "QR Colleague", role_title: "Server" },
+    ])).error).toBeNull();
+
+    const ownerApi = createClient(apiUrl, anonKey, options);
+    expect((await ownerApi.auth.signInWithPassword({
+      email: `qr-browser-owner-${suffix}@example.test`, password,
+    })).error).toBeNull();
+    expect((await ownerApi.rpc("set_venue_clock_geofence", {
+      p_business_id: businessId, p_venue_id: venueId, p_enabled: true,
+    })).error).toBeNull();
+
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, `qr-browser-owner-${suffix}@example.test`, password);
+    await page.goto(`/attendance?business=${businessId}&venue=${venueId}`);
+    await page.getByRole("link", { name: "Manage kiosk devices" }).click();
+    const setup = page.getByRole("region", { name: "Create kiosk device" });
+    await setup.getByLabel("Device name").fill("Front counter");
+    await setup.getByRole("button", { name: "Create activation code" }).click();
+    await expect(setup.getByRole("heading", { name: "Activate the venue device" })).toBeVisible();
+    const setupUrl = await decodeQr(page, setup.locator("svg"));
+    expect(setupUrl.pathname).toBe("/kiosk");
+    const activation = new URLSearchParams(setupUrl.hash.slice(1)).get("activate");
+    expect(Boolean(activation) && activation === await setup.locator("code").innerText()).toBe(true);
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile kiosk setup"));
+
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(managerContext);
+    const managerPage = await managerContext.newPage();
+    await signIn(managerPage, `qr-browser-manager-${suffix}@example.test`, password);
+    await managerPage.goto(`/attendance/kiosks?business=${businessId}&venue=${venueId}`);
+    await expect(managerPage.getByRole("alert").filter({
+      hasText: "Only a business owner can manage kiosk devices.",
+    })).toBeVisible();
+    await expect(managerPage.getByRole("button", { name: "Create activation code" })).toHaveCount(0);
+
+    const workerContext = await browser.newContext({
+      baseURL: appUrl, viewport: { width: 375, height: 812 },
+      geolocation: { latitude: -33.8688, longitude: 151.2093, accuracy: 10 },
+    });
+    contexts.push(workerContext);
+    await workerContext.grantPermissions([], { origin: appUrl });
+    const workerLogin = await workerContext.newPage();
+    await signIn(workerLogin, `qr-browser-worker-${suffix}@example.test`, password);
+
+    const colleagueContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(colleagueContext);
+    const colleagueLogin = await colleagueContext.newPage();
+    await signIn(colleagueLogin, `qr-browser-colleague-${suffix}@example.test`, password);
+
+    const deviceContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(deviceContext);
+    const kioskPage = await openScan(deviceContext, setupUrl);
+    const activationInput = kioskPage.getByLabel("One-time activation code");
+    await expect(activationInput).toBeVisible();
+    expect((await activationInput.inputValue()) === activation).toBe(true);
+    expect(new URL(kioskPage.url()).hash).toBe("");
+    await kioskPage.getByRole("button", { name: "Activate this device" }).click();
+    await expect(kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg")).toBeVisible();
+    const deviceCookie = (await deviceContext.cookies(`${appUrl}/kiosk`))
+      .find((cookie) => cookie.name === "__Secure-bb_kiosk");
+    expect(Boolean(deviceCookie)).toBe(true);
+    expect({
+      httpOnly: deviceCookie.httpOnly, secure: deviceCookie.secure,
+      sameSite: deviceCookie.sameSite, path: deviceCookie.path,
+    }).toEqual({ httpOnly: true, secure: true, sameSite: "Strict", path: "/kiosk" });
+    const signedOutPage = await deviceContext.newPage();
+    await signedOutPage.goto("/attendance");
+    await expect(signedOutPage.getByLabel("Email address")).toBeVisible();
+    findingsMustBeEmpty(await accessibilityFindings(kioskPage, "mobile kiosk display"));
+    expect(await kioskPage.locator("body").evaluate((body) =>
+      body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+
+    const firstUrl = await decodeQr(kioskPage, kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg"));
+    expect(firstUrl.pathname).toBe("/attendance/qr");
+    expect(firstUrl.searchParams.get("business")).toBe(businessId);
+    expect(firstUrl.searchParams.get("venue")).toBe(venueId);
+    const oldPath = await kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg path").last().getAttribute("d");
+
+    const guestContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(guestContext);
+    const unauthorizedIssue = await guestContext.request.post("/kiosk/code");
+    expect(unauthorizedIssue.status()).toBe(401);
+    expect(unauthorizedIssue.headers()["cache-control"]).toContain("no-store");
+    const guestPage = await guestContext.newPage();
+    await guestPage.goto("/login");
+    await guestPage.evaluate((url) => { window.location.assign(url); }, firstUrl.href);
+    await expect.poll(() => {
+      const current = new URL(guestPage.url());
+      return current.pathname === "/login" && current.searchParams.get("message") === "qr-sign-in";
+    }).toBe(true);
+    await expect(guestPage.getByRole("status")).toContainText("Sign in on your own device, then scan a fresh venue kiosk code.");
+    await expect.poll(() => new URL(guestPage.url()).hash === "").toBe(true);
+
+    const outsideContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(outsideContext);
+    const outsideLogin = await outsideContext.newPage();
+    await signIn(outsideLogin, `qr-browser-outside-${suffix}@example.test`, password);
+    const outsideScan = await openScan(outsideContext, firstUrl);
+    await expect(outsideScan.getByRole("heading", { name: "QR clock unavailable" })).toBeVisible();
+    await expect(outsideScan.getByRole("alert").filter({
+      hasText: "This venue is unavailable to your account.",
+    })).toBeVisible();
+    await expect.poll(() => new URL(outsideScan.url()).hash === "").toBe(true);
+
+    const invalidUrl = new URL(firstUrl);
+    invalidUrl.searchParams.delete("venue");
+    const invalidScan = await openScan(workerContext, invalidUrl);
+    await expect(invalidScan.getByRole("heading", { name: "Invalid kiosk link" })).toBeVisible();
+    await expect.poll(() => new URL(invalidScan.url()).hash === "").toBe(true);
+
+    const workerScan = await openScan(workerContext, firstUrl);
+    const colleagueScan = await openScan(colleagueContext, firstUrl);
+    await expect(workerScan.getByRole("button", { name: "Confirm QR clock in" })).toBeVisible();
+    await expect(colleagueScan.getByRole("button", { name: "Confirm QR clock in" })).toBeVisible();
+    expect(new URL(workerScan.url()).hash).toBe("");
+    expect(await workerScan.locator("body").evaluate((body) =>
+      body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(workerScan, "mobile QR clock confirmation"));
+    await workerScan.getByRole("button", { name: "Confirm QR clock in" }).click();
+    await expect(workerScan.getByRole("status").filter({ hasText: "QR clock request recorded" }))
+      .toContainText("queued for manager review");
+    await colleagueScan.getByRole("button", { name: "Confirm QR clock in" }).click();
+    await expect(colleagueScan.getByRole("alert").filter({ hasText: "That code was already used" })).toBeVisible();
+
+    const secondUrl = await waitForNewCode(kioskPage, oldPath);
+    expect(secondUrl.hash !== firstUrl.hash).toBe(true);
+    const secondPath = await kioskPage.getByRole("region", { name: "Venue clock QR" }).locator("svg path").last().getAttribute("d");
+    await workerContext.grantPermissions(["geolocation"], { origin: appUrl });
+    const workerOut = await openScan(workerContext, secondUrl);
+    await expect(workerOut.getByRole("button", { name: "Confirm QR clock out" })).toBeVisible();
+    await workerOut.getByRole("button", { name: "Confirm QR clock out" }).click();
+    await expect(workerOut.getByRole("status").filter({ hasText: "QR clock request recorded" })).toBeVisible();
+    const events = await admin.from("attendance_events").select("event_type, employee_id, verification_status")
+      .eq("business_id", businessId).order("event_type");
+    expect(events.error).toBeNull();
+    expect(events.data).toEqual([
+      { event_type: "clock_in", employee_id: workerId, verification_status: "unverified" },
+      { event_type: "clock_out", employee_id: workerId, verification_status: "unverified" },
+    ]);
+    const checks = await admin.from("attendance_location_checks").select("verification_status, reason")
+      .eq("business_id", businessId);
+    expect(checks.error).toBeNull();
+    expect(checks.data.map((row) => `${row.verification_status}:${row.reason}`).sort())
+      .toEqual(["review:permission_denied", "verified:inside"]);
+
+    const unusedUrl = await waitForNewCode(kioskPage, secondPath);
+    await page.reload();
+    await page.getByRole("button", { name: "Revoke Front counter" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Device revoked" })).toBeVisible();
+    await expect(kioskPage.getByRole("status").filter({ hasText: "expired or been revoked" })).toBeVisible();
+    const revokedScan = await openScan(workerContext, unusedUrl);
+    await revokedScan.getByRole("button", { name: "Confirm QR clock in" }).click();
+    await expect(revokedScan.getByRole("alert").filter({ hasText: "That code has expired or its kiosk is unavailable" }))
+      .toBeVisible();
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideBusinessId]);
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("operational probes report database readiness and protect process metrics", async ({ request }) => {
   const liveness = await request.get("/api/health");
   expect(liveness.status()).toBe(200);

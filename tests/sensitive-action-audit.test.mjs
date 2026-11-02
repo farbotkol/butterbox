@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { test } from "node:test";
 import { auditSources, parseAuditFilters, parseAuditRows } from "../src/lib/sensitive-action-audit.ts";
 
@@ -32,6 +32,10 @@ test("audit filters validate exact dates, UTC bounds, identifiers and pagination
 
 test("audit row parsing rejects foreign, malformed and inconsistent records", () => {
   assert.deepEqual(parseAuditRows([row], business), [row]);
+  for (const source of ["attendance_kiosks", "venue_roster_week_events"]) {
+    assert.deepEqual(parseAuditRows([{ ...row, source_table: source }], business)?.[0].source_table, source);
+    assert.equal(parseAuditFilters({ source })?.source, source);
+  }
   assert.deepEqual(parseAuditRows([{ ...row, actor_kind: "database", actor_id: null }], business)?.length, 1);
   assert.deepEqual(parseAuditRows([], business), []);
   assert.equal(parseAuditRows(null, business), null);
@@ -43,7 +47,7 @@ test("audit row parsing rejects foreign, malformed and inconsistent records", ()
   ]) assert.equal(parseAuditRows([{ ...row, ...change }], business), null, JSON.stringify(change));
 });
 
-test("every audited source has a documented label and a database trigger", () => {
+test("every audited source has a documented label and a database audit producer", () => {
   const migration = readFileSync(new URL("../supabase/migrations/20261103010000_sensitive_action_audit.sql", import.meta.url), "utf8");
   const loop = migration.split("foreach v_table in array array[")[1].split("] loop")[0];
   const sources = [...loop.matchAll(/'([a-z_]+)'/g)].map((match) => match[1]);
@@ -59,6 +63,12 @@ test("every audited source has a documented label and a database trigger", () =>
   )].map((match) => match[1]);
   assert.deepEqual(rosterTriggers.sort(), ["roster_review_decisions", "roster_review_requests"]);
   sources.push(...rosterTriggers);
-  assert.deepEqual(sources.sort(), Object.keys(auditSources).sort());
+  const migrationDirectory = new URL("../supabase/migrations/", import.meta.url);
+  const manualSources = readdirSync(migrationDirectory).filter((file) => file.endsWith(".sql"))
+    .flatMap((file) => [...readFileSync(new URL(file, migrationDirectory), "utf8")
+      .matchAll(/'([a-z_]+)', '(?:INSERT|UPDATE|DELETE)'/g)].map((match) => match[1]));
+  assert.ok(manualSources.includes("attendance_kiosks"));
+  assert.ok(manualSources.includes("venue_roster_week_events"));
+  assert.deepEqual([...new Set([...sources, ...manualSources])].sort(), Object.keys(auditSources).sort());
   for (const label of Object.values(auditSources)) assert.ok(label.length > 0);
 });

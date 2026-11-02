@@ -73,6 +73,11 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           You&apos;ve signed out.
         </p>
       )}
+      {params.message === "qr-sign-in" && (
+        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+          Sign in on your own device, then scan a fresh venue kiosk code.
+        </p>
+      )}
       {!configured && (
         <p className="mt-5 rounded-lg border border-sand bg-soft-sand px-4 py-3 text-sm leading-6 text-ocean">
           Authentication is not connected yet. Copy <code>.env.example</code> to <code>.env.local</code> and add your Supabase project URL and anon key.
