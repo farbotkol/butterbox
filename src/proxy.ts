@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function proxy(request: NextRequest) {
-  if (request.nextUrl.pathname === "/api/health") {
+  if (["/api/health", "/api/ready", "/api/metrics"].includes(request.nextUrl.pathname)) {
     return NextResponse.next({ request });
   }
 

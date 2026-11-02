@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { cp, readFile } from "node:fs/promises";
 import { createServer } from "node:net";
@@ -45,6 +46,7 @@ localOrigin(settings.API_URL);
 localOrigin(settings.MAILPIT_URL);
 const host = appUrl.hostname === "[::1]" ? "::1" : appUrl.hostname;
 const port = Number(appUrl.port || 80);
+const operationsToken = randomBytes(32).toString("base64url");
 const testEnv = {
   ...process.env,
   BUTTERBOX_TEST_APP_URL: appUrl.origin,
@@ -53,6 +55,7 @@ const testEnv = {
   BUTTERBOX_TEST_SUPABASE_ANON_KEY: settings.ANON_KEY,
   BUTTERBOX_TEST_SUPABASE_SERVICE_KEY: settings.SERVICE_ROLE_KEY,
   BUTTERBOX_TEST_DB_CONTAINER: `supabase_db_${projectId}`,
+  BUTTERBOX_TEST_OPERATIONS_TOKEN: operationsToken,
 };
 
 async function checkPortAvailable() {
@@ -107,6 +110,7 @@ try {
     NEXT_PUBLIC_SUPABASE_URL: settings.API_URL,
     NEXT_PUBLIC_SUPABASE_ANON_KEY: settings.ANON_KEY,
     NEXT_PUBLIC_SITE_URL: appUrl.origin,
+    BUTTERBOX_OPERATIONS_TOKEN: operationsToken,
   };
   if (!useDevServer) {
     const commands = useSplitBuild

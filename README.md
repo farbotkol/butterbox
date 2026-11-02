@@ -526,7 +526,7 @@ npm run dev
 npm test
 npm run lint
 npm run build
-npx --yes supabase@2.122.0 test db --local
+npx --yes supabase@2.122.0 test db supabase/tests/database --local
 ```
 
 The Supabase CLI applies the local migrations when starting a new local
@@ -653,8 +653,102 @@ The container runs as a non-root user and checks `/api/health` automatically.
 That endpoint reports **process liveness only**: it does not check Supabase,
 migrations, authentication, or deployment readiness. Configure your platform
 to use the container health status (or `GET /api/health`) for liveness, and
-monitor external dependencies separately. Put a reverse proxy in front of a
-public self-hosted deployment.
+use `GET /api/ready` for dependency readiness. Readiness executes a
+non-privileged, data-free RPC through PostgREST and JWT validation to PostgreSQL
+with a three-second timeout. It returns 200 `{"status":"ok"}` or a generic
+503 `{"status":"unavailable"}` with `Cache-Control: no-store`; it does not
+expose dependency errors or tenant data. Apply the readiness migration first.
+It is a connectivity/schema-probe check, not a check of every migration,
+the Auth service, email delivery, external payroll or all application functionality. Put a
+reverse proxy in front of a public self-hosted deployment, with rate limits
+for public health probes and an appropriate readiness polling interval.
 
 CI installs from the lockfile, runs tests, lint and a production build, then
 builds the image and waits for its health check.
+
+### Operational error and health metrics
+
+Set `BUTTERBOX_OPERATIONS_TOKEN` securely in the **server runtime** to an
+operator-generated random value of at least 32 characters. It is not a
+`NEXT_PUBLIC_` setting, customer credential or browser session token. Never
+commit it, put it in a URL, or share it with tenants. `GET /api/metrics` requires
+`Authorization: Bearer <operator token>`; absent/wrong credentials return 401,
+and missing or too-short server configuration returns 503. All responses are
+uncached. Restrict access further at the operator network/proxy layer.
+
+The JSON response exposes fixed-cardinality counters for liveness/readiness
+successes and failures and captured Next.js request errors by
+render/route/action/proxy category, with observation/start/last-error times.
+Counters are **per Node.js process**, reset on restart and must be collected
+from each replica; they are not durable global totals or customer-level
+analytics. Next's `onRequestError` hook also emits structured
+`butterbox_request_error` log events. Readiness emits `butterbox_readiness`
+events. These events deliberately omit request URLs, headers, error messages,
+user identifiers and payloads. Existing application logs require their own
+access/retention controls; the hook does not sanitise third-party logs.
+
+Before a pilot, an operator must configure a collector for these logs and
+metrics, notify on repeated readiness failure or elevated error counts, and
+verify an alert reaches its on-call destination. No external monitoring
+provider or alert delivery has been provisioned or verified by local tests.
+The browser regression checks real healthy probes, a controlled database
+permission failure, generic 503, continued liveness, recovered readiness,
+protected metric reads and failure-counter increments on the disposable stack.
+
+### Backup retention and recovery runbook
+
+**Status:** no hosted staging/production backup configuration or retained
+backup has been verified. This is a pilot-readiness operating policy and
+rehearsal procedure, not evidence that recovery works in a deployed project.
+The owner must explicitly identify an isolated staging Supabase project and
+authorise a restore there before this story can be marked Done. Never restore,
+reset or alter a shared/live database while following local test instructions.
+
+Proposed pilot recovery policy, requiring owner approval, provisioning and verification:
+
+- Retain encrypted daily recovery points for **35 days** in restricted operator
+  storage, with monitored backup success and deletion/expiry controls. This
+  recovery-window policy is not a statutory employee/payroll record retention
+  policy; do not delete live timekeeping or audit records when backups expire.
+- Target at most **24 hours** of data loss and a **four-hour** restore time.
+  These are targets, not measured guarantees. The staging rehearsal must
+  record actual RPO/RTO and owner sign-off before pilot use.
+- Verify the hosted plan and actual recovery-point history. Supabase documents
+  plan-dependent daily retention (Pro 7 days, Team 14, Enterprise up to 30);
+  these defaults alone do not satisfy the 35-day operating target. An
+  authorised operator must provision the additional encrypted recovery points
+  and storage rather than assume they exist. Free-plan projects do not have
+  the same automatic daily-backup guarantee.
+- Back up Storage objects separately; database backups contain their metadata,
+  not their contents. Preserve environment configuration, migrations, auth
+  redirect settings and external integration configuration through their
+  respective secure recovery procedures. Custom role passwords may need
+  re-provisioning. Do not copy production credentials or real customer data
+  into a test project.
+
+Staging rehearsal, to be performed only after explicit target authorisation:
+
+1. Record the source/target project IDs, data classification, migration SHA,
+   backup timestamp and intended recovery point. Verify the target is
+   isolated and disposable, has no live users/data/integrations, and all
+   outbound payroll and customer messaging are disabled.
+2. Seed synthetic records for two tenants, scoped managers, an employee,
+   immutable clocks/corrections, payroll finalisation, mapping and export
+   history. Record known counts and checksums outside the target, without
+   credentials or personal data.
+3. Use the supported Supabase backup/restore workflow for the identified
+   project and plan. Recheck the target ID at its destructive confirmation;
+   never reuse a production project ID or a shared development database.
+4. After restore, verify migration history, synthetic counts/checksums,
+   immutable original and correction records, payroll versions and export
+   deduplication. Recheck two-tenant RLS, authenticated login, permission
+   revocation and idempotent retry behaviour, then readiness/metrics and
+   alert delivery.
+5. Record the recovery-point timestamp, start/end times, measured RPO/RTO,
+   verification outputs and any restore gaps. Confirm backup expiry behaviour
+   without deleting retained live backups. Obtain owner approval before any
+   pilot recovery claim or cleanup of the explicit staging target.
+
+Reference: [Supabase database backups](https://supabase.com/docs/guides/platform/backups).
+Local migration replay and transactional regression results are recorded in
+`IMPLEMENTATION_PROGRESS.md`; they do not substitute for this staging rehearsal.

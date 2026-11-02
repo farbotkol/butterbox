@@ -4,7 +4,19 @@
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
   BB-PAYRULES stories). Verified Done: **40**. In Progress: **1**.
-  Blocked: **3**. Not started (Backlog): **65**.
+  Blocked: **4**. Not started (Backlog): **64**.
+- BB-FOUND-008 (resilience and operations) has a verified partial checkpoint
+  and is **Blocked**, not Done: an explicitly authorised isolated hosted
+  staging project and backup destination are unavailable. Implemented readiness,
+  process-scoped health/error counters, protected operator metrics and a
+  backup/recovery runbook. Final regression passed **2,121/2,121** pgTAP
+  assertions across 46 files after a clean 47-migration replay, **19/19**
+  authenticated integrations, **146** Node tests (19 integrations skipped
+  and run separately), ESLint, TypeScript, split production build and
+  **57/57** serialized browser scenarios. A real hanging HTTP dependency
+  was aborted within the tested three-second deadline tolerance.
+  No staging restore, retained hosted backups or external alert delivery
+  is claimed. Disk stayed above 29 GiB free.
 - BB-FOUND-007 (sensitive action audit) is Done. A clean isolated replay of
   46 migrations passed **2,116/2,116** pgTAP assertions across 45 files,
   including 31 audit assertions. All **19/19** authenticated integrations,
@@ -350,10 +362,14 @@
 ## Current story
 
 - **BB-FOUND-007 — Audit sensitive actions** is Done (evidence below).
-  Next P0 to assess and implement: **BB-FOUND-008 — Resilience and operations**,
-  including an explicitly isolated restore rehearsal, monitoring and retention
-  documentation. Do not equate local recovery tests with deployed staging or
-  production backup guarantees.
+  Commit `012e07ccb54cd99331d0b861b6a2e9fb40288390` was pushed and its remote
+  SHA matched.
+- **BB-FOUND-008 — Resilience and operations** has verified monitoring
+  implementation and is Blocked on authorised hosted staging restore/backup
+  access. See the criterion table and exact recovery steps below.
+  Next independent operational workflow: **BB-SHIFTS-001 — Offer open shift**,
+  followed by response/transactional confirmation (BB-SHIFTS-002/003), which
+  unblock the offer-notification part of BB-COMMS-002.
 - **BB-SAAS-004 — Performance and accessibility** is Done. BB-COMMS-002's
   remaining offer notifications require an offer workflow first; do not mark
   it Done based only on roster publication updates.
@@ -1403,6 +1419,34 @@ environment. HTTP test fixtures were removed and their absence verified.
 
 ## Blocked stories
 
+### BB-FOUND-008 — Resilience and operations (Blocked; verified partial checkpoint)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| FOUND-008.1 Health and error metrics exist | Existing uncached liveness remains compatible. New `/api/ready` performs a data-free, security-invoker database RPC through PostgREST with a three-second timeout and generic 503 on failure. `/api/metrics` requires a server-only operator bearer token and exports process-scoped health/error counters. Next's request-error instrumentation emits fixed-field events without error messages, request URLs, headers or tenant identifiers. Proxy bypass applies only to these operational routes; metrics authorises independently of customer sessions. | Seven new Node tests passed token/configuration checks, error-hook attribution, immutable metric snapshots, redaction, dependency failures, response shapes and an actual hanging local HTTP server aborted at the deadline (2.5–6 second scheduling tolerance). Five pgTAP assertions verified anonymous/authenticated readiness, no elevated privileges or table access. Production Chromium verified healthy readiness, controlled anon RPC revocation yielding generic 503 while liveness stayed healthy, permission restoration/recovery, failure-counter increments and wrong/missing operator-token 401 responses. | Pass |
+| FOUND-008.2 Restore procedure rehearsed in staging | README documents an explicit target-ID gate, synthetic two-tenant fixture checks, immutable attendance/payroll/export checks and measured RPO/RTO evidence. Local clean migration replay is deliberately not treated as backup restoration or hosted staging acceptance. | No authorised isolated hosted staging project, restore permission or backup destination is identified. No staging/production restore was attempted. Provision these securely, approve the target and proposed policy, then execute the README rehearsal and record real timestamps/checksums/results. | Blocked |
+| FOUND-008.3 Retryable actions are idempotent | Existing scoped request-ID/revision and immutable ledger mechanisms remain unchanged; monitoring probes are read-only apart from process-local diagnostic counters. Metrics retrieval has no business-data side effects. | All 19 authenticated tenant/concurrency integration suites passed on the final schema, covering duplicate clock/break requests, corrections, claims, approvals, finalisation/export/mapping and invitation/business scopes. Readiness failure/recovery leaves source business records untouched. | Pass |
+| FOUND-008.4 Backup retention documented | README distinguishes a proposed 35-day encrypted daily recovery window from statutory/live record retention, documents 24-hour RPO/four-hour RTO targets as unverified, identifies hosted-plan retention gaps and separate Storage/configuration recovery. It requires owner approval and operator provisioning before pilot use. | Documentation reviewed against official Supabase backup guidance: hosted daily retention is plan-dependent, Storage object contents are excluded and custom-role passwords may require re-provisioning. No actual hosted retention configuration or expired-backup deletion was verified. | Pass (documentation only) |
+
+Files: `.env.example`, `.github/workflows/ci.yml`, `README.md`,
+`src/lib/operations.ts`, `src/instrumentation.ts`,
+`src/app/api/health/route.ts`, `src/app/api/ready/route.ts`,
+`src/app/api/metrics/route.ts`, `src/proxy.ts`,
+`supabase/migrations/20261103020000_application_readiness.sql`,
+`supabase/tests/database/application_readiness.test.sql`,
+`tests/operations.test.mjs`, `scripts/test-auth.mjs`,
+`tests/e2e/auth.spec.mjs` and tracking files.
+CI/database documentation now explicitly select `supabase/tests/database`,
+not the pre-migration legacy rehearsal scripts. The browser runner generates
+an ephemeral operator token separately from customer credentials.
+Final validation: 47-migration clean replay, **2,121 assertions / 46 files**,
+**19/19 integrations**, **146 Node tests**, full lint, TypeScript,
+split production compile/generate and **57/57 browser scenarios** passed.
+Counters are per-process and reset on restart; no durable multi-replica
+collector, hosted alert delivery, backup provisioning or staging restore is
+claimed. No volumes, databases, worktrees or build caches were deleted for
+space; free disk remained above 29 GiB.
+
 ### BB-PAY-004 — Xero Payroll adapter (Blocked)
 
 | Criterion | Implementation evidence | Test and actual result | Status |
@@ -1477,7 +1521,10 @@ not yet run remotely.
 
 ## Outstanding defects and technical decisions
 
-- The health endpoint is liveness only; it does not assert Supabase readiness.
+- `/api/health` is liveness only; `/api/ready` checks a live data-free RPC,
+  and `/api/metrics` exposes protected process-scoped counters. These do not
+  establish every migration, Auth-service/email availability, external payroll
+  delivery, durable alerting or backup recoverability.
 - Build separate images per environment: Next.js embeds `NEXT_PUBLIC_` values
   at build time. Never use a secret/service-role key in those values.
 - Stories are marked Done only after every acceptance criterion is verified.
@@ -1496,11 +1543,17 @@ not yet run remotely.
 
 ## Next story
 
-- Next P0: **BB-FOUND-008 — Resilience and operations**. Inspect the existing
-  liveness route and error handling; implement meaningful monitoring and
-  explicit backup retention guidance. Rehearse restore only in a verified
-  disposable project; if deployed staging access is required and unavailable,
-  record that acceptance criterion as Blocked rather than claiming it passed.
+- Next independent ready workflow: **BB-SHIFTS-001 — Offer open shift**.
+  Read every criterion and reuse current venue/role/availability/conflict
+  eligibility helpers, preserving the shift as open until a separately
+  confirmed claim. Follow with BB-SHIFTS-002/003 before completing
+  offer notifications under BB-COMMS-002.
+- Resume **BB-FOUND-008** only after the owner identifies and authorises an
+  isolated hosted staging project and securely provisions backup/restore
+  access. Approve the proposed retention/recovery targets, rehearse the
+  README procedure and record actual results. Do not run destructive tests
+  against shared development or production and do not claim local replay as
+  a successful staging restore.
   BB-COMMS-002 remains In Progress until offer and approval notifications are
   implemented and tested, with their workflow prerequisites completed first.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth

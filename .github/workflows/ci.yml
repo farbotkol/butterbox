@@ -63,7 +63,7 @@ jobs:
             echo "Failed to start the disposable Supabase project." >&2
             exit 1
           fi
-      - run: npx --yes supabase@2.122.0 test db --local
+      - run: npx --yes supabase@2.122.0 test db supabase/tests/database --local
       - name: Test authenticated tenant isolation
         run: BUTTERBOX_TEST_DISPOSABLE=yes node scripts/test-tenant-isolation.mjs .
       - name: Install browser for authentication tests

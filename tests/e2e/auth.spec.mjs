@@ -100,6 +100,42 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("operational probes report database readiness and protect process metrics", async ({ request }) => {
+  const liveness = await request.get("/api/health");
+  expect(liveness.status()).toBe(200);
+  expect(await liveness.json()).toEqual({ status: "ok" });
+  const ready = await request.get("/api/ready");
+  expect(ready.status()).toBe(200);
+  expect(ready.headers()["cache-control"]).toContain("no-store");
+  expect(await ready.json()).toEqual({ status: "ok" });
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  try {
+    await sql("revoke execute on function public.check_application_readiness() from anon");
+    const unavailable = await request.get("/api/ready");
+    expect(unavailable.status()).toBe(503);
+    expect(unavailable.headers()["cache-control"]).toContain("no-store");
+    expect(await unavailable.json()).toEqual({ status: "unavailable" });
+    expect((await request.get("/api/health")).status()).toBe(200);
+  } finally {
+    await sql("grant execute on function public.check_application_readiness() to anon");
+  }
+  expect((await request.get("/api/ready")).status()).toBe(200);
+  const token = process.env.BUTTERBOX_TEST_OPERATIONS_TOKEN;
+  expect(token).toBeTruthy();
+  expect((await request.get("/api/metrics")).status()).toBe(401);
+  expect((await request.get("/api/metrics", { headers: { authorization: "Bearer invalid" } })).status()).toBe(401);
+  const protectedMetrics = await request.get("/api/metrics", { headers: { authorization: `Bearer ${token}` } });
+  expect(protectedMetrics.status()).toBe(200);
+  expect(protectedMetrics.headers()["cache-control"]).toContain("no-store");
+  const body = await protectedMetrics.json();
+  expect(body.scope).toBe("process");
+  expect(body.probes.readiness.passed).toBeGreaterThanOrEqual(1);
+  expect(body.probes.readiness.failed).toBeGreaterThanOrEqual(1);
+  expect(body.probes.liveness.passed).toBeGreaterThanOrEqual(1);
+  expect(body.requestErrors.render).toBeGreaterThanOrEqual(0);
+  expect(JSON.stringify(body)).not.toContain(token);
+});
+
 async function navigateDuringSessionChange(page, path) {
   await page.goto(path).catch((error) => {
     if (!error.message.includes("net::ERR_ABORTED")) throw error;
