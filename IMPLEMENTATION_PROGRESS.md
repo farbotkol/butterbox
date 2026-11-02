@@ -590,6 +590,25 @@
   payroll or publication boundaries; venue defaults cannot override employee
   consent, and urgent external notices may bypass quiet hours only through
   eligible channels.
+- At 11:22 UTC a lock-gated HTTP race passed: a privileged business deletion
+  was rejected while a worker clocked in, cross-tenant access remained denied,
+  both businesses remained, and the original event survived clock-out. A
+  rolled-back replay of the quick-change and preservation migrations passed
+  **17/17** preservation assertions; the replay ledger and temporary Auth
+  helper were unchanged afterward. An initial browser run failed because the
+  session-only diagnostic runner omitted the required disposable database
+  container. It left 32 synthetic Auth users, verified by project, timestamp
+  and test address and removed using normal Auth teardown; protected businesses
+  were not deleted. Browser setup now verifies the container before fixtures
+  are created. With the correct container, **8/8** affected browser scenarios
+  passed; changed-file ESLint and TypeScript also passed. The full database
+  rerun remains pending.
+- Owner decision DEC-003 was fetched and merged without rewriting history in
+  `83e7ec412f6a3dbce63003c03ad97e840b85457c`, pushed and verified. It
+  requires hard-isolated demonstrations and a clean, uncopied paid tenant;
+  the current operator-enabled sample policy is insufficient. After completing
+  the retention checkpoint, investigate fail-closed sample protection before
+  other optional configuration work.
 
 ## Recently completed story
 
@@ -815,7 +834,8 @@
   checklist, contextual help and default-off protected sample policy are
   implemented and tested in the disposable environment. Production isolation
   and whether historical production sample records exist have not been
-  verified; the policy can still be enabled deliberately by a database operator.
+  verified; the policy can still be enabled deliberately by a database
+  operator and does not meet the hard-isolation requirements of DEC-003.
 - Supabase PKCE links initiated in a manager's browser cannot be assumed to
   work in a recipient's separate browser.
 - **BB-ROSTER-004 — Copy week and roster template** is Done. A scoped manager
@@ -1022,7 +1042,7 @@ in each deployed environment.
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
 | SAAS-003.1 Checklist progresses business, venue, staff, shift and publication | Owner-only progress RPC and dashboard checklist use real records, with tenant and role checks. | The 29-assertion onboarding pgTAP suite and production Chromium scenario verified successive steps, archived staff, owner-only access and cross-tenant isolation. Both passed. | Pass |
-| SAAS-003.2 Seeded demo data is isolated from production | A database policy defaults to disabled; application accounts and the Supabase service role cannot enable it or call the unchecked helper. Explicit opt-in is documented for isolated test databases only. | pgTAP, eight authenticated integrations and Chromium verified default denial, rollback, scoped opt-in and a concurrent disable race in the disposable project. Actual production configuration and historical data were not inspected, and a database operator can deliberately enable the policy. | Blocked |
+| SAAS-003.2 Seeded demo data is isolated from production | A database policy defaults to disabled; application accounts and the Supabase service role cannot enable it or call the unchecked helper. The operator opt-in does not establish the separate environment now required by DEC-003. | Earlier pgTAP, eight authenticated integrations and Chromium verified default denial, rollback, scoped opt-in and a concurrent disable race in the disposable project. Actual production configuration, historical data, hard demo isolation and clean paid conversion have not been verified. | Blocked |
 | SAAS-003.3 Inline help covers common tasks | The checklist explains business and venue setup, staff, draft shifts and publishing, with links to the relevant pages. | Production Chromium followed the departments help link and exercised the staff, shift and publication workflow; the 37-scenario regression passed. | Pass |
 
 Files: `supabase/migrations/20261102060000_onboarding_and_demo_isolation.sql`,
