@@ -174,3 +174,61 @@ These are operational and technical proof requirements, not further open product
 ### Record provenance
 
 Recorded after the product owner's explicit direction: *“For Butterbox DEC-003 / BB-SAAS-003, I choose a dedicated isolated demo business. When converting to a paying customer, start with a completely clean real business.”*
+
+---
+
+## DEC-004 — Historical credential exposure: assessment before rotation
+
+- **Date recorded:** 2026-11-02
+- **Related story:** `BB-FOUND-001 — Create production-ready application`
+- **Decision owner:** Butterbox product owner
+- **Status:** Assessment and classification authorized; remediation/rotation requires separate explicit approval
+
+### Confirmed decision
+
+The Main Roadmap Agent is authorized to **inventory, assess and classify suspected historical Supabase credential exposure** in the repository and accessible development checkpoint refs. **No credential rotation or other secret changes are authorized at this stage.** The agent must deliver a redacted findings report and proposed remediation actions for owner approval before changing credentials.
+
+The known report concerns historical keys in local Git checkpoint refs despite a clean current branch/checkout scan. This does **not** yet establish that a privileged, active or production secret was exposed. Determine key type, environment, historical locations, likely scope of access, revocation status where safely verifiable, and the relevant uncertainty.
+
+### Agent authority and safety boundaries
+
+**Authorized now:**
+- Read-only examination of the Main Roadmap Git history, accessible local checkpoint refs, current checked-out files and available repository metadata/secret-scanning alerts.
+- Non-invasive classification of candidate values as expected-public/publishable, local development, privileged server-side/service role, database credential, signing secret or unknown.
+- Use offline/redacted fingerprinting to correlate duplicates; record file paths, commit/ref references and abbreviated hashes only. Never expose secret values, tokens, private keys, or credential-bearing URLs in commits, prompts, issue comments, logs, status files or report output.
+- Review gitignore patterns, secret-handling documentation and secret-scanning safeguards; propose corrective changes, but do not create new secret-containing artifacts.
+- Produce a concise risk-ranked inventory and credential-dependency/rotation plan with explicit owner decision points. If an active privileged secret is suspected, report promptly through a private approved channel without reproducing it.
+
+**Not authorized without further owner approval:**
+- Rotating, revoking, regenerating, replacing, testing live privileged access with, or modifying **any** credential (including development/staging credentials).
+- Editing production infrastructure, modifying databases/customer records, changing Supabase project security settings or configuring new remote secrets.
+- Rewriting/removing Git history, deleting refs/branches/tags, force-pushing, deleting repositories or projects, or performing destructive cleanups.
+- Sharing findings containing actual credential strings in public GitHub or other external channels.
+- Penetration testing, trying credentials against remote endpoints, or performing privileged access tests beyond authorized read-only metadata review.
+
+If a high-severity, apparently valid privileged credential is found, **stop and escalate immediately** for expedited owner approval; do not wait for ordinary story completion or take unilateral action.
+
+### Deliverables for owner review
+
+A redacted report with one row per distinct finding:
+- Non-secret finding ID and type/classification.
+- Environment and likely privilege scope (production, staging, local, unknown).
+- Repository location, relevant commit or local ref and duplicate count without secret value.
+- Exposure/access surface (e.g. branch, checkpoint ref) and evidence basis.
+- Confidence, possible impact and severity, with uncertainty clearly noted.
+- Proposed rotation/revocation and dependency-update sequence **without executing it**.
+- Whether history remediation is justified after rotation and what it would affect across Core and Award Central branches.
+
+Record what was *not* assessed (unavailable refs, private infra, unknown key validity). Mark checks as verified only where actually supported by evidence; do not claim clean history just because HEAD is clean.
+
+### Completion and next steps
+
+1. Run the authorized **read-only** inventory and classification.
+2. Submit redacted findings and recommended remediation order to the owner.
+3. Request separate explicit owner approval for any credential rotation, secret-store updates or Git history operation.
+4. After approval and execution, independently verify that affected credentials were revoked, replacement-dependent integrations work, secret scanning is in place and no unresolved privileged exposure remains.
+5. Keep `BB-FOUND-001` **Blocked** until required remediation and acceptance evidence pass. Continue unrelated ready stories safely.
+
+### Record provenance
+
+Recorded after owner instruction: *“For Butterbox DEC-004 / BB-FOUND-001, I choose assessment and classification first, with separate approval before any credential rotation. Record this decision in the Main Roadmap GitHub decision log, specify the agent's safety boundaries and next steps.”*
