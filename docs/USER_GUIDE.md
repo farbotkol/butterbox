@@ -46,9 +46,90 @@ contact details, attendance or payroll information. The local review app is
   reset discards review database edits and replaces the fictional fixture.
   It does not convert a demo into a real customer business.
 
-Guided multi-role walkthroughs are tracked separately in BB-DEMO-002.
 This environment does not imply final branding approval, hosted reviewer
 access, production readiness or legal/payroll compliance.
+
+### Guided owner and payroll-preparation review
+
+These are repeatable **read-only baseline walkthroughs** of the real app.
+Sign out between roles or use separate browser profiles. The operator supplies
+the owner/manager/employee credentials privately and the two seeded weeks from
+the current fixture inventory: the roster week and the previous approved-time
+week. Dates move when fixtures are reseeded; never assume a hard-coded date.
+Leave forms unsubmitted unless deliberately running a separate synthetic
+experiment, then have the operator reset before the next baseline review.
+
+1. Sign in with the review **owner**. Confirm the simulation notice and
+   **Get your first roster ready** checklist. Inspect the Business, Venue,
+   Staff, Shift and Publish steps. Setup is already provisioned:
+   `/setup` returns this existing account to its dashboard. This walkthrough
+   does not register a new customer or demonstrate demo-to-paid conversion.
+2. Use **Departments** in **Main navigation**. On **Departments and roles**,
+   review FOH and BOH. Then open **People** and inspect the 14 **Employee
+   profiles**, qualifications and department links. Do not send invitations.
+   The fictional profiles have no verified award classification/pay rules.
+3. Open **Rostering**. Use **Previous week**/**Next week**, or the seeded-week
+   URL supplied by the operator, to open the roster week. With a single
+   department selected, inspect **Publication history**. Choose **Department:
+   All departments**, then **Apply filter** to see both departments and the
+   two **Open shifts**. A single-department view shows only its one open shift.
+   **Offer shift** is a real action, not an already-sent offer; do not submit
+   it in this baseline. Unassigned shifts alone do not create employee offers.
+4. Open **Timesheet review**. In **Week containing date**, enter the
+   approved-time week and choose **Apply filters**. Inspect the **Payroll
+   period**, which is already **Finalised**, and expand **Finalised payroll
+   records (14)**. Review recorded breaks, approvals and source identifiers.
+   These are existing approved fixtures, not a demonstration of newly approving
+   a current week. Finalised time cannot change without an authorized reopen.
+5. In **Generic payroll CSV**, expand **Payroll export history (1)** and
+   choose **Download payroll CSV**. The baseline batch is already prepared;
+   do not reopen the period or create a replacement. Confirm the
+   `SIMULATION_ONLY-` filename and the notice on every row; never send it to
+   live payroll. The [timesheet instructions](#timesheets-and-payroll-preparation)
+   explain actual approval, preparation and reconciliation controls separately.
+6. Open **Clock in / out** and review **Attendance correction history**.
+   The owner-attributed fictional correction preserves its original event.
+   The owner has no linked employee clock profile in this fixture; use the
+   employee account for the self-service clock controls. Sign out.
+
+### Guided FOH or BOH manager review
+
+1. Sign in as the corresponding department manager. Open **People**: there
+   are seven fictional staff in that department, not all 14.
+2. Open **Rostering** at the supplied roster week. Review the department's
+   one **Open shifts** vacancy. Do not submit **Offer shift** in the baseline.
+3. Open **Timesheet review**, choose the approved-time week and **Apply
+   filters**. Review the seven department groups and their **Approved**
+   decisions. The manager's own time was decided by the owner, not self-approved.
+   The period is already finalised, so **Approve time** is unavailable.
+4. There is no **Download payroll CSV** or **Reopen payroll period** control
+   for these department managers. Manually opening a sample download URL is
+   also denied; guessing a URL never grants access. The owner-only **Hours
+   and labour** report is likewise unavailable. Sign out before changing roles.
+
+### Guided employee mobile review
+
+1. At a narrow mobile viewport, sign in with the supplied employee account.
+   Use the horizontally scrollable **Main navigation** to open **My schedule**.
+   Open the supplied roster week and review **Next shift** and **Weekly
+   schedule**. If the fixture is old, there may be no upcoming shift even
+   though the selected historical week contains a published shift.
+2. Open **Availability** and review **Recurring availability**. Do not save
+   changes in the baseline. Open **Clock in / out**: **Clock in** is a real
+   control, but leave it unsubmitted to keep the baseline unchanged.
+3. Choose **View your attendance history**. **Your attendance history**
+   contains this employee's four original clock/break events, not the team's
+   records. The request-correction workflow does not silently rewrite history.
+4. **Timesheet review** is not in this employee's navigation. Opening that
+   page directly returns to the dashboard with a permission error; a sample
+   payroll download is denied. Sign out when finished.
+
+These journeys have targeted production-browser checks, including actual login,
+navigation, mobile schedule accessibility and negative permissions. They do
+not execute fresh customer onboarding, a new offer/clock/approval or a provider
+submission. Those existing operational workflows have separate feature evidence;
+hosted access, external notifications, live payroll, approved branding,
+Award Central and production/legal acceptance are not implied.
 
 ## Getting started — owners
 
@@ -542,7 +623,7 @@ this Markdown guide does not claim those routes are deployed.
 ### Verification scope and feature coverage
 
 This guide was checked on 2026-11-02 against the Main Roadmap implementation
-through `c1ddaf3`, with BB-DEMO-001 guidance added after its targeted checks.
+through `c1ddaf3`, with BB-DEMO-001/002 guidance added after targeted checks.
 Routes, button wording, role checks and recovery paths were
 source-reviewed. The kiosk, attendance-alert, reporting and isolated-showcase workflows also have
 recorded targeted production-browser evidence in
@@ -569,6 +650,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | Story | Guidance / non-user-facing reason |
 | --- | --- |
 | BB-DEMO-001 | Internal synthetic showcase — local review accounts, fictional records, sample-only CSV and reset limitations |
+| BB-DEMO-002 | Guided owner/payroll, scoped FOH/BOH manager and mobile employee baseline reviews; real navigation, permission failures and explicit omissions |
 | BB-FOUND-002 | Accounts and business access — registration, sign-in/out and reset |
 | BB-FOUND-003 | Accounts and business access; Delegate access — tenant selection never grants access |
 | BB-FOUND-004 | Delegate access and select a venue — owner membership administration and scoped managers |

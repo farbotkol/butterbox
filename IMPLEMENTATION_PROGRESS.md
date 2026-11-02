@@ -3,8 +3,15 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **54**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **66**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **55**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **66**.
+- BB-DEMO-002 is **Done**: documented owner/payroll, scoped FOH/BOH manager
+  and mobile employee baseline journeys; actual login/navigation, sample
+  download and permission failures verified in **4/4** focused production
+  browser tests. Repeated walkthroughs preserve the original fixture:
+  post-walkthrough HTTP integrity **1/1**. Mobile axe/overflow, test ESLint,
+  TypeScript and split production build passed. Fresh setup, new operational
+  mutations, provider submission and remote access are explicitly not claimed.
 - BB-DEMO-001 is **Done** for local internal review: separately verified
   showcase project, independently generated signing/API keys, dedicated
   internal network/storage, 14 fictional FOH/BOH staff, scoped accounts,
@@ -692,20 +699,34 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-DEMO-002 — Guided owner, manager and employee showcase journeys:
-In Progress (Planning).**
+**BB-DEMO-002 — Guided owner, manager and employee showcase journeys: Done.**
 Selected next ready Showcase P0 after DEMO-001 `a984d6c6563cb324cf6c3bcb3c21a67b5e329f91`
-was committed/pushed with the remote SHA verified. Reuse the existing isolated
-fixture and private scoped accounts; do not rebuild them. Add repeatable
-task-oriented owner/setup, manager, employee/mobile and payroll-preparation
-walkthroughs to the existing User Guide, backed by actual navigation and
-negative/permission browser checks. The baseline walkthrough should not mutate
-the fixture; setup is already provisioned, signup disabled and fresh-customer
-conversion remains outside this story. Clearly distinguish pre-existing
-approved time from taking a new approval action and sample CSV from wages or
-live delivery. No new production/shared authorization or database changes.
-Documentation: existing guide update underway. Targeted production-browser
-navigation/scope/accessibility checks planned; full suites not justified.
+was committed/pushed with matching remote SHA; planning checkpoint `30ba109`
+also pushed. Reused the existing isolated fixture and private scoped accounts.
+
+| Criterion | Implementation and selected verification | Actual result | Status |
+| --- | --- | --- | --- |
+| DEMO-002-AC1: repeatable owner/manager/employee/payroll walkthroughs | Task-oriented User Guide sections; actual form login and Main navigation links; repeated focused production-browser execution on the same fixture | Owner 1/1, FOH/BOH managers 2/2, mobile employee 1/1 passed; post-walkthrough HTTP fixture integrity 1/1 | Pass |
+| DEMO-002-AC2: setup, people, roster, shifts, attendance, approvals and CSV | Owner reviews pre-provisioned setup/checklist and `/setup` redirect, FOH/BOH departments, 14 people, department publication history and explicit all-department open shifts; approved prior week, 14 finalised records and actual CSV download; correction-history page; employee's four original events | Actual headings, counts, filters, sample filename/download and history passed; no new signup/clock/approval/provider action claimed | Pass |
+| DEMO-002-AC3: accurate scoped accounts and accessible steps | Private accounts from DEMO-001; seven staff/approved groups and one open shift per manager; employee mobile schedule, availability and attendance; actual direct timesheet/download denials | Both managers and employee passed; mobile axe zero violations and no horizontal page overflow | Pass |
+| DEMO-002-AC4: unavailable features clearly marked | Guide distinguishes pre-provisioned setup and pre-approved time from new actions; no seeded offers, real messages, payroll submission, hosted access, final branding, award calculations or conversion claimed | Source/browser labels verified; explicit omissions recorded in guide | Pass |
+| DEMO-002-AC5: working app rather than simulated unimplemented behavior | Native login, navigation, GET filters, details expansion, real download and server permission denials; read-only baseline instructions | All four journey tests passed; original labelled-report/CSV test also passed during this story | Pass |
+
+Changed files: `tests/e2e/showcase.spec.mjs`, `docs/USER_GUIDE.md` and trackers.
+Documentation: **updated** existing role-based guide, not a duplicate manual.
+Final targeted result **4/4** production journeys passed. Post-walkthrough
+HTTP fixture/scope/signup/mail/egress integrity **1/1**, ESLint zero warnings,
+TypeScript, split production build and diff checks passed. Earlier runs exposed
+an exact-password-label selector mismatch (the real label includes the recovery
+link) and the owner's default single-department roster filter; corrected the
+test to use the real label and explicit All departments/Apply filter, then
+reran affected cases. No legitimate assertion was removed or weakened.
+Full Node, pgTAP, integration and browser suites intentionally deferred:
+no app/schema/authorization code changed. Baseline walkthroughs intentionally
+do not submit new offers, clocks, approvals or reopen finalised time; those
+operational features retain separate acceptance evidence. Remaining risks:
+hosted access/owner review, final identity approval and broader production gates.
+Disk guard held 29 GiB free; temporary app/browser processes stopped normally.
 
 ## Latest completed showcase story
 
@@ -2644,8 +2665,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- After verified **BB-DEMO-001**, select **BB-DEMO-002** guided multi-role
-  walkthroughs using the existing isolated fixture and scoped review accounts.
+- **BB-DEMO-001/002** are Done. Remaining Showcase P0 brand/UI/reset milestone
+  work depends on final owner-approved identity; do not invent that approval.
+  Select independent ready P1 work, including **BB-DOC-002** searchable HTML help.
   ATTEND-006, REPORT-001, BRAND-001 and DOC-001 are Done; do not rebuild them.
   Other BRAND delivery still requires its specific assets and approvals.
   Keep **BB-ORG-006** Blocked until its full criteria and

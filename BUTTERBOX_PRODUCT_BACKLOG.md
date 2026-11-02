@@ -14,7 +14,7 @@
 | ID | Story | Showcase priority | Status | Dependencies |
 |---|---|---|---|---|
 | BB-DEMO-001 | Isolated synthetic showcase café | P0 | Done | — |
-| BB-DEMO-002 | Guided owner, manager and employee showcase journeys | P0 | In Progress | BB-DEMO-001 |
+| BB-DEMO-002 | Guided owner, manager and employee showcase journeys | P0 | Done | BB-DEMO-001 |
 | BB-DEMO-003 | Showcase UI, navigation and mobile polish | P0 | Backlog | BB-BRAND-002; BB-DEMO-002 |
 | BB-DEMO-004 | Repeatable showcase acceptance and reset | P0 | Backlog | BB-DEMO-001; BB-DEMO-002; BB-DEMO-003 |
 | BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | Backlog | BB-DEMO-002 |
