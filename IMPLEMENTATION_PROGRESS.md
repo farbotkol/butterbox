@@ -367,6 +367,18 @@
 
 ## Current story
 
+- **BB-SHIFTS-004 — Request shift swap** remains In Progress. Recovery on
+  2026-11-02 found the swap migration and 341-line pgTAP test committed and
+  pushed in `9ec5e6f033e8e95e1d17624beb7c7f5d38321604`, with a clean
+  worktree and the same fetched remote SHA. The identified isolated
+  `butterbox-acceptance` database has the migration applied. The first
+  acceptance run reached **23 passing and 10 failing assertions** before a
+  later SQL error aborted the suite: approval calls nonexistent
+  `public.lock_shared_worker_links(uuid)` and downstream approval, assignment,
+  publication and acknowledgement assertions fail. No swap UI is present.
+  Next: preserve the committed migration, add a forward-only correction using
+  established scheduling locks, rerun the suite, and implement the employee,
+  manager and notification interfaces. No swap criterion is marked Pass.
 - **BB-COMMS-002 — In-app notification centre** is Done. It now combines
   roster-publication updates with per-recipient shift-offer and claim-outcome
   notifications. The targeted checks passed; see the criterion evidence below.
