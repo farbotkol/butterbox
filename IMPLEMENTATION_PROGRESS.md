@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **47**. In Progress: **0**.
-  Blocked: **5**. Not started (Backlog): **57**.
+  BB-PAYRULES stories). Verified Done: **47**. In Progress: **1**.
+  Blocked: **6**. Not started (Backlog): **55**.
 - BB-ROSTER-009 (roster approval) is Done. A venue owner can retain direct
   publication or require a different scoped owner, administrator or general
   manager to review an immutable snapshot. The requester can withdraw;
@@ -16,8 +16,16 @@
   production-browser scenarios passed, including mobile axe, cross-tenant
   scope, notifications and acknowledgement. Changed-file ESLint, TypeScript
   and the split production build passed. Full suites were intentionally
-  deferred. Feature commit/push is pending this verified checkpoint; see the
-  criterion evidence below.
+  deferred. Feature commit `6fbdde15f41131ce15236bf20468b6ede23cd372`
+  was pushed and its remote SHA matched; see the criterion evidence below.
+- BB-ORG-006 (business configuration) is **Blocked**. Roster approval mode
+  now works per venue, but existing roster publications, weekly reviews and
+  immutable payroll periods assume Monday. The owner must decide whether
+  roster and payroll weeks change together, whether transition periods are
+  short or long, and how already scheduled future shifts are handled.
+  Notification defaults also need defined event/channel/consent behavior and
+  the undelivered BB-COMMS-003 email/push capability. No historical periods
+  have been reinterpreted.
 - BB-RULES-005 (privacy and retention) has a verified partial implementation
   and is **Blocked**, not Done. Point-in-time location, visibility and
   self-service history/correction passed focused database and browser tests.
@@ -529,6 +537,22 @@
 
 ## Current story
 
+- **BB-ROSTER-005 — Drag and drop roster changes** is In Progress, in planning.
+  Existing editable draft shifts, conflict policies, scoped scheduling and
+  roster-review snapshots are prerequisites. Inspect those paths before
+  designing a visible date/worker preview, move/duplicate operation,
+  keyboard-accessible alternative and concurrency-safe undo. Published shifts
+  and immutable review snapshots must not be silently changed.
+
+  | Criterion | Implementation evidence | Test and actual result | Status |
+  | --- | --- | --- | --- |
+  | ROSTER-005.1 — preview shows target date and worker | Not yet implemented | No story-specific test run | Blocked pending implementation |
+  | ROSTER-005.2 — conflicts block or warn appropriately | Existing scheduling policy exists; quick-change integration not yet implemented | No story-specific test run | Blocked pending implementation |
+  | ROSTER-005.3 — keyboard-accessible alternative | Existing full editor exists; equivalent quick operation not yet implemented | No story-specific test run | Blocked pending implementation |
+  | ROSTER-005.4 — undo is offered | Not yet implemented | No story-specific test run | Blocked pending implementation |
+
+## Recently completed story
+
 - **BB-ROSTER-009 — Roster approval workflow** is Done. Direct publication
   remains the default. Owners can require review per venue; scoped managers
   submit an immutable snapshot, a different scoped owner, administrator or
@@ -572,8 +596,9 @@
     browser suites were intentionally not run. Broader regression remains
     necessary for workstream merge or release. Independent reviewer approval
     is a documented design choice; an owner-only venue can withdraw and use
-    direct mode or grant a suitable second reviewer. Feature commit/push is
-    pending this verified checkpoint.
+    direct mode or grant a suitable second reviewer. Feature commit
+    `6fbdde15f41131ce15236bf20468b6ede23cd372` was pushed and the remote
+    SHA matched.
 - **BB-RULES-005 — Privacy and retention policy** is Blocked as detailed
   above; the verified access and visibility changes have been pushed. Week
   boundaries are currently baked into roster publications and payroll
@@ -1858,12 +1883,12 @@ not yet run remotely.
   approves the required record classes, live retention/deletion controls and
   recovery expectations. Implement and verify the resulting safeguards without
   altering live records or assuming legal approval.
-- Assess **BB-ORG-006 — Business configuration** now that roster approval
-  exists. Before changing week boundaries or notification defaults, establish
-  prospective semantics and dependencies: existing roster publications and
-  payroll snapshots assume Monday-based weeks and must not be reinterpreted.
-  If a required decision or prerequisite blocks the full story, record it and
-  continue with an independent ready Core Roadmap story.
+- Continue **BB-ROSTER-005** by tracing draft edit, conflict and review
+  transactions, then implement the target preview and safe undo.
+- Resume **BB-ORG-006** only after owner-approved roster/payroll transition
+  and notification-default semantics and the necessary delivery capability
+  are available. Preserve existing immutable periods and do not silently
+  reinterpret historical records.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the

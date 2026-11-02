@@ -1,23 +1,23 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 10:25 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-02 10:28 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent in the Butterbox Codespace
 - **Workstream:** Roadmap / Core; `copilot/finish-roadmap-for-app`
 - **Agent execution state:** Active at this checkpoint. The timestamp does not prove later execution; no background scheduling is configured.
-- **Current story:** `BB-ROSTER-009 — Roster approval workflow`
-- **Acceptance criteria:** Owner chooses direct or approval publication; reviewer sees changes; approval/rejection is scoped and audited.
-- **Phase:** Testing
-- **Current activity:** Preparing the verified feature commit and selecting the next ready Core Roadmap story.
-- **Progress since previous report:** All three acceptance criteria have passed, including a mobile owner/manager browser flow, accessible review, audited rejection, tenant scope, publication notification and shift acknowledgement. Independent review by another scoped owner, administrator or general manager is a documented design choice. Implementation remains local until the feature checkpoint is committed and pushed.
+- **Current story:** `BB-ROSTER-005 — Drag and drop roster changes`
+- **Acceptance criteria:** Preview identifies target date and worker; conflicts block or warn appropriately; a keyboard-accessible alternative exists; undo is offered.
+- **Phase:** Planning
+- **Current activity:** Tracing existing scoped draft editing, scheduling conflicts and immutable review snapshots before designing quick move/duplicate and undo.
+- **Progress since previous report:** `BB-ROSTER-009` passed all three criteria and was committed and pushed as `6fbdde15f41131ce15236bf20468b6ede23cd372`. `BB-ORG-006` is blocked pending owner-approved roster/payroll week-transition and notification-default semantics; email/push delivery is not yet implemented. No historical periods were changed.
 - **Testing policy in effect:** Targeted verification.
-- **Tests selected and actual results:** Roster-review pgTAP passed **67/67** on acceptance and **67/67** on replay; seven affected publication, conflict, tenant and audit files passed **290/290**. One authenticated concurrency integration passed, including simultaneous submissions/approvals, idempotency, edit contention and permission revocation. Focused Node passed **17/17**; five serial production-browser scenarios, mobile axe, changed-file ESLint, TypeScript and the split production build passed. The replay Auth helper existed only in a rolled-back fixture and remains absent afterward.
-- **Tests intentionally deferred:** Full pgTAP, Node, authenticated integration and browser suites were not run under the risk-based policy.
-- **Remaining verification risks:** Broader regression is required for workstream merge or release. Privileged business deletion can remove employment records; approved retention/deletion policy and hosted backups remain unverified. No compliance claim is made.
-- **Failing tests:** None in the latest focused runs. The first browser run found an acknowledgement accessible-name defect, fixed and verified by axe; a subsequent test selector conflicted with the Next.js route announcer and passed after the selector was corrected. Earlier fixture and replay setup errors were fixed and rerun.
-- **Blockers requiring owner intervention:** RULES-005 approved record retention/deletion and recovery policy; FOUND-001 credential assessment and rotation; FOUND-008 authorised staging restore target; SAAS-003 production/sample-data assessment. PAY-004 Xero is deferred pending explicit owner authorisation.
-- **Next concrete action:** Scan and commit the verified feature, push and verify the remote SHA, then select the next ready Core Roadmap story.
-- **Latest development commit:** `a98b1ad18abc69cf12f442e9a38db26028b46a58`
-- **Push outcome:** Documentation checkpoint `c52970ff777ea329bb9b18924cab42b0368c476a` was verified on the remote. The verified feature remains local until its checkpoint is pushed.
-- **Backlog:** 109 total; 47 Done, 0 In Progress, 5 Blocked, 57 Backlog
+- **Tests selected and actual results:** No `BB-ROSTER-005` tests run yet. For the completed roster-review feature, pgTAP passed **67/67** on each isolated project and **290/290** in seven affected files; one authenticated concurrency integration, **17/17** Node tests, five serial browser scenarios, mobile axe, ESLint, TypeScript and the split production build passed.
+- **Tests intentionally deferred:** Full pgTAP, Node, authenticated integration and browser suites were not run under the risk-based policy. Story-specific move, duplicate, undo, conflict, tenant and browser tests remain to be created.
+- **Remaining verification risks:** New quick changes must not mutate published shifts, bypass conflict policies or overwrite a concurrent edit. Broader regression is required for workstream merge or release. Privileged business deletion can remove employment records; approved retention/deletion policy and hosted backups remain unverified.
+- **Failing tests:** None in the latest focused runs. The previous story's initial fixture, replay setup, accessibility and browser-selector failures were corrected and rerun.
+- **Blockers requiring owner intervention:** ORG-006 roster/payroll week-transition and notification-default policy; RULES-005 approved record retention/deletion and recovery policy; FOUND-001 credential assessment and rotation; FOUND-008 authorised staging restore target; SAAS-003 production/sample-data assessment. PAY-004 Xero remains deferred pending explicit owner authorisation.
+- **Next concrete action:** Inspect draft shift edit and conflict APIs, determine a safe target-preview and undo design, then implement and test the database transaction.
+- **Latest development commit:** `6fbdde15f41131ce15236bf20468b6ede23cd372`
+- **Push outcome:** Feature checkpoint `6fbdde15f41131ce15236bf20468b6ede23cd372` was pushed and the remote SHA matched.
+- **Backlog:** 109 total; 47 Done, 1 In Progress, 6 Blocked, 55 Backlog
 
 Detailed criterion evidence and recovery steps are in `IMPLEMENTATION_PROGRESS.md`.
