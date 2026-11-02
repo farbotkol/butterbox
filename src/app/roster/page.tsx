@@ -13,9 +13,12 @@ import {
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
+  confirmShiftOfferClaimAction,
   deleteShiftAction,
   publishRosterAction,
+  sendShiftOfferAction,
   setShiftAcknowledgementRequirementAction,
+  withdrawShiftOfferAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { CopyRosterForm } from "@/components/copy-roster-form";
@@ -32,6 +35,16 @@ import { rosterOverlapConflicts } from "@/lib/roster-overlap-conflicts";
 import { collapsedRosterDepartments, rosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
+import {
+  defaultOfferExpiry,
+  hasShiftStarted,
+  ineligibilityLabels,
+  loadRosterShiftOffers,
+  MAX_OFFERABLE_SHIFTS,
+  responseLabels,
+  type ManagedShiftOffer,
+  type OfferCandidate,
+} from "@/lib/shift-offers";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
   addDays,
@@ -58,6 +71,7 @@ type RosterPageProps = {
     ack_requirement?: string;
     edit?: string;
     created?: string;
+    offer?: string;
   }>;
 };
 
@@ -83,7 +97,132 @@ const errorMessages: Record<string, string> = {
   acknowledgement: "We couldn't update the acknowledgement requirement. Check the draft, employee and your permissions, then try again.",
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
   "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
+  offer: "We couldn't update that shift offer. Check your permissions and try again.",
+  "offer-audience": "Choose at least one eligible team member to offer the shift to.",
+  "offer-expiry": "Choose an offer expiry in the future and before the shift starts.",
+  "offer-ineligible": "A selected team member is no longer eligible. Review the list and try again.",
+  "offer-exists": "This shift already has an open offer.",
+  "offer-shift": "Only upcoming published open shifts can be offered.",
+  "offer-filled": "This shift has already been filled by another confirmation.",
+  "offer-closed": "This offer is no longer open, or the shift has already started or been filled.",
+  "offer-claim": "Only a team member who claimed the shift can be confirmed.",
+  "offer-claim-unavailable": "That team member is no longer available or eligible, so they were not confirmed. The shift is still open.",
+  "offer-retry": "The roster changed while confirming. Reload and try again.",
+  "offer-unknown": "The server could not confirm the result. Reload the roster before trying again.",
 };
+
+const offerMessages: Record<string, string> = {
+  sent: "Shift offer sent. The shift stays open until you confirm a claim.",
+  withdrawn: "Shift offer withdrawn.",
+  confirmed: "Claim confirmed and the shift assigned.",
+};
+
+type OfferFormContext = { week: string; venueId: string; filterDepartment?: string; collapsed: string[] };
+
+function OfferContextFields({ context }: { context: OfferFormContext }) {
+  return (
+    <>
+      <input type="hidden" name="venue_id" value={context.venueId} />
+      <input type="hidden" name="week" value={context.week} />
+      {context.filterDepartment && <input type="hidden" name="filter_department" value={context.filterDepartment} />}
+      <CollapsedFields departments={context.collapsed} />
+    </>
+  );
+}
+
+function ShiftOfferPanel({ shiftId, label, startsAt, timezone, offer, candidates, employeeNames, context }: {
+  shiftId: string; label: string; startsAt: string; timezone: string;
+  offer?: ManagedShiftOffer; candidates?: OfferCandidate[];
+  employeeNames: Map<string, string>; context: OfferFormContext;
+}) {
+  const formatStamp = (value: string) => new Intl.DateTimeFormat("en-AU", {
+    timeZone: timezone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
+  }).format(new Date(value));
+  if (offer) {
+    return (
+      <section aria-label={`Offer for ${label}`} className="mt-2 rounded-lg border border-amber-200 bg-white p-3 text-xs">
+        <p className="font-semibold text-amber-900">
+          Offered to {offer.recipients.length} · sent <time dateTime={offer.created_at}>{formatStamp(offer.created_at)}</time>
+          {" · "}expires <time dateTime={offer.expires_at}>{formatStamp(offer.expires_at)}</time>
+        </p>
+        <ul className="mt-2 space-y-1.5">
+          {offer.recipients.map((recipient) => {
+            const name = employeeNames.get(recipient.employee_id) ?? "Team member";
+            return (
+              <li key={recipient.employee_id} className="flex flex-wrap items-center justify-between gap-2">
+                <span>
+                  <span className="font-medium text-ink">{name}</span>{" — "}
+                  {recipient.outcome === "unavailable" ? "Not confirmed: unavailable" : responseLabels[recipient.response]}
+                  {recipient.responded_at && (
+                    <> · <time dateTime={recipient.responded_at}>{formatStamp(recipient.responded_at)}</time></>
+                  )}
+                </span>
+                {recipient.response === "accepted" && !recipient.outcome && (
+                  <form action={confirmShiftOfferClaimAction}>
+                    <OfferContextFields context={context} />
+                    <input type="hidden" name="offer_id" value={offer.id} />
+                    <input type="hidden" name="employee_id" value={recipient.employee_id} />
+                    <button type="submit" aria-label={`Confirm ${name} for ${label}`}
+                      className="rounded bg-ocean px-2 py-1 font-semibold text-white hover:bg-ocean/90">
+                      Confirm
+                    </button>
+                  </form>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+        <form action={withdrawShiftOfferAction} className="mt-2">
+          <OfferContextFields context={context} />
+          <input type="hidden" name="offer_id" value={offer.id} />
+          <button type="submit" aria-label={`Withdraw offer for ${label}`}
+            className="rounded border border-amber-300 px-2 py-1 font-semibold text-amber-900 hover:bg-amber-50">
+            Withdraw offer
+          </button>
+        </form>
+      </section>
+    );
+  }
+  if (!candidates) return null;
+  const eligible = candidates.filter((candidate) => !candidate.ineligibility);
+  const expiryId = `offer-expiry-${shiftId}`;
+  return (
+    <details className="mt-2 rounded-lg border border-amber-200 bg-white text-xs">
+      <summary className="cursor-pointer px-3 py-2 font-semibold text-amber-900">Offer shift</summary>
+      <form action={sendShiftOfferAction} className="space-y-2 px-3 pb-3">
+        <OfferContextFields context={context} />
+        <input type="hidden" name="shift_id" value={shiftId} />
+        <fieldset>
+          <legend className="font-semibold text-ink">Invite eligible team members for {label}</legend>
+          {candidates.length === 0 && <p className="mt-1 text-muted">No active team members are linked to this department.</p>}
+          <ul className="mt-1 space-y-1">
+            {candidates.map((candidate) => (
+              <li key={candidate.employee_id}>
+                <label className={`flex items-center gap-2 ${candidate.ineligibility ? "text-muted" : "text-ink"}`}>
+                  <input type="checkbox" name="employee_id" value={candidate.employee_id}
+                    disabled={Boolean(candidate.ineligibility)} defaultChecked={!candidate.ineligibility} />
+                  <span>{candidate.employee_name}</span>
+                  {candidate.ineligibility && <span>· {ineligibilityLabels[candidate.ineligibility]}</span>}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </fieldset>
+        <div>
+          <label htmlFor={expiryId} className="block font-semibold text-ink">Offer expires</label>
+          <input id={expiryId} type="datetime-local" name="expires_at" required
+            defaultValue={formatLocalDateTime(defaultOfferExpiry(startsAt), timezone)}
+            max={formatLocalDateTime(startsAt, timezone)}
+            className="mt-1 rounded border border-line px-2 py-1" />
+        </div>
+        <button type="submit" disabled={eligible.length === 0}
+          className="rounded-lg bg-ocean px-3 py-2 font-semibold text-white hover:bg-ocean/90 disabled:opacity-50">
+          Send offer
+        </button>
+      </form>
+    </details>
+  );
+}
 
 const conflictMessages: Record<ShiftConflict, string> = {
   "invalid-duration": "Shift exceeds 24 hours; review availability manually",
@@ -379,6 +518,14 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   }
   const selectedDepartmentActive =
     departments.find((department) => department.id === selectedDepartment)?.active ?? false;
+  const offerableShiftIds = visibleShifts.filter((shift) => !shift.employee_id && shift.is_published &&
+    !hasShiftStarted(shift.starts_at) && canManageDepartment(shift.department_id) &&
+    departments.find((department) => department.id === shift.department_id)?.active)
+    .map((shift) => shift.id).slice(0, MAX_OFFERABLE_SHIFTS);
+  const rosterOffers = await loadRosterShiftOffers(
+    workspace.supabase, workspace.business.id, workspace.venue.id, offerableShiftIds,
+  );
+  const employeeNames = new Map((employeeRows ?? []).map((employee) => [employee.id, employee.name]));
   const editingShift = params.edit && selectedDepartment && canManageSelectedDepartment && selectedDepartmentActive
     ? visibleShifts.find((shift) =>
         shift.id === params.edit && shift.department_id === selectedDepartment && !shift.is_published)
@@ -489,7 +636,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         </div>
       </div>
 
-      {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement || copiedCount !== undefined) && (
+      {(errorMessage || params.saved || params.deleted || params.published || params.ack_requirement || copiedCount !== undefined ||
+        (params.offer && offerMessages[params.offer])) && (
         <p
           role={errorMessage ? "alert" : "status"}
           className={`mt-4 rounded-xl px-4 py-3 text-sm ${
@@ -502,6 +650,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             (copiedCount !== undefined
               ? copiedCount === 0 ? "No shifts were found in the selected source week."
                 : `${copiedCount} ${copiedCount === 1 ? "shift was" : "shifts were"} copied into this week's draft roster.`
+              : params.offer && offerMessages[params.offer]
+              ? offerMessages[params.offer]
               : params.ack_requirement
               ? "Acknowledgement requirement updated."
               : params.saved
@@ -926,6 +1076,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                         Acknowledgement required. Assign a worker or remove the requirement before publishing.
                       </p>
                     )}
+                    {offerableShiftIds.includes(shift.id) && (rosterOffers ? (
+                      <ShiftOfferPanel shiftId={shift.id}
+                        label={`open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)}`}
+                        startsAt={shift.starts_at} timezone={workspace.venue.timezone}
+                        offer={rosterOffers.offers.get(shift.id)} candidates={rosterOffers.candidates.get(shift.id)}
+                        employeeNames={employeeNames}
+                        context={{ week, venueId: workspace.venue.id, filterDepartment, collapsed }} />
+                    ) : (
+                      <p role="alert" className="mt-1 text-xs font-semibold text-red-800">Shift offer status unavailable.</p>
+                    ))}
                   </div>
                   <div className="flex items-center gap-3">
                     <span className="text-xs font-medium text-amber-800">Needs cover</span>

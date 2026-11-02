@@ -3685,6 +3685,107 @@ test("required shift acknowledgements stay scoped and survive later publications
   }
 });
 
+test("managers offer published open shifts to eligible staff and confirm one timestamped claim", async ({ page, browser }) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, venueId, departmentId, annId, benId, openShiftId] = Array.from({ length: 6 }, () => randomUUID());
+  const users = [];
+  let workerContext;
+  try {
+    for (const name of ["owner", "ann", "ben"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `offer-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Offer cafe ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Offer venue", timezone: "UTC", address: "1 Test Street",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[2], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: annId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[1], name: "Offer Ann", role_title: "Server" },
+      { id: benId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users[2], name: "Offer Ben", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: openShiftId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        role_title: "Cover service", starts_at: "2032-04-06T09:00:00Z", ends_at: "2032-04-06T12:00:00Z", is_published: true },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: benId,
+        role_title: "Ben service", starts_at: "2032-04-06T10:00:00Z", ends_at: "2032-04-06T14:00:00Z", is_published: true },
+    ])).error).toBeNull();
+
+    await signIn(page, `offer-owner-${suffix}@example.test`, password);
+    await page.goto(`/roster?week=2032-04-05&venue=${venueId}&department=${departmentId}`);
+    const openShifts = page.locator("#open-shifts");
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    const audience = openShifts.getByRole("group", { name: /Invite eligible team members for open shift Cover service/ });
+    await expect(audience.getByRole("checkbox", { name: /Offer Ann/ })).toBeChecked();
+    const ben = audience.getByRole("checkbox", { name: /Offer Ben/ });
+    await expect(ben).toBeDisabled();
+    await expect(audience.locator("label").filter({ hasText: "Offer Ben" })).toContainText("Already rostered at this time");
+    await openShifts.getByRole("button", { name: "Send offer" }).click();
+    await expect(page.locator("main").getByRole("status"))
+      .toHaveText("Shift offer sent. The shift stays open until you confirm a claim.");
+    const panel = openShifts.getByRole("region", { name: /Offer for open shift Cover service/ });
+    await expect(panel).toContainText("Offered to 1");
+    await expect(panel).toContainText("Offer Ann — Awaiting response");
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    const benPage = await workerContext.newPage();
+    await signIn(benPage, `offer-ben-${suffix}@example.test`, password);
+    await benPage.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
+    await expect(benPage.getByRole("region", { name: "Shift offers" })).toHaveCount(0);
+    await workerContext.close();
+
+    workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    const annPage = await workerContext.newPage();
+    await signIn(annPage, `offer-ann-${suffix}@example.test`, password);
+    await annPage.goto(`/my-schedule?week=2032-04-05&venue=${venueId}`);
+    const offers = annPage.getByRole("region", { name: "Shift offers" });
+    await expect(offers).toContainText("Cover service · Front of House");
+    expect(await annPage.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    await offers.getByRole("button", { name: /Claim Cover service shift/ }).click();
+    await expect(annPage.locator("main").getByRole("status"))
+      .toHaveText("Shift claimed. Your manager will confirm who gets the shift.");
+    await expect(offers).toContainText("Claimed — waiting for manager confirmation");
+    await expect(offers.getByRole("button", { name: /Claim Cover service shift/ })).toHaveCount(0);
+    const claim = await admin.from("shift_offer_recipients").select("response, responded_at, responded_by")
+      .eq("employee_id", annId).single();
+    expect(claim.error).toBeNull();
+    expect(claim.data.response).toBe("accepted");
+    expect(claim.data.responded_by).toBe(users[1]);
+    expect(Number.isNaN(Date.parse(claim.data.responded_at))).toBe(false);
+
+    await page.reload();
+    await expect(panel).toContainText("Offer Ann — Claimed");
+    await panel.getByRole("button", { name: /Confirm Offer Ann for open shift Cover service/ }).click();
+    await expect(page.locator("main").getByRole("status")).toHaveText("Claim confirmed and the shift assigned.");
+    await expect(openShifts.getByText("Cover service", { exact: true })).toHaveCount(0);
+    const assigned = await admin.from("shifts").select("employee_id").eq("id", openShiftId).single();
+    expect(assigned.error).toBeNull();
+    expect(assigned.data.employee_id).toBe(annId);
+
+    await annPage.reload();
+    await expect(offers).toContainText("Confirmed — this shift is yours");
+    await expect(annPage.getByRole("region", { name: "Weekly schedule" })).toContainText("Cover service");
+  } finally {
+    if (workerContext) await workerContext.close();
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("owners link shared workers and scoped rosters enforce cross-venue conflicts", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

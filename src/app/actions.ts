@@ -24,6 +24,7 @@ import {
 } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
+import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib/shift-offers";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
 import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage } from "@/lib/payroll-periods";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
@@ -2190,4 +2191,124 @@ export async function markRosterNotificationReadAction(formData: FormData) {
     redirect(`/my-schedule?${new URLSearchParams({ week: result.week_start, venue: result.venue_id })}`);
   }
   redirect(`${destination}&saved=read`);
+}
+
+async function shiftOfferRosterContext(formData: FormData, operation: string) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const week = text(formData, "week", 10);
+  const filterDepartment = text(formData, "filter_department", 36);
+  if (!venueIds || venueIds.length !== 1 || !/^\d{4}-\d{2}-\d{2}$/.test(week) ||
+    (filterDepartment && filterDepartment !== "all" && !uuidList(formData, "filter_department", 1))) {
+    console.error(`Invalid shift offer ${operation} request.`);
+    redirect("/roster?error=offer");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error(`Could not load the roster workspace for a shift offer ${operation}.`, { message: workspace.message });
+    redirect("/roster?error=offer");
+  }
+  const destination = `/roster?week=${encodeURIComponent(week)}&venue=${encodeURIComponent(workspace.venue.id)}${filterDepartment ? `&department=${encodeURIComponent(filterDepartment)}` : ""}${collapsedRosterQuery(formData)}`;
+  if (getWeekStart(week, workspace.venue.timezone) !== week) {
+    console.error(`Invalid roster week for a shift offer ${operation}.`);
+    redirect(`${destination}&error=offer#open-shifts`);
+  }
+  return { workspace, destination };
+}
+
+export async function sendShiftOfferAction(formData: FormData) {
+  const { workspace, destination } = await shiftOfferRosterContext(formData, "send");
+  const shiftIds = uuidList(formData, "shift_id", 1);
+  const employeeIds = uuidList(formData, "employee_id", 200);
+  const expiresAt = localDateTimeAsUtc(text(formData, "expires_at", 16), workspace.venue.timezone);
+  if (!shiftIds || shiftIds.length !== 1 || !employeeIds || employeeIds.length === 0) {
+    redirect(`${destination}&error=offer-audience#open-shifts`);
+  }
+  if (!expiresAt) redirect(`${destination}&error=offer-expiry#open-shifts`);
+  const { error } = await workspace.supabase.rpc("create_shift_offer", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_shift_id: shiftIds[0],
+    p_employee_ids: [...new Set(employeeIds)],
+    p_expires_at: expiresAt,
+  });
+  if (error) {
+    console.error("Could not send the shift offer.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${offerFailureCode(error.message)}#open-shifts`);
+  }
+  revalidatePath("/roster");
+  revalidatePath("/my-schedule");
+  redirect(`${destination}&offer=sent#open-shifts`);
+}
+
+export async function withdrawShiftOfferAction(formData: FormData) {
+  const { workspace, destination } = await shiftOfferRosterContext(formData, "withdrawal");
+  const offerIds = uuidList(formData, "offer_id", 1);
+  if (!offerIds || offerIds.length !== 1) redirect(`${destination}&error=offer#open-shifts`);
+  const { error } = await workspace.supabase.rpc("withdraw_shift_offer", { p_offer_id: offerIds[0] });
+  if (error) {
+    console.error("Could not withdraw the shift offer.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=${offerFailureCode(error.message)}#open-shifts`);
+  }
+  revalidatePath("/roster");
+  revalidatePath("/my-schedule");
+  redirect(`${destination}&offer=withdrawn#open-shifts`);
+}
+
+export async function confirmShiftOfferClaimAction(formData: FormData) {
+  const { workspace, destination } = await shiftOfferRosterContext(formData, "confirmation");
+  const offerIds = uuidList(formData, "offer_id", 1);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  if (!offerIds || offerIds.length !== 1 || !employeeIds || employeeIds.length !== 1) {
+    redirect(`${destination}&error=offer#open-shifts`);
+  }
+  const { data, error } = await workspace.supabase.rpc("confirm_shift_offer_claim", {
+    p_offer_id: offerIds[0],
+    p_employee_id: employeeIds[0],
+  });
+  if (error || (data !== "confirmed" && data !== "unavailable")) {
+    console.error("Could not confirm the shift claim.", {
+      code: error?.code,
+      message: error?.message ?? "The server returned an invalid confirmation result.",
+    });
+    redirect(`${destination}&error=${error ? offerFailureCode(error.message) : "offer-unknown"}#open-shifts`);
+  }
+  revalidatePath("/roster");
+  revalidatePath("/my-schedule");
+  redirect(`${destination}&${data === "confirmed" ? "offer=confirmed" : "error=offer-claim-unavailable"}#open-shifts`);
+}
+
+export async function respondShiftOfferAction(formData: FormData) {
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const offerIds = uuidList(formData, "offer_id", 1);
+  const week = text(formData, "week", 10);
+  const response = text(formData, "response", 7);
+  if (!venueIds || venueIds.length !== 1 || !offerIds || offerIds.length !== 1 ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(week) || !["accept", "decline"].includes(response)) {
+    console.error("Invalid shift offer response request.");
+    redirect("/my-schedule?error=offer");
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the schedule workspace for a shift offer response.", { message: workspace.message });
+    redirect("/my-schedule?error=offer");
+  }
+  const destination = `/my-schedule?${new URLSearchParams({ week, venue: workspace.venue.id })}`;
+  const { data, error } = await workspace.supabase.rpc("respond_shift_offer", {
+    p_offer_id: offerIds[0],
+    p_response: response,
+  });
+  if (error || typeof data !== "string" || Number.isNaN(Date.parse(data))) {
+    console.error("Could not record the shift offer response.", {
+      code: error?.code,
+      message: error?.message ?? "The server returned an invalid response time.",
+    });
+    redirect(`${destination}&error=${error ? responseFailureCode(error.message) : "offer-unknown"}#shift-offers`);
+  }
+  revalidatePath("/my-schedule");
+  revalidatePath("/roster");
+  redirect(`${destination}&offer=${response === "accept" ? "accepted" : "declined"}#shift-offers`);
 }

@@ -3,8 +3,14 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **40**. In Progress: **1**.
-  Blocked: **4**. Not started (Backlog): **64**.
+  BB-PAYRULES stories). Verified Done: **43**. In Progress: **1**.
+  Blocked: **4**. Not started (Backlog): **61**.
+- BB-SHIFTS-001/002/003 (open-shift offers, responses and transactional
+  confirmation) are Done under the targeted testing policy: 58 new pgTAP
+  assertions plus five neighbouring rostering suites, one lock-gated
+  concurrency/tenant integration, five Node tests, and four production-browser
+  scenarios (one new, three neighbouring) with a production build. No full
+  regression was run for this story; see the story section for deferred suites.
 - BB-FOUND-008 (resilience and operations) has a verified partial checkpoint
   and is **Blocked**, not Done: an explicitly authorised isolated hosted
   staging project and backup destination are unavailable. Implemented readiness,
@@ -361,6 +367,8 @@
 
 ## Current story
 
+- **BB-SHIFTS-001/002/003 — Open-shift offers** are Done (evidence below).
+  Next: BB-COMMS-002 offer/approval notifications, then BB-SHIFTS-004 swaps.
 - **BB-FOUND-007 — Audit sensitive actions** is Done (evidence below).
   Commit `012e07ccb54cd99331d0b861b6a2e9fb40288390` was pushed and its remote
   SHA matched.
@@ -516,6 +524,56 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-SHIFTS-001/002/003 — Open-shift offers, responses and confirmation (Done)
+
+Design: an accept is a *claim*; the shift stays open until an authorised
+manager confirms one claim, which rechecks the latest eligibility under locks.
+Offers apply only to published, upcoming open shifts (the existing published
+shift protections stay in force; confirmation is the only sanctioned
+post-publish assignment and does not create a new publication version).
+Offer and recipient rows are the append-only audit trail; actor ids are plain
+UUIDs (like `sensitive_action_audit`) so audit history survives account removal.
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| SHIFTS-001.1 Eligibility checks venue, role, availability and conflicts | `shift_offer_ineligibility` checks active venue/department membership, active and qualified role, `employee_available_for_shift` and `shared_worker_has_overlap`; `list_shift_offer_candidates` shows reasons; `create_shift_offer` rejects any ineligible selection. Roster UI disables ineligible candidates with the reason. | pgTAP passed each ineligibility reason and rejection. Browser: overlapping worker shown disabled as "Already rostered at this time"; eligible worker preselected. | Pass |
+| SHIFTS-001.2 Selected audience and send are auditable | `shift_offers` (creator, `clock_timestamp` send, expiry) and `shift_offer_recipients` (invited audience); `protect_shift_offer_history` makes identity, audience, responses and outcomes immutable; select-only RLS for scoped managers. | pgTAP passed audit rows, immutability, out-of-scope FOH/BOH denial and cross-tenant reads. Integration: outsider and employee sends denied; concurrent sends create exactly one open offer. | Pass |
+| SHIFTS-001.3 Shift remains open until confirmed | Claims do not touch `shifts.employee_id`; only `confirm_shift_offer_claim` assigns. | pgTAP and integration: shift unassigned after two claims. Browser: shift remains under Open shifts until Confirm. | Pass |
+| SHIFTS-002.1 Employee only sees eligible published offers | Security-definer `list_my_shift_offers` returns only the caller's own linked recipient rows for open, unexpired offers on still-open published shifts where they remain eligible (plus answered/outcome history). | pgTAP passed uninvited-employee, other-tenant, other-recipient, expired and withdrawn exclusions (the eligibility filter itself is implemented but not separately asserted). Browser: non-invited worker sees no offers section; invited worker sees the offer at 375px without overflow. | Pass |
+| SHIFTS-002.2 Response is timestamped | `respond_shift_offer` records `responded_at` (server clock) and `responded_by`; a single response only. | pgTAP passed timestamps and second-response refusal. Browser verified accepted response, actor and timestamp in the database and status text. | Pass |
+| SHIFTS-002.3 Expired offers cannot be accepted | Expiry must be future and no later than shift start; acceptance after expiry, withdrawal, fill or start is refused. | pgTAP passed expired and withdrawn acceptance refusals and invalid responses. | Pass |
+| SHIFTS-003.1 Concurrent claims cannot assign multiple employees | Confirmation takes shared-link, membership, shared-worker and employee locks, then offer/shift/employee row locks; partial unique index allows one open offer per shift. | Integration held the offer row lock while two managers confirmed different claimants; both waited, then exactly one returned `confirmed` and the other "Shift offer has already been filled"; the shift has one employee. | Pass |
+| SHIFTS-003.2 Confirmation checks latest availability | Eligibility is re-evaluated after locking; an ineligible claimant receives outcome `unavailable` and the shift stays open. | pgTAP passed claimant made unavailable after claiming → `unavailable`, shift still open, another claimant confirmable. | Pass |
+| SHIFTS-003.3 Losers receive clear status | Outcomes: claimant `confirmed`, other accepted `not_selected`, others `closed`; shown on My schedule as "Confirmed — this shift is yours", "Filled by another team member", "Not confirmed — you are no longer available" or "Offer closed". | Integration verified winner/loser outcomes through the employee RPC; browser verified the winner's confirmed status and weekly schedule entry. | Pass |
+
+Files: `supabase/migrations/20261103030000_open_shift_offers.sql`,
+`supabase/tests/database/open_shift_offers.test.sql`, `src/lib/shift-offers.ts`,
+`src/app/actions.ts`, `src/app/roster/page.tsx`, `src/app/my-schedule/page.tsx`,
+`tests/shift-offers.test.mjs`, `tests/shift-offers-concurrency.integration.test.mjs`,
+`scripts/test-tenant-isolation.mjs`, `tests/e2e/auth.spec.mjs` and tracking files.
+
+Tests selected (targeted policy) and actual results, all on the isolated
+`butterbox-acceptance` project (API 55421, DB 55422):
+- pgTAP `open_shift_offers` **58/58**; neighbouring rostering suites
+  `shift_acknowledgements` 59, `roster_publication_versions` 47,
+  `manual_assignment_eligibility` 37, `roster_conflict_policies` 53,
+  `shared_worker_conflicts` 26 — all pass (shared shift/eligibility objects).
+- Integration `shift-offers-concurrency` **1/1** (HTTP tenant/role denial,
+  concurrent send, lock-gated concurrent confirmation, loser status).
+- Node `tests/shift-offers.test.mjs` **5/5**; `tsc --noEmit` clean; ESLint on
+  changed files clean.
+- Browser (low-memory, split production build succeeded): new offer scenario
+  **1/1**; neighbouring roster/my-schedule scenarios (acknowledgements, roster
+  copy, WCAG/keyboard smoke) **3/3**.
+
+Intentionally deferred: full pgTAP suite, other integrations, other Node tests
+and the remaining browser scenarios (no shared authorization, identity or
+tenant-context helpers changed). Remaining risks: offers do not yet produce
+notification-centre items (BB-COMMS-002); a confirmed assignment after
+publication does not create a new roster publication version; offers are not
+automatically expired by a job (expiry is enforced at read/response time).
+Broader regression is recommended at the next release-candidate checkpoint.
 
 ### BB-FOUND-007 — Audit sensitive actions (Done)
 
@@ -1554,11 +1612,10 @@ not yet run remotely.
 
 ## Next story
 
-- Next independent ready workflow: **BB-SHIFTS-001 — Offer open shift**.
-  Read every criterion and reuse current venue/role/availability/conflict
-  eligibility helpers, preserving the shift as open until a separately
-  confirmed claim. Follow with BB-SHIFTS-002/003 before completing
-  offer notifications under BB-COMMS-002.
+- Next: complete **BB-COMMS-002** by adding shift-offer (and outcome) and
+  approval notifications to the notification centre with read state, deep
+  links to `/my-schedule#shift-offers` and deduplication. Then
+  **BB-SHIFTS-004 — Shift swaps**, reusing the offer eligibility function.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
