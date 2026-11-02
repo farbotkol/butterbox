@@ -423,13 +423,18 @@
 
 ## Current story
 
-- **BB-RULES-001 — Employment rule metadata** is In Progress, in planning.
+- **BB-RULES-001 — Employment rule metadata** is In Progress, in coding.
   Its P0 criteria require maintainable employment basis and award/contract
   references, explicit unknown classifications, and effective-dated changes.
-  Next inspect existing employee schema, editing workflow, tenant permissions
-  and tests; design the smallest compatible history model before coding.
-  This core story is a prerequisite for the separate Award Central workstream,
-  which must remain isolated. No criterion has been verified yet.
+  Existing `employees.employment_type` is mutable, has a legacy casual default
+  and is edited by scoped managers; it cannot establish a classification,
+  award or effective date retroactively. Add append-only scoped metadata
+  history, without inventing backdated facts, and keep the legacy edit
+  compatible by recording an effective-today entry when its basis is changed.
+  Date-aware reads must select the active version, including future changes,
+  and optimistic revisions must protect the new editor from stale submissions.
+  The separate Award Central workstream remains isolated. No criterion has
+  been verified yet.
 - **BB-SHIFTS-004 — Request shift swap** is Done. Feature commit
   `de39307dcfed4b121ee8417d93622b408c0a86c9` was pushed and the remote SHA
   matched. The recovered migration and initial test had
@@ -1704,10 +1709,10 @@ not yet run remotely.
 
 ## Next story
 
-- Continue **BB-RULES-001 — Employment rule metadata**: inspect existing
-  employee schema, editing workflow, tenant permissions and tests, then
-  implement and verify an appropriately scoped effective-dated history. Do
-  not modify the Award Central branch or imply payroll compliance.
+- Continue **BB-RULES-001 — Employment rule metadata**: implement the
+  tenant-scoped history, compatible profile edits and dated UI, then run
+  targeted pgTAP, tenant/concurrency, unit and browser tests. Do not modify the
+  Award Central branch or imply payroll compliance.
 - Resume **BB-FOUND-008** only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Approve the proposed retention/recovery targets, rehearse the
