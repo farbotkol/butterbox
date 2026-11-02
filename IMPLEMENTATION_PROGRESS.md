@@ -3,8 +3,18 @@
 ## Execution summary
 
 - Total stories: **109** (the owner's merged PR #2 added 22 Award Central
-  BB-PAYRULES stories). Verified Done: **38**. In Progress: **2**.
+  BB-PAYRULES stories). Verified Done: **39**. In Progress: **1**.
   Blocked: **3**. Not started (Backlog): **66**.
+- BB-SAAS-004 (performance and accessibility) is Done. Axe WCAG-oriented,
+  keyboard and accessible-landmark/status smoke checks pass across signed-out,
+  owner and mobile employee core pages. The final production 25-worker/7-day
+  benchmark passed: roster median **890 ms** (budget 3,000 ms), publish
+  **828 ms** (5,000 ms), mobile schedule median **373 ms** (2,000 ms).
+  Full serialized browser regression **55/55**, Node **136** passed
+  (19 integrations skipped in the unit-only invocation), ESLint, TypeScript
+  and split production compile/generate passed. No database or authorisation
+  changes; prior 2,085-assertion pgTAP and 19-integration results remain the
+  database baseline, not newly executed results. Disk remained above 29 GiB.
 - BB-ROSTER-008 (publish and notify) is Done. With invitations available, a
   publication to an uninvited worker stays pending. The worker receives exactly
   one unread in-app update after accepting, and the manager warning links to
@@ -34,7 +44,7 @@
   BB-PEOPLE-006, BB-ROSTER-001, BB-ROSTER-002, BB-ROSTER-003, BB-ROSTER-004, BB-ROSTER-006,
   BB-ROSTER-007, BB-ROSTER-008, BB-ROSTER-010, BB-ATTEND-001, BB-ATTEND-002, BB-ATTEND-003,
   BB-ATTEND-005, BB-ATTEND-007, BB-TIME-001, BB-TIME-002, BB-TIME-003, BB-TIME-004 and
-  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002 and BB-PAY-003.
+  BB-TIME-005, BB-TIME-006, BB-PAY-001, BB-PAY-002, BB-PAY-003 and BB-SAAS-004.
 - BB-ORG-005's remaining approval/export attribution criterion is now verified,
   without recreating the existing venue workflow. The authenticated integration
   finalises and exports Sydney and Perth separately for linked worker profiles;
@@ -333,6 +343,10 @@
 
 ## Current story
 
+- **BB-SAAS-004 — Performance and accessibility** is Done (evidence below).
+  Next ready P0: **BB-FOUND-007 — Audit sensitive actions**. BB-COMMS-002's
+  remaining offer notifications require an offer workflow first; do not mark
+  it Done based only on roster publication updates.
 - **BB-FOUND-005 — Invite and onboard users** is Done (evidence below). The
   former cross-business rejection was removed by a new migration now that
   BB-FOUND-006 resolves the business per request. Manager-page permission
@@ -341,8 +355,7 @@
   `540ed3f3e650f83e3a17c6dfe88bbfc2702e812f`; the remote SHA matched.
 - **BB-ROSTER-008 — Publish and notify** is Done. The final open criterion
   (ROSTER-008.3) is verified for invited staff. In-app delivery is the
-  notification channel; email/push belongs to BB-COMMS-003. Next:
-  **BB-SAAS-004 — Performance and accessibility**.
+  notification channel; email/push belongs to BB-COMMS-003.
 - **BB-FOUND-006 — Switch between business memberships** is Done (evidence
   below), committed as `92f4841d21c89b4bfbf3e3c5d7bbf678aac70bc3`; the remote
   SHA matched.
@@ -477,6 +490,32 @@
 - **BB-ROSTER-003 — Unassigned open shift** is Done: all four criteria are
   covered below. Role and availability restrictions are opt-in to preserve
   existing venue behaviour; active membership and overlap checks always apply.
+
+### BB-SAAS-004 — Performance and accessibility (Done)
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| SAAS-004.1 Core pages pass WCAG-oriented checks, keyboard controls and screen-reader smoke tests | Added a keyboard-visible skip link and focusable main landmark, corrected low-contrast brand/dashboard text and CSS link colour precedence, and preserved visible accessible brand names. Exact axe dependency is test-only. | Production Chromium ran axe WCAG 2.0/2.1 A/AA and 2.2 AA checks on login, signup, reset request, 11 owner pages and five employee pages at 375px. No violations; document language/title, one main landmark and one h1 verified. Keyboard-only sign-in, skip-to-main, roster publication and notification read passed; mobile employee pages have no horizontal page scroll. These are automated accessibility-tree/live-region smoke checks, not a manual assistive-device study or compliance certification. | Pass |
+| SAAS-004.2 Defined benchmark tested with 25 employees/7 days | Documented production-build budgets and seeded 25 workers with seven drafts each, verifying all 175 drafts, publication persistence and the employee's seven shifts. | Final full regression measured roster loads [993, 890, 771] ms (median 890 <= 3,000), publish 828 <= 5,000 ms, mobile schedule loads [400, 368, 373] ms (median 373 <= 2,000). Mobile schedule excludes other employees. | Pass |
+| SAAS-004.3 Loading and error states are clear | Main navigation uses Next's `useLinkStatus` to announce a pending transition without replacing server-rendered forms. Root and global error boundaries give safe messages and retry; missing-page UI provides a dashboard link. Root page errors focus their heading and show only a reference digest, never raw exception text. | Production browser held a real RSC navigation and verified the loading status appears and clears. Simulated a 500 action response, verified focused/axe-clean error UI and unchanged draft, removed the failure and retried successfully to publish. Signed-out and signed-in unknown URLs returned 404 with accessible recovery. | Pass |
+
+Files: `src/components/app-shell.tsx`, `src/components/main-navigation.tsx`,
+`src/components/auth-layout.tsx`, `src/components/brand-lockup.tsx`,
+`src/app/globals.css`, `src/app/page.tsx`, `src/app/error.tsx`,
+`src/app/global-error.tsx`, `src/app/not-found.tsx`,
+`tests/e2e/auth.spec.mjs`, dependency manifests, `README.md` and tracking.
+The first full run passed 50/55: a proposed root `loading.tsx` caused
+server-streamed forms to remain hidden without JavaScript, and five existing
+workflows timed out. A Playwright API trace isolated the no-JavaScript roster
+form lookup. Removed the root loading boundary and used the documented
+navigation pending hook instead; idle links expose no status role. All eight
+affected/new scenarios then passed, followed by the full **55/55** production
+regression. No legitimate assertions were removed or weakened. Node **136**
+passed with 19 separately configured integrations skipped in this unit-only
+run; full ESLint, TypeScript and split production build passed. No SQL or
+server authorisation changed, so no database reset or new pgTAP/integration
+run was required for this UI-only checkpoint. Free disk remained above 29 GiB;
+no volumes, databases, worktrees or caches were deleted.
 
 ### BB-FOUND-006 — Switch between business memberships (Done)
 
@@ -1409,7 +1448,7 @@ not yet run remotely.
 - The repository instructions checkpoint `08fac01` was pushed to the requested
   feature branch. This conflict-policy checkpoint builds on it; inspect Git
   status and the remote SHA during recovery rather than relying on older notes.
-- Provider payroll delivery, cross-business employee invitation and email/push
+- Provider payroll delivery and email/push
   notification remain incomplete. The historical credential
   findings still require owner assessment and any approved rotation/history
   handling.
@@ -1421,13 +1460,16 @@ not yet run remotely.
 
 ## Next story
 
-- Next ready implementation: **BB-SAAS-004 — Performance and accessibility**
-  (P0, In Progress), then BB-COMMS-002 and BB-FOUND-007.
+- Next ready implementation: **BB-FOUND-007 — Audit sensitive actions** (P0).
+  Reuse the existing append-only domain audit records, add a safely scoped
+  filterable owner view and fill missing staffing/pay audit coverage.
+  BB-COMMS-002 remains In Progress until offer and approval notifications are
+  implemented and tested, with their workflow prerequisites completed first.
   **BB-PAY-004 — Xero Payroll adapter** is Blocked pending secure OAuth
   client/test-organisation access. Generic CSV and mapping destinations do
   not enable provider delivery.
-  Completing invitations for existing other-business users requires
-  **BB-FOUND-006** safe per-request switching. Revisit BB-SAAS-003 only after
+  Cross-business invitations and per-request switching are complete.
+  Revisit BB-SAAS-003 only after
   production isolation and historical sample data can be verified safely.
 - The latest payroll migrations have been tested only on the isolated stack. The
   pre-existing Butterbox development stack and production were not changed.

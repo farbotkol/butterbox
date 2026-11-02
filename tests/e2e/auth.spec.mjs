@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 import {
   combineChunks,
@@ -6696,6 +6697,339 @@ test("staff invitations deliver separate-browser email and join only the intende
     const recipient = await findUser(recipientEmail);
     if (recipient) users.push(recipient.id);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+const wcagTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
+function findingsMustBeEmpty(findings) {
+  expect(findings, findings.join("\n")).toEqual([]);
+}
+
+async function accessibilityFindings(page, label) {
+  const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
+  const findings = results.violations.map((violation) =>
+    `${label}: ${violation.id} (${violation.impact}) ${violation.nodes.slice(0, 3)
+      .map((node) => `${node.target.join(" ")} [${node.failureSummary?.replace(/\s+/g, " ").slice(0, 220)}]`)
+      .join(", ")}`);
+  expect(await page.locator("html").getAttribute("lang")).toBe("en-AU");
+  expect((await page.title()).length).toBeGreaterThan(0);
+  const mains = await page.getByRole("main").count();
+  const headings = await page.getByRole("heading", { level: 1 }).count();
+  if (mains !== 1) findings.push(`${label}: expected one main landmark, found ${mains}`);
+  if (headings !== 1) findings.push(`${label}: expected one level-one heading, found ${headings}`);
+  return findings;
+}
+
+test("core pages pass WCAG checks, keyboard controls and screen-reader smoke tests", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const ownerEmail = `a11y-owner-${suffix}@example.test`;
+  const workerEmail = `a11y-worker-${suffix}@example.test`;
+  const [businessId, venueId, departmentId, employeeId] = Array.from({ length: 4 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const findings = [];
+  try {
+    for (const email of [ownerEmail, workerEmail]) {
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Accessible cafe ${suffix}` })).error)
+      .toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Accessible venue", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      auth_user_id: users[1], name: "Avery Access", email: workerEmail, role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: employeeId,
+      role_title: "Accessible service", starts_at: "2032-03-15T22:00:00Z", ends_at: "2032-03-16T02:00:00Z",
+      is_published: false,
+    })).error).toBeNull();
+
+    for (const path of ["/login", "/signup", "/forgot-password"]) {
+      await page.goto(path);
+      findings.push(...await accessibilityFindings(page, path));
+    }
+
+    await page.goto("/login");
+    await page.keyboard.press("Tab");
+    for (let index = 0; index < 8; index += 1) {
+      if (await page.getByLabel("Email address").evaluate((element) => element === document.activeElement)) break;
+      await page.keyboard.press("Tab");
+    }
+    await expect(page.getByLabel("Email address")).toBeFocused();
+    await page.keyboard.type(ownerEmail);
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Forgot password?" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#password")).toBeFocused();
+    await page.keyboard.type(password);
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+
+    await page.keyboard.press("Tab");
+    const skip = page.getByRole("link", { name: "Skip to main content" });
+    await expect(skip).toBeFocused();
+    await expect(skip).toBeVisible();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("#main-content")).toBeFocused();
+
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    const ownerPages = [
+      "/", roster, `/people?venue=${venueId}`, `/timesheets?venue=${venueId}`, `/work-time?venue=${venueId}`,
+      `/availability?venue=${venueId}`, `/attendance?venue=${venueId}`, `/notifications?venue=${venueId}`,
+      "/settings/organisation", "/settings/permissions", "/settings/payroll",
+    ];
+    for (const path of ownerPages) {
+      await page.goto(path);
+      await expect(page.getByRole("main")).toBeVisible();
+      findings.push(...await accessibilityFindings(page, `owner ${path}`));
+    }
+
+    await page.goto(roster);
+    const publish = page.getByRole("button", { name: "Publish this department" });
+    await publish.focus();
+    await expect(publish).toBeFocused();
+    await page.keyboard.press("Enter");
+    const published = page.getByRole("main").getByRole("status").filter({ hasText: "roster published" });
+    await expect(published).toHaveText("Front of House roster published.");
+    findings.push(...await accessibilityFindings(page, "owner roster after publishing"));
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, workerEmail, password);
+    await expect(workerPage.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+    const workerPages = [
+      "/", `/my-schedule?week=2032-03-15&venue=${venueId}`, `/notifications?venue=${venueId}`,
+      `/attendance?venue=${venueId}`, `/availability?venue=${venueId}`,
+    ];
+    for (const path of workerPages) {
+      await workerPage.goto(path);
+      await expect(workerPage.getByRole("main")).toBeVisible();
+      findings.push(...await accessibilityFindings(workerPage, `employee mobile ${path}`));
+      expect(await workerPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+        `${path} must not scroll horizontally on a phone`).toBe(true);
+    }
+
+    await workerPage.goto(`/notifications?venue=${venueId}`);
+    const markRead = workerPage.getByRole("button", { name: "Mark as read" });
+    await markRead.focus();
+    await workerPage.keyboard.press("Enter");
+    await expect(workerPage.getByRole("main").getByRole("status")).toHaveText("Notification marked as read.");
+    await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
+    await expect(workerPage.getByRole("region", { name: "Weekly schedule" })).toContainText("Accessible service");
+
+    expect(findings, findings.join("\n")).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+function median(values) {
+  const sorted = [...values].sort((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+test("a 25 employee by 7 day roster meets the documented performance benchmark", async ({ page, browser }) => {
+  test.setTimeout(300_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const ownerEmail = `bench-owner-${suffix}@example.test`;
+  const workerEmail = `bench-worker-${suffix}@example.test`;
+  const [businessId, venueId, departmentId] = Array.from({ length: 3 }, () => randomUUID());
+  const employeeIds = Array.from({ length: 25 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const budget = { rosterLoadMs: 3_000, publishMs: 5_000, mobileScheduleMs: 2_000 };
+  try {
+    for (const email of [ownerEmail, workerEmail]) {
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Benchmark cafe ${suffix}` })).error)
+      .toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Benchmark venue", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert(employeeIds.map((id, index) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      auth_user_id: index === 0 ? users[1] : null,
+      name: `Bench Worker ${String(index + 1).padStart(2, "0")}`, role_title: "Server",
+    })))).error).toBeNull();
+    const shifts = employeeIds.flatMap((employeeId) => Array.from({ length: 7 }, (_, day) => ({
+      business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: employeeId,
+      role_title: "Benchmark service", is_published: false,
+      starts_at: `2032-03-${15 + day}T00:00:00Z`, ends_at: `2032-03-${15 + day}T06:00:00Z`,
+    })));
+    expect(shifts).toHaveLength(175);
+    expect((await admin.from("shifts").insert(shifts)).error).toBeNull();
+
+    await signIn(page, ownerEmail, password);
+    await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+    const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
+    const drafts = page.getByRole("link", { name: /^Edit Bench Worker \d+ shift$/ });
+    const rosterLoads = [];
+    for (let run = 0; run < 3; run += 1) {
+      const started = Date.now();
+      await page.goto(roster);
+      await expect(drafts).toHaveCount(175);
+      rosterLoads.push(Date.now() - started);
+    }
+
+    const publishStarted = Date.now();
+    await page.getByRole("button", { name: "Publish this department" }).click();
+    await expect(page.getByRole("main").getByRole("status").filter({ hasText: "roster published" }))
+      .toHaveText("Front of House roster published.");
+    await expect(drafts).toHaveCount(0);
+    const publishMs = Date.now() - publishStarted;
+    const published = await admin.from("shifts").select("id", { count: "exact", head: true })
+      .eq("business_id", businessId).eq("is_published", true);
+    expect(published.error).toBeNull();
+    expect(published.count).toBe(175);
+
+    const workerContext = await browser.newContext({ baseURL: appUrl, viewport: { width: 375, height: 812 } });
+    contexts.push(workerContext);
+    const workerPage = await workerContext.newPage();
+    await signIn(workerPage, workerEmail, password);
+    await expect(workerPage.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+    const scheduleLoads = [];
+    const schedule = workerPage.getByRole("region", { name: "Weekly schedule" });
+    for (let run = 0; run < 3; run += 1) {
+      const started = Date.now();
+      await workerPage.goto(`/my-schedule?week=2032-03-15&venue=${venueId}`);
+      await expect(schedule.getByText("Benchmark service")).toHaveCount(7);
+      scheduleLoads.push(Date.now() - started);
+    }
+    expect(await workerPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await expect(schedule).not.toContainText("Bench Worker 02");
+
+    const result = { rosterLoadMs: median(rosterLoads), publishMs, mobileScheduleMs: median(scheduleLoads) };
+    test.info().annotations.push({ type: "benchmark", description: JSON.stringify({ ...result, rosterLoads, scheduleLoads }) });
+    console.log(`25x7 benchmark ${JSON.stringify({ ...result, rosterLoads, scheduleLoads, budget })}`);
+    for (const [name, value] of Object.entries(result)) {
+      expect(value, `${name} must stay within ${budget[name]} ms`).toBeLessThanOrEqual(budget[name]);
+    }
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("loading, failure and missing-page states are announced and recoverable", async ({ page }) => {
+  test.setTimeout(180_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const email = `states-owner-${suffix}@example.test`;
+  const [businessId, venueId, departmentId, employeeId, shiftId] = Array.from({ length: 5 }, () => randomUUID());
+  let userId;
+  try {
+    const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+    expect(created.error).toBeNull();
+    userId = created.data.user.id;
+    expect((await admin.from("businesses").insert({ id: businessId, name: `States cafe ${suffix}` })).error)
+      .toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "States venue", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({ business_id: businessId, user_id: userId, role: "owner" }))
+      .error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: "Stella States", role_title: "Server",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      id: shiftId, business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: employeeId,
+      role_title: "State service", starts_at: "2032-03-15T00:00:00Z", ends_at: "2032-03-15T06:00:00Z",
+      is_published: false,
+    })).error).toBeNull();
+
+    const signedOutMissing = await page.goto("/missing-butterbox-page");
+    expect(signedOutMissing.status()).toBe(404);
+    await expect(page.getByRole("heading", { level: 1, name: "Page not found" })).toBeVisible();
+    findingsMustBeEmpty(await accessibilityFindings(page, "not found"));
+
+    await signIn(page, email, password);
+    await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+    const missing = await page.goto("/missing-butterbox-page");
+    expect(missing.status()).toBe(404);
+    await page.getByRole("link", { name: "Go to dashboard" }).click();
+    await expect(page.getByRole("navigation", { name: "Main navigation" })).toBeVisible();
+
+    let releaseNavigation;
+    const navigationHeld = new Promise((resolve) => { releaseNavigation = resolve; });
+    await page.route("**/roster**", async (route) => {
+      const headers = route.request().headers();
+      if (headers.rsc === "1" && !headers["next-router-prefetch"]) await navigationHeld;
+      await route.continue();
+    });
+    await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Rostering" }).click();
+    const loading = page.getByRole("status").filter({ hasText: "Loading…" });
+    await expect(loading).toBeVisible();
+    releaseNavigation();
+    await expect(page.getByRole("heading", { name: "Team roster" })).toBeVisible();
+    await expect(loading).toHaveCount(0);
+    await page.unroute("**/roster**");
+
+    await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    const publish = page.getByRole("button", { name: "Publish this department" });
+    await expect(publish).toBeVisible();
+    await page.route("**/roster**", async (route) => {
+      if (route.request().method() === "POST" && route.request().headers()["next-action"]) {
+        await route.fulfill({ status: 500, contentType: "text/plain", body: "Simulated outage" });
+      } else {
+        await route.continue();
+      }
+    });
+    await publish.click();
+    const failure = page.getByRole("alert").filter({ hasText: "Something went wrong" });
+    await expect(failure).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Something went wrong" })).toBeFocused();
+    findingsMustBeEmpty(await accessibilityFindings(page, "error state"));
+    const unchanged = await admin.from("shifts").select("is_published").eq("id", shiftId).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data.is_published).toBe(false);
+
+    await page.unroute("**/roster**");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(failure).toHaveCount(0);
+    await expect(publish).toBeVisible();
+    await publish.click();
+    await expect(page.getByRole("main").getByRole("status").filter({ hasText: "roster published" }))
+      .toHaveText("Front of House roster published.");
+    const saved = await admin.from("shifts").select("is_published").eq("id", shiftId).single();
+    expect(saved.error).toBeNull();
+    expect(saved.data.is_published).toBe(true);
+  } finally {
+    expect((await admin.from("businesses").delete().eq("id", businessId)).error).toBeNull();
+    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
   }
 });
 

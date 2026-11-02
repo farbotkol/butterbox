@@ -26,6 +26,10 @@ export function AppShell({
   const pinnedBusiness = businessCount > 1 ? businessId : undefined;
   return (
     <div className="min-h-screen bg-[#f5f9f8] md:flex">
+      <a href="#main-content"
+        className="sr-only z-50 rounded-lg bg-ocean px-4 py-3 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
+        Skip to main content
+      </a>
       <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:border-b-0 md:border-r">
         <Link href={pinnedBusiness ? `/?business=${encodeURIComponent(pinnedBusiness)}` : "/"}
           className="flex items-center gap-3 px-5 py-5 md:px-6 md:py-6">
@@ -84,7 +88,7 @@ export function AppShell({
             </form>
           </div>
         </header>
-        <main className="mx-auto w-full max-w-[1440px] px-5 py-6 sm:px-8 sm:py-8">
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1440px] px-5 py-6 outline-none sm:px-8 sm:py-8">
           {children}
         </main>
       </div>

@@ -7,11 +7,12 @@ export function AuthLayout({ children }: { children: ReactNode }) {
   return (
     <main className="min-h-screen bg-white lg:grid lg:grid-cols-[0.94fr_1.06fr]">
       <section className="relative flex min-h-[290px] flex-col overflow-hidden bg-soft-sea px-6 py-6 sm:px-10 lg:min-h-screen lg:px-[clamp(2rem,6vw,6rem)] lg:py-10">
-        <Link href="/login" aria-label="Butterbox Systems sign in" className="relative z-10 w-fit">
+        <Link href="/login" className="relative z-10 w-fit">
           <BrandLockup />
+          <span className="sr-only"> sign in</span>
         </Link>
         <div className="relative z-10 mt-8 max-w-lg lg:mb-4 lg:mt-auto">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean/70">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-ocean">
             Made for hospitality
           </p>
           <h1 className="mt-3 max-w-md font-display text-[36px] font-semibold leading-[1.13] text-ocean sm:text-[44px] lg:text-[52px]">

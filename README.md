@@ -586,6 +586,32 @@ scenarios still run and any failure remains fatal. To run a focused scenario
 instead, set `BUTTERBOX_TEST_GREP` to a Playwright test-name pattern; run the
 unfiltered suite separately for regression coverage.
 
+### Accessibility and performance checks
+
+The browser suite runs axe-core WCAG 2.0/2.1 A and AA plus WCAG 2.2 AA rules.
+It covers the signed-out pages, the owner's core pages and the employee's core
+pages on a 375px phone viewport. Each page must have one `main` landmark,
+one level-one heading, a document title and `lang="en-AU"`, with no
+horizontal page scroll on the phone. Keyboard checks sign in using only the
+keyboard, use the "Skip to main content" link, publish a roster and mark a
+notification as read. Automated checks are smoke tests, not a full manual
+WCAG audit or a screen-reader user study.
+
+The performance benchmark seeds 25 employees with one draft shift each day for
+7 days (175 shifts) against the production build. Its budgets are:
+
+| Measure | Budget |
+| --- | --- |
+| Median manager roster page load until all 175 drafts render (3 loads) | 3,000 ms |
+| Publishing all 175 shifts until confirmation | 5,000 ms |
+| Median employee schedule on a 375px phone until the week renders (3 loads) | 2,000 ms |
+
+Measured times are written to the test output as `25x7 benchmark`. They depend
+on the host, so treat them as regression guards rather than production service
+levels. Loading, failure and missing-page states are tested with a delayed
+navigation, a simulated server-action outage followed by **Try again**, and an
+unknown URL.
+
 ## Staging and production
 
 Apply reviewed migrations to the appropriate Supabase project using your

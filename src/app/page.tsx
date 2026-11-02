@@ -191,7 +191,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         </div>
         <div className="relative flex flex-col justify-between gap-5 sm:flex-row sm:items-end">
           <div className="max-w-2xl">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ocean/70">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ocean">
               Made for hospitality <span className="px-1.5 text-sea-glass">·</span> {workspace.venue.name}
             </p>
             <h1 className="mt-2 text-3xl font-semibold text-[#101b36] sm:text-[36px]">
@@ -252,7 +252,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white shadow-[0_4px_18px_rgba(18,63,74,0.04)]">
           <div className="flex flex-wrap items-center justify-between gap-4 border-b border-line px-5 py-4 sm:px-6">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ocean/65">Week at a glance</p>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-ocean">Week at a glance</p>
               <h2 className="mt-1 text-xl font-semibold text-[#101b36]">{weekLabel}</h2>
             </div>
             <Link

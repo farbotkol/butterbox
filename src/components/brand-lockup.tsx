@@ -43,9 +43,9 @@ export function BrandLockup({ inverse = false, compact = false }: BrandLockupPro
           className={`font-display font-bold leading-none ${compact ? "text-lg" : "text-sm sm:text-xl"}`}
         >
           butterbox
-        </span>
+        </span>{" "}
         <span
-          className={`mt-1 text-[8px] uppercase tracking-[0.24em] sm:text-[9px] sm:tracking-[0.3em] ${inverse ? "text-cloud/70" : "text-ocean/70"}`}
+          className={`mt-1 text-[8px] uppercase tracking-[0.24em] sm:text-[9px] sm:tracking-[0.3em] ${inverse ? "text-cloud/80" : "text-ocean"}`}
         >
           Systems
         </span>

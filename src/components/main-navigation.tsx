@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, Building2, CalendarCheck, CalendarDays, ClipboardList, Clock, LayoutDashboard, ShieldCheck, Timer, UsersRound } from "lucide-react";
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 
 const links = [
@@ -12,6 +12,20 @@ const links = [
   { href: "/roster", label: "Rostering", icon: CalendarDays },
   { href: "/availability", label: "Availability", icon: Clock },
 ];
+
+function NavigationPending() {
+  const { pending } = useLinkStatus();
+
+  return (
+    <span role={pending ? "status" : undefined} aria-live="polite" className="ml-auto inline-flex h-5 w-5 shrink-0">
+      {pending && <>
+        <span aria-hidden="true"
+          className="h-5 w-5 animate-spin rounded-full border-2 border-sea-glass border-t-ocean motion-reduce:animate-none" />
+        <span className="sr-only">Loading…</span>
+      </>}
+    </span>
+  );
+}
 
 export function MainNavigation({ role, businessId }: { role: string; businessId?: string }) {
   const pathname = usePathname();
@@ -39,6 +53,7 @@ export function MainNavigation({ role, businessId }: { role: string; businessId?
           >
             <Icon size={18} aria-hidden="true" />
             {label}
+            <NavigationPending />
           </Link>
         );
       })}
