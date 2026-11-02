@@ -6,9 +6,12 @@
   BB-DOC and ten BB-BRAND stories). Verified Done: **49**. In Progress: **1**.
   Blocked: **6**. Not started (Backlog): **66**.
 - BB-ATTEND-006 (late, missing and no-show alerts) is **In Progress** as of
-  2026-11-02 17:58 UTC. Existing published roster, immutable attendance and
-  scoped manager authorization foundations are being investigated. All four
-  acceptance criteria remain unverified; no alert implementation is claimed.
+  2026-11-02 18:12 UTC. Its database implementation is applied only to the
+  identified disposable acceptance project. Focused pgTAP passed **55/55**,
+  seven adjacent files passed **440/440**, and a scheduled worker invocation
+  succeeded. A follow-up notification-read migration, real scheduled alert
+  creation, user interface and concurrency checks remain unverified. No
+  acceptance criterion is yet claimed complete.
 - The requested **BRAND** epic and ten P2 planning stories now cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. They remain
@@ -675,10 +678,26 @@ settings/delivery still require their own implementation and verification.
   focused pgTAP replay passed **55/55** in a rolled-back transaction. It
   exercises threshold boundaries, deduplication, audit, department/tenant
   authorization, corrections, draft exclusion and notification counts.
-  The migration and tests remain uncommitted; the scheduler has not yet been
-  installed or observed running. Next apply only to the verified disposable
-  project, verify actual scheduled execution and add authenticated/browser
-  coverage before judging the four criteria.
+  The migration was subsequently applied and ledger-recorded only on the
+  verified `butterbox-acceptance` project (API 55421, DB 55422). Applied-schema
+  focused pgTAP passed **55/55**, and seven directly affected files passed
+  **440/440**. At 18:10 UTC its local cron job ran successfully and updated
+  the worker heartbeat; actual alert creation by the scheduler remains
+  unverified. The implementation and tests remain uncommitted. A new
+  untested forward migration separates each manager's notification read
+  state from the team's acknowledgement state. Next preflight that migration
+  and its expanded tests, build the management and notification interfaces,
+  and verify scheduled creation, authorization and concurrent operations.
+  Full suites are intentionally deferred; broader migration/security
+  regression is appropriate at workstream merge or release. Documentation:
+  user guide update pending the tested workflow.
+
+  | Criterion | Implementation evidence | Actual verification | Status |
+  | --- | --- | --- | --- |
+  | ATTEND-006.1 — configurable threshold | Owner-scoped venue policy in the uncommitted database migration | Focused pgTAP threshold cases passed; settings UI not yet tested | Blocked: incomplete vertical slice |
+  | ATTEND-006.2 — suppress duplicates | Worker reuses alert per shift/category and records transitions | Focused pgTAP repeated-scan cases passed; real scheduler and races not yet tested | Blocked: pending runtime verification |
+  | ATTEND-006.3 — auditable acknowledgement and resolution | Scoped actions create immutable decision and sensitive audit events | Focused pgTAP actor, reason, idempotency and immutability cases passed; UI and races not yet tested | Blocked: incomplete vertical slice |
+  | ATTEND-006.4 — exclude unpublished shifts | Worker filters published assigned shifts | Focused pgTAP draft exclusion passed; real scheduled creation not yet tested | Blocked: pending runtime verification |
 - **Recovery, 2026-11-02 17:50 UTC:** The previously uncommitted QR
   implementation and guide survived, and the disposable acceptance project
   remained healthy. The recovery status checkpoint `d8e9229` was pushed
