@@ -579,9 +579,12 @@
 - **BB-FOUND-001 — Create production-ready application** remains Blocked on
   historical credential findings. DEC-004 authorizes a read-only, redacted
   assessment and classification; no credential rotation, privileged access
-  test or history modification is authorized. The next action is to inventory
-  accessible local refs and classify the existing findings without exposing
-  secret values.
+  test or history modification is authorized. At 11:34 UTC, an offline scan of
+  accessible local refs identified four historical candidates, including two
+  with privileged characteristics. The evidence suggests a local development
+  origin, but signature validity, current use, remote exposure and production
+  connection are unverified. Assessment is paused for private owner/security
+  review under DEC-004. No credential was used, changed or reproduced.
 - **BB-RULES-005 — Privacy and retention policy** remains Blocked for full
   acceptance. Its verified partial business-deletion safeguard was committed
   as `89738f8e24561dc1481252ae15c073e709a5aeb4` and pushed in merge
@@ -653,6 +656,15 @@
   Credential assessment is authorized read-only; rotations and history changes
   need separate approval. Recovery objectives are approved as targets only;
   actual hosted configuration and restoration remain unverified.
+- At 11:34 UTC a network-disabled, redacted scan of accessible local Git refs
+  returned four historical candidate findings, two with privileged
+  characteristics. No finding was observed in the current branch's reachable
+  refs; this is not proof that other copies or unadvertised refs are absent.
+  Candidate validity and current exposure were not tested. Assessment and
+  unrelated development are paused for owner/security review as required by
+  DEC-004; no secrets, key changes, privileged-access tests or history
+  changes were made. Exact next action: deliver the redacted classifications
+  privately and await the owner's security decision.
 
 ## Recently completed story
 
@@ -1949,12 +1961,12 @@ Continue BB-FOUND-006 independently while this access is missing.
 | 001.1 Clean checkout installs and builds with documented commands | `README.md`, lockfile and `Dockerfile`. | A separate clean checkout successfully ran `npm ci`, `npm test` and `npm run build`; the container also installed and built from scratch. | Pass |
 | 001.2 Environment variables have safe examples | `.env.example`, `.gitignore`, `.dockerignore` and `README.md`. | Example values are empty; a redacted Gitleaks scan of the clean checkout found no leaks. | Pass |
 | 001.3 A deployment runs a health check | `src/app/api/health/route.ts`, `src/proxy.ts`, `Dockerfile` and `.github/workflows/ci.yml`. | A built container became healthy as UID 1000; `GET` returned 200 and `no-store`, `POST` returned 405, and the home page returned 200. | Pass |
-| 001.4 No secrets are committed | `.gitignore` excludes local environment and Supabase CLI state. | Gitleaks found no leaks on the current branch or in the clean checkout. A scan of **all local refs** nevertheless found four Supabase key/token findings in an earlier local checkpoint commit, not reachable from the current branch. | Blocked |
+| 001.4 No secrets are committed | `.gitignore` excludes local environment and Supabase CLI state. | Gitleaks found no leaks on the current branch or in the clean checkout. A network-disabled scan of accessible local refs found four historical candidates in a checkpoint outside the current branch, including two with privileged characteristics. Validity, current use and other copies remain unverified; private owner review is required. | Blocked |
 
-Credential owners must assess/rotate any affected keys and decide how to handle
-the local checkpoint history. This session did not rewrite or delete those
-refs, and no secret values were printed. GitHub CI has been configured but has
-not yet run remotely.
+Credential owners must assess the candidates and separately authorize any
+rotation and history handling. This session did not use candidate credentials,
+rewrite or delete refs, or print secret values. GitHub CI has been configured
+but has not yet run remotely.
 
 ## Test environment and outcomes
 
@@ -2032,9 +2044,10 @@ not yet run remotely.
 
 ## Next story
 
-- Complete the authorized redacted **BB-FOUND-001** historical credential
-  assessment first. Do not use any candidate credential for access, rotate it
-  or alter history; escalate a potentially active privileged finding.
+- Await private owner/security review of the redacted **BB-FOUND-001**
+  credential findings before resuming the assessment or unrelated development.
+  Do not use a candidate credential for access, rotate it or alter history
+  without the required separate authorization.
 - Then inspect **BB-SAAS-003 — Tenant
   onboarding and support** for a fail-closed response to DEC-003. The
   operator-enabled sample path does not establish a separate demonstration
