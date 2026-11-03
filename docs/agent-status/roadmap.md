@@ -2,20 +2,20 @@
 
 ## Local showcase setup checkpoint
 
-- **Last report:** 2026-11-03 11:57 AEDT (UTC+1100), observed on the local operator's clock.
+- **Last report:** 2026-11-03 12:05 AEDT (UTC+1100), observed on the local operator's clock.
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current work:** User-directed BB-DEMO-001 operator setup and test-owner option; the completed story is not being reopened.
 - **Criteria:** A separately verified internal-only showcase, 12–15 fictional FOH/BOH staff and realistic sample workflows, no production data, real messaging or live payroll, and guarded reset; the designated login must be test-only and scoped to the isolated project.
-- **Phase:** Debugging.
-- **Activity:** Replacing the separate app snapshot's external dependency symlink with a local copy before retrying its production build.
-- **Progress since previous report:** The guarded reset succeeded on the isolated project, then fixtures were reseeded and the live integration passed again. The VM proxy was restarted from a durable private Node runtime. The original workspace remains unchanged and its login is available.
-- **Tests and results:** 18/18 focused unit tests, 2/2 live integration runs, the isolated reset/reseed, changed-code ESLint, TypeScript and diff checks passed. The first snapshot production build failed because Turbopack rejects the symlinked dependencies outside its workspace root; browser review remains pending.
-- **Failing tests:** The first production build failed on dependency resolution; a local snapshot copy and retry are next.
-- **Blockers/risks:** The review app is not yet available. The brand, hosted-review and production gates below remain unchanged.
+- **Phase:** Testing.
+- **Activity:** Preparing to rebuild the showcase with a distinct authentication-cookie namespace across server, proxy, browser and offline session handling.
+- **Progress since previous report:** Cloning the snapshot dependencies fixed the initial build failure. The app is running and five real owner, manager and employee browser journeys passed after installing the missing Chromium runtime. A new browser check reproduced a shared-cookie collision between the two local ports; a scoped fix has been implemented.
+- **Tests and results:** 24/24 focused showcase/offline unit tests, 2/2 live integration runs, isolated reset/reseed, the production build, five pre-fix browser journeys, changed-code ESLint, TypeScript and diff checks passed. The new cookie-preservation browser test failed against the pre-fix build as expected; the rebuilt app and regression tests remain pending.
+- **Failing tests:** The reproduced cookie-collision baseline fails on the old build; verification of the fix has not yet run.
+- **Blockers/risks:** The currently running showcase build still uses the old cookie namespace until rebuilt. The brand, hosted-review and production gates below remain unchanged.
 - **Documentation:** Draft operator and user-guide updates added; verify against the resulting workflow.
-- **Next concrete action:** Repair snapshot dependency resolution, rebuild and test the owner and scoped review journeys in the separate app.
+- **Next concrete action:** Rebuild the isolated app, rerun the cookie-preservation and scoped browser journeys, and confirm the original workspace remains available.
 - **Latest development commit:** `20742da5d9f6b5baf2096607e79330e330022cc9`; branch head at observation was status-only `7fb47049b82f6d21a923dec67d52afd7faa284dc`.
-- **Push outcome:** Status-only checkpoint `13d4b0965b1d76491317306b661254edcd0d4f36` was pushed and its remote SHA verified; this update has not yet been pushed.
+- **Push outcome:** Status-only checkpoint `c8adf4a77522c7bc95a7d8371745282425ed078d` was pushed and its remote SHA verified; this update has not yet been pushed.
 
 The prior Roadmap planning and brand blocker remain below; their current execution state is not verified by this local checkpoint.
 
