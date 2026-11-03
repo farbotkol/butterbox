@@ -1,6 +1,6 @@
 # Coastal café imagery — owner-approved selection
 
-**Status: owner-selected for internal review; not publication-ready.** These are AI-generated illustrations
+**Status: owner-accepted temporary imagery for internal Showcase P0 (BB-BRAND-004 Done); not publication-ready.** These are AI-generated illustrations
 in a photographic style, not photographs of a real café or staff, and not screenshots of Butterbox. On
 2026-11-03 the owner approved the proposed visual selection below. This approval does not verify usage rights,
 source ownership, native resolution, or approval for public marketing. The Coastal Wave identity remains the
@@ -65,6 +65,4 @@ in an actual placement, use `alt=""` only when the image is genuinely decorative
 and phone crops, team and team alternative, café operations, terrace, and service selections above are
 approved as the visual selection for the internal imagery library.
 
-**Remaining gates:** BB-BRAND-004 remains **Blocked (partial)**. The supplied source hero is below the brief's
-native 3200 × 1800 requirement, and the generation-account terms, input/third-party rights, and publication
-clearance remain unverified. This approval does not approve public marketing or deployment.
+**Owner closeout:** BB-BRAND-004 is **Done for the internal Showcase P0** because the owner accepts the current low-resolution images as temporary private showcase artwork, to be replaced for production. **Still-open public/production gates:** native 3200 × 1800 hero master, generation-account terms, input/third-party permissions, and marketing publication clearance. No rights or deployment approval is implied.
