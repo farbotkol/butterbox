@@ -90,24 +90,25 @@ export function searchHelp(topics: readonly HelpTopic[], query: string, category
     terms.every((term) => `${topic.title} ${topic.category} ${topic.markdown}`.toLocaleLowerCase("en-AU").includes(term)));
 }
 
-export function helpHref(topic?: string, businessId?: string): string {
+export function helpHref(topic?: string, businessId?: string, contextVenueId?: string): string {
   const params = new URLSearchParams();
   if (businessId) params.set("business", businessId);
+  if (contextVenueId) params.set("contextVenue", contextVenueId);
   if (topic) params.set("topic", topic);
   return `/help${params.size ? `?${params}` : ""}`;
 }
 
-export function helpContentHref(href: string, topics: readonly HelpTopic[], businessId?: string): string | null {
+export function helpContentHref(href: string, topics: readonly HelpTopic[], businessId?: string, contextVenueId?: string): string | null {
   if (!/^#[a-z0-9-]+$/.test(href)) return null;
   const anchor = href.slice(1);
   const target = topics.find((topic) => topic.anchors.includes(anchor));
-  return target ? `${helpHref(target.id, businessId)}#${anchor}` : null;
+  return target ? `${helpHref(target.id, businessId, contextVenueId)}#${anchor}` : null;
 }
 
-export function helpMarkdownOptions(topics: readonly HelpTopic[], businessId?: string) {
+export function helpMarkdownOptions(topics: readonly HelpTopic[], businessId?: string, contextVenueId?: string) {
   return {
     skipHtml: true,
     disallowedElements: ["img"],
-    urlTransform: (url: string) => helpContentHref(url, topics, businessId) ?? "",
+    urlTransform: (url: string) => helpContentHref(url, topics, businessId, contextVenueId) ?? "",
   };
 }

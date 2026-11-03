@@ -438,7 +438,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       : { message: "The selected venue or its publication setting is unavailable." });
     return (
       <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} email={workspace.user.email ?? ""}
-        role={workspace.membership.role} venueName={workspace.venue.name}>
+        role={workspace.membership.role} venueId={workspace.venue.id} venueName={workspace.venue.name}>
         <h1 className="text-3xl font-semibold">Weekly roster</h1>
         <p role="alert" className="mt-4 rounded-xl bg-red-50 px-4 py-3 text-red-800">
           We couldn&apos;t load the roster. Try again before making changes.
@@ -615,7 +615,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length}
       email={workspace.user.email ?? ""}
       role={workspace.membership.role}
-      venueName={workspace.venue.name}
+      venueId={workspace.venue.id} venueName={workspace.venue.name}
     >
       <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
         <div>
@@ -627,7 +627,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             Build a balanced week for your FOH and BOH teams.
           </p>
           <div className="mt-2 flex flex-wrap gap-x-5">
-            <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id)}
+            <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id, workspace.venue.id)}
               className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
               Help with rosters
             </Link>

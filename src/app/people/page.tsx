@@ -112,7 +112,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
   const hasFilters = Boolean(baseFilters.q || baseFilters.role || baseFilters.department || baseFilters.status !== "all");
 
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div>
@@ -234,7 +234,7 @@ export default async function PeoplePage({ searchParams }: { searchParams: Promi
         </Link>}
       </nav>}
     </>}
-    <Link href={helpHref("people", workspace.business.id)} className="mt-6 inline-block text-sm font-semibold text-ocean underline">
+    <Link href={helpHref("people", workspace.business.id, workspace.venue.id)} className="mt-6 inline-block text-sm font-semibold text-ocean underline">
       Help with managing people
     </Link>
   </AppShell>;

@@ -27,7 +27,7 @@ export default async function AttendanceKiosksPage({ searchParams }: {
   const attendanceUrl = withBusiness(`/attendance?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id);
   if (workspace.membership.role !== "owner") {
     return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-      businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+      businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-2xl font-semibold">Kiosk settings</h1>
       <p role="alert" className="mt-3 text-sm">Only a business owner can manage kiosk devices.</p>
@@ -41,7 +41,7 @@ export default async function AttendanceKiosksPage({ searchParams }: {
   if (error || !kiosks) console.error("Could not load kiosk devices.", { code: error?.code });
 
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={attendanceUrl} className="text-sm font-semibold text-ocean underline">Back to attendance</Link>
     <h1 className="mt-3 text-3xl font-semibold">Kiosk devices</h1>

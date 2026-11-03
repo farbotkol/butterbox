@@ -120,7 +120,7 @@ export default async function AttendanceAlertsPage({ searchParams }: {
   const attendanceUrl = withBusiness(`/attendance?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id);
   const shell = {
     businessName: workspace.business.name, businessId: workspace.business.id,
-    businessCount: workspace.businesses.length, venueName: workspace.venue.name,
+    businessCount: workspace.businesses.length, venueId: workspace.venue.id, venueName: workspace.venue.name,
     email: workspace.user.email ?? "", role: workspace.membership.role,
   };
   if (!canManageAttendanceAlerts(workspace.membership.role)) {

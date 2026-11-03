@@ -37,7 +37,7 @@ export default async function JobRolePage({ params, searchParams }: {
     : await requireDepartmentWorkspace({ ...search, venue: department.venue_id });
   const context = { businessId: workspace.business.id, venueId: workspace.venue.id, filters };
   return <AppShell businessName={workspace.business.name} businessId={context.businessId}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={departmentHref(context.businessId, context.venueId, filters, department.id)}
       className="inline-flex min-h-11 max-w-full items-center text-sm font-semibold text-ocean underline">

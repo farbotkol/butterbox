@@ -104,7 +104,7 @@ export default async function AvailabilityPage({
     (team.data ?? []).some((employee) => employee.id === item.employee_id));
 
   return (
-    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-3xl font-semibold">Availability and leave</h1>
       <p className="mt-3 text-sm leading-6 text-muted">

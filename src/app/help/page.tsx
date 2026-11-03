@@ -9,11 +9,13 @@ import { helpAnchor, helpHref, helpMarkdownOptions, helpTopics, searchHelp } fro
 import { isShowcase } from "@/lib/showcase";
 import { getWorkspace } from "@/lib/workspace";
 
-type HelpParams = { business?: string; q?: string | string[]; category?: string | string[]; topic?: string | string[] };
+type HelpParams = { business?: string; contextVenue?: string; q?: string | string[]; category?: string | string[]; topic?: string | string[] };
 
 export default async function HelpPage({ searchParams }: { searchParams: Promise<HelpParams> }) {
   const params = await searchParams;
-  const workspace = await getWorkspace(undefined, { businessId: params.business, page: true });
+  const workspace = await getWorkspace(undefined, {
+    businessId: params.business, venueHint: params.contextVenue, page: true,
+  });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "error") {
     console.error("Could not load help workspace.", { message: workspace.message });
@@ -25,6 +27,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
   }
   const ready = workspace.status === "ready";
   const businessId = ready ? workspace.business.id : undefined;
+  const contextVenueId = ready ? workspace.venue.id : undefined;
   const role = ready ? workspace.membership.role : "new_owner";
   const source = await readFile(path.join(process.cwd(), "docs", "USER_GUIDE.md"), "utf8");
   const topics = helpTopics(source, role, isShowcase());
@@ -45,6 +48,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
     </p>
     <form action="/help" className="mt-5 grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
       {businessId && <input type="hidden" name="business" value={businessId} />}
+      {contextVenueId && <input type="hidden" name="contextVenue" value={contextVenueId} />}
       <div className="min-w-0 text-sm font-medium">
         <label htmlFor="help-query" className="block">Search help</label>
         <input id="help-query" type="search" name="q" maxLength={160} defaultValue={query}
@@ -69,7 +73,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
         <ul className="grid gap-3 sm:grid-cols-2">
           {results.map((topic) => <li key={topic.id} className="min-w-0 rounded-lg border border-line bg-white p-4">
             <p className="text-xs text-muted">{topic.category}</p>
-            <Link href={helpHref(topic.id, businessId)} className="mt-1 inline-flex min-h-11 items-center font-semibold text-ocean underline">
+            <Link href={helpHref(topic.id, businessId, contextVenueId)} className="mt-1 inline-flex min-h-11 items-center font-semibold text-ocean underline">
               {topic.title}
             </Link>
           </li>)}
@@ -81,7 +85,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
     {selected && <article aria-labelledby={selected.anchor}
       className="mt-6 min-w-0 rounded-xl border border-line bg-white p-5 leading-7 [overflow-wrap:anywhere] [&_h3]:mb-2 [&_h3]:mt-5 [&_h3]:text-lg [&_h3]:font-semibold [&_li]:my-2 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-3 [&_table]:w-full [&_table]:text-left [&_td]:border [&_td]:border-line [&_td]:p-2 [&_th]:border [&_th]:border-line [&_th]:p-2 [&_ul]:list-disc [&_ul]:pl-6">
       <h2 id={selected.anchor} className="text-xl font-semibold">{selected.title}</h2>
-      <Markdown {...helpMarkdownOptions(topics, businessId)} remarkPlugins={[remarkGfm]}
+      <Markdown {...helpMarkdownOptions(topics, businessId, contextVenueId)} remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children }) => href
             ? <Link href={href} className="font-semibold text-ocean underline">{children}</Link>
@@ -91,7 +95,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
         }}>
         {selected.markdown}
       </Markdown>
-      <Link href={helpHref(undefined, businessId)} className="mt-5 inline-flex min-h-11 items-center font-semibold text-ocean underline">All help topics</Link>
+      <Link href={helpHref(undefined, businessId, contextVenueId)} className="mt-5 inline-flex min-h-11 items-center font-semibold text-ocean underline">All help topics</Link>
     </article>}
     <aside aria-label="Help limitations" className="mt-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6">
       External notification channels, live payroll adapters and independent Award Central calculations are not generally available.
@@ -99,7 +103,7 @@ export default async function HelpPage({ searchParams }: { searchParams: Promise
     </aside>
   </>;
   return ready ? <AppShell businessName={workspace.business.name} businessId={businessId}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>{content}</AppShell>
     : <main className="mx-auto max-w-5xl px-4 py-8">
       <Link href="/setup" className="mb-5 inline-block font-semibold text-ocean underline">Back to setup</Link>

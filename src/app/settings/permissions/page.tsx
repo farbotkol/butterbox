@@ -36,7 +36,7 @@ export default async function BusinessPermissionsPage({ searchParams }: Props) {
 
   return <AppShell email={workspace.user.email ?? ""} businessName={workspace.business.name}
     businessCount={workspace.businesses.length} businessId={businessId}
-    venueName={workspace.venue.name} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} role={workspace.membership.role}>
     <div className="mx-auto max-w-7xl">
       <h1 className="text-3xl font-semibold">Business permissions</h1>
       <p className="mt-2 break-words text-sm text-muted">Business: {workspace.business.name}</p>
@@ -46,22 +46,23 @@ export default async function BusinessPermissionsPage({ searchParams }: Props) {
           Only owners can manage business permissions. Changing a person&apos;s access does not change their staff profile.
         </p>
         <div className="flex flex-wrap gap-4">
-          <Link href={helpHref("permissions", businessId)} className="text-sm font-semibold text-ocean underline">
+          <Link href={helpHref("permissions", businessId, workspace.venue.id)} className="text-sm font-semibold text-ocean underline">
             Help with permissions
           </Link>
-          <Link href={withBusiness("/", businessId)} className="text-sm font-semibold text-ocean underline">
+          <Link href={withBusiness(`/?venue=${workspace.venue.id}`, businessId)} className="text-sm font-semibold text-ocean underline">
             Back to dashboard
           </Link>
         </div>
       </div>
       <PermissionsFeedback error={filters ? search.error : "filter"} saved={search.saved} />
       {!filters ? <div className="mt-5">
-        <Link href={withBusiness("/settings/permissions", businessId)} className="font-semibold text-ocean underline">
+        <Link href={withBusiness(`/settings/permissions?contextVenue=${workspace.venue.id}`, businessId)} className="font-semibold text-ocean underline">
           Reset filters
         </Link>
       </div> : <>
         <form action="/settings/permissions" aria-label="Member directory filters" className="mt-5 rounded-xl border border-line bg-white p-4">
           <input type="hidden" name="business" value={businessId} />
+          <input type="hidden" name="contextVenue" value={workspace.venue.id} />
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <label className="text-sm font-medium">Search members
               <input className={input} name="q" defaultValue={filters.q} maxLength={100} type="search" placeholder="Name or email" />
@@ -97,7 +98,7 @@ export default async function BusinessPermissionsPage({ searchParams }: Props) {
           </div>
           <div className="mt-4 flex flex-wrap items-center gap-4">
             <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 font-semibold text-white">Apply filters</button>
-            <Link href={withBusiness("/settings/permissions", businessId)} className="text-sm font-semibold text-ocean underline">
+            <Link href={withBusiness(`/settings/permissions?contextVenue=${workspace.venue.id}`, businessId)} className="text-sm font-semibold text-ocean underline">
               Reset filters
             </Link>
           </div>
@@ -130,7 +131,7 @@ export default async function BusinessPermissionsPage({ searchParams }: Props) {
               <td className="break-words px-4 py-3">{permissionScopeLabel(member.department_id, departments, "department")}</td>
               <td className="px-4 py-3"><Link className="font-semibold text-ocean underline"
                 aria-label={`View access for ${member.full_name || member.email || "member"}`}
-                href={permissionsHref(businessId, currentFilters, member.user_id)}>View</Link></td>
+                href={permissionsHref(businessId, currentFilters, member.user_id, workspace.venue.id)}>View</Link></td>
             </tr>)}</tbody>
           </table>
           <ul className="divide-y divide-line md:hidden">{visible.map((member) => <li key={member.user_id} className="p-4">
@@ -140,15 +141,15 @@ export default async function BusinessPermissionsPage({ searchParams }: Props) {
             <p className="mt-1 break-words text-sm text-muted">{permissionScopeLabel(member.department_id, departments, "department")}</p>
             <Link className="mt-3 inline-flex min-h-11 items-center font-semibold text-ocean underline"
               aria-label={`View access for ${member.full_name || member.email || "member"}`}
-              href={permissionsHref(businessId, currentFilters, member.user_id)}>View access</Link>
+              href={permissionsHref(businessId, currentFilters, member.user_id, workspace.venue.id)}>View access</Link>
           </li>)}</ul>
         </div>}
         {currentFilters && pages > 1 && <nav aria-label="Member pages" className="mt-4 flex flex-wrap items-center gap-4 text-sm">
           {currentFilters.page > 1 && <Link className="min-h-11 content-center font-semibold text-ocean underline"
-            href={permissionsHref(businessId, { ...currentFilters, page: currentFilters.page - 1 })}>Previous</Link>}
+            href={permissionsHref(businessId, { ...currentFilters, page: currentFilters.page - 1 }, undefined, workspace.venue.id)}>Previous</Link>}
           <span>Page {currentFilters.page} of {pages}</span>
           {currentFilters.page < pages && <Link className="min-h-11 content-center font-semibold text-ocean underline"
-            href={permissionsHref(businessId, { ...currentFilters, page: currentFilters.page + 1 })}>Next</Link>}
+            href={permissionsHref(businessId, { ...currentFilters, page: currentFilters.page + 1 }, undefined, workspace.venue.id)}>Next</Link>}
         </nav>}
       </>}
     </div>

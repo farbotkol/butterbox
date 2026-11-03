@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.7 — reviewed 2026-11-04 (Core Roadmap; People, Departments, Business Permissions and Payroll Mapping workflows; other sections retain their earlier review dates).
+**Guide version:** 1.8 — reviewed 2026-11-04 (Core Roadmap; People, Departments, Business Permissions, Payroll Mapping and navigation workflows; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -246,7 +246,7 @@ authorizes an update.
    The current app has no **Add venue** page/button: additional venue
    provisioning is a backend/operator workflow, not an instruction to create a
    second business or to modify a database yourself.
-6. Owners open **Departments**, then **Venue settings**
+6. Owners open **Venue settings** in **Venue Management**
    (`/settings/organisation`). Under **Venue location and geofence**, set **Latitude**, **Longitude**
    and **Radius in metres**, then **Save venue location**. Choose **Clock
    location verification** and **Save clock location setting** separately.
@@ -276,7 +276,7 @@ These instructions describe the updated development application. The protected
 showcase retains its earlier department screen until the owner authorizes an
 update.
 
-1. Open **Departments** (`/settings/departments`). Choose **Venue**, enter
+1. Open **Departments & roles** under **Venue Management** (`/settings/departments`). Choose **Venue**, enter
    **Search departments**, select **Status** and **Sort by**, then choose
    **Show departments**. Results and role counts include only the records
    available to your account. Change or clear the search and select **All
@@ -376,7 +376,7 @@ accounts are provisioned by the operator.
 
 #### Maintain availability, leave and preferences
 
-1. Open **Availability** (`/availability`, heading **Availability and leave**).
+1. Open **My availability** (`/availability`, heading **Availability and leave**).
    On your linked employee profile add recurring day/time intervals and **Save
    availability**. An overnight interval belongs to the selected starting day.
    Review the explicit unavailable-week choice before saving an empty pattern.
@@ -453,7 +453,7 @@ trying again.
    If the result is uncertain, use **Retry same request** or reload and inspect;
    do not repeatedly create new requests.
 5. Resolve overlap, eligibility and blocking availability issues. Owners can
-   configure **Roster conflict rules** in **Departments** and **Save roster
+   configure **Roster conflict rules** in **Venue settings** and **Save roster
    conflict rules**; warnings and blockers differ by policy. Warnings are not
    payroll/legal clearance. Assignment and publication recheck current data.
 6. For direct publication choose **Publish this department**. In approval mode,
@@ -706,7 +706,7 @@ authorizes an update.
 
 ### Hours and labour — owners
 
-1. Select **Hours and labour** in the main navigation. Only a business owner
+1. Select **Hours & labour** in the **Business** navigation group. Only a business owner
    can view the page or request the report; manager, admin and employee access
    to timesheets does not confer access to this owner report.
 2. Set **Week containing**, **Venue** and **Department**, then select **Apply
@@ -744,7 +744,7 @@ it does not approve hours, export payroll or transmit data to a provider.
 
 ### Overtime and exceptions — managers
 
-1. Select **Exceptions report** in the main navigation. Owners, admins,
+1. Select **Exceptions** under **Team Management** in the main navigation. Owners, admins,
    general managers and scoped department managers can use it; employees
    cannot. Results cover only the departments you can manage in the selected
    venue, not the whole business.
@@ -869,16 +869,28 @@ swap, confirm an open-shift claim or approve time. Use the linked task screen fo
 those decisions. Use **View your attendance history** from **Attendance** for
 your own historical effective clocks and correction decisions.
 
-**Mobile and keyboard use:** On a narrow screen, **Main navigation** is
-collapsed behind a **Menu** button that shows the current page. Choose **Menu**
-to list your available pages; choosing a page or pressing **Escape** closes it
-and **Escape** returns focus to **Menu**. On wider screens the navigation stays
-open in the sidebar, grouped into **Everyday**, **Team** and **Business** when
-your role has more than one group, and scrolls independently if it is taller
-than the window. Use **Skip to main content** and visible keyboard focus; quick roster
-changes have explicit controls instead of requiring a drag gesture. Wait for
-loading/pending state and the actual result. If a result is uncertain, refresh
-and inspect history before retrying. No fixed response-time guarantee is implied.
+**Navigation, mobile and keyboard use:** In the updated development
+application, **Main navigation** groups pages into **My Work**, **Team
+Management**, **Venue Management** and **Business**. Only groups and actions
+relevant to your role appear. Employees can still read **Rostering** and open
+**Announcements**; owners manage **Clock kiosks** and **Venue settings**.
+**Help** is a separate utility beneath the groups. Hiding a link does not
+grant or deny access; current server permissions still apply to every page.
+
+On a narrow screen choose **Menu** to open the scrollable list. Choosing a page
+or pressing **Escape** closes it; **Escape** returns focus to **Menu**. On
+wider screens the sidebar scrolls independently when needed. The current
+business and selected venue follow navigation where supported; business-wide
+**Hours & labour**, **Permissions** and **Audit history** retain their own
+filters rather than being silently limited to that venue. Use **Skip to main
+content** and visible keyboard focus; quick roster changes have explicit
+controls instead of requiring a drag gesture. Wait for loading and the actual
+result. If a result is uncertain, refresh and inspect history before retrying.
+No fixed response-time guarantee is implied.
+
+The protected showcase retains its older navigation labels and grouping until
+the owner authorizes an update. The guided showcase walkthrough above describes
+that older screen.
 
 External email, push, SMS and WhatsApp notifications are **planned optional channels**, not currently guaranteed live delivery. Recipient preferences and consent govern any future activation.
 
@@ -959,8 +971,9 @@ Use the following contextual links without submitting a workflow form:
 | Generic payroll CSV section | Help with payroll CSV | Preparing/reconciling approved-hours CSV; only shown with the existing finalisation/export permission |
 | Payroll employee mapping | Help with payroll preparation | Mapping limitations and payroll-preparation guidance |
 
-Links retain the server-resolved business; help does not broaden venue,
-department or payroll access. Employees cannot use a direct timesheet URL to
+Links retain the server-resolved business and, where a venue is selected, its
+navigation context; help does not broaden venue, department or payroll access.
+Employees cannot use a direct timesheet URL to
 obtain manager guidance. **All help topics** returns to browsing; use browser
 Back to return to the originating screen. Search does not change application
 records. The desktop **Contact support** link opens an email composer; it is
@@ -979,7 +992,7 @@ those checks include actual article destinations, keyboard focus and mobile
 axe/overflow. Automated label contracts cover the core contextual workflows,
 not every sentence or all app screens; human review remains necessary.
 
-| Version | Reviewed (UTC date) | Source checkpoint / change | Verified scope |
+| Version | Reviewed (recorded date) | Source checkpoint / change | Verified scope |
 | --- | --- | --- | --- |
 | 1.0 | 2026-11-02 | `c1ddaf3` (guide audit); DEMO-001/002 evidence below | Done-feature mapping and source label/permission review; recorded targeted browser evidence, not a fresh full-app walkthrough |
 | 1.1 | 2026-11-02 | `9918957` (DOC-002); DOC-003 contextual links | Markdown-backed role-safe search and core contextual navigation; targeted runtime and lightweight upkeep checks |
@@ -989,6 +1002,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.5 | 2026-11-03 | BB-DEMO-003 showcase polish | Mobile **Menu**, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels; targeted desktop/mobile browser audit |
 | 1.6 | 2026-11-04 | BB-UXFIX-001/002/003 | Isolated People, Departments and owner-only Business Permissions directory/detail workflows; protected showcases retain earlier screens |
 | 1.7 | 2026-11-04 | BB-UXFIX-004 | Isolated Payroll Mapping destination, directory, focused edit and confirmed removal workflow; protected showcases retain earlier screens |
+| 1.8 | 2026-11-04 | BB-UXFIX-005 | Isolated role-sensitive navigation, mobile menu and selected-venue context; protected showcases retain earlier navigation |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -1023,6 +1037,11 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 
 | Story | Guidance / non-user-facing reason |
 | --- | --- |
+| BB-UXFIX-001 | Maintain profiles, qualifications and invitations — searchable directory, selected profile and focused changes |
+| BB-UXFIX-002 | Departments and roles — selected department and role details, scope and focused changes |
+| BB-UXFIX-003 | Delegate access and select a venue — owner-only member directory and focused permission changes |
+| BB-UXFIX-004 | Prepare CSV, reconcile exports and map employees — destination-first mapping and confirmed removal |
+| BB-UXFIX-005 | Navigation, mobile and keyboard use — role-sensitive groups, Help and venue context in isolated development |
 | BB-DEMO-001 | Internal synthetic showcase — local review accounts, fictional records, sample-only CSV and reset limitations |
 | BB-DEMO-002 | Guided owner/payroll, scoped FOH/BOH manager and mobile employee baseline reviews; real navigation, permission failures and explicit omissions |
 | BB-DOC-002 | Getting help and improving this guide — authenticated role-scoped HTML, search, task navigation, denied/empty states and limitations |

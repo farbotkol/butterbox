@@ -404,7 +404,7 @@ test("owner hours and labour report reconciles approved time with mobile filters
     await page.goto(reportUrl);
     await expect(page.getByRole("heading", { name: "Hours and labour", exact: true })).toBeVisible();
     await openMainNavigation(page);
-    await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Hours and labour" })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Hours & labour" })).toBeVisible();
     const totals = page.getByLabel("Report totals");
     await expect(totals).toContainText("9h 0m 0s");
     await expect(totals).toContainText("6h 15m 0s");
@@ -576,7 +576,7 @@ test("overtime and exceptions report is scoped, source-linked and accessible", a
     await expect(page.getByRole("heading", { name: "Overtime and exceptions" })).toBeVisible();
     await openMainNavigation(page);
     await expect(page.getByRole("navigation", { name: "Main navigation" })
-      .getByRole("link", { name: "Exceptions report" })).toBeVisible();
+      .getByRole("link", { name: "Exceptions", exact: true })).toBeVisible();
     const totals = page.getByLabel("Exception totals");
     const total = (label) => totals.locator("div").filter({ hasText: label });
     await expect(total("Overlapping shifts")).toContainText("2");
@@ -4618,7 +4618,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
         ])).error).toBeNull();
 
         await signIn(page, `owner-${suffix}@example.test`, password);
-        await page.getByRole("link", { name: "Departments", exact: true }).click();
+        await page.getByRole("link", { name: "Departments & roles", exact: true }).click();
         await expect(page.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
         const addDepartment = page.getByRole("region", { name: "Add department", exact: true });
         await addDepartment.getByRole("button", { name: "Add department" }).click();
@@ -4720,7 +4720,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
         employeeContext = await browser.newContext({ baseURL: appUrl });
         const employeePage = await employeeContext.newPage();
         await signIn(employeePage, `staff-${suffix}@example.test`, password);
-        await expect(employeePage.getByRole("link", { name: "Departments", exact: true })).toHaveCount(0);
+        await expect(employeePage.getByRole("link", { name: "Departments & roles", exact: true })).toHaveCount(0);
         await employeePage.goto("/settings/departments");
         await expect(employeePage).toHaveURL(/\/\?error=permission/);
       } finally {
@@ -5055,7 +5055,7 @@ test("Department loading and failed saves are announced and recover without writ
     });
     try {
       await page.getByRole("navigation", { name: "Main navigation" })
-        .getByRole("link", { name: "Departments", exact: true }).click();
+        .getByRole("link", { name: "Departments & roles", exact: true }).click();
       await expect(page.getByRole("status").filter({ hasText: "Loading…" })).toBeVisible();
       releaseNavigation();
       await expect(page.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
@@ -11418,7 +11418,8 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
     const shell = page.locator("aside");
     await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
     await expect(shell.getByRole("link", { name: "Switch business" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "People" })).toHaveAttribute("href", `/people?business=${businessId}`);
+    await expect(page.getByRole("link", { name: "People" }))
+      .toHaveAttribute("href", `/people?business=${businessId}&venue=${venueId}`);
 
     const secondTab = await page.context().newPage();
     secondTab.setDefaultTimeout(20_000);
@@ -11428,7 +11429,7 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
     await expect(secondTab.locator("aside").getByText("Second private business", { exact: true })).toBeVisible();
 
     await page.getByRole("link", { name: "People" }).click();
-    await expect(page).toHaveURL(new RegExp(`/people\\?business=${businessId}$`));
+    await expect(page).toHaveURL(new RegExp(`/people\\?business=${businessId}&venue=${venueId}$`));
     await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
     await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
     await page.getByRole("link", { name: "Add person", exact: true }).click();
@@ -11460,7 +11461,7 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
     await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
 
     await secondTab.getByRole("link", { name: "People" }).click();
-    await expect(secondTab).toHaveURL(new RegExp(`/people\\?business=${otherBusiness}$`));
+    await expect(secondTab).toHaveURL(new RegExp(`/people\\?business=${otherBusiness}&venue=${otherVenue}$`));
     await secondTab.getByRole("link", { name: "Add person", exact: true }).click();
     newEmployee = secondTab.getByRole("region", { name: "New employee", exact: true });
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Revoked tab staff");
@@ -11729,6 +11730,230 @@ async function withPayrollDirectoryFixtures(run) {
     for (const id of [businessId, outsideBusiness]) await assertBusinessFixturesPreserved(admin, id);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
+}
+
+test("navigation UX: role visibility and direct-route authorization", async ({ browser }) => {
+  test.setTimeout(180_000);
+  const screenshotDir = process.env.BUTTERBOX_UXFIX_005_SCREENSHOTS;
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, outsideBusiness, venueId, outsideVenue }) => {
+    const expectations = {
+      owner: [
+        ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
+        ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
+        ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings"]],
+        ["Business", ["Payroll", "Hours & labour", "Permissions", "Audit history"]],
+      ],
+      admin: [
+        ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
+        ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
+        ["Venue Management", ["Departments & roles"]],
+        ["Business", ["Payroll"]],
+      ],
+      foh: [
+        ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
+        ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
+        ["Venue Management", ["Departments & roles"]],
+      ],
+      employee: [
+        ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
+        ["Team Management", ["Rostering", "Announcements"]],
+      ],
+    };
+    const contexts = [];
+    try {
+      for (const [role, groups] of Object.entries(expectations)) {
+        const context = await browser.newContext({
+          baseURL: appUrl, viewport: { width: role === "foh" || role === "employee" ? 375 : 1440, height: 900 },
+        });
+        contexts.push(context);
+        const rolePage = await context.newPage();
+        await signIn(rolePage, email(role), password);
+        await rolePage.goto(`/?business=${businessId}&venue=${venueId}`);
+        await openMainNavigation(rolePage);
+        const nav = rolePage.getByRole("navigation", { name: "Main navigation" });
+        await expect(nav.getByRole("group")).toHaveCount(groups.length);
+        for (const [index, [name, items]] of groups.entries()) {
+          const group = nav.getByRole("group").nth(index);
+          await expect(group).toHaveAccessibleName(name);
+          await expect(group.getByRole("link")).toHaveText(items);
+        }
+        await expect(nav.getByRole("link", { name: "Help", exact: true })).toHaveCount(1);
+        if (screenshotDir && (role === "foh" || role === "employee")) {
+          await rolePage.screenshot({ path: `${screenshotDir}/after-${role}-375.png`, fullPage: true });
+        }
+        if (role === "employee") {
+          for (const path of ["/settings/payroll", "/settings/permissions", "/settings/departments", "/reports/exceptions"]) {
+            await rolePage.goto(`${path}?business=${businessId}&venue=${venueId}`);
+            await expect(rolePage).toHaveURL(/error=permission/);
+          }
+          await rolePage.goto(`/attendance/kiosks?business=${businessId}&venue=${venueId}`);
+          await expect(rolePage.getByRole("main").getByRole("alert")).toContainText("Only a business owner");
+        }
+        if (role === "admin") {
+          await rolePage.goto(`/attendance/kiosks?business=${businessId}&venue=${venueId}`);
+          await expect(rolePage.getByRole("main").getByRole("alert")).toContainText("Only a business owner");
+          await rolePage.goto(`/settings/permissions?business=${businessId}`);
+          await expect(rolePage).toHaveURL(/error=permission/);
+        }
+        if (role === "foh") {
+          await rolePage.goto(`/settings/departments?business=${outsideBusiness}&venue=${outsideVenue}`);
+          await expect(rolePage).toHaveURL(/error=workspace/);
+          await expect(rolePage.getByText("Outside payroll UX cafe")).toHaveCount(0);
+          await rolePage.goto(`/settings/payroll?business=${businessId}&venue=${venueId}`);
+          await expect(rolePage).toHaveURL(/error=permission/);
+        }
+      }
+    } finally {
+      for (const context of contexts) await context.close();
+    }
+  });
+});
+
+test("navigation UX: every owner destination, context and browser history", async ({ page }) => {
+  test.setTimeout(180_000);
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, secondVenue }) => {
+    await signIn(page, email("owner"), password);
+    await page.goto(`/roster?business=${businessId}&venue=${secondVenue}`);
+    const nav = page.getByRole("navigation", { name: "Main navigation" });
+    const destinations = [
+      ["Dashboard", "/"], ["My schedule", "/my-schedule"], ["Clock in / out", "/attendance"],
+      ["My availability", "/availability"], ["Notifications", "/notifications"], ["Rostering", "/roster"],
+      ["People", "/people"], ["Announcements", "/announcements"], ["Timesheet review", "/timesheets"],
+      ["Work time", "/work-time"], ["Exceptions", "/reports/exceptions"], ["Clock kiosks", "/attendance/kiosks"],
+      ["Departments & roles", "/settings/departments"], ["Venue settings", "/settings/organisation"],
+      ["Payroll", "/settings/payroll"], ["Hours & labour", "/reports/hours"],
+      ["Permissions", "/settings/permissions"], ["Audit history", "/settings/audit"], ["Help", "/help"],
+    ];
+    const businessWide = new Set(["Hours & labour", "Permissions", "Audit history", "Help"]);
+    let contextualHelpLinks = 0;
+    for (const [label, pathname] of destinations) {
+      await nav.getByRole("link", { name: label, exact: true }).click();
+      await expect(page).toHaveURL((url) => url.pathname === pathname &&
+        url.searchParams.get(businessWide.has(label) ? "contextVenue" : "venue") === secondVenue);
+      await expect(page.getByRole("main")).toBeVisible();
+      await expect(page.locator("aside").first().getByText("Second venue", { exact: true })).toBeVisible();
+      await expect(nav.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
+      await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
+      for (const link of await page.locator('main a[href^="/help?"]').all()) {
+        const href = await link.getAttribute("href");
+        expect(new URL(href, appUrl).searchParams.get("contextVenue"), `${label} contextual help`).toBe(secondVenue);
+        contextualHelpLinks++;
+      }
+    }
+    expect(contextualHelpLinks).toBeGreaterThanOrEqual(10);
+    await page.goto(`/attendance/kiosks?business=${businessId}&venue=${secondVenue}`);
+    await expect(nav.getByRole("link", { name: "Clock kiosks" })).toHaveAttribute("aria-current", "page");
+    await page.reload();
+    await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
+    await nav.getByRole("link", { name: "Clock in / out" }).click();
+    await expect(nav.getByRole("link", { name: "Clock in / out" })).toHaveAttribute("aria-current", "page");
+    await page.goBack();
+    await expect(nav.getByRole("link", { name: "Clock kiosks" })).toHaveAttribute("aria-current", "page");
+    await page.goForward();
+    await expect(nav.getByRole("link", { name: "Clock in / out" })).toHaveAttribute("aria-current", "page");
+  });
+});
+
+test("navigation UX: business-wide views retain venue context without narrowing results", async ({ page }) => {
+  test.setTimeout(120_000);
+  page.setDefaultTimeout(20_000);
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, secondVenue, users }) => {
+    await signIn(page, email("owner"), password);
+    await page.goto(`/roster?business=${businessId}&venue=${secondVenue}`);
+    const nav = page.getByRole("navigation", { name: "Main navigation" });
+    const venueLabel = () => page.locator("aside").first().getByText("Second venue", { exact: true });
+    await nav.getByRole("link", { name: "Hours & labour" }).click();
+    const hours = page.getByRole("form", { name: "Report filters" });
+    await expect(hours.locator('select[name="venue"]')).toHaveValue("");
+    await hours.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await expect(venueLabel()).toBeVisible();
+    await nav.getByRole("link", { name: "Permissions", exact: true }).click();
+    const backToDashboard = await page.getByRole("link", { name: "Back to dashboard" }).getAttribute("href");
+    expect(new URL(backToDashboard, appUrl).searchParams.get("venue")).toBe(secondVenue);
+    const filters = page.getByRole("form", { name: "Member directory filters" });
+    await expect(filters.locator('select[name="venue"]')).toHaveValue("all");
+    await filters.getByRole("searchbox", { name: "Search members" }).fill(email("foh"));
+    await filters.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await page.getByRole("row").filter({ hasText: email("foh") }).getByRole("link", { name: /^View access for / }).click();
+    await expect(venueLabel()).toBeVisible();
+    await page.getByRole("button", { name: "Edit permissions" }).click();
+    await page.getByLabel("Business role").selectOption("general_manager");
+    await page.getByRole("button", { name: "Review change" }).click();
+    await page.getByLabel("I confirm this change to the member's business access.").check();
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText("Permissions updated");
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await expect(venueLabel()).toBeVisible();
+    const membership = await admin.from("business_memberships").select("role")
+      .eq("business_id", businessId).eq("user_id", users[3]).single();
+    expect(membership.error).toBeNull();
+    expect(membership.data.role).toBe("general_manager");
+    await page.getByRole("link", { name: "Help with permissions" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await expect(venueLabel()).toBeVisible();
+    await page.goBack();
+    await page.getByRole("link", { name: "sensitive action audit" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue &&
+      url.searchParams.get("source") === "business_memberships");
+    await page.getByRole("button", { name: "Apply audit filters" }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await expect(venueLabel()).toBeVisible();
+    await nav.getByRole("link", { name: "Help", exact: true }).click();
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
+    await expect(venueLabel()).toBeVisible();
+  });
+});
+
+for (const width of [375, 390, 768, 1024, 1440]) {
+  test(`navigation UX: responsive keyboard and accessibility at ${width}px`, async ({ page }) => {
+    test.setTimeout(180_000);
+    const screenshotDir = process.env.BUTTERBOX_UXFIX_005_SCREENSHOTS;
+    await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId }) => {
+      await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await signIn(page, email("owner"), password);
+      await page.goto(`/?business=${businessId}&venue=${venueId}`);
+      await openMainNavigation(page);
+      const nav = page.getByRole("navigation", { name: "Main navigation" });
+      const menu = nav.getByRole("button", { name: "Menu", exact: true });
+      await expect(nav.getByRole("group")).toHaveCount(4);
+      await expect(nav.getByRole("link")).toHaveCount(19);
+      const sizes = await nav.locator("a").evaluateAll((anchors) =>
+        anchors.map((anchor) => ({ label: anchor.textContent.trim(), height: anchor.getBoundingClientRect().height })));
+      for (const size of sizes) expect(size.height, `${width}px ${size.label} target height`).toBeGreaterThanOrEqual(44);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (width < 768) {
+        await menu.focus();
+        await page.keyboard.press("Tab");
+        await expect(nav.getByRole("link", { name: "Dashboard", exact: true })).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expect(menu).toBeFocused();
+        await nav.getByRole("link", { name: "Help", exact: true }).focus();
+        await expect(nav.getByRole("link", { name: "Help", exact: true })).toBeFocused();
+        await page.keyboard.press("Escape");
+        await expect(menu).toHaveAttribute("aria-expanded", "false");
+        await expect(menu).toBeFocused();
+        await openMainNavigation(page);
+      } else {
+        await expect(menu).toBeHidden();
+        await nav.getByRole("link", { name: "Dashboard", exact: true }).focus();
+        await page.keyboard.press("Tab");
+        await expect(nav.getByRole("link", { name: "My schedule", exact: true })).toBeFocused();
+        await page.keyboard.press("Shift+Tab");
+        await expect(nav.getByRole("link", { name: "Dashboard", exact: true })).toBeFocused();
+      }
+      expect(await accessibilityFindings(page, `navigation ${width}px`)).toEqual([]);
+      if (screenshotDir) {
+        await nav.getByRole("link", { name: "Dashboard", exact: true }).focus();
+        await page.screenshot({ path: `${screenshotDir}/after-owner-${width}-top.png`, fullPage: true });
+        await nav.getByRole("link", { name: "Help", exact: true }).focus();
+        await page.screenshot({ path: `${screenshotDir}/after-owner-${width}-bottom.png`, fullPage: true });
+      }
+    });
+  });
 }
 
 test("payroll UX: destination switching, empty states and return filters", async ({ page }) => {

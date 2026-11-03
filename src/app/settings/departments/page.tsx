@@ -53,14 +53,14 @@ export default async function DepartmentsPage({ searchParams }: { searchParams: 
   const context = filters ? { businessId, venueId, filters } : null;
 
   return <AppShell businessName={workspace.business.name} businessId={businessId} businessCount={workspace.businesses.length}
-    venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <h1 className="text-3xl font-semibold">Departments and roles</h1>
         <p className="mt-2 text-sm text-muted">Find a department, then open it to manage its roles.</p>
       </div>
       <div className="flex flex-wrap gap-3 text-sm font-semibold text-ocean">
-        <Link href={`${helpHref("people", businessId)}#departments-and-roles`} className="min-h-11 content-center underline">
+        <Link href={`${helpHref("people", businessId, venueId)}#departments-and-roles`} className="min-h-11 content-center underline">
           Department help
         </Link>
         {workspace.membership.role === "owner" && <Link

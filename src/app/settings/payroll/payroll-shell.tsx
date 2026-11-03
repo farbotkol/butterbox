@@ -4,7 +4,7 @@ import type { PayrollWorkspace } from "./payroll-workspace";
 
 export function PayrollShell({ workspace, children }: { workspace: PayrollWorkspace; children: ReactNode }) {
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>{children}</AppShell>;
 }
 

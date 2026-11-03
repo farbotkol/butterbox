@@ -30,7 +30,7 @@ export default async function HoursLabourPage({ searchParams }: {
   const department = parseReportFilter(params.department);
   const rate = parseIllustrativeRate(params.rate);
   const workspace = await getWorkspace(typeof venue === "string" ? venue : undefined, {
-    businessId: params.business, page: true,
+    businessId: params.business, venueHint: params.contextVenue, page: true,
   });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
@@ -43,7 +43,7 @@ export default async function HoursLabourPage({ searchParams }: {
   }
   const shell = {
     businessName: workspace.business.name, businessId: workspace.business.id,
-    businessCount: workspace.businesses.length, venueName: workspace.venue.name,
+    businessCount: workspace.businesses.length, venueId: workspace.venue.id, venueName: workspace.venue.name,
     email: workspace.user.email ?? "", role: workspace.membership.role,
   };
   if (workspace.membership.role !== "owner") return <AppShell {...shell}>
@@ -84,6 +84,7 @@ export default async function HoursLabourPage({ searchParams }: {
     <p className="mt-2 text-sm text-muted">Published scheduled hours compared with currently approved timesheets. Read-only; not a payroll calculation.</p>
     <form action="/reports/hours" aria-label="Report filters" className="mt-5 grid gap-4 rounded-xl border border-line bg-white p-5 sm:grid-cols-2 lg:grid-cols-5">
       <input type="hidden" name="business" value={workspace.business.id} />
+      <input type="hidden" name="contextVenue" value={workspace.venue.id} />
       <label className="grid gap-1 text-sm">Week containing
         <input type="date" name="week" defaultValue={week ?? ""} className={control} required />
       </label>

@@ -99,7 +99,7 @@ export default async function EmploymentMetadataPage({
   const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink";
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-      businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+      businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <Link href={profileHref} className="text-sm font-semibold text-ocean underline">Back to profile</Link>
       <h1 className="mt-4 break-words text-3xl font-semibold">Employment metadata{employee.data ? ` for ${employee.data.name}` : ""}</h1>

@@ -290,7 +290,7 @@ export default async function ShiftSwapsPage({
 
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length}
-      venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
+      venueId={workspace.venue.id} venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <p className="text-sm font-medium text-muted">Your roster</p>

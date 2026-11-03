@@ -45,6 +45,9 @@ test("permission URLs retain only normalized safe directory context", () => {
   assert.equal(url.searchParams.get("venue"), venue);
   assert.equal(url.searchParams.get("role"), "employee");
   assert.equal(url.searchParams.get("q"), "Alex");
+  const contextual = new URL(permissionsHref(business, filters, member, venue), "http://localhost");
+  assert.equal(contextual.searchParams.get("contextVenue"), venue);
+  assert.equal(contextual.searchParams.get("venue"), venue);
 });
 
 test("the owner directory searches names and emails and filters scopes without mutating its input", () => {

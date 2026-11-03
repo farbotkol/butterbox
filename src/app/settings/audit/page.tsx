@@ -9,14 +9,16 @@ import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
 type AuditSearch = {
-  business?: string; source?: string; operation?: string; actor?: string; from?: string; to?: string; page?: string;
+  business?: string; contextVenue?: string; source?: string; operation?: string; actor?: string; from?: string; to?: string; page?: string;
 };
 const pageSize = 50;
 
 export default async function AuditPage({ searchParams }: { searchParams: Promise<AuditSearch> }) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
   const params = await searchParams;
-  const workspace = await getWorkspace(undefined, { businessId: params.business, page: true });
+  const workspace = await getWorkspace(undefined, {
+    businessId: params.business, venueHint: params.contextVenue, page: true,
+  });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -59,7 +61,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     }
   }
   const pageHref = (page: number) => {
-    const query = new URLSearchParams({ business: workspace.business.id, page: String(page) });
+    const query = new URLSearchParams({ business: workspace.business.id, contextVenue: workspace.venue.id, page: String(page) });
     for (const key of ["source", "operation", "actor", "from", "to"] as const) {
       if (params[key]) query.set(key, params[key]);
     }
@@ -68,7 +70,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
   const inputStyle = "mt-1 block w-full rounded-lg border border-line bg-white p-2 text-sm";
 
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <h1 className="text-3xl font-semibold">Sensitive action audit</h1>
     <p className="mt-3 text-sm leading-6 text-muted">
@@ -80,6 +82,7 @@ export default async function AuditPage({ searchParams }: { searchParams: Promis
     <form action="/settings/audit" aria-label="Filter audit history"
       className="mt-5 grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2 lg:grid-cols-3">
       <input type="hidden" name="business" value={workspace.business.id} />
+      <input type="hidden" name="contextVenue" value={workspace.venue.id} />
       <label className="text-sm">Change category
         <select name="source" defaultValue={filters?.source ?? ""} className={inputStyle}>
           <option value="">All categories</option>

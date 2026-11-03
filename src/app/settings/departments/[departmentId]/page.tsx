@@ -40,7 +40,7 @@ export default async function DepartmentPage({ params, searchParams }: {
   const context = { businessId, venueId, filters };
 
   return <AppShell businessName={workspace.business.name} businessId={businessId} businessCount={workspace.businesses.length}
-    venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={departmentHref(businessId, venueId, filters)} className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
       Back to departments
     </Link>

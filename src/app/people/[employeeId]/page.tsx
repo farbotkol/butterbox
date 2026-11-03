@@ -49,7 +49,7 @@ export default async function PersonPage({
   if (employeeResponse.error) {
     console.error("Could not load the employee profile.", employeeResponse.error);
     return <AppShell businessName={initialWorkspace.business.name} businessId={initialWorkspace.business.id}
-      businessCount={initialWorkspace.businesses.length} venueName={initialWorkspace.venue.name}
+      businessCount={initialWorkspace.businesses.length} venueId={initialWorkspace.venue.id} venueName={initialWorkspace.venue.name}
       email={initialWorkspace.user.email ?? ""} role={initialWorkspace.membership.role}>
       <h1 className="text-2xl font-semibold">Profile unavailable</h1>
       <p role="alert" className="mt-4 text-sm">Could not load this profile. Refresh and check your access.</p>
@@ -135,7 +135,7 @@ export default async function PersonPage({
   const renderKey = randomUUID();
 
   return <AppShell businessName={workspace.business.name} businessId={businessId} businessCount={workspace.businesses.length}
-    venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={peopleHref(businessId, venueId, filters)} className="text-sm font-semibold text-ocean underline">
       Back to people
     </Link>
@@ -267,7 +267,7 @@ export default async function PersonPage({
           editor={<SharedWorkersSection employee={employee} otherEmployees={otherEmployees.data ?? []}
             sharedProfiles={sharedProfiles.data ?? []} venues={venues.data ?? []} venue={workspace.venue} context={context} />} />
       </section>}
-      <Link href={helpHref("people", businessId)} className="mt-6 inline-block text-sm font-semibold text-ocean underline">
+      <Link href={helpHref("people", businessId, venueId)} className="mt-6 inline-block text-sm font-semibold text-ocean underline">
         Help with managing people
       </Link>
     </>}

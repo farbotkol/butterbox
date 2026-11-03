@@ -10,6 +10,7 @@ type AppShellProps = {
   businessId?: string;
   businessCount?: number;
   venueName: string;
+  venueId: string;
   email: string;
   role: string;
 };
@@ -20,10 +21,12 @@ export function AppShell({
   businessId,
   businessCount = 1,
   venueName,
+  venueId,
   email,
   role,
 }: AppShellProps) {
   const pinnedBusiness = businessCount > 1 ? businessId : undefined;
+  const homeParams = new URLSearchParams({ ...(pinnedBusiness ? { business: pinnedBusiness } : {}), venue: venueId });
   return (
     <div className="min-h-screen bg-[#f5f9f8] md:flex">
       <a href="#main-content"
@@ -31,7 +34,7 @@ export function AppShell({
         Skip to main content
       </a>
       <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:overflow-y-auto md:overscroll-contain md:border-b-0 md:border-r">
-        <Link href={pinnedBusiness ? `/?business=${encodeURIComponent(pinnedBusiness)}` : "/"}
+        <Link href={`/?${homeParams}`}
           className="flex items-center gap-3 px-5 py-4 md:px-6 md:py-5">
           <BrandLockup compact />
         </Link>
@@ -44,7 +47,7 @@ export function AppShell({
             Switch business
           </Link>}
         </div>
-        <MainNavigation role={role} businessId={pinnedBusiness} />
+        <MainNavigation role={role} businessId={pinnedBusiness} venueId={venueId} />
         <div className="mt-auto hidden border-t border-line px-3 py-3 md:block">
           <a
             href="mailto:support@butterbox.app"

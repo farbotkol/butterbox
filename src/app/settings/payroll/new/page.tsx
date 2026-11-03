@@ -36,7 +36,7 @@ export default async function NewPayrollDestinationPage({ searchParams }: { sear
       <Link href={back} className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
         Back to mappings
       </Link>
-      <Link href={helpHref("payroll", workspace.business.id)}
+      <Link href={helpHref("payroll", workspace.business.id, workspace.venue.id)}
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with payroll preparation
       </Link>

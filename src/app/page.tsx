@@ -29,7 +29,7 @@ import {
 } from "@/lib/workspace";
 
 type HomePageProps = {
-  searchParams: Promise<{ week?: string; business?: string; error?: string; saved?: string }>;
+  searchParams: Promise<{ week?: string; business?: string; venue?: string; error?: string; saved?: string }>;
 };
 
 function SetupNotice() {
@@ -102,7 +102,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   if (!isSupabaseConfigured()) return <SetupNotice />;
 
   const params = await searchParams;
-  const workspace = await getWorkspace(undefined, { businessId: params.business, page: true });
+  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {
@@ -188,7 +188,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length}
       email={workspace.user.email ?? ""}
       role={workspace.membership.role}
-      venueName={workspace.venue.name}
+      venueId={workspace.venue.id} venueName={workspace.venue.name}
     >
       {params.error === "permission" && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
         You don&apos;t have permission to access that page or make that change. No changes were saved.

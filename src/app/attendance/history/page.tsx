@@ -60,7 +60,7 @@ export default async function PersonalAttendanceHistoryPage({ searchParams }: { 
   );
 
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={attendanceHref} className="text-sm font-semibold text-ocean underline">Back to clock in / out</Link>
     <h1 className="mt-4 text-3xl font-semibold">Your attendance history</h1>

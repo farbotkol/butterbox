@@ -18,7 +18,7 @@ export default async function MemberPermissionsPage({ params, searchParams }: Pr
   const [{ userId }, search] = await Promise.all([params, searchParams]);
   const workspace = await requirePermissionsWorkspace(search);
   const filters = parsePermissionsFilters(search);
-  if (!filters) redirect(withBusiness("/settings/permissions?error=filter", workspace.business.id));
+  if (!filters) redirect(withBusiness(`/settings/permissions?error=filter&contextVenue=${workspace.venue.id}`, workspace.business.id));
   const normalizedUserId = parseBusinessId(userId);
   if (!normalizedUserId) notFound();
   const { members, venues, departments } = await loadPermissionsData(workspace);
@@ -27,11 +27,11 @@ export default async function MemberPermissionsPage({ params, searchParams }: Pr
 
   return <AppShell email={workspace.user.email ?? ""} businessName={workspace.business.name}
     businessCount={workspace.businesses.length} businessId={workspace.business.id}
-    venueName={workspace.venue.name} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} role={workspace.membership.role}>
     <div className="mx-auto max-w-4xl">
       <h1 className="text-3xl font-semibold">Member access</h1>
       <p className="mt-2 text-sm text-muted">Review the current business role and scope before making changes.</p>
-      <Link href={permissionsHref(workspace.business.id, filters)} className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+      <Link href={permissionsHref(workspace.business.id, filters, undefined, workspace.venue.id)} className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Back to members
       </Link>
       <PermissionsFeedback error={search.error} saved={search.saved} />
@@ -49,15 +49,15 @@ export default async function MemberPermissionsPage({ params, searchParams }: Pr
             <dd className="mt-1 break-words">{permissionScopeLabel(member.department_id, departments, "department")}</dd></div>
         </dl>
         <div className="mt-5 border-t border-line pt-4">
-          <PermissionEditor businessId={workspace.business.id} member={member} venues={venues}
+          <PermissionEditor businessId={workspace.business.id} contextVenueId={workspace.venue.id} member={member} venues={venues}
             departments={departments} filters={filters} />
         </div>
       </section>
       <p className="mt-4 text-sm text-muted">Permission changes are recorded in the existing{" "}
-        <Link href={withBusiness("/settings/audit?source=business_memberships", workspace.business.id)}
+        <Link href={withBusiness(`/settings/audit?source=business_memberships&contextVenue=${workspace.venue.id}`, workspace.business.id)}
           className="font-semibold text-ocean underline">sensitive action audit</Link>.
       </p>
-      <Link href={helpHref("permissions", workspace.business.id)}
+      <Link href={helpHref("permissions", workspace.business.id, workspace.venue.id)}
         className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with permissions
       </Link>

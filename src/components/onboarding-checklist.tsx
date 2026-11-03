@@ -26,7 +26,7 @@ export function OnboardingChecklist({ progress, venueId, businessId }: {
         <h2 id="onboarding-heading" className="text-lg font-semibold">Get your first roster ready</h2>
         <p className="text-sm text-muted">{completed} of {steps.length} steps complete</p>
       </div>
-      <Link href={helpHref("onboarding", businessId)} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+      <Link href={helpHref("onboarding", businessId, venueId)} className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with your first roster
       </Link>
       <ol className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">

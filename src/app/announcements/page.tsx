@@ -64,13 +64,13 @@ export default async function AnnouncementsPage({ searchParams }: {
     business: businessId, venue: venueId, ...(notice ? { notice } : {}),
   })}`;
   return <AppShell businessName={workspace.business.name} businessId={businessId} businessCount={workspace.businesses.length}
-    venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
+    venueId={workspace.venue.id} venueName={workspace.venue.name} email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <h1 className="text-3xl font-semibold">Announcements</h1>
     <p className="mt-3 text-sm text-muted">
       In-app business, venue and department notices. Your history follows current business access.
       Email and push are not sent. Reading a notice does not acknowledge it or change your roster.
     </p>
-    <Link href={helpHref("announcements", businessId)}
+    <Link href={helpHref("announcements", businessId, venueId)}
       className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">Help with announcements</Link>
     {params.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-900">
       We could not confirm that acknowledgement. Refresh history and check your access before retrying.

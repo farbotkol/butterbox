@@ -224,7 +224,7 @@ export default async function MySchedulePage({
     });
   }
   return (
-    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -234,7 +234,7 @@ export default async function MySchedulePage({
             Only your published shifts are shown. Times use {workspace.venue.timezone.replaceAll("_", " ")}.
           </p>
           <div className="mt-2 flex flex-wrap gap-x-5">
-            <Link href={helpHref("employee", workspace.business.id)}
+            <Link href={helpHref("employee", workspace.business.id, workspace.venue.id)}
               className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
               Help with your schedule
             </Link>

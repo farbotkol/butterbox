@@ -183,7 +183,7 @@ export default async function OrganisationPage({
   const conflictEvents: ConflictPolicyEvent[] = conflictHistory.data ?? [];
 
   return (
-    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={selectedVenue?.name ?? workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={venueId} venueName={selectedVenue?.name ?? workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <h1 className="text-3xl font-semibold">Venue settings</h1>
       <p className="mt-3 text-sm leading-6 text-muted">

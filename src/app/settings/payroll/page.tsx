@@ -50,7 +50,7 @@ export default async function PayrollMappingPage({ searchParams }: { searchParam
       Xero and other adapters remain unavailable until separately verified.
     </p>
     <div className="mt-2 flex flex-wrap gap-x-4">
-      <Link href={helpHref("payroll", businessId)}
+      <Link href={helpHref("payroll", businessId, venueId)}
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with payroll preparation
       </Link>

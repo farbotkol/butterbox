@@ -452,12 +452,13 @@ export async function assignMemberRoleAction(formData: FormData) {
   const context = singleFormString(formData, "directory_filters");
   const filters = parsePermissionsFilterContext(context);
   const origin = singleFormString(formData, "permissions_origin");
-  if (origin !== "detail" || !filters || userIds?.length !== 1) {
+  const contextVenues = uuidList(formData, "context_venue_id", 1);
+  if (origin !== "detail" || !filters || userIds?.length !== 1 || !contextVenues) {
     console.error("Invalid permission return context.");
     redirect(withBusiness("/settings/permissions?error=filter", businessId));
   }
   const userId = userIds[0].toLowerCase();
-  const destination = permissionsHref(businessId, filters, userId);
+  const destination = permissionsHref(businessId, filters, userId, contextVenues[0]?.toLowerCase());
   const role = singleFormString(formData, "role");
   const expectedRole = singleFormString(formData, "expected_role");
   const venue = singleFormString(formData, "venue_id");

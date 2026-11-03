@@ -111,6 +111,10 @@ test("help links retain business scope and allow only visible real guide anchors
   const owner = helpTopics(source, "owner", true);
   const employee = helpTopics(source, "employee", true);
   assert.equal(helpHref("payroll", "business id"), "/help?business=business+id&topic=payroll");
+  assert.equal(helpHref("payroll", "business id", "venue id"),
+    "/help?business=business+id&contextVenue=venue+id&topic=payroll");
+  assert.equal(helpContentHref("#timesheets-and-payroll-preparation", owner, "business", "venue"),
+    "/help?business=business&contextVenue=venue&topic=payroll#timesheets-and-payroll-preparation");
   assert.equal(helpContentHref("#timesheets-and-payroll-preparation", owner, "business"),
     "/help?business=business&topic=payroll#timesheets-and-payroll-preparation");
   assert.equal(helpContentHref("#timesheets-and-payroll-preparation", employee), null);
@@ -151,8 +155,10 @@ test("core contextual help destinations and documented screen/link labels stay w
   const screens = [
     ["src/app/setup/page.tsx", "Set up your workspace", "Help with workspace setup"],
     ["src/app/people/page.tsx", "Your people", "Help with managing people"],
+    ["src/app/people/[employeeId]/page.tsx", "Help with managing people"],
     ["src/app/settings/departments/page.tsx", "Departments and roles", "Department help"],
     ["src/app/settings/permissions/page.tsx", "Business permissions", "Help with permissions"],
+    ["src/app/settings/permissions/[userId]/page.tsx", "Help with permissions"],
     ["src/components/onboarding-checklist.tsx", "Get your first roster ready", "Help with your first roster"],
     ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters"],
     ["src/app/my-schedule/page.tsx", "My schedule", "Help with your schedule"],
@@ -182,7 +188,13 @@ test("core contextual help destinations and documented screen/link labels stay w
           }
         };
         checkTopic(node.arguments[0]);
-        if (!file.includes("/setup/")) assert.equal(node.arguments.length, 2, `${file}: missing business scope`);
+        if (file.includes("/setup/")) {
+          assert.equal(node.arguments.length, 1, `${file}: setup has no selected workspace`);
+        } else {
+          assert.equal(node.arguments.length, 3, `${file}: missing business or venue context`);
+          assert.match(node.arguments[1].getText(syntax), /^(?:businessId|workspace\.business\.id)$/);
+          assert.match(node.arguments[2].getText(syntax), /^(?:venueId|workspace\.venue\.id)$/);
+        }
       }
       ts.forEachChild(node, visit);
     };

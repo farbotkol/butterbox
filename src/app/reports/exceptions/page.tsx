@@ -74,7 +74,7 @@ export default async function ExceptionsReportPage({ searchParams }: {
   });
   const shell = {
     businessName: workspace.business.name, businessId: workspace.business.id,
-    businessCount: workspace.businesses.length, venueName: workspace.venue.name,
+    businessCount: workspace.businesses.length, venueId: workspace.venue.id, venueName: workspace.venue.name,
     email: workspace.user.email ?? "", role: workspace.membership.role,
   };
   const control = "min-h-11 min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-sm";
@@ -89,7 +89,7 @@ export default async function ExceptionsReportPage({ searchParams }: {
         <h1 className="text-2xl font-semibold sm:text-3xl">Overtime and exceptions</h1>
         <p className="mt-2 text-sm text-muted">Read-only operational indicators for the departments you manage in one venue.</p>
       </div>
-      <Link href={helpHref("exceptions", workspace.business.id)}
+      <Link href={helpHref("exceptions", workspace.business.id, workspace.venue.id)}
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         How to use this report
       </Link>

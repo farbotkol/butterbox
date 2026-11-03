@@ -67,7 +67,7 @@ export default async function PayrollEmployeePage({ params, searchParams }: {
     <p className="mt-4 text-sm text-muted">
       Changes retain their existing audit history. Removing an ID blocks provider-ready records for this employee.
     </p>
-    <Link href={helpHref("payroll", workspace.business.id)}
+    <Link href={helpHref("payroll", workspace.business.id, workspace.venue.id)}
       className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
       Help with payroll preparation
     </Link>

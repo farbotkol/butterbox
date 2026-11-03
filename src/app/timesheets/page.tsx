@@ -369,7 +369,7 @@ export default async function TimesheetsPage({ searchParams }: {
     <input type="hidden" name="decision" value={decision} />
   </>;
 
-  return <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+  return <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <div>
       <p className="text-sm font-medium text-muted">Attendance</p>
@@ -377,7 +377,7 @@ export default async function TimesheetsPage({ searchParams }: {
       <p className="mt-2 text-sm text-muted">
         Compare published shifts with recorded attendance, then approve or return entries for the departments you manage.
       </p>
-      <Link href={helpHref("timesheets", workspace.business.id)}
+      <Link href={helpHref("timesheets", workspace.business.id, workspace.venue.id)}
         className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with timesheet review
       </Link>
@@ -547,7 +547,7 @@ export default async function TimesheetsPage({ searchParams }: {
           </details>}
           {period.canFinalise && <section aria-labelledby="payroll-export-heading" className="mt-4 border-t border-line pt-4">
             <h3 id="payroll-export-heading" className="font-semibold">Generic payroll CSV</h3>
-            <Link href={helpHref("payroll", workspace.business.id)}
+            <Link href={helpHref("payroll", workspace.business.id, workspace.venue.id)}
               className="mt-2 inline-flex min-h-11 items-center font-semibold text-ocean underline">
               Help with payroll CSV
             </Link>

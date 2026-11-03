@@ -12,20 +12,20 @@ import type { PermissionDepartment, PermissionVenue } from "./permissions-worksp
 const assignableRoles = ["owner", "general_manager", "foh_manager", "boh_manager", "employee"] as const;
 
 export function PermissionEditor({
-  businessId, member, venues, departments, filters,
+  businessId, contextVenueId, member, venues, departments, filters,
 }: {
-  businessId: string; member: PermissionsMember; venues: PermissionVenue[];
+  businessId: string; contextVenueId: string; member: PermissionsMember; venues: PermissionVenue[];
   departments: PermissionDepartment[]; filters: PermissionsFilters;
 }) {
   return <InlineEditor label="Edit permissions"
     read={<p className="text-sm text-muted">Review the current access above before making changes.</p>}
-    editor={<PermissionEditForm businessId={businessId} member={member} venues={venues} departments={departments} filters={filters} />} />;
+    editor={<PermissionEditForm businessId={businessId} contextVenueId={contextVenueId} member={member} venues={venues} departments={departments} filters={filters} />} />;
 }
 
 function PermissionEditForm({
-  businessId, member, venues, departments, filters,
+  businessId, contextVenueId, member, venues, departments, filters,
 }: {
-  businessId: string; member: PermissionsMember; venues: PermissionVenue[];
+  businessId: string; contextVenueId: string; member: PermissionsMember; venues: PermissionVenue[];
   departments: PermissionDepartment[]; filters: PermissionsFilters;
 }) {
   const [role, setRole] = useState(member.role);
@@ -72,6 +72,7 @@ function PermissionEditForm({
       <h3 ref={editHeading} tabIndex={-1} className="font-semibold">Edit permissions</h3>
       <input type="hidden" name="permissions_origin" value="detail" />
       <input type="hidden" name="business_id" value={businessId} />
+      <input type="hidden" name="context_venue_id" value={contextVenueId} />
       <input type="hidden" name="user_id" value={member.user_id} />
       <input type="hidden" name="expected_role" value={member.role} />
       <input type="hidden" name="expected_venue_id" value={member.venue_id ?? ""} />

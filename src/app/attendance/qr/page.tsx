@@ -69,7 +69,7 @@ export default async function KioskClockPage({ searchParams }: {
   }
   const attendanceUrl = withBusiness(`/attendance?venue=${encodeURIComponent(venueId)}`, businessId);
   return <AppShell businessName={workspace.business.name} businessId={businessId}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={attendanceUrl} className="text-sm font-semibold text-ocean underline">Back to attendance</Link>
     <h1 className="mt-3 text-3xl font-semibold">Confirm QR clock</h1>

@@ -291,7 +291,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
   const breakRequestId = randomUUID();
 
   return (
-    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
@@ -300,7 +300,7 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           <p className="mt-2 text-sm text-muted">
             Your clock time is recorded by the server, not your device.
           </p>
-          <Link href={helpHref("attendance", workspace.business.id)}
+          <Link href={helpHref("attendance", workspace.business.id, workspace.venue.id)}
             className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
             Help with clocking and corrections
           </Link>

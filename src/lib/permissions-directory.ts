@@ -66,9 +66,10 @@ export function parsePermissionsFilterContext(value: unknown): PermissionsFilter
   return parsePermissionsFilters(input);
 }
 
-export function permissionsHref(businessId: string, filters: PermissionsFilters, userId?: string): string {
+export function permissionsHref(businessId: string, filters: PermissionsFilters, userId?: string, contextVenueId?: string): string {
   const params = new URLSearchParams(serializePermissionsFilters(filters));
   params.set("business", businessId);
+  if (contextVenueId) params.set("contextVenue", contextVenueId);
   const path = userId ? `/settings/permissions/${encodeURIComponent(userId)}` : "/settings/permissions";
   return `${path}?${params}`;
 }

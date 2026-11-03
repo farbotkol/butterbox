@@ -6,7 +6,7 @@ import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
 
 export type PermissionsSearch = {
-  business?: string; q?: string; role?: string; venue?: string; department?: string;
+  business?: string; contextVenue?: string; q?: string; role?: string; venue?: string; department?: string;
   sort?: string; page?: string; error?: string; saved?: string;
 };
 export type PermissionVenue = { id: string; name: string };
@@ -14,7 +14,9 @@ export type PermissionDepartment = { id: string; name: string; venue_id: string 
 
 export async function requirePermissionsWorkspace(search: PermissionsSearch) {
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const workspace = await getWorkspace(undefined, { businessId: search.business, page: true });
+  const workspace = await getWorkspace(undefined, {
+    businessId: search.business, venueHint: search.contextVenue, page: true,
+  });
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status === "needs_setup") redirect("/setup");
   if (workspace.status === "error") {

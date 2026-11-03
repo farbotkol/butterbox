@@ -24,7 +24,7 @@ export default async function NewPersonPage({ searchParams }: { searchParams: Pr
   if (departments.error) console.error("Could not load departments for a new person.", departments.error);
   const context = { businessId: workspace.business.id, venueId: workspace.venue.id, filters };
   return <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
-    businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
     email={workspace.user.email ?? ""} role={workspace.membership.role}>
     <Link href={peopleHref(workspace.business.id, workspace.venue.id, filters)}
       className="text-sm font-semibold text-ocean underline">Back to people</Link>

@@ -136,7 +136,7 @@ export default async function NotificationsPage({
   });
 
   return (
-    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
+    <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={workspace.venue.id} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
