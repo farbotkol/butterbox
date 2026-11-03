@@ -3,8 +3,8 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **65**.
-  In Progress: **0**. Blocked: **7**. Not started (Backlog): **55**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **55**.
 - BB-REPORT-002 is **Done**: a manager-scoped read-only exceptions report highlights overlapping shifts,
   incomplete sessions and optional operational hours thresholds, without inferring award breaches. Focused
   pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent
@@ -13,16 +13,13 @@
 - BB-DEMO-004 is **Done — owner accepted internal showcase delivery on 2026-11-03**: the authorised operator acceptance run on
   `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
   **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). The owner confirmed the showcase accessible and working and explicitly accepted the delivery milestone. Consolidated UX/functional feedback is a separate subsequent review; no per-feature or production approval is implied.
-- BB-BRAND-004 remains **Blocked (partial)**: newly supplied AI-generated coastal café contact sheets have
-  been inventoried and prepared as responsive review drafts. The owner approved the proposed visual selection
-  on 2026-11-03 at 18:07 AEDT. The hero source is only 861 × 377, and generation-account, input/third-party
-  rights and publication clearance remain unverified.
+- BB-BRAND-004 is **Done for internal Showcase P0 by owner scope acceptance**: existing AI-generated temporary café images and 49 responsive image variants were catalogued, visually selected by the owner and preview tested. The owner has now expressly accepted the lower-resolution images for the non-public showcase and will replace them for production. The 861 × 377 hero, absent native 3200 × 1800 master, account-specific terms, third-party/input rights and public publication clearance are **unverified mandatory production requirements**, not completed or legally cleared.
 - BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
   accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
   **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
   owner/manager/employee desktop and mobile overflow/axe audit. Lint, types and split build passed.
   The operator-owned showcase spec was adapted but not run (its live showcase is off-limits).
-- BB-BRAND-002/003/005 are **Done** and BB-BRAND-004 is **Blocked (partial)**. The work uses the
+- BB-BRAND-002/003/004/005 are **Done for the internal showcase scope**. The work uses the
   owner-selected Coastal Wave reference (design direction approved). The traced vector logo system, icons,
   brand guide and sign-in artwork await the owner's final visual review. Production browsers passed
   **3/3**, with lint, types and split build also passing. The newer photographic-style café imagery is
@@ -84,8 +81,7 @@
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. BRAND-001,
-  002, 003 and 005 are Done. BRAND-004 is Blocked on suitable-resolution masters, rights verification and
-  final owner approval; supplied AI café concepts are available for internal review. BRAND-006 to 010
+  002, 003 and 005 are Done. BRAND-004 is Done for the temporary internal showcase scope; suitable-resolution production masters and commercial/public-use rights verification remain mandatory deferred gates. BRAND-006 to 010
   remain Backlog. The earlier five named concept binaries and approved campaigns are not asserted to exist.
 - BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
   all four criteria are verified. QR pgTAP passed **62/62** against the
@@ -729,6 +725,14 @@ settings/delivery still require their own implementation and verification.
   legal requirements remain unapproved, and operational recovery remains
   unverified. No live records were altered and legal or payroll compliance
   is not claimed.
+
+## BB-BRAND-004 — Owner closeout (temporary internal showcase imagery)
+
+**Decision:** The owner explicitly closes BB-BRAND-004 as **Done for the private internal Showcase P0 milestone**. Existing approved AI-generated illustrations are temporary and will be replaced for production. This narrows the showcase deliverable; it is **not** verification or waiver of the rights-clearance and native-resolution requirements for a public website.
+
+**Deferred mandatory public/production gates:** Replace the 861 × 377 hero with an appropriately native high-resolution master (the brief specifies 3200 × 1800), verify applicable AI generation-account terms and any source/input/third-party permissions, obtain any required publication authorization and verify deployed homepage performance before publishing. None of those gates has been cleared. Keep AI imagery clearly labelled, without implying a real café or staff. No public website is approved or deployed.
+
+**Prior evidence retained:** Original source sheets, 15 scenes, 49 responsive drafts, recorded provenance/unknowns, image and browser tests 4/4 each, and prior owner visual selection. This GitHub documentation-only status change does not touch showcase port 3137.
 
 ## BB-BRAND-004 — Supplied café imagery review and owner selection (2026-11-03)
 

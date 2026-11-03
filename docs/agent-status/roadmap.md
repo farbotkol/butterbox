@@ -15,7 +15,17 @@
 - **Documentation:** Status checkpoint only; user guidance must be updated if public access is delivered.
 - **Next concrete action:** Verify an application-only, host-validated HTTPS gateway and remote role workflows without exposing backend ports or disrupting the live showcase.
 - **Latest development commit:** `1865111a81fba062bc60fc66b1c751456092b887`; latest repository checkpoint before this update was `a04f256`.
-- **Push outcome:** This documentation checkpoint is pending.
+- **Push outcome:** Checkpoint `e983ecf` was rejected because concurrent owner commits advanced the remote branch; a non-rewriting merge is in progress.
+
+## BB-BRAND-004 closed by owner — internal showcase scope only
+
+- **Decision:** Owner expressly accepts the present AI-generated coastal café images as temporary imagery for the **private internal Showcase P0**, with replacement planned for production. BB-BRAND-004 status: **Done**. This does not claim production imagery standards are satisfied.
+- **Evidence retained:** 15 scenes, 49 optimized review variants, truthful AI labelling and alt text, prior owner visual selection, image tests 4/4 and isolated browser preview tests 4/4.
+- **Deferred mandatory production/public launch requirements:** Native 3200 × 1800 hero replacement (current source 861 × 377), verified generation-account terms and input/third-party rights, and explicit public marketing publication approval. All remain unverified; not waived or represented as legally cleared.
+- **Backlog:** 127 total; 66 Done, 0 In Progress, 6 Blocked, 55 Backlog; **Showcase P0 57/57 Done (100% by count)**.
+- **Safety:** Documentation-only GitHub commits. No app, database, showcase on port 3137, or live web deployment was accessed or altered.
+- **Next action:** Preserve the showcase for later consolidated owner UX feedback. Codespace agent can refresh and select the next ready task; these commits do not start it.
+
 
 ## Owner approval of BB-BRAND-004 visual selection — 2026-11-03
 
