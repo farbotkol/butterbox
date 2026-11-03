@@ -4,6 +4,8 @@
 
 - **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 In Progress; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. Start with People, preserving existing actions, tenant/role scope and dated employment rules. Before screenshots are captured; after screenshots, all five required post-change viewport checks and complete isolated role/security acceptance remain pending. The existing showcases must not be changed or redeployed.
 
+- **BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, Backlog, not started).** Owner-approved four-group menu architecture: My Work, Team Management, Venue Management and Business. Story added to master backlog and index; implementation, screenshots, permission regression and accessibility checks remain pending. This is separate from the first four Wave 1 directory/detail/edit stories; no product code or showcase changed.
+
 - **BB-UXFIX-001 technical checkpoint, 2026-11-03 23:42 AEDT:** Captured
   actual pre-change People screenshots at 375, 390, 768, 1024 and 1440 px in
   a separately built app against the disposable `butterbox-report-002-55b9`
@@ -23,9 +25,9 @@
   to this backend-only checkpoint**; update the User Guide and contextual Help
   when the user-facing workflow is implemented and verified.
 
-- Total stories: **131** (including 22 Award Central BB-PAYRULES, three
+- Total stories: **132** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **58**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **59**.
 - **Owner-requested public synthetic preview, 2026-11-03:** The existing
   showcase database remains isolated and shared with its local review app.
   A separately built app snapshot (`dfaf495` baseline plus the public-preview
