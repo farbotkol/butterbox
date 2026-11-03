@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-REPORT-002 implementation milestone
+
+- **Last report:** 2026-11-03 17:03 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-REPORT-002 — Overtime and exceptions report (In Progress, Showcase P1).
+- **Acceptance criteria:** Summarise overlaps, excessive hours and missing clock events; provide source drill-down; do not infer award breaches without verified rules.
+- **Phase:** Testing.
+- **Activity:** Verifying the new read-only venue/department-scoped report and its contextual help in an isolated test project.
+- **Progress since previous report:** Added a single-statement report snapshot, optional user-entered threshold, manager-facing route, source links and User Guide draft. Threshold totals separate published scheduled and currently approved worked hours; no statutory calculation is inferred. None of the new code has been committed yet.
+- **Tests and results:** Targeted calculation, weekly-timesheet, worked-time and help tests **25/25** passed. The new isolated-project pgTAP suite passed **20/20**, including FOH/BOH and cross-tenant denial. Changed-file ESLint and TypeScript passed.
+- **Failing tests:** The first test migration attempt exposed a reserved SQL identifier; it was corrected and the migration then applied successfully to the disposable project. No current failing tests.
+- **Blockers requiring intervention:** None identified for the report. BB-BRAND-004 remains Blocked on native resolution, rights and owner approval; BB-DEMO-004 remains Blocked on owner review.
+- **Documentation:** Draft User Guide and contextual help updated; browser verification is still pending.
+- **Safety:** New disposable project `butterbox-report-002-55b9` was positively checked against its workdir and loopback API/DB/mail ports 58421/58422/58424. No existing project was reset; the showcase on 3137 returned HTTP 200.
+- **Next concrete action:** Run focused browser/accessibility, source-link, invalid-filter and isolation checks in the separate project, then review and record acceptance evidence.
+- **Latest development commit:** `06aca95d2620116dd0a06cda99c5bcdd6695ade3` (BB-BRAND-004 review library).
+- **Push outcome:** Previous story-start checkpoint `5701154` was pushed and its remote SHA verified; this checkpoint is pending.
+
 ## BB-REPORT-002 resumed checkpoint
 
 - **Last report:** 2026-11-03 16:54 AEDT (UTC+1100), observed on the local operator's clock.
