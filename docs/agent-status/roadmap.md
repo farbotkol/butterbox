@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-REPORT-002 source-link and privacy checkpoint
+
+- **Last report:** 2026-11-03 17:13 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-REPORT-002 — Overtime and exceptions report (In Progress, Showcase P1).
+- **Acceptance criteria:** Summarise overlaps, excessive hours and missing clock events; provide source drill-down; do not infer award breaches without verified rules.
+- **Phase:** Testing.
+- **Activity:** Rechecking exact roster drill-down and historical-worker privacy in the separately identified disposable project.
+- **Progress since previous report:** Added a direct shift anchor for historical records, preserved four-digit early-year week validation, and masked unavailable employee profile names consistently across report arrays. No feature code has been committed or deployed to the showcase.
+- **Tests and results:** Focused calculation, weekly-timesheet, worked-time and help tests **26/26** passed. Revised report pgTAP **28/28** passed, including unavailable-profile redaction and cross-venue isolation. Related weekly-timesheet, overlap, shared-worker, tenant and labour pgTAP suites previously passed **167/167**; three concurrency integrations and the updated HTTP authorization integration passed. Changed-file ESLint and TypeScript passed. A production browser scenario passed before the latest source-link and redaction changes.
+- **Failing tests:** None currently known; the latest browser scenario has not yet been rerun.
+- **Blockers requiring intervention:** None identified for the report. BB-BRAND-004 remains Blocked on native resolution, rights and owner approval; BB-DEMO-004 remains Blocked on owner review.
+- **Documentation:** User Guide and contextual help updated in the uncommitted report work.
+- **Safety:** Changes were applied only to the verified disposable project `butterbox-report-002-55b9` on loopback ports 58421/58422/58424. The running showcase on 3137 returned an HTTP redirect during this check and has not been restarted or reset.
+- **Next concrete action:** Rebuild the isolated application snapshot and rerun the focused browser/accessibility scenario, including the historical source link, before recording final acceptance evidence.
+- **Latest development commit:** `06aca95d2620116dd0a06cda99c5bcdd6695ade3` (BB-BRAND-004 review library).
+- **Push outcome:** Previous testing checkpoint `d6055bf` was pushed and its remote SHA verified; this checkpoint is pending.
+
 ## BB-REPORT-002 implementation milestone
 
 - **Last report:** 2026-11-03 17:03 AEDT (UTC+1100), observed on the local operator's clock.
