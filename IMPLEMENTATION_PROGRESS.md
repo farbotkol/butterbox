@@ -5,10 +5,13 @@
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **63**.
   In Progress: **1**. Blocked: **8**. Not started (Backlog): **55**.
-- BB-DEMO-004 is **Blocked (prepared)**: the repeatable acceptance checklist, failure-mode table, known
-  gaps and an owner-review record are documented over the existing guarded reset/seed/verify, fixture
-  integration and showcase browser checks. Running it requires stopping and resetting the operator's live
-  showcase, and only the owner can record the review outcome.
+- BB-DEMO-004 is **Blocked only on the owner's review**: the authorised operator acceptance run on
+  `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
+  **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). Only the owner can record
+  the review outcome.
+- BB-BRAND-004 remains **Blocked (partial)**: a deterministic responsive homepage imagery library was built
+  from the original vector coastal artwork and browser-verified, but the owner-authorised generated
+  coastal imagery could not be found anywhere, so its provenance and rights cannot be documented.
 - BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
   accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
   **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
@@ -746,27 +749,49 @@ calculation. First inspect existing permission, overlap, attendance, shared
 worker and reporting primitives; record any genuine implementation blocker.
 **Documentation: pending.** No REPORT-002 criterion has been verified.
 
-## BB-DEMO-004 — Acceptance evidence (Blocked, prepared)
+## BB-DEMO-004 — Acceptance evidence (Blocked: awaiting owner review)
 
-**BB-DEMO-004 — Repeatable showcase acceptance and reset: Blocked.** The owner was unavailable to choose
-between interrupting the live showcase and preparing only, so the safe option was taken: nothing was run
-against the operator's showcase (fixed project `butterbox-showcase`, port 3137); a second instance would
-collide with it. The checklist is in [README.md](README.md) under *Repeatable acceptance checklist*.
+**BB-DEMO-004 — Repeatable showcase acceptance and reset: Blocked only on the owner's review.** On
+2026-11-03 the owner authorised a controlled reset/reseed of the positively identified isolated synthetic
+showcase. The operator acceptance run below followed the README *Repeatable acceptance checklist* on
+development commit `dfaf495` from a private app snapshot (no ordinary `.env.local` bundled).
+
+Pre-destructive safeguards (13:39–13:41 AEDT): `showcase-environment.mjs verify` passed (project
+`butterbox-showcase`, 6 containers, credentials verified); every targeted DB container carried the
+`com.supabase.cli.project=butterbox-showcase` label and the ordinary `butterbox` project was not addressed.
+Auth contained only 15 `example.test` fixture accounts plus the operator-designated test owner; both
+businesses were labelled **SIMULATION ONLY**. A private recovery point (`pg_dump -Fc`, 1.6 MB, mode 0600)
+was written to the private workdir. The review app (launcher PID 48904 / server PID 49054, identity and
+working directory verified) was stopped with SIGTERM; port 3137 was then free and the ordinary app still
+returned HTTP 200.
 
 | Criterion | Evidence | Actual result | Status |
 | --- | --- | --- | --- |
-| Stable restricted access and role-specific sample accounts documented | README showcase runbook (loopback-only, private `fixture-state.json`, owner, FOH/BOH managers, employees, outside control owner); User Guide *Internal synthetic showcase* | Documented; hosted/remote reviewer access does not exist | Pass (local only) |
-| Automated smoke tests for core journeys and tenant isolation | `tests/showcase-fixtures.integration.test.mjs` (role-scoped reads incl. outside owner, owner-only report, signup denial, no mail, no egress); `tests/e2e/showcase.spec.mjs` (owner, managers, mobile employee, help, cookies) | Existing DEMO-001/002 evidence; not rerun this session; the spec's DEMO-003 menu adaptation is unrun | Blocked |
-| Reliable verified demo reset | Guarded `showcase-fixtures.mjs reset` (confirmation, inventory checks, empty-project proof, receipt) | Not exercised this session (would destroy the live review state) | Blocked |
-| Repeatable synthetic data | Deterministic seed plan validated by `tests/showcase-fixtures.test.mjs` and the integration counts | Existing evidence; not rerun against a fresh reseed | Blocked |
-| Known gaps and failure states logged | README failure-mode table and known gaps | Documented | Pass |
-| No production secrets, live payroll or messaging | Isolation `verify`, SIMULATION ONLY rows, mail/egress assertions | Existing evidence; not rerun | Blocked |
-| Successful final owner review evidence | Owner-review record below | Pending — must come from the owner | Blocked |
+| Stable restricted access and role-specific sample accounts documented | README showcase runbook; User Guide *Internal synthetic showcase*; private regenerated `owner-login.txt` (0600) | Loopback-only; reseed issued new passwords; owner, FOH/BOH managers, employees and outside owner present | Pass (local only) |
+| Automated smoke tests for core journeys and tenant isolation | `tests/showcase-fixtures.integration.test.mjs`; `tests/e2e/showcase.spec.mjs` via `--split-build` | Integration **1/1** passed immediately after reseed. Production Chromium **15/15** passed (1.2 min): cookie isolation, owner hours report at 1440/375 px with axe and overflow checks, CSV with 14 **SIMULATION ONLY** rows, owner guided setup/people/roster/payroll, FOH and BOH managers department-scoped and denied CSV export, mobile employee schedule/availability/attendance with axe and timesheet denial, offline reopening, Help Center ×4, contextual help ×4 (roster, attendance, timesheets, payroll) | Pass |
+| Reliable verified demo reset | Confirmed `reset` | Exit 0; empty project; receipt `51939669-dd64-4d1d-8cc8-9cbec86f863a` appended to `reset-history.jsonl` | Pass |
+| Repeatable synthetic data | `seed` | Exit 0; `fixture-state.json` phase `seeded`, `simulationOnly: true`, 16 accounts; post-run counts 16 users, 2 businesses, 1 venue, 2 departments, 14 employees, 30 shifts — identical to before the reset (the suite's temporary onboarding account was removed) | Pass |
+| Known gaps and failure states logged | README failure-mode table and known gaps | No failure mode occurred | Pass |
+| No production secrets, live payroll or messaging | Isolation verify; integration mail/egress assertions; SIMULATION ONLY CSV | Passed; ordinary project counts unchanged (1/1/1/2/0/2) and `demo_seed_enabled()` false | Pass |
+| Successful final owner review evidence | Owner-review record below | Pending — only the owner may record it | **Blocked** |
 
-**Owner-review record:** none yet. Each operator acceptance run (checklist step 6) records date, commit SHA,
-reset ID and step results here; the owner records the review outcome. Unblock by: the operator stopping the
-review app and running checklist steps 1–5 on the current commit, then the owner's review.
-**Documentation: updated** (README checklist, failure modes and known gaps; User Guide reviewer note).
+Restart: the review app was restarted from the `dfaf495` snapshot (`--serve-showcase`). The designated owner
+signed in with the regenerated private password at 1440 and 390 px, reached the dashboard, People listed the
+fictional staff and the roster rendered without horizontal overflow.
+
+Limitations: access remains loopback-only on the operator machine; browser cross-business checks cover the
+Help Center only (data isolation is proven by the integration test); dashboard concepts remain labelled;
+award calculation, live payroll, external delivery and production readiness are out of scope. No broader
+regression was run.
+
+**Owner-review record:**
+
+| Date | Commit | Reset ID | Checklist steps 1–5 | Owner outcome |
+| --- | --- | --- | --- | --- |
+| 2026-11-03 | `dfaf495` | `51939669-dd64-4d1d-8cc8-9cbec86f863a` | All passed (operator run above) | **Pending owner review** |
+
+**Documentation: updated** (User Guide reviewer note with the latest run and new passwords; README checklist
+unchanged and followed as written).
 
 ## Latest completed showcase polish story
 
@@ -830,9 +855,10 @@ component. Verify fidelity, small sizes, contrast, the catalogue and the real si
 | BRAND-003.2 — examples, misuse, accessibility | Variant/background table, misuse list, contrast rules | Every listed file exists in the catalogue | Pass |
 | BRAND-003.3 — contrast, approval, version history | Contrast table computed with the WCAG 2.x formula; version history 1.0 → 2.0 draft | Charcoal on white 15.25:1, ocean on white 11.44:1, muted on white 5.82:1, charcoal on gold 8.07:1; teal on white 3.21:1 restricted to large text and graphics; gold on white 1.89:1 prohibited for text | Pass |
 | BRAND-003.4 — concept vs approved labelling | Status table at top of the guide and README | The direction is the only approved item; everything else is labelled draft | Pass |
-| BRAND-004.1 — approved rights-cleared imagery | — | Concept photography (5 PNGs) is missing and no public homepage route exists | **Blocked** |
-| BRAND-004.2 — responsive optimised formats | `branding/website/` artwork WebP/AVIF at desktop 1600 w and mobile 800 w, plus OG image 1200×630 | Files generated and catalogued; originals retained | Pass (artwork only) |
-| BRAND-004.3/4 — alt text, presentation | Decorative artwork is `aria-hidden`. The OG image is served at `/opengraph-image.png` (200) | No homepage exists to verify | Blocked |
+| BRAND-004.1 — approved rights-cleared imagery | Owner authorised the generated coastal imagery as the creative direction (2026-11-03). Repository, all Git history, operator Mac (Spotlight, Downloads, Desktop, Pictures) and agent session files searched for the five catalogued files | **None found** — generator, date, prompt and usage terms cannot be documented; they stay `missing`. The library uses only original repository vector artwork, labelled as illustration (never photography or screenshots); external rights clearance and owner final visual review pending | **Blocked** |
+| BRAND-004.2 — responsive optimised formats | Original sets in `branding/website/` plus `branding/website/homepage/` from `scripts/build-homepage-imagery.mjs`: hero-wide 640–2560 w (16:7), hero-portrait 480–960 w (4:5, sun-preserving crop), section-band 800–2400 w (4:1), feature tile 480/960 w; AVIF + WebP; `manifest.json` with sizes, bytes and SHA-256 | 26 files, 192 KB total; rebuild is byte-identical; source SVG and earlier derivatives unchanged; catalogued in `ASSET_INDEX.csv` | Pass |
+| BRAND-004.3 — alt text | Decorative hero/band sets use `alt=""`; the wordmark tile has "Butterbox logo above a calm coastal sunrise illustration" | Verified in the rendered preview | Pass |
+| BRAND-004.4 — mobile/desktop presentation and loading | `preview.html` harness (no homepage is deployed or required for the Showcase) | Playwright Chromium at 390×844 and 1440×900 (DPR 2): phones load the portrait AVIF and desktops the wide AVIF; heroes eager, others lazy; no failed requests or horizontal overflow; axe WCAG 2.1 AA 0 violations. Screenshot review found a cropped sun and text over the sun on phones; fixed by crop gravity and stacking copy above the image | Pass (harness only) |
 | BRAND-005.1 — artwork without changing auth | `auth-layout.tsx` uses an inline vector artwork panel; form, links and actions unchanged | Signup, setup, cross-tab logout and recovery browser test passed | Pass (owner visual review pending) |
 | BRAND-005.2 — mobile, desktop, low bandwidth | Inline SVG, no image request; 110 px mobile / 150 px sm / clamp(200–380 px) desktop | Screenshots at 1280×800 and 375×812 for `/login` and `/signup`: scrollWidth equals clientWidth, artwork clear of text | Pass |
 | BRAND-005.3 — contrast, keyboard, alt treatment | Artwork `aria-hidden`; logo `role="img"` with `aria-label="Butterbox"`; ocean/ink text on `#FBF6EE` ≥ 10.6:1 | WCAG axe, keyboard and screen-reader browser test passed | Pass |

@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## Showcase P0 unblock checkpoint (BB-BRAND-004, BB-DEMO-004)
+
+- **Last report:** 2026-11-03 13:49 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current work:** Owner-authorised Showcase P0 unblock. BB-DEMO-004 (repeatable showcase acceptance and reset) and BB-BRAND-004 (homepage imagery).
+- **Criteria:** DEMO-004: documented access and role accounts, core-journey and tenant-isolation smoke tests, verified reset, repeatable synthetic data, logged gaps, no production secrets/payroll/messaging, owner review evidence. BRAND-004: approved rights-cleared imagery labelled as illustration, responsive optimised formats with originals kept, alt text, verified mobile/desktop presentation.
+- **Phase:** Complete for this session; both stories remain Blocked on owner/rights gates.
+- **Activity:** Recorded evidence; committing and pushing.
+- **Progress since previous report:** Fast-forwarded to `d2ebe99` (DEMO-003 Done, DEMO-004 checklist). Built and pushed the BRAND-004 imagery library (`dfaf495`). Ran the full DEMO-004 checklist against the positively identified `butterbox-showcase` only: verify, private recovery dump, graceful stop, confirmed reset (receipt `51939669`), reseed, integration, browser suite, restart from a `dfaf495` snapshot and live owner sign-in.
+- **Tests and results:** Showcase verify passed (6 containers). Fixture/tenant integration **1/1**. Showcase production Chromium **15/15** (roles, scoped managers, mobile employee, offline, help, cookie isolation, reports, payroll CSV, axe and 375 px overflow). Live owner sign-in at 1440/390 px passed. Imagery harness at 390/1440 px: correct art direction, no overflow, axe 0; ESLint passed on the new script. Post-run showcase counts match the fixture; ordinary project unchanged and demo seeding disabled.
+- **Failing tests:** None.
+- **Blockers requiring intervention:** **Owner:** personally review the showcase and record the outcome (DEMO-004). **BRAND-004:** the authorised generated coastal imagery files were not found anywhere; supply the originals with their generator/date/usage terms, or licensed photography, plus final visual review.
+- **Documentation:** updated — User Guide reviewer note (latest run, new passwords), branding README/guidelines, asset index, progress evidence and owner-review record.
+- **Next concrete action:** Owner review of `http://127.0.0.1:3137` using the regenerated private login; then resume the paused P1 BB-REPORT-002.
+- **Latest development commit:** `dfaf495484afce88518d334f7acb9ebfb1f725f0` (homepage imagery library); evidence commit follows this report.
+- **Push outcome:** `dfaf495` pushed and remote SHA verified; this checkpoint pending.
+- **Backlog:** 127 total; 63 Done, 1 In Progress, 8 Blocked, 55 Backlog.
+
 ## Local application refresh checkpoint
 
 - **Last report:** 2026-11-03 12:44 AEDT (UTC+1100), observed on the local operator's clock.

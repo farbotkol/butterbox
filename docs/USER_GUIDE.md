@@ -56,7 +56,10 @@ contact details, attendance or payroll information. The local review app is
 - Before a formal owner review, the operator runs the README *Repeatable
   acceptance checklist* (isolation, reset, reseed, data/tenant checks and core
   browser journeys). Ask whether it passed on the current version; if any step
-  failed, the showcase should not be presented.
+  failed, the showcase should not be presented. The most recent run (3 November
+  2026, version `dfaf495`) passed every step; the showcase was reseeded, so
+  reviewers need the newly issued private passwords. The owner's own review
+  outcome is still pending.
 
 This environment does not imply final branding approval, hosted reviewer
 access, production readiness or legal/payroll compliance.
@@ -897,7 +900,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
 | BB-BRAND-002/003 | Accounts and business access — logo and icon appearance; [brand guidelines](../branding/BRAND_GUIDELINES.md) (draft, final owner visual review pending) |
 | BB-BRAND-005 | Accounts and business access — sign-in artwork; no workflow change |
-| BB-DEMO-004 | Internal synthetic showcase — operator acceptance checklist note (story Blocked pending operator run and owner review) |
+| BB-DEMO-004 | Internal synthetic showcase — operator acceptance checklist note and latest passing run (story Blocked pending the owner's review) |
 | BB-DEMO-003 | Mobile **Menu** navigation, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels |
 | BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
