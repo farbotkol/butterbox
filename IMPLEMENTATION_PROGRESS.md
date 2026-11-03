@@ -34,6 +34,17 @@
   and a public clock mutation were intentionally not run. **Documentation:
   updated** — README, User Guide and in-app Help; status/acceptance evidence
   updated without changing story priorities or completion statuses.
+
+  | Public-preview criterion | Implementation and actual verification | Result |
+  | --- | --- | --- |
+  | PUB-01 HTTPS access | Dedicated gateway and tunnel; public login **200**, served TLS certificate matched the locally held certificate, and live Chromium sign-in/sign-out passed. | Pass |
+  | PUB-02 Synthetic isolation | Verified showcase project and exact fictional inventory; API/database listeners stayed on loopback and public backend routes returned **404**. | Pass |
+  | PUB-03 Reviewer scope | Public owner, FOH/BOH manager, employee and outside-business checks passed in **7/7** Chromium tests, including scoped people, roster, timesheet, report and sample CSV access. | Pass |
+  | PUB-04 Mobile and help | Mobile viewport/axe and updated in-app offline-help checks passed in the live Chromium suite. | Pass |
+  | PUB-05 Public clock mutation | Clock controls and recorded history were checked without creating a new event in the shared fixture. | Blocked: positive public mutation not run |
+  | PUB-06 Operations and documentation | App/tunnel failure and graceful-stop checks passed; the User Guide, README, in-app Help and status evidence were updated. | Pass for temporary preview |
+  | PUB-07 Durable hosting | This route depends on the operator's computer and network; no production deployment or independent physical-device test was performed. | Blocked: not verified |
+
 - BB-REPORT-002 is **Done**: a manager-scoped read-only exceptions report highlights overlapping shifts,
   incomplete sessions and optional operational hours thresholds, without inferring award breaches. Focused
   pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent

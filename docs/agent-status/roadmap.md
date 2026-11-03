@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## Public synthetic showcase — completed operator request
+
+- **Last report:** 2026-11-03 21:55 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Implementation and checks are complete at this checkpoint. The public app/tunnel are deliberately left running; this report does not imply continued agent activity.
+- **Current work:** Owner-requested internet-accessible synthetic showcase. No new backlog story was started; existing BB-DEMO-001 evidence was updated without changing its status or priority.
+- **Acceptance criteria:** PUB-01 HTTPS access, PUB-02 synthetic isolation, PUB-03 role scope, PUB-04 mobile/help and PUB-06 temporary operations/documentation passed. PUB-05 positive public clock mutation and PUB-07 durable hosting remain blocked/unverified, as recorded in `IMPLEMENTATION_PROGRESS.md`.
+- **Phase:** Complete for the requested temporary preview; production and durable hosting are not claimed.
+- **Activity:** Delivered a separate app snapshot, supervised application-only gateway and locally terminated HTTPS tunnel, without restarting or resetting the original showcase.
+- **Progress since previous report:** Deployed the updated in-app guide, added direct password-action guards and verified manager rosters/employee availability; committed and pushed the tested implementation.
+- **Tests and results:** Public HTTPS Chromium **7/7**, original local owner/FOH/BOH/employee browser journeys **4/4**, focused Node/guide **18/18**, changed-file ESLint, TypeScript, split production build and diff checks passed. App/tunnel failure and graceful-stop checks passed. Public and local login returned **200**; Supabase API/database and ordinary app remained loopback-only; the live TLS certificate matched the local certificate.
+- **Failing tests:** The earlier outside-business sign-out timeout was fixed by using the existing business chooser. An earlier harmless direct password-change check reached validation; the added server guard passed direct-action tests. Startup HTTPS attempts failed briefly before the tunnel connected, then passed.
+- **Blockers requiring intervention:** Durable hosting, production/marketing rights approval, a physical external-device check and a positive public clock mutation are unverified. BB-REPORT-002 is not deployed to this older snapshot. Public and local reviews share synthetic data; email, password changes/recovery and offline claims are unavailable publicly.
+- **Documentation:** Updated — README, User Guide, deployed in-app Help, backlog evidence and implementation progress.
+- **Next concrete action:** Share the public HTTPS link and the owner's existing private showcase credentials. For durable hosting or production, obtain separate approval and complete the outstanding security, data, branding and operational gates.
+- **Latest development commit:** `cfcabb51a3cd0b890f51bd05b21b48a5a3aa79dd`.
+- **Push outcome:** Development commit `cfcabb5` was pushed to `copilot/finish-roadmap-for-app`; its remote SHA matched. This final documentation checkpoint is pending push.
+
 ## Public synthetic showcase — testing milestone
 
 - **Last report:** 2026-11-03 21:48 AEDT (UTC+1100), observed on the operator's clock.
