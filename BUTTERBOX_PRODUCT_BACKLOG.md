@@ -7,6 +7,63 @@
 **Status:** Proposed requirements; not a representation of implemented features or regulatory certification.
 
 
+## Epic UXFIX — Post-showcase usability improvements (owner-prioritised)
+
+**Purpose:** Capture owner-observed usability gaps discovered during the complete Butterbox showcase review, without reopening or reclassifying accepted Showcase P0 delivery stories. UXFIX stories are incrementally added as the owner submits consolidated feedback. UXFIX-001 is the **first** story, selected as the **next UX focus**; it is not an instruction to interrupt or overwrite unrelated agent work in progress.
+
+**State:** UX backlog; not yet implemented. **Priority:** P1 (next owner-prioritised UX improvement). **Epic ID prefix:** `BB-UXFIX-###`.
+
+### BB-UXFIX-001 — Redesign People Directory and Employee Profile (list/detail/edit UX) [P1]
+
+**Problem / observed gap**
+
+The existing `/people` route already supports employee search and filters, but it renders every returned employee as a full stack of forms (work preferences, account link, invitation, dated employment metadata link, personal profile, departments, eligible roles and primary role). In a venue with a normal-sized team this creates a very long page, makes discovery and comparison difficult and requires users to scan through editing controls just to find or verify a team member. The owner considers the functional foundation delivered but the list/detail interaction design incomplete. Existing `/people/[id]/employment` routes and established business logic must be preserved.
+
+**User story**
+
+As a hospitality owner or authorised manager, **I want to find a team member in a clean, searchable directory, open a readable employee profile and edit only the details I choose**, so managing a team is fast and understandable on desktop and mobile without losing the existing controls, permissions or data.
+
+**Personas and scope**
+
+- Owner/admin: venue/team directory and all permitted employee management actions, including owner-gated account linking, invitations, roles, departments and shared-worker controls as currently authorised.
+- General/department manager: see and edit only the records/fields permitted by existing business, venue and FOH/BOH department rules. No broadened access.
+- Employee/self-service: no new access to other employee records is created. Existing employee-facing routes remain unchanged.
+- Multi-venue/business: current selected business, venue, department and worker-sharing boundaries remain enforced server-side and by RLS.
+
+**Expected UX / interaction design**
+
+1. **Directory first.** `/people` opens a compact **People** directory, not hundreds of profile forms. Keep a strong Butterbox header (“Your people”), a primary **Add person** action and meaningful count indicators (e.g. active people and invitations awaiting action), calculated from actual permitted data. Never infer counts from a filtered page without clarifying the scope.
+2. **Discoverability.** Provide a prominent search for name and, where authorized, email or role; filter by venue, department, role, active/archived and optionally invitation state. Include clear filters/reset, result count, applied-filter feedback, keyboard submit and stable URL/bookmark state. Preserve existing query scoping and validation. Sorting by name, department, role and status should be predictable.
+3. **Desktop list.** Use a readable table-like list with initials/avatar fallback, name, department, primary role, employment type where available, account/invitation state, active/archived state and one clear **View profile** action. Show only information authorized for the viewer. Rows should be easy to scan; no full nested forms. Do not treat the free-text job title as an eligible role.
+4. **Mobile directory.** Provide intentionally designed touch-friendly compact person rows/cards (not a shrunk eight-column table). Preserve search, filters, actions and status labels. Test narrow devices and long names/emails without horizontal page overflow.
+5. **Employee profile route.** Selecting a person opens a canonical employee-specific detail URL such as `/people/[employeeId]` (route shape to be validated against existing `/people/[id]/employment`). A **Back to people** link returns to the prior directory context, including search/filters/venue where safe; bookmarks and refresh work. Invalid, archived, deleted, out-of-scope and cross-tenant IDs return appropriate states without leaking employee details.
+6. **Read-first header and overview.** Show identity/initials, name, primary role, department, current employment basis/type if known, active/archived and linked-account/invitation status. Overview presents permitted contact and primary assignment fields as readable label/value pairs with “Not provided” rather than fake sample data. No sensitive payroll secrets or unverified compliance statements.
+7. **Focused sections.** Separate **Overview**, **Employment**, **Roles & departments**, and **Account & invitations** as accessible tabs/sections; consider **Shared worker profiles** and **Work preferences** as contextual sections when relevant. Preserve dated employment metadata and its existing specialist page/link, qualifications/eligible roles, primary role rules, multiple department membership, shared profile links, account linking, invitation controls and preference explanations. Expose only sections/actions actually available to the current user. Prefer a section URL/query/hash state when it improves deep linking.
+8. **View → Edit → Save/Cancel.** Default to read-only profile. **Edit** enables only the fields in that section; **Save** persists via the existing validated server action(s), and **Cancel** restores the last saved data without a write. Clearly distinguish unsaved edits, a pending save, validation errors, successful saves, denied permissions and stale/concurrent edits. Prevent accidental double submission and provide confirmation before abandoning changes. Reuse existing server-side authorization; never accept an optimistic UI update as proof of persistence.
+9. **Add person.** Keep a visible **Add person** flow with concise initial fields and appropriate validation. On success, navigate to the new employee profile with a clear confirmation. Do not invent mandatory employee attributes, new entitlement rules or collection of payroll/bank details. A permission-denied user cannot see or invoke actions they are not authorized for.
+10. **Lifecycle and permissions.** Archive/reactivate must be clearly distinct from deleting a record; confirm the consequences and preserve shift/timesheet/audit history. Retain restrictions preventing archived workers being newly rostered by default, restrictions on inactive departments/roles, invitation resend/revoke rules and privilege boundaries. Public synthetic showcase restrictions (such as disabled outbound invitation email) must still be respected. Do not leak cross-venue/private records through search, summary counts, previews or direct URLs.
+11. **Visual language.** Match the owner-preferred light Butterbox Coastal Wave interface: warm cream, charcoal, fresh coastal teal, **selective butter-yellow** highlights and clear status colours. Strong typographic hierarchy, restrained corners and visual density suitable for everyday operations. Avoid giant vertical form stacks and unnecessary cards; keep familiar AppShell navigation, labels, contextual Help and accessible feedback.
+12. **Loading, failure and scale.** Provide meaningful loading/skeleton, empty directory, no search results, error/retry, unsupported action and denied-access states. Avoid loading/editing every employee form in a single render. Use bounded, paginated or otherwise scalable data fetching; verify tenant/department scoping in every query and mutation. Do not regress shared-worker or dated employment edge cases.
+
+**Acceptance tests / definition of Done**
+
+- **Functional journey (owner):** From `/people`, search/filter/sort → open an employee → inspect overview → edit name/contact/primary role using permitted controls → Save → refresh confirms persistence → Cancel leaves data unchanged → return to preserved directory filters.
+- **Lifecycle and admin journeys:** Add new employee, archive/reactivate and review history; account link and invitation permitted/disabled states; role eligibility and department membership rules; dated employment metadata navigation; shared-worker links where applicable. Verify every existing profile action remains reachable and correct, even if its form moves.
+- **Access control:** Test owner/admin/GM/FOH manager/BOH manager and employee/unprivileged accounts, two businesses and two venues. Verify server/RLS enforcement against direct URL, tampered POST/action requests, unauthorised field updates, cross-venue search/count leaks and archived/invalid IDs.
+- **Visual and accessibility:** Production-build browser tests at **375, 390, 768, 1024 and 1440 px** for list, filtered/empty list, profile read mode, edit mode, validation and modal/confirmation states. No uncontrolled overflow. Keyboard-only search, list navigation, tabs, form use, focus restoration, live errors and semantic headings/labels work; automated axe checks report no relevant serious/critical findings. Reduced motion respected.
+- **Reliability:** Existing People domain tests pass, plus tests for filter persistence, save/cancel, stale update handling, invitation safety and explicit archive behavior. Run changed-file lint, TypeScript, unit/integration, relevant database authorization tests and production build. Document real failures and any untested pathways.
+- **Documentation:** Update the user guide/contextual help with screenshots only from verified app states. Provide before/after evidence and owner-review screenshots at desktop and mobile; do not close story solely on an unconnected mockup.
+- **Safety:** The existing isolated showcase at port 3137 and temporary public synthetic preview must not be reset, reseeded, redeployed or exposed differently as part of this UX story without separate authorization. No live payroll, emails, production data or security changes.
+
+**Dependencies:** BB-PEOPLE-001; BB-PEOPLE-002; BB-PEOPLE-006; BB-ORG-004 (existing features to preserve, not reimplement).
+
+**Explicit exclusions:** Awards/pay-rate calculations; payroll secrets; redesigning unrelated roster/timesheet screens; replacing Supabase security model; changing employee classification policy; claiming production clearance. Example names in design mockups are fictional, not application data.
+
+**Implementation guidance:** Keep this an app UX refactor of `src/app/people/page.tsx` and associated focused components/routes. Reuse existing server actions and query/authorization patterns where correct. Refactor large components into tested modules; do not recreate business rules in client-side JavaScript. Do not treat the conceptual chat prototype as implemented functionality.
+
+**Priority decision:** Owner nominated UXFIX as the next area of product focus after the accepted internal showcase. Further UXFIX stories will be added later; do not assume this first story covers the whole usability review.
+
+
 ## Epic DEMO — First internal Showcase MVP (P0 milestone)
 
 **Milestone intent:** This is an internal, repeatable, interactive **product-review showcase**, not a production-go-live MVP. Reviewers must experience the existing application through safe synthetic data. The demo must not use production customer data or send real payroll/outbound messages. Future-vision concepts must be clearly distinguished from functioning features.
