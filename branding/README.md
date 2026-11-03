@@ -127,12 +127,11 @@ fingerprinted source PNGs without enlarging or modifying them. The generator wri
 it does not clear the output directory or touch the original vector library. `manifest.json` records every
 source, crop, alt text, size and digest.
 
-These are **owner-selected internal review drafts**, not publication-ready masters. On 2026-11-03 the owner
+These are **owner-accepted temporary private internal Showcase P0 illustrations** (BB-BRAND-004 Done for the owner's revised showcase scope), not publication-ready masters. On 2026-11-03 the owner
 approved the proposed visual selection; this does not verify usage rights or approve public placement. The
 supplied 861 × 377 hero cut and its 859 × 377 clean source region fall short of the brief's native 3200 × 1800
 hero. The phone crop is only 296 × 370. Do not present an upscaled image as a native high-resolution master.
-The summary records the public OpenAI terms reviewed, their limitations, and the remaining account-specific
-rights and publication gates.
+The summary records the public OpenAI terms reviewed and their limitations. The owner accepts these low-resolution draft images for the non-public showcase only, with replacement planned for production. Account-specific rights, third-party/input permissions, native-resolution replacement and public publication review remain mandatory unverified production gates; no public deployment is authorized.
 
 ## Homepage imagery library (BB-BRAND-004, internal)
 
