@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 09:05 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:08 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
-- **Phase:** Debugging.
-- **Activity:** Investigating a Linux CI timeout in an attendance correction scenario and preparing an isolated targeted rerun.
+- **Phase:** Testing.
+- **Activity:** Waiting for the newer automatic Linux regression after the isolated attendance-correction rerun passed.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** Corrected Linux CI run `41725048428` passed quick-roster ArrowDown and the department selector but one attendance-correction scenario exceeded its 180-second timeout. The same unchanged attendance scenario passed in **5.9 seconds** in earlier Linux run `41723864035`. A newer automatic run is in progress. Both protected local and public showcase login endpoints last returned HTTP **200** at 08:55 AEDT; neither showcase was changed.
+- **Progress since previous report:** The attendance-correction scenario that timed out on Linux passed a fresh isolated production-browser rerun **1/1** in **38.4 seconds**; it also passed in **5.9 seconds** in earlier Linux CI. Its exact CI stall is not established. A newer automatic run is in progress. Both protected local and public showcase login endpoints returned HTTP **200** at 09:07 AEDT; neither showcase was changed.
 - **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The complete Node/integration rerun passed **300** with **one** intentionally skipped protected-showcase test; the initial seven failures were corrected and their affected files passed **30/30**. Focused Help/navigation units passed **18/18** after the label correction. The macOS browser run reported **95 passed, six failed and one public-mode-only test skipped**; targeted reruns passed **6/7**. Corrected Ubuntu CI reported **100 passed, one timed out and one public-mode-only test skipped**; the timed-out attendance case passed in an earlier Linux run, and the earlier selector failure passed on the corrected run. Browser-test syntax and ESLint passed. The passing 25×7 benchmark measured **1,702/3,000 ms** roster load, **1,979/5,000 ms** publication and **396/2,000 ms** mobile schedule load. The skipped public-mode scenario was separately verified during UXFIX-001, not in these full runs.
-- **Failing tests:** The corrected Linux run's attendance-correction case timed out after 180 seconds; its exact stall is not yet established. Synthetic ArrowDown on a native select remains unsupported in the tested macOS browser harness, while the retained actual ArrowDown scenario passed in Linux CI. The protected-showcase integration was deliberately not run.
+- **Failing tests:** The corrected Linux run's attendance-correction case timed out after 180 seconds, then passed its isolated rerun; its exact CI stall is not established. Synthetic ArrowDown on a native select remains unsupported in the tested macOS browser harness, while the retained actual ArrowDown scenario passed in Linux CI. The protected-showcase integration was deliberately not run.
 - **Blockers requiring intervention:** None identified yet. Consolidated owner UX review and deployment to either protected showcase remain separate.
 - **Documentation:** Updated, including the attendance label correction and passing browser Help/context verification.
-- **Next concrete action:** Rerun the attendance-correction browser scenario against the disposable project, then inspect newer Linux CI run `41726343706`; keep the story open until acceptance evidence is complete.
+- **Next concrete action:** Inspect newer Linux CI run `41726343706`; keep the story open until acceptance evidence is complete.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa`.
-- **Push outcome:** Status checkpoint `e997656bdf1395c7a651938b5eeceaabfd8ddd11` was pushed and its remote SHA verified; this status checkpoint is pending push.
+- **Push outcome:** Status checkpoint `bf0e7fda081c61ead36df6796db49627712abf0b` was pushed and its remote SHA verified; this status checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
