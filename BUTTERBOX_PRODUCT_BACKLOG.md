@@ -64,6 +64,118 @@ As a hospitality owner or authorised manager, **I want to find a team member in 
 **Priority decision:** Owner nominated UXFIX as the next area of product focus after the accepted internal showcase. Further UXFIX stories will be added later; do not assume this first story covers the whole usability review.
 
 
+### BB-UXFIX-002 — Departments & Roles directory and detail management [P1]
+
+**Problem / observed gap**
+
+The existing \`/settings/organisation\` screen includes venue settings, departments, roles and rule settings together. Each department displays editable department fields, repeated job-role forms and separate automatic/manual restriction forms. As departments and roles grow, there is no efficient list → inspect → edit journey. This is the same underlying list/detail/edit flaw observed in People, compounded by mixing organisational setup with venue-level settings.
+
+**User story**
+
+As an authorised hospitality owner or manager, **I want to find a department, review its assigned roles and restrictions, and change only the item I select**, so I can maintain my venue's structure without navigating a long page of exposed configuration forms.
+
+**Expected UX / acceptance criteria**
+
+1. **Separation of concerns.** Retain the existing organisation and venue settings capabilities, but create a clear **Departments & Roles** workspace or distinct navigation section within Organisation Settings. Roster planning week, publication mode, conflict rules and geofence/location settings remain available in logical, labelled settings sections; do not lose or silently alter them.
+2. **Directory-first overview.** Show current business/venue scope and a compact department list with name, active/inactive status, role count and associated worker count *only where reliably supported and permitted*. Include optional search, active/inactive filter, predictable sorting, zero-result feedback and a prominent **Add department**. Counts must be accurate and permission-scoped; omit unverified metrics.
+3. **Detail view.** Selecting a department opens a focused detail route/panel preserving the selected venue and a safe Back to departments link. Read-only summary displays name, status, job roles and whether manual/automatic assignment restrictions apply. Do not render a stack of editable forms for all departments on the default overview.
+4. **Focused editing.** **Edit department** exposes name and active status only on request. **Manage role** opens a focused form for one selected role; provide an Add role action. Save, Cancel and validation feedback are clear, and no unrelated role is accidentally modified. Handle invalid/stale records and changes made in another session.
+5. **Role qualifications and restrictions.** Preserve both existing *manual* and *automatic* restriction controls, their distinct semantics and any qualification checks. Do not silently equate role name with qualification. Clearly explain what “qualified workers only” means for shift assignment; preserve blocking/warning logic rather than moving business rules to the client.
+6. **Department/role lifecycle.** Activation/deactivation uses an explicit confirmation explaining impact on new staffing/shift assignments while preserving historical employee and shift references. Inactive departments/roles cannot be inadvertently selected for new work. Existing history and archived choices remain appropriately visible.
+7. **Authorization and multi-venue safety.** Apply the current owner/admin/manager permissions, business/venue/department boundaries and Supabase RLS, including direct link and tampered mutation tests. A user with read-only access sees no actionable edit controls, and forged requests cannot bypass scope.
+8. **Mobile, empty and error states.** Directory remains usable at narrow widths using compact rows, accessible filters and sufficiently sized actions. Provide states for no departments, no roles, filtered-empty, loading/error, expired record and permission denial. Maintain accessible labels, keyboard focus and contextual Help.
+9. **Shared visual pattern.** Reuse the Butterbox UXFIX-001 list/detail/edit interaction pattern and approved Coastal Wave palette—cream/charcoal, teal actions, selective yellow highlights—without a new inconsistent UI system. Keep forms compact, purpose-specific and accessible.
+
+**Functional acceptance scenarios**
+
+- Owner selects venue → searches departments → opens FOH → views active roles and restrictions without any forms open → edits one role → saves → refreshes → sees persisted update → returns to the same venue/filter.
+- Owner adds a role, sets independent manual/automatic qualification restrictions and confirms they affect rostering exactly as before; cancels a draft without persistence.
+- Inactivate/reactivate a department or role with explicit confirmation; existing staff/shift references remain unchanged; ineligible new assignment is still rejected.
+- Department manager and general manager can only see/edit their authorized scope; attempt to access another venue's detail URL or forge a save is denied server-side.
+- Preview at 375, 390, 768, 1024 and 1440px; keyboard/screen-reader navigation, focus and axe checks pass; no uncontrolled horizontal overflow. Run appropriate existing role, roster, qualification and settings tests plus lint, types and production build.
+
+**Code / integration touchpoints:** \`src/app/settings/organisation/page.tsx\`, existing \`saveDepartmentAction\`, \`saveJobRoleAction\`, \`setJobRoleAutoRestrictionAction\` and \`setJobRoleManualRestrictionAction\`, existing venue/role authorization and roster restrictions. Prefer composable components and routes over a single oversized page.
+
+**Dependencies:** BB-ORG-003; BB-ORG-004; BB-PEOPLE-002. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed second in sequence. **Exclusions:** No alteration of rostering rules, historical records, or employment legislation.
+
+### BB-UXFIX-003 — Business Permissions directory and focused access editing [P1]
+
+**Problem / observed gap**
+
+The existing \`/settings/permissions\` screen renders each business member as a separate card containing editable role, venue and department dropdowns plus a Save Permissions button. This makes it difficult to compare who has access, find a particular member, or distinguish inspection from a potentially high-impact permission change.
+
+**User story**
+
+As a business owner or authorised administrator, **I want a clear access directory that shows each person's current business role and scope, with deliberate edit-and-confirm actions**, so permissions remain understandable, auditable and difficult to change accidentally.
+
+**Expected UX / acceptance criteria**
+
+1. **Access directory by default.** Replace the repeated edit forms with a searchable, sortable, compact member table (mobile: accessible row layout). Display member email/identity, role, business, venue scope, department scope and a concise **View / Edit access** action. Use accurate current data; avoid exposing emails to unauthorized roles.
+2. **Find and compare.** Offer search for permitted member identities and filters for role, venue and department, including a useful result count, an All/clear filter and clear distinction between global and scoped access. Sorting must remain stable and URL state should preserve filtering where appropriate.
+3. **Focused view and edit.** Selecting a member opens a read-only access summary, followed by an explicit Edit Permissions action. Role, venue and department selections appear only in edit mode, with clear Save/Cancel, unsaved-change warning, pending/success/error and stale-data handling. No editable forms are rendered for unselected members.
+4. **Role-aware controls.** Preserve existing server-side semantics for owner, general manager, FOH/BOH manager, employee and any supported legacy roles. Choices dynamically explain required/optional venue and department scope for each role without permitting invalid combinations; unrecognized legacy roles are not silently rewritten.
+5. **High-impact confirmation.** Before changing an owner or expanding/restricting a member's scope, display a plain-English before/after summary of the role and affected venue/department. Preserve the “at least one owner” safeguard; last-owner demotion must remain blocked even under concurrent requests. Never imply a UI confirmation replaces server authorization.
+6. **No privilege escalation.** Only authorized users can inspect/manage business membership; cross-business and out-of-scope member IDs must not disclose data. Direct URL and forged POST/action attempts must be rejected by server checks and RLS. Do not broaden existing role permissions as a side effect of the UX change.
+7. **Auditability.** Retain the existing \`assignMemberRoleAction\` business mutation and audit trail. On success, refresh/revalidate access and show persisted result; on failure, show actionable but non-sensitive feedback. Do not create a fake role history or promise approvals the backend does not support.
+8. **Responsive and accessible.** Proper table semantics on desktop, readable mobile layout with wrapped emails, touch-sized actions, keyboard and screen-reader usability, clear focus changes, no overflow. Distinguish empty business/member list, no search matches, loading/errors and denied access.
+9. **Design consistency.** Reuse the People/Departments directory → detail → edit patterns, light Butterbox typography and Coastal Wave brand palette. A permissions screen should make access relationships immediately legible, not feel like a collection of configuration cards.
+
+**Functional acceptance scenarios**
+
+- Owner finds a named member → views current role/venue/department → edits the scope → reviews before/after confirmation → saves → refresh confirms persisted scoped role and audit record → navigates back to prior filters.
+- Cancel/edit-switch and invalid role/scope combinations do not write. Last-owner demotion is denied even with racing requests.
+- General manager, department manager and employee cannot escalate permissions; direct URL, forged action and two-business isolation tests confirm enforcement.
+- Desktop/table and 375/390/768/1024/1440px mobile responsive tests, keyboard/axe checks, lint, TypeScript, relevant auth/RLS/integration and production build pass.
+
+**Code / integration touchpoints:** \`src/app/settings/permissions/page.tsx\`, existing \`assignMemberRoleAction\`, business-member membership and role/venue/department authorization. Reuse security rules; do not add general-purpose new roles or membership invitations in this story.
+
+**Dependencies:** BB-ORG-004; BB-ORG-005 if multi-venue scenarios are exercised; BB-PEOPLE-001 for identity context. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed third in sequence. **Exclusions:** New permissions framework, role hierarchy changes, public signup or auth-system redesign.
+
+### BB-UXFIX-004 — Payroll Employee Mapping directory and contextual mapping editor [P1]
+
+**Problem / observed gap**
+
+The existing \`/settings/payroll\` screen selects a payroll destination and then renders each employee's mapping as a separate editable form (external payroll ID, required change reason and Save button). Adding a destination shares the same page. This is lengthy for a normal venue and makes it hard to identify missing, duplicated, or recently updated mappings.
+
+**User story**
+
+As an authorised payroll/operations administrator, **I want to select a payroll destination, see all relevant employee mappings in one scannable list, and edit a single mapping safely**, so I can prepare consistent external payroll IDs without accidentally changing the wrong person or implying a live payroll connection.
+
+**Expected UX / acceptance criteria**
+
+1. **Destination-first navigation.** Preserve the existing business/venue scope and list of provider destinations. A clear **Payroll mappings** workspace shows the currently selected destination, provider label and permitted account metadata, plus a separate **Add destination** flow. Adding a destination must not imply that payroll credentials or a provider connection have been established.
+2. **Mapping directory.** For the selected destination, render a compact, searchable employee table (mobile: readable rows) with name, Butterbox identity, external payroll employee ID where authorized, **Mapped / Missing** status and one **View / Edit mapping** action. Support status filters, count of mapped/missing employees and stable sorting without leaking cross-venue/business records.
+3. **Focused edit mode.** Open one employee mapping in an accessible detail panel/drawer/page with a read-only summary. **Edit mapping** shows current destination, employee identity, payroll ID and required reason for change, with Cancel/Save, validation, saved feedback and stale revision handling. Do not render a Save form under every row.
+4. **Sensitive change clarity.** A mapping may be cleared by blanking the external ID only through an explicit, confirmed remove/unmap action. Explain that unmapping blocks provider-ready records for that employee, while preserving historical audit/reconciliation. Confirm destination identity before saving to prevent mapping an employee against the wrong provider or account.
+5. **Integrity and concurrency.** Preserve unique external employee ID per destination, case sensitivity, the existing revision/stale-save guard and current mapping audit record. Validation errors identify the affected selected row without revealing unrelated people; duplicate IDs and racing writes cannot be accepted merely because the client view is stale.
+6. **Permission and isolation.** Maintain current owner/admin authorization and tenant/venue boundaries. A user without access cannot list, view or mutate mappings; IDs and destination metadata do not leak through URL manipulation, search, detail pages or summaries. Existing server actions and RLS remain authoritative.
+7. **Provider readiness honesty.** Do not add live provider sync, bank/pay-rate fields, payroll submission, export or reconciliation behavior to this story. Existing destination records are *mapping configuration*, not a verified payroll integration. Preserve all existing warnings and restrictions.
+8. **States and responsiveness.** Handle zero destinations, no employees, missing mappings, filtered-empty, saving, conflict, permission denial and provider-disabled conditions. Preserve search/selection safely across navigation; responsive at 375/390/768/1024/1440px, accessible keyboard/focus/axe and clear labels.
+9. **Reuse the UXFIX visual system.** Follow the same Butterbox directory → detail → edit language as People, Departments and Permissions: warm cream, charcoal, coastal teal, restrained butter-yellow highlights. Keep data readable and avoid repetitive form-card stacks.
+
+**Functional acceptance scenarios**
+
+- Authorized owner selects a destination → filters Missing mappings → opens a worker → enters external payroll ID and reason → saves → refresh confirms persistence and audit entry → returns with prior filters.
+- Owner intentionally clears a mapping after confirmation; appropriate warning about blocked provider-ready records is shown, no live payroll action triggered.
+- Duplicate external ID, wrong tenant/venue, stale revision, malformed input and concurrent edit are rejected; error and recovery path are clear.
+- Unprivileged and cross-business callers cannot read destination IDs or submit mapping actions. Existing mapping and payroll export tests remain green; focused UI, a11y, lint, TypeScript and build checks pass.
+
+**Code / integration touchpoints:** \`src/app/settings/payroll/page.tsx\`, existing \`savePayrollMappingAction\`, provider destination and employee mapping query/helpers, mapping revision/audit constraints. Coordinate with existing generic payroll CSV separation, but do not modify its calculation or submission pipeline.
+
+**Dependencies:** BB-PAY-001 (generic payroll data/export foundation); BB-PEOPLE-001. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed fourth in sequence. **Exclusions:** Provider API integration, Xero/Dayforce adapter work, payslip/payment execution, award interpretation and employment-law certification.
+
+### UXFIX Wave 1 — shared Definition of Done
+
+These four owner-prioritised stories form **Wave 1: list / detail / contextual edit**. They are independent implementation stories, not a single enormous screen rewrite. Implement BB-UXFIX-001 first to establish reusable patterns, then 002 → 003 → 004 unless owner priorities or real dependencies change.
+
+1. Every existing action remains available from an appropriate authorized location, without weakening validation, audit history, concurrent-write protections or RLS; reference the original source routes/actions before extracting components.
+2. For each story demonstrate **list → selected detail → intentional edit → Save/Cancel → persisted read-back → back to retained list context**, plus create/archive/permission-specific flows.
+3. Reuse tested layout primitives and Butterbox brand tokens; do not fork four unrelated design systems or copy forms into a generic dashboard.
+4. Verify keyboard, screen reader, axe, reduced-motion, mobile/desktop, loading, empty, error and access-denied states. Run focused database/auth integration tests, component/unit checks, lint, types and production build.
+5. Preserve the owner-accepted private showcase at port 3137 and existing public synthetic preview: no reset/reseed/redeploy or security/public-exposure changes without explicit approval. UXFIX story evidence is new and separate from completed P0 milestone evidence.
+6. Owner will submit more UXFIX observations later. These four stories do not imply approval of all other screens and do not close independently until their acceptance evidence is recorded.
+
+
 ## Epic DEMO — First internal Showcase MVP (P0 milestone)
 
 **Milestone intent:** This is an internal, repeatable, interactive **product-review showcase**, not a production-go-live MVP. Reviewers must experience the existing application through safe synthetic data. The demo must not use production customer data or send real payroll/outbound messages. Future-vision concepts must be clearly distinguished from functioning features.
