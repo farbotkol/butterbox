@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 02:02 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 02:37 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
 - **Phase:** Planning.
-- **Activity:** Inspecting existing payroll mapping authorization, actions and database contracts before capturing the isolated pre-change baseline.
+- **Activity:** Reviewing the authoritative mapping RPC and designing the scoped editor after capturing the isolated pre-change baseline.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** BB-UXFIX-003 was committed and pushed after its complete verification. The first HTTPS pushes disconnected; a per-command HTTP/1.1/non-chunked retry succeeded and the remote SHA matched. The complete BB-UXFIX-004 story and its ready foundation were reviewed.
-- **Tests and results:** No BB-UXFIX-004 tests have run yet. BB-UXFIX-003 finished with **141/141** targeted database assertions, concurrency **1/1**, units **20/20**, **13** distinct targeted browser scenarios, TypeScript, lint and isolated production build passing.
-- **Failing tests:** None known for the new story; its baseline is pending.
+- **Progress since previous report:** The existing mapping and generic CSV browser journeys passed in the isolated app; five synthetic before screenshots were captured. Existing mapping writes serialize on the business lock and preserve revision, uniqueness and audit, but the legacy RPC is business-scoped and does not receive the selected venue. The new UI path needs an atomic selected-venue check and deliberate destination/removal confirmation without removing the existing RPC contract.
+- **Tests and results:** Pre-change isolated production build and mapping/generic CSV browser baseline **2/2** passed. Focused mapping/export pgTAP and unit baselines are running. BB-UXFIX-003 previously finished with **141/141** targeted database assertions, concurrency **1/1**, units **20/20** and **13** distinct targeted browser scenarios passing.
+- **Failing tests:** None in completed checks; database and unit baseline results are pending.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Pending implementation; the existing User Guide and contextual Help will be updated to match tested behavior.
-- **Next concrete action:** Inspect the existing mapping action and database policies, then run pre-change payroll mapping/export checks and capture synthetic browser screenshots.
+- **Next concrete action:** Inspect the pending baseline results, implement a destination-scoped directory/detail workflow and checked selected-venue mutation, then run the targeted negative and concurrency tests.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** BB-UXFIX-003 feature commit `4857bb9f797f07e53d234b9e6178729635d08238` was pushed and its remote SHA verified. This planning checkpoint is pending push.
+- **Push outcome:** Planning checkpoint `c25c536fdffb6443a7aad2875389a1394c49c0ab` was pushed and its remote SHA verified. This baseline checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
