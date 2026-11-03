@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-03 23:42 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-03 23:51 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
 - **Phase:** Coding.
-- **Activity:** Preparing a scoped, paginated directory and revision-safe profile actions before building the list/detail interface.
+- **Activity:** Wiring the new directory, employee detail route, focused editors and existing employee actions; browser acceptance has not started.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** Verified corrected before screenshots at five required widths. Added an RLS-invoker directory query, profile revision and checked-save wrapper, and safe filter/context helpers; these are not yet wired to the UI. Applied the migration only to the verified disposable database and confirmed the existing UI remains compatible.
-- **Tests and results:** Targeted People/employment/role/invitation pgTAP **212/212**, real competing-profile/employment HTTP concurrency **1/1**, directory helper unit tests **4/4**, existing People production-browser journey **1/1**, changed-file ESLint, TypeScript and baseline split build passed. Local and public showcase login endpoints last returned **200** after the test project started.
-- **Failing tests:** None currently. The first mobile screenshot captured the dashboard during navigation and was recaptured after waiting for People. An initial concurrency test failed because its safe function-name matcher rejected a digit; after correcting the matcher, the test passed.
+- **Progress since previous report:** Committed and pushed the verified database/query foundation at `0616f06`. Implemented the first uncommitted draft of the compact directory, new-person and profile routes, section editors, status confirmation and safe return context. No UX changes have been deployed to either showcase.
+- **Tests and results:** Foundation pgTAP **212/212**, real competing-profile/employment HTTP concurrency **1/1**, existing People baseline browser **1/1**, and pre-change screenshots at all five widths passed/captured. The new draft passed changed-file ESLint, TypeScript and directory helper unit tests **5/5** before the latest contextual-help/employment-link edits. Both showcase login endpoints returned **200** at 23:50 AEDT.
+- **Failing tests:** An initial draft type check failed on an object type guard; the guard was corrected and the rerun passed. The new UX has not yet been built or tested in a browser. Earlier baseline screenshot and concurrency-helper failures are documented in implementation progress.
 - **Blockers requiring intervention:** None identified. Keep the two running showcases and their shared synthetic database untouched.
 - **Documentation:** User Guide and contextual Help updates are required with the implemented behavior.
-- **Next concrete action:** Connect the bounded directory and canonical employee profile to the existing scoped actions, then implement contextual editing and lifecycle confirmation.
-- **Latest development commit:** `cfcabb51a3cd0b890f51bd05b21b48a5a3aa79dd`; latest baseline checkpoint `427b2b77b42f441b15ea8dbf3278582f2c5b4934`.
-- **Push outcome:** Baseline checkpoint `427b2b7` was pushed and its remote SHA verified; this technical checkpoint is pending push.
+- **Next concrete action:** Build the draft in the separate snapshot, adapt and extend the People browser tests, and fix any runtime, permission or accessibility regressions before recording acceptance.
+- **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
+- **Push outcome:** Development checkpoint `0616f06` was pushed and its remote SHA verified; this documentation-only checkpoint is pending push.
 
 ## Public synthetic showcase — completed operator request
 
