@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 00:58 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:08 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
-- **Phase:** Coding.
-- **Activity:** Implemented the initial scoped department directory, selected department and role detail, focused editors and separately linked venue settings; preparing browser, permission and concurrency validation.
+- **Phase:** Testing.
+- **Activity:** Debugging and rerunning the two newly added browser scenarios; production lifecycle and role-restriction workflows have passed.
 - **Plan:** Keep `/settings/organisation` available for venue settings; add a Departments & Roles workspace with selected department/role editors, reuse the existing server rules and add checked concurrency/lifecycle wrappers. Verify restrictions, history, authorization and five viewport sizes in the disposable environment; update guide/help and evidence without deploying to either showcase.
-- **Progress since previous report:** Added the initial read-first directory/detail/role routes, focused edit and status-confirmation forms, filter/context validation, and server-checked mutations that delegate to the existing authoritative rules. Applied the new migration only to positively identified disposable project `butterbox-report-002-55b9` (API/DB ports 58421/58422). The protected showcases were not changed.
-- **Tests and results:** UXFIX-002 baseline browser **1/1** and isolated split production build passed before changes. New checked-mutation pgTAP **34/34**, directory units **3/3**, changed-file ESLint and TypeScript passed after changes. Browser workflows, actual competing writes, updated guide/help and post-change five-width screenshots are pending. Previous People checks remain recorded in the implementation progress.
-- **Failing tests:** None in the checks run so far; the new UI has not yet been browser-tested.
+- **Progress since previous report:** Added focused browser coverage for scoped access, stale edits, loading/failure recovery and five viewport sizes, plus actual competing-write and revoked-permission integration coverage. Updated the User Guide and contextual Help. Added explicit permission feedback and a retryable department error state. Both protected showcase login endpoints returned **200** at 01:01 AEDT; neither deployment was modified.
+- **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and isolated production build passed. The lifecycle, automatic-qualification and manual-restriction production browser workflows passed (**3/5** in the latest run). Previous People checks remain recorded in the implementation progress.
+- **Failing tests:** The two new browser scenarios failed before completing: one fixture omitted an explicit non-null active flag in a mixed bulk insert, and one alert locator also matched Next.js's route announcer. Both test issues were corrected; reruns are pending. Earlier ambiguous saved-status locators and a missing Help label were corrected and their affected existing checks passed.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
-- **Documentation:** BB-UXFIX-001 updated; BB-UXFIX-002 user guidance and criterion evidence pending implementation.
-- **Next concrete action:** Adapt and run the existing department/role lifecycle and restriction browser scenarios, add stale/concurrent and access-scope checks, then verify the five viewport sizes and update user documentation.
+- **Documentation:** Updated — BB-UXFIX-002 User Guide and contextual Help guidance; criterion-by-criterion evidence remains pending browser verification.
+- **Next concrete action:** Rerun the two corrected scope/layout and loading/recovery scenarios, resolve any product defects, complete screenshot/evidence checks, and run affected venue-settings/navigation regressions.
 - **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
-- **Push outcome:** UXFIX-001 and baseline checkpoint `fd895eb712f768f7f371ec67cd53335dd2fae196` were pushed and their remote SHAs verified. The earlier HTTP 400 succeeded on retry over HTTP/1.1. This documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
+- **Push outcome:** UXFIX-001 and implementation checkpoint `1d158593fb8c0b4bad854b713f066bf6be63d765` were pushed and their remote SHAs verified. The earlier HTTP 400 succeeded on retry over HTTP/1.1. This documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
 
 ## Public synthetic showcase — completed operator request
 
