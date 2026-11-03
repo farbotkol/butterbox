@@ -1,4 +1,4 @@
-import { ArrowLeftRight, CircleHelp, LogOut } from "lucide-react";
+import { ArrowLeftRight, LifeBuoy, LogOut } from "lucide-react";
 import Link from "next/link";
 import { signOutAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
@@ -30,12 +30,12 @@ export function AppShell({
         className="sr-only z-50 rounded-lg bg-ocean px-4 py-3 text-sm font-semibold text-white focus:not-sr-only focus:fixed focus:left-4 focus:top-4">
         Skip to main content
       </a>
-      <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:border-b-0 md:border-r">
+      <aside className="border-b border-line bg-white md:fixed md:inset-y-0 md:z-20 md:flex md:w-[246px] md:flex-col md:overflow-y-auto md:overscroll-contain md:border-b-0 md:border-r">
         <Link href={pinnedBusiness ? `/?business=${encodeURIComponent(pinnedBusiness)}` : "/"}
-          className="flex items-center gap-3 px-5 py-5 md:px-6 md:py-6">
+          className="flex items-center gap-3 px-5 py-4 md:px-6 md:py-5">
           <BrandLockup compact />
         </Link>
-        <div className="mx-4 mb-3 rounded-lg border border-line bg-cloud px-4 py-3 md:mb-5">
+        <div className="mx-4 mb-3 rounded-lg border border-line bg-cloud px-4 py-3 md:mb-4">
           <p className="truncate text-sm font-semibold text-ink">{businessName}</p>
           <p className="mt-1 truncate text-xs text-muted">{venueName}</p>
           {businessCount > 1 && <Link href="/choose-business"
@@ -45,12 +45,12 @@ export function AppShell({
           </Link>}
         </div>
         <MainNavigation role={role} businessId={pinnedBusiness} />
-        <div className="mt-auto hidden space-y-1 px-3 pb-5 md:block">
+        <div className="mt-auto hidden border-t border-line px-3 py-3 md:block">
           <a
             href="mailto:support@butterbox.app"
-            className="flex min-h-11 items-center gap-3 rounded-lg px-4 py-3 text-sm text-muted hover:bg-cloud hover:text-ocean"
+            className="flex min-h-10 items-center gap-3 rounded-lg px-4 py-2 text-sm text-muted hover:bg-cloud hover:text-ocean focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean"
           >
-            <CircleHelp size={17} aria-hidden="true" />
+            <LifeBuoy size={17} aria-hidden="true" />
             Contact support
           </a>
         </div>
@@ -58,10 +58,8 @@ export function AppShell({
       <div className="min-w-0 flex-1 md:ml-[246px]">
         <header className="flex min-h-[72px] items-center justify-between border-b border-line bg-white px-5 sm:px-8">
           <div>
-            <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted">
-              PEOPLE <span className="px-1 text-sea-glass">·</span> PLACES <span className="px-1 text-sea-glass">·</span> HOSPITALITY <span className="px-1 text-sea-glass">·</span> PROGRESS
-            </p>
-            <p className="mt-1 text-sm font-semibold">{venueName}</p>
+            <p className="hidden text-xs font-medium text-muted sm:block">Less admin. More good days.</p>
+            <p className="text-sm font-semibold sm:mt-1">{venueName}</p>
           </div>
           <div className="flex items-center gap-3">
             <div className="hidden text-right sm:block">

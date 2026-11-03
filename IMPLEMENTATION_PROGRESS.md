@@ -3,8 +3,13 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **62**.
-  In Progress: **1**. Blocked: **7**. Not started (Backlog): **57**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **63**.
+  In Progress: **1**. Blocked: **7**. Not started (Backlog): **56**.
+- BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
+  accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
+  **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
+  owner/manager/employee desktop and mobile overflow/axe audit. Lint, types and split build passed.
+  The operator-owned showcase spec was adapted but not run (its live showcase is off-limits).
 - BB-BRAND-002/003/005 are **Done** and BB-BRAND-004 is **Blocked (partial)**. The work uses the
   owner-selected Coastal Wave reference (design direction approved). The traced vector logo system, icons,
   brand guide and sign-in artwork await the owner's final visual review. Production browsers passed
@@ -736,6 +741,39 @@ for "excessive hours"; the report must not manufacture one or imply wage
 calculation. First inspect existing permission, overlap, attendance, shared
 worker and reporting primitives; record any genuine implementation blocker.
 **Documentation: pending.** No REPORT-002 criterion has been verified.
+
+## Latest completed showcase polish story
+
+**BB-DEMO-003 — Showcase UI, navigation and mobile polish: Done.**
+
+Audit (real production build, isolated acceptance project, synthetic two-department café with four staff and
+published shifts in the week of 2032-03-15): owner at 1280 and 375 px, FOH manager at 375 px and employee
+at 375 and 1280 px across the dashboard, roster, people, timesheets, work time, hours report, payroll
+settings, departments, permissions, audit, attendance, availability, notifications, shift swaps, help and
+**My schedule**. Highest-impact findings: owner desktop navigation (16 items) clipped **Payroll**, **Hours
+and labour**, **Permissions** and **Audit history** below the fold with no scroll; mobile navigation was a
+horizontal strip that showed only two links; payroll settings had no navigation entry; the header eyebrow
+was off-brand and wrapped on phones; the dashboard presented forecasting, labour optimisation, compliance
+checks and an AI Copilot without stating they are unavailable; roster and schedule help links ran together.
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| Audit real screens against brand and accessibility guidance | Browser audit above; 33+ real screenshots retained in the session workspace (not committed, not marketing imagery) | `showcase polish: branded role navigation…` — axe findings empty and no horizontal overflow on every audited page and open menu: **passed** | Pass |
+| Prioritise roster, employee mobile, attendance, timesheets, payroll and navigation | Those routes are in the audited journeys; navigation was rebuilt first | Same test; `personal mobile schedules…` **passed**; `owner hours and labour report…` (390 px) **passed** | Pass |
+| Fix major usability inconsistencies | `main-navigation.tsx`: Everyday/Team/Business groups, distinct icons, owner/admin **Payroll**, mobile **Menu** (`aria-expanded`, `aria-controls`, current page, **Escape** closes and returns focus); `app-shell.tsx`: scrollable sidebar, tagline header, LifeBuoy support link; `page.tsx`: concept badges; roster/schedule link spacing | Polish test asserts collapsed menu exposes no links, opens to show them, payroll link count per role, Escape/focus and last desktop link reachable: **passed**; WCAG/keyboard/screen-reader test **passed**; loading/failure states **passed** | Pass |
+| Verify realistic mobile and desktop flows | Sign-in per role and real navigation at 375 and 1280 px | 5/5 targeted production Chromium tests passed after fixes | Pass |
+| Do not substitute illustrative mockups | Evidence is from the running app; dashboard concept features are labelled rather than presented as working | Manual screenshot review | Pass |
+
+Tests selected: the new polish audit; the WCAG suite and loading/failure states (navigation and shell
+changed); the hours report and personal mobile schedule tests (they use navigation at phone width). A
+first run of the mobile schedule test timed out because the new test helper checked for the **Menu** before
+the dashboard rendered; the helper now waits for **Main navigation** and retries the tap until hydration,
+then passed. Guide upkeep `tests/help.test.mjs` **9/9** passed after restoring the version-line format the
+review-history check requires (it had failed at baseline after the 1.4 showcase edit). Deferred: `tests/e2e/showcase.spec.mjs` was adapted with the same helper but needs the
+operator's live showcase on port 3137 and was not run — rerun it before the next showcase refresh. Broader
+regression was not run. Files: `src/components/{main-navigation,app-shell}.tsx`, `src/app/page.tsx`,
+`src/app/{roster,my-schedule}/page.tsx`, `tests/e2e/{auth,showcase}.spec.mjs`, User Guide.
+**Documentation: updated** (mobile **Menu**, grouped navigation, **Payroll** link, dashboard concept labels).
 
 ## Latest completed brand identity stories
 
@@ -2956,8 +2994,8 @@ but has not yet run remotely.
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
 - **BB-DEMO-001/002** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and 005 are
-  Done with final visual review pending. Next Showcase P0 work is DEMO-003 (UI and mobile polish against
-  `branding/BRAND_GUIDELINES.md`), then DEMO-004. BRAND-004 needs licensed photography.
+  Done with final visual review pending. DEMO-003 is Done (rerun the adapted showcase spec on the operator's
+  showcase before its next refresh). Next Showcase P0 work is DEMO-004. BRAND-004 needs licensed photography.
   Select ready P1 operational work; inspect roster-change safeguards required
   before scenario-driven staffing changes. ATTEND-006, REPORT-001, BRAND-001
   and DOC-001/002/003 are Done; do not rebuild them.

@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.4 — showcase access updated 2026-11-03; broader guide reviewed 2026-11-02 (Core Roadmap).
+**Guide version:** 1.5 — reviewed 2026-11-03 (Core Roadmap; navigation, sign-in branding and showcase access sections; other sections last reviewed 2026-11-02).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -117,7 +117,7 @@ experiment, then have the operator reset before the next baseline review.
 ### Guided employee mobile review
 
 1. At a narrow mobile viewport, sign in with the supplied employee account.
-   Use the horizontally scrollable **Main navigation** to open **My schedule**.
+   In **Main navigation**, choose **Menu**, then open **My schedule**.
    Open the supplied roster week and review **Next shift** and **Weekly
    schedule**. If the fixture is old, there may be no upcoming shift even
    though the selected historical week contains a published shift.
@@ -548,7 +548,8 @@ The usual attendance screen remains available when scanning is not possible.
    Previously exported sessions are not emitted again. This records your
    acknowledgement; Butterbox does not send an adjustment.
 4. Owners/admins use **Manage payroll employee mapping** in the payroll-period
-   section to open `/settings/payroll`. Use **Add mapping destination**, select
+   section, or **Payroll** in the **Business** group of **Main navigation**, to
+   open `/settings/payroll`. Use **Add mapping destination**, select
    the destination and **Show mappings**. Enter each **Payroll employee ID** and
    **Reason for mapping change**, then **Save payroll ID**. A blank ID removes
    the mapping and blocks provider-ready records for that employee. Refresh
@@ -680,8 +681,13 @@ swap, confirm an open-shift claim or approve time. Use the linked task screen fo
 those decisions. Use **View your attendance history** from **Attendance** for
 your own historical effective clocks and correction decisions.
 
-**Mobile and keyboard use:** Horizontal main navigation can scroll on a narrow
-screen. Use **Skip to main content** and visible keyboard focus; quick roster
+**Mobile and keyboard use:** On a narrow screen, **Main navigation** is
+collapsed behind a **Menu** button that shows the current page. Choose **Menu**
+to list your available pages; choosing a page or pressing **Escape** closes it
+and **Escape** returns focus to **Menu**. On wider screens the navigation stays
+open in the sidebar, grouped into **Everyday**, **Team** and **Business** when
+your role has more than one group, and scrolls independently if it is taller
+than the window. Use **Skip to main content** and visible keyboard focus; quick roster
 changes have explicit controls instead of requiring a drag gesture. Wait for
 loading/pending state and the actual result. If a result is uncertain, refresh
 and inspect history before retrying. No fixed response-time guarantee is implied.
@@ -714,7 +720,11 @@ Butterbox's agreed product direction is customer-owned export of employment reco
 - External notification channel delivery (email/push; SMS/WhatsApp additional planned options)
 - Direct payroll provider adapters (including deferred Xero)
 - Independent approved Award Central rule calculations
-- Advanced AI rostering, forecasting and analytics
+- Advanced AI rostering, forecasting and analytics. On the dashboard, the
+  **Forecast demand**, **Labour optimisation** and **Compliance checks** cards
+  and the **Butterbox AI Copilot** panel are labelled **Concept · not yet
+  available**. They show planned capabilities only; nothing in them is
+  generated, connected or checked yet.
 - SaaS subscription/self-service billing and full production release readiness
 
 ## Getting help and improving this guide
@@ -728,8 +738,8 @@ as HTML; it is not a separate hand-maintained copy.
    An empty search lists available tasks; no matches are reported explicitly.
    Searches are limited to 160 characters.
 2. Open a task, use its internal links, or choose **All help topics**.
-   Search and links retain the selected business. Mobile navigation may scroll;
-   native form controls and visible keyboard focus remain available.
+   Search and links retain the selected business. On phones, open **Menu** in
+   **Main navigation** to move between pages; native form controls and visible keyboard focus remain available.
 3. Available tasks follow the current server-verified membership. Employees
    do not receive owner administration/payroll-preparation articles;
    department managers do not receive owner-only audit/report tasks. Describing
@@ -787,6 +797,8 @@ not every sentence or all app screens; human review remains necessary.
 | 1.1 | 2026-11-02 | `9918957` (DOC-002); DOC-003 contextual links | Markdown-backed role-safe search and core contextual navigation; targeted runtime and lightweight upkeep checks |
 | 1.2 | 2026-11-02 | `300426b` (announcement backend); COMMS-001 UI | Scoped plain-text publication, recipient history, acknowledgements, real HTTP retries and mobile browser acceptance |
 | 1.3 | 2026-11-02 | BB-ROSTER-011 roster productivity | Scoped roster search, opt-in Chromium shortcuts, draft-deletion confirmation and mobile accessibility |
+| 1.4 | 2026-11-03 | `0f8c847` (showcase test-owner login); `6d5c4e7` (BRAND-002/003/005) | Isolated showcase owner access and Coastal Wave sign-in branding |
+| 1.5 | 2026-11-03 | BB-DEMO-003 showcase polish | Mobile **Menu**, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels; targeted desktop/mobile browser audit |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -880,6 +892,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
 | BB-BRAND-002/003 | Accounts and business access — logo and icon appearance; [brand guidelines](../branding/BRAND_GUIDELINES.md) (draft, final owner visual review pending) |
 | BB-BRAND-005 | Accounts and business access — sign-in artwork; no workflow change |
+| BB-DEMO-003 | Mobile **Menu** navigation, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels |
 | BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
 **Document ownership:** Main Roadmap feature agent maintains user-facing guidance with each completed feature. Update this guide and any relevant help UI when workflows change; indicate unavailable or blocked capabilities explicitly.

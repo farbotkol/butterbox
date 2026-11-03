@@ -88,6 +88,18 @@ async function followEmailLink(page, link, next) {
   await page.goto(next);
 }
 
+async function openMainNavigation(page) {
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(navigation).toBeVisible();
+  const toggle = navigation.getByRole("button", { name: "Menu", exact: true });
+  if (!await toggle.isVisible()) return;
+  // A tap before hydration is ignored, so retry until React has attached the handler.
+  await expect(async () => {
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+}
+
 async function signIn(page, email, password) {
   if (new URL(page.url()).pathname !== "/login") await page.goto("/login");
   await page.getByLabel("Email address").fill(email);
@@ -391,6 +403,7 @@ test("owner hours and labour report reconciles approved time with mobile filters
     await signIn(page, `report-ui-owner-${suffix}@example.test`, password);
     await page.goto(reportUrl);
     await expect(page.getByRole("heading", { name: "Hours and labour", exact: true })).toBeVisible();
+    await openMainNavigation(page);
     await expect(page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Hours and labour" })).toBeVisible();
     const totals = page.getByLabel("Report totals");
     await expect(totals).toContainText("9h 0m 0s");
@@ -5060,6 +5073,7 @@ test("personal mobile schedules show only the member's published shifts", async 
     await page.goto("/my-schedule");
     await expect(page).toHaveURL(/\/login/);
     await signIn(page, `schedule-worker-${suffix}@example.test`, password);
+    await openMainNavigation(page);
     await page.getByRole("link", { name: "My schedule", exact: true }).click();
     await page.goto(`/my-schedule?week=2099-03-16&venue=${venueId}`);
     const next = page.getByRole("region", { name: "Next shift" });
@@ -8982,6 +8996,125 @@ test("core pages pass WCAG checks, keyboard controls and screen-reader smoke tes
     for (const context of contexts) await context.close();
     await assertBusinessFixturesPreserved(admin, businessId);
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
+test("showcase polish: branded role navigation and overflow-free owner, manager and employee screens", async ({ browser }) => {
+  test.setTimeout(300_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const shotDir = process.env.BUTTERBOX_TEST_SCREENSHOT_DIR;
+  const [businessId, venueId, fohId, bohId] = Array.from({ length: 4 }, () => randomUUID());
+  const accounts = { owner: "owner", manager: "foh_manager", worker: "employee" };
+  const users = {};
+  const contexts = [];
+  const findings = [];
+  try {
+    for (const key of Object.keys(accounts)) {
+      const created = await admin.auth.admin.createUser({
+        email: `polish-${key}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[key] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Polish cafe ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Long Reef Kiosk", timezone: "Australia/Sydney",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+    ])).error).toBeNull();
+    const staff = [
+      ["Avery Barista", fohId, "Barista", users.worker], ["Jordan Floor", fohId, "Server", null],
+      ["Riley Pass", bohId, "Cook", null], ["Sam Prep", bohId, "Kitchen hand", null],
+    ].map(([name, departmentId, roleTitle, authUserId]) => ({
+      id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: departmentId,
+      auth_user_id: authUserId, name, role_title: roleTitle,
+    }));
+    expect((await admin.from("employees").insert(staff)).error).toBeNull();
+    expect((await admin.from("shifts").insert(staff.flatMap((employee, index) => [0, 1, 2].map((day) => ({
+      business_id: businessId, venue_id: venueId, department_id: employee.department_id, employee_id: employee.id,
+      role_title: employee.role_title, is_published: true,
+      starts_at: `2032-03-${String(14 + day).padStart(2, "0")}T${String(19 + index).padStart(2, "0")}:30:00Z`,
+      ends_at: `2032-03-${String(15 + day).padStart(2, "0")}T0${2 + index}:00:00Z`,
+    }))))).error).toBeNull();
+
+    const week = `week=2032-03-15&venue=${venueId}`;
+    const journeys = [
+      { key: "owner", viewport: { width: 1280, height: 800 }, payroll: true, pages: [
+        "/", `/roster?${week}&department=${fohId}`, `/people?venue=${venueId}`, `/timesheets?venue=${venueId}`,
+        `/work-time?venue=${venueId}`, `/reports/hours?${week}`, "/settings/payroll", "/settings/organisation"] },
+      { key: "owner", viewport: { width: 375, height: 812 }, payroll: true, pages: [
+        "/", `/roster?${week}&department=${fohId}`, `/people?venue=${venueId}`, `/timesheets?venue=${venueId}`,
+        `/work-time?venue=${venueId}`, `/reports/hours?${week}`, "/settings/payroll", "/settings/organisation",
+        "/settings/permissions", "/settings/audit"] },
+      { key: "manager", viewport: { width: 375, height: 812 }, payroll: false, pages: [
+        "/", `/roster?${week}&department=${fohId}`, `/people?venue=${venueId}`, `/timesheets?venue=${venueId}`,
+        `/work-time?venue=${venueId}`, `/attendance?venue=${venueId}`] },
+      { key: "worker", viewport: { width: 375, height: 812 }, payroll: false, pages: [
+        "/", `/my-schedule?${week}`, `/attendance?venue=${venueId}`, `/availability?venue=${venueId}`,
+        `/notifications?venue=${venueId}`, `/shift-swaps?venue=${venueId}`, "/help"] },
+      { key: "worker", viewport: { width: 1280, height: 800 }, payroll: false, pages: ["/", `/my-schedule?${week}`] },
+    ];
+    for (const journey of journeys) {
+      const context = await browser.newContext({ baseURL: appUrl, viewport: journey.viewport });
+      contexts.push(context);
+      const page = await context.newPage();
+      await signIn(page, `polish-${journey.key}-${suffix}@example.test`, password);
+      const navigation = page.getByRole("navigation", { name: "Main navigation" });
+      await expect(navigation).toBeVisible();
+      await expect(page.getByRole("img", { name: "Butterbox" })).toBeVisible();
+      const menu = navigation.getByRole("button", { name: "Menu", exact: true });
+      const label = `${journey.key} ${journey.viewport.width}px`;
+      if (journey.viewport.width < 768) {
+        await expect(menu).toHaveAttribute("aria-expanded", "false");
+        await expect(navigation.getByRole("link")).toHaveCount(0);
+        await openMainNavigation(page);
+        await expect(navigation.getByRole("link", { name: "My schedule", exact: true })).toBeVisible();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth), `${label} open menu`)
+          .toBeLessThanOrEqual(0);
+        if (shotDir) await page.screenshot({ path: `${shotDir}/${journey.key}-${journey.viewport.width}-menu.png` });
+        findings.push(...await accessibilityFindings(page, `${label} open menu`));
+        await expect(navigation.getByRole("link", { name: "Payroll", exact: true })).toHaveCount(journey.payroll ? 1 : 0);
+        await page.keyboard.press("Escape");
+        await expect(menu).toHaveAttribute("aria-expanded", "false");
+        await expect(menu).toBeFocused();
+      } else {
+        await expect(menu).toBeHidden();
+        await expect(navigation.getByRole("link", { name: "Payroll", exact: true })).toHaveCount(journey.payroll ? 1 : 0);
+        const lastLink = navigation.getByRole("link").last();
+        await lastLink.scrollIntoViewIfNeeded();
+        await expect(lastLink).toBeInViewport();
+      }
+      for (const path of journey.pages) {
+        await page.goto(path);
+        await expect(page.getByRole("main")).toBeVisible();
+        await expect(page.getByRole("img", { name: "Butterbox" })).toBeVisible();
+        const route = new URL(path, appUrl).pathname;
+        expect(await navigation.locator('a[aria-current="page"]').count(), `${label} ${path} current page`)
+          .toBeLessThanOrEqual(1);
+        const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
+        if (overflow > 0) findings.push(`${label} ${path}: page scrolls horizontally by ${overflow}px`);
+        findings.push(...await accessibilityFindings(page, `${label} ${path}`));
+        if (shotDir) {
+          await page.screenshot({
+            path: `${shotDir}/${journey.key}-${journey.viewport.width}${route === "/" ? "-dashboard" : route.replaceAll("/", "-")}.png`,
+            fullPage: true,
+          });
+        }
+      }
+    }
+    expect(findings, findings.join("\n")).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, businessId);
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
 

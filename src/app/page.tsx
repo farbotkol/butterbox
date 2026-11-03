@@ -63,12 +63,14 @@ function MetricCard({
   note,
   icon: Icon,
   tone,
+  concept = false,
 }: {
   label: string;
   value: string;
   note: string;
   icon: typeof UsersRound;
   tone: "sky" | "amber" | "mint" | "coral";
+  concept?: boolean;
 }) {
   const tones = {
     sky: "border-sky-100 bg-[#f0f9fc] text-sky-800",
@@ -89,6 +91,9 @@ function MetricCard({
         </span>
       </div>
       <p className="mt-3 max-w-[28ch] text-xs leading-5 text-muted">{note}</p>
+      {concept && <p className="mt-3 inline-flex rounded-full border border-current/20 bg-white/80 px-2.5 py-0.5 text-[11px] font-semibold text-ink">
+        Concept · not yet available
+      </p>}
     </section>
   );
 }
@@ -224,6 +229,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           note="Connect bookings and weather to forecast staffing needs"
           value="Not connected"
           tone="sky"
+          concept
         />
         <MetricCard
           icon={Coins}
@@ -231,6 +237,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           note="Add wage rates to compare labour cost and savings"
           value="Setup needed"
           tone="amber"
+          concept
         />
         <MetricCard
           icon={CircleAlert}
@@ -245,6 +252,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           note="Configure award, break and maximum-hour rules"
           value="Rules needed"
           tone="coral"
+          concept
         />
       </div>
 
@@ -310,8 +318,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
             <Sparkles size={18} aria-hidden="true" />
             <h2 className="text-base font-semibold text-white">Butterbox AI Copilot</h2>
           </div>
-          <p className="relative mt-2 text-sm leading-6 text-white/70">
-            Recommendations will appear here when the venue data they rely on is connected.
+          <p className="relative mt-2 inline-flex rounded-full bg-white/15 px-2.5 py-0.5 text-[11px] font-semibold text-white">
+            Concept preview · not yet available
+          </p>
+          <p className="relative mt-2 text-sm leading-6 text-white/80">
+            AI recommendations are a planned capability. Nothing below is generated or connected yet.
           </p>
           <div className="relative mt-5 space-y-0 divide-y divide-white/10">
             <div className="flex gap-3 py-3 first:pt-0">

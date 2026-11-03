@@ -47,7 +47,20 @@ async function signIn(page, role) {
   await expect(page.getByRole("complementary", { name: "Synthetic showcase notice" })).toBeVisible();
 }
 
+async function openMainNavigation(page) {
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(navigation).toBeVisible();
+  const toggle = navigation.getByRole("button", { name: "Menu", exact: true });
+  if (!await toggle.isVisible()) return;
+  // A tap before hydration is ignored, so retry until React has attached the handler.
+  await expect(async () => {
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+}
+
 async function navigate(page, label, heading) {
+  await openMainNavigation(page);
   await page.getByRole("navigation", { name: "Main navigation" })
     .getByRole("link", { name: label, exact: true }).click();
   await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
@@ -202,6 +215,7 @@ test("guided mobile employee follows schedule, availability and original attenda
   await seededWeek(page, state.plan.currentWeek);
   await expect(page.getByRole("heading", { name: "Weekly schedule", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Next shift", exact: true })).toBeVisible();
+  await openMainNavigation(page);
   await expect(page.getByRole("navigation", { name: "Main navigation" })
     .getByRole("link", { name: "Timesheet review", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);

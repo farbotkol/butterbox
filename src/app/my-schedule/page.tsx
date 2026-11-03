@@ -233,14 +233,16 @@ export default async function MySchedulePage({
           <p className="mt-2 text-sm text-muted">
             Only your published shifts are shown. Times use {workspace.venue.timezone.replaceAll("_", " ")}.
           </p>
-          <Link href={helpHref("employee", workspace.business.id)}
-            className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
-            Help with your schedule
-          </Link>
-          <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
-            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
-            Request or review shift swaps
-          </Link>
+          <div className="mt-2 flex flex-wrap gap-x-5">
+            <Link href={helpHref("employee", workspace.business.id)}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Help with your schedule
+            </Link>
+            <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Request or review shift swaps
+            </Link>
+          </div>
         </div>
         {(venueResult.data ?? []).length > 1 && (
           <form action="/my-schedule" className="flex items-center gap-2">

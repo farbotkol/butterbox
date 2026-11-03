@@ -626,14 +626,16 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           <p className="mt-2 text-muted">
             Build a balanced week for your FOH and BOH teams.
           </p>
-          <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id)}
-            className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
-            Help with rosters
-          </Link>
-          <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
-            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
-            Review shift swaps
-          </Link>
+          <div className="mt-2 flex flex-wrap gap-x-5">
+            <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id)}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Help with rosters
+            </Link>
+            <Link href={`/shift-swaps?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Review shift swaps
+            </Link>
+          </div>
           <p className="text-sm text-muted">
             This editing and publication roster uses Monday–Sunday operational weeks.{" "}
             <Link href={`/roster/planning?${new URLSearchParams({
