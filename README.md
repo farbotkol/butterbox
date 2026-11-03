@@ -217,6 +217,58 @@ state or implicitly resets. Seed/reset share an exclusive operation lock; a part
 inventory or interrupted lock requires private operator inspection, not
 automatic deletion or a bypass.
 
+#### Repeatable acceptance checklist (BB-DEMO-004)
+
+Run this sequence before each owner review, from one private workdir, and keep
+the output privately. Every step must pass; stop at the first failure.
+
+1. **Isolation:** `node scripts/showcase-environment.mjs verify <workdir>` with
+   the backend/proxy running (exact project, private network, loopback-only
+   ports, owned storage, signed/foreign JWT and anonymous-read checks).
+2. **Reset:** stop the review app, then run the confirmed `reset` above. It
+   must report an empty project and append a `reset-history.jsonl` receipt.
+3. **Reseed:** run `seed`. Expect a new private `fixture-state.json` in phase
+   `seeded` with `simulationOnly: true` and new generated passwords.
+4. **Data and tenant isolation:** with the same workdir exported as
+   `BUTTERBOX_SHOWCASE_WORKDIR`, run
+   `node --experimental-strip-types --test tests/showcase-fixtures.integration.test.mjs`.
+   Run it immediately after reseeding, before any review edits, because it
+   expects the exact fixture counts. It checks 14 staff, 30 shifts, preserved
+   original clock events with an attributed correction, 4 roster publications, 14 sample payroll rows marked
+   **SIMULATION ONLY - NOT FOR PAYROLL**, FOH/BOH managers seeing only their
+   7 department staff, the employee seeing only themselves, the
+   outside-business owner seeing none of the showcase staff, owner-only
+   reporting, disabled signup, zero captured mail and no outbound network.
+5. **Core journeys:** with the review app stopped (it binds the same port),
+   run the launcher command above with `--split-build` instead of
+   `--serve-showcase`; it builds, serves and runs `tests/e2e/showcase.spec.mjs`
+   (owner payroll preparation, scoped FOH/BOH managers, mobile employee,
+   offline reopening, Help Center and contextual help, cookie separation from
+   the ordinary app). Run it after step 4: one check briefly creates, then
+   deletes, a temporary onboarding account.
+   Then start the review app again with `--serve-showcase`.
+6. **Record:** add the date, commit SHA, reset ID and step results to the
+   owner-review record in `IMPLEMENTATION_PROGRESS.md`. Only the owner may
+   record their own review outcome.
+
+| Failure | Meaning | Safe response |
+| --- | --- | --- |
+| `verify` rejects project, network, ports or storage | Not a verified isolated showcase | Do not seed, reset or review; inspect the private diagnostics |
+| Reset refuses unknown accounts or businesses | Non-fixture data is present | Preserve the project; investigate privately; never bypass |
+| `Fixture state already exists` on seed | Seed never overwrites | Run the confirmed reset first, or keep the existing fixture |
+| Operation lock or partial inventory | An interrupted seed/reset | Inspect privately; do not delete the lock or state by hand |
+| Integration or browser step fails | Fixture or app regression | Do not present the showcase; record the failure and fix it first |
+| Reviewer cannot sign in after reseed | Passwords are regenerated | Supply the new private credentials |
+
+Known gaps: access is loopback-only on the operator machine (no hosted or
+remote reviewer access); browser-level cross-business checks cover the Help
+Center only, with data isolation proven by the integration step; dashboard
+forecasting, labour optimisation, compliance checks and AI Copilot are
+labelled concepts; there is no public marketing homepage (BB-BRAND-004);
+the Coastal Wave logo system awaits the owner's final visual review; external
+notifications, live payroll, award calculation and production readiness are
+out of scope.
+
 To pause while preserving storage, use:
 
 ```sh

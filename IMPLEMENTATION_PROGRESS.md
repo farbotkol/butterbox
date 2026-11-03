@@ -4,7 +4,11 @@
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **63**.
-  In Progress: **1**. Blocked: **7**. Not started (Backlog): **56**.
+  In Progress: **1**. Blocked: **8**. Not started (Backlog): **55**.
+- BB-DEMO-004 is **Blocked (prepared)**: the repeatable acceptance checklist, failure-mode table, known
+  gaps and an owner-review record are documented over the existing guarded reset/seed/verify, fixture
+  integration and showcase browser checks. Running it requires stopping and resetting the operator's live
+  showcase, and only the owner can record the review outcome.
 - BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
   accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
   **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
@@ -741,6 +745,28 @@ for "excessive hours"; the report must not manufacture one or imply wage
 calculation. First inspect existing permission, overlap, attendance, shared
 worker and reporting primitives; record any genuine implementation blocker.
 **Documentation: pending.** No REPORT-002 criterion has been verified.
+
+## BB-DEMO-004 — Acceptance evidence (Blocked, prepared)
+
+**BB-DEMO-004 — Repeatable showcase acceptance and reset: Blocked.** The owner was unavailable to choose
+between interrupting the live showcase and preparing only, so the safe option was taken: nothing was run
+against the operator's showcase (fixed project `butterbox-showcase`, port 3137); a second instance would
+collide with it. The checklist is in [README.md](README.md) under *Repeatable acceptance checklist*.
+
+| Criterion | Evidence | Actual result | Status |
+| --- | --- | --- | --- |
+| Stable restricted access and role-specific sample accounts documented | README showcase runbook (loopback-only, private `fixture-state.json`, owner, FOH/BOH managers, employees, outside control owner); User Guide *Internal synthetic showcase* | Documented; hosted/remote reviewer access does not exist | Pass (local only) |
+| Automated smoke tests for core journeys and tenant isolation | `tests/showcase-fixtures.integration.test.mjs` (role-scoped reads incl. outside owner, owner-only report, signup denial, no mail, no egress); `tests/e2e/showcase.spec.mjs` (owner, managers, mobile employee, help, cookies) | Existing DEMO-001/002 evidence; not rerun this session; the spec's DEMO-003 menu adaptation is unrun | Blocked |
+| Reliable verified demo reset | Guarded `showcase-fixtures.mjs reset` (confirmation, inventory checks, empty-project proof, receipt) | Not exercised this session (would destroy the live review state) | Blocked |
+| Repeatable synthetic data | Deterministic seed plan validated by `tests/showcase-fixtures.test.mjs` and the integration counts | Existing evidence; not rerun against a fresh reseed | Blocked |
+| Known gaps and failure states logged | README failure-mode table and known gaps | Documented | Pass |
+| No production secrets, live payroll or messaging | Isolation `verify`, SIMULATION ONLY rows, mail/egress assertions | Existing evidence; not rerun | Blocked |
+| Successful final owner review evidence | Owner-review record below | Pending — must come from the owner | Blocked |
+
+**Owner-review record:** none yet. Each operator acceptance run (checklist step 6) records date, commit SHA,
+reset ID and step results here; the owner records the review outcome. Unblock by: the operator stopping the
+review app and running checklist steps 1–5 on the current commit, then the owner's review.
+**Documentation: updated** (README checklist, failure modes and known gaps; User Guide reviewer note).
 
 ## Latest completed showcase polish story
 
@@ -2995,7 +3021,8 @@ but has not yet run remotely.
   records or bypass the fail-closed safeguard.
 - **BB-DEMO-001/002** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and 005 are
   Done with final visual review pending. DEMO-003 is Done (rerun the adapted showcase spec on the operator's
-  showcase before its next refresh). Next Showcase P0 work is DEMO-004. BRAND-004 needs licensed photography.
+  showcase before its next refresh). DEMO-004 is Blocked (prepared): the operator runs the README acceptance
+  checklist on the showcase, then the owner records the review. BRAND-004 needs licensed photography.
   Select ready P1 operational work; inspect roster-change safeguards required
   before scenario-driven staffing changes. ATTEND-006, REPORT-001, BRAND-001
   and DOC-001/002/003 are Done; do not rebuild them.
