@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 09:08 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:09 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
+- **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, Done in isolated development).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
-- **Phase:** Testing.
-- **Activity:** Waiting for the newer automatic Linux regression after the isolated attendance-correction rerun passed.
+- **Phase:** Complete.
+- **Activity:** Recording criterion-level completion evidence after the full Linux regression passed.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** The attendance-correction scenario that timed out on Linux passed a fresh isolated production-browser rerun **1/1** in **38.4 seconds**; it also passed in **5.9 seconds** in earlier Linux CI. Its exact CI stall is not established. A newer automatic run is in progress. Both protected local and public showcase login endpoints returned HTTP **200** at 09:07 AEDT; neither showcase was changed.
-- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The complete Node/integration rerun passed **300** with **one** intentionally skipped protected-showcase test; the initial seven failures were corrected and their affected files passed **30/30**. Focused Help/navigation units passed **18/18** after the label correction. The macOS browser run reported **95 passed, six failed and one public-mode-only test skipped**; targeted reruns passed **6/7**. Corrected Ubuntu CI reported **100 passed, one timed out and one public-mode-only test skipped**; the timed-out attendance case passed in an earlier Linux run, and the earlier selector failure passed on the corrected run. Browser-test syntax and ESLint passed. The passing 25×7 benchmark measured **1,702/3,000 ms** roster load, **1,979/5,000 ms** publication and **396/2,000 ms** mobile schedule load. The skipped public-mode scenario was separately verified during UXFIX-001, not in these full runs.
-- **Failing tests:** The corrected Linux run's attendance-correction case timed out after 180 seconds, then passed its isolated rerun; its exact CI stall is not established. Synthetic ArrowDown on a native select remains unsupported in the tested macOS browser harness, while the retained actual ArrowDown scenario passed in Linux CI. The protected-showcase integration was deliberately not run.
-- **Blockers requiring intervention:** None identified yet. Consolidated owner UX review and deployment to either protected showcase remain separate.
+- **Progress since previous report:** Linux CI run `41726343706` passed both jobs and the full browser regression: **101 passed, one public-mode-only case skipped**. The formerly failing quick-roster, department and attendance cases all passed. Both protected local and public showcase login endpoints returned HTTP **200** at 09:09 AEDT; neither showcase was changed.
+- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The complete Node/integration rerun passed **300** with **one** intentionally skipped protected-showcase test; affected initial failures passed **30/30**. Focused Help/navigation units passed **18/18** after the label correction. Full Linux CI passed **101 browser cases** with **one** public-mode-only skip; that scenario was separately verified during UXFIX-001. The earlier Linux attendance timeout passed a targeted rerun and the final full CI. The local 25×7 benchmark measured **1,702/3,000 ms** roster load, **1,979/5,000 ms** publication and **396/2,000 ms** mobile schedule load.
+- **Failing tests:** None in the final Linux CI. Synthetic ArrowDown on a bare native select remains unsupported in the tested macOS browser harness; the retained actual ArrowDown scenario passed on Linux. The protected-showcase integration was deliberately not run.
+- **Blockers requiring intervention:** No feature blocker. Physical assistive-device review, consolidated owner UX review and deployment to either protected showcase remain separate. Remaining Showcase P1 rule/scenario work lacks verified applicable rule sources; marketing templates require rights and approval.
 - **Documentation:** Updated, including the attendance label correction and passing browser Help/context verification.
-- **Next concrete action:** Inspect newer Linux CI run `41726343706`; keep the story open until acceptance evidence is complete.
+- **Next concrete action:** Commit and push completion evidence, then select the independent ready BB-REPORT-003 business-report export story after checking its prerequisites.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa`.
-- **Push outcome:** Status checkpoint `bf0e7fda081c61ead36df6796db49627712abf0b` was pushed and its remote SHA verified; this status checkpoint is pending push.
+- **Push outcome:** Status checkpoint `6d453a7242bc855fbfd4287e11a9b61bcb4641a3` was pushed and its remote SHA verified; this completion checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
