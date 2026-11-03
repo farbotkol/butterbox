@@ -1,8 +1,8 @@
 # BB-BRAND-004 — Homepage photography brief
 
-**Status:** Owner brief, received 2026-11-03. No images have been produced from it yet; this repository has no
-image-generation capability, and none of the earlier generated concepts were found. Do not mark BB-BRAND-004
-Done until delivered files meet the acceptance checklist below.
+**Status:** Owner brief, received 2026-11-03. The owner subsequently supplied AI-generated contact sheets under
+`branding/originals/website_imagery/`. [Draft selections](../website/CAFE_IMAGERY_SELECTION.md) are ready for
+review, but their resolution, rights and final approval do not yet meet the acceptance checklist below.
 
 Tagline context: **Butterbox — Less admin. More good days.**
 
@@ -53,8 +53,9 @@ Each delivered master must arrive with:
 
 ## Acceptance checklist (BB-BRAND-004)
 
-- [ ] Master files kept unmodified under `branding/originals/photography/` and catalogued in
-      [ASSET_INDEX.csv](../ASSET_INDEX.csv) with SHA-256, provenance and licence fields.
+- [ ] High-resolution masters retained unmodified and catalogued in [ASSET_INDEX.csv](../ASSET_INDEX.csv)
+      with SHA-256, provenance and licence fields. The supplied AI contact sheets are preserved under
+      `branding/originals/website_imagery/`, but do not meet the master-size requirements above.
 - [ ] Labelled clearly as photography or AI illustration, and never as an application screenshot.
 - [ ] AVIF and WebP responsive derivatives at the crop sizes above, with the masters retained.
 - [ ] Meaningful alt text for informative images; `alt=""` for decorative ones.

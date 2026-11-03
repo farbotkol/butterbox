@@ -25,7 +25,7 @@ wordmark), it was committed unchanged under its supplied name in `677a33e` rathe
 
 | Folder | Contents |
 | --- | --- |
-| `originals/` | Owner-supplied reference (never modified) |
+| `originals/` | Owner-supplied reference and the `website_imagery/` AI-generated contact sheets and scene cuts (never modified) |
 | `tools/` | `trace_reference.py`: reproducible potrace vectorisation of the reference |
 | `logos/source/` | `traced-geometry.json`: vector master path data in reference-pixel coordinates |
 | `logos/svg/` | 11 SVG masters: stacked and horizontal in light, dark, mono-dark and mono-white, plus the icon in colour, mono-dark and mono-white |
@@ -33,7 +33,7 @@ wordmark), it was committed unchanged under its supplied name in `677a33e` rathe
 | `logos/verification/` | Small-size rendering evidence (icon 16/32/64/128 px, horizontal lockup 96–240 px) |
 | `icons/` | Favicon SVG/ICO/PNG 16–48, app icon 192/512, maskable 512, apple-touch 180, social profile 400/1024 |
 | `auth/` | Coastal sun, hill and wave vector artwork used on sign-in and the dashboard |
-| `website/` | Artwork WebP/AVIF (desktop 1600 w, mobile 800 w) and Open Graph image 1200 × 630 |
+| `website/` | Vector artwork and Open Graph image; `cafe-concepts/` contains separate, low-resolution AI imagery review drafts |
 
 Production copies live in `public/brand/` (served logos, PWA icons and the prepared email logo) and in
 `src/app/` (`favicon.ico`, `icon.svg`, `apple-icon.png` and `opengraph-image.png` use the Next.js file
@@ -71,12 +71,9 @@ Then update the SHA-256 values in `ASSET_INDEX.csv` and rerun the integrity chec
 ## Inventory and approval boundary
 
 [ASSET_INDEX.csv](ASSET_INDEX.csv) is the authoritative path-by-path catalogue. Paths are relative to the
-repository root. The current catalogue has **88 records**:
-
-- 1 approved: the reference, for design direction only.
-- 75 draft: the Coastal Wave derivatives and app copies, awaiting the owner's final visual review.
-- 10 unreviewed: 5 missing concept photos and 5 scaffold SVGs.
-- 2 retired: `public/butterbox_logo.svg` and `public/icon.svg`, the superseded pre-Coastal Wave drafts.
+repository root. Its current records include the design-direction reference, draft Coastal Wave derivatives,
+the supplied AI concept sheets and their review derivatives, missing historical concepts, and retired marks.
+Only the reference is approved for the **design direction**; individual café images await the owner's review.
 
 Version identifies the source-changing commit (`git-677a33e`) or `brand-v2-draft` for app integration files.
 SHA-256 binds each present entry to the inspected bytes. Any source change requires a catalogue update.
@@ -107,19 +104,34 @@ No source binary, generation log, rights grant or approval is present.
 | concept-attendance / `coastal_attendance_app_showcase.png` | Illustrative attendance/mobile marketing image | Missing / unreviewed |
 | concept-confidence / `coastal_cafe_confidence.png` | Proposed benefits/lifestyle imagery | Missing / unreviewed |
 
-These photos are still missing, so BB-BRAND-004 homepage **photography** is blocked. The WebP/AVIF files in
-`website/` are derivatives of the original vector coastal artwork, not photographs. No campaign creative or
-approved marketing release is claimed.
+These five historical files are still missing. They are distinct from the newly supplied contact sheets and
+must not be relabelled as those earlier files. No campaign creative or approved marketing release is claimed.
 
 On 2026-11-03 the owner authorised the generated coastal hospitality imagery as the creative direction for the
 internal Showcase. A search of the repository, all Git history, the operator's Mac (Spotlight, Downloads,
 Desktop, Pictures) and agent session files found **none** of the five files above, so their generator, date,
 prompt and usage terms cannot be documented. They remain `missing`; do not recreate them under these names.
 
-The owner's photography brief for replacement homepage imagery (hero, team-collaboration and optional login
-images inspired by Long Reef / Northern Beaches) is in
-[briefs/BB-BRAND-004-homepage-photography-brief.md](briefs/BB-BRAND-004-homepage-photography-brief.md), with crop sizes,
-provenance requirements and the acceptance checklist. No images have been produced from it yet.
+The owner's brief for replacement homepage imagery is in
+[briefs/BB-BRAND-004-homepage-photography-brief.md](briefs/BB-BRAND-004-homepage-photography-brief.md).
+The separately supplied AI-generated contact sheets and 15 scene cuts are in `originals/website_imagery/`.
+Their provenance is reported by the supplier, while the exact generation prompt, model version, applicable
+account terms and final approval remain unverified. They are illustrations, not authentic photographs.
+
+## Coastal café review drafts
+
+The [visual selection summary](website/CAFE_IMAGERY_SELECTION.md) and
+[responsive preview](website/cafe-concepts/preview.html) propose a hero, team, operations and supporting
+images. `node scripts/build-coastal-cafe-imagery.mjs` regenerates AVIF, WebP and JPEG crops from the two
+fingerprinted source PNGs without enlarging or modifying them. The generator writes only its named outputs;
+it does not clear the output directory or touch the original vector library. `manifest.json` records every
+source, crop, alt text, size and digest.
+
+These are **internal review drafts**, not publication-ready masters. The supplied 861 × 377 hero cut and its
+859 × 377 clean source region fall short of the brief's native 3200 × 1800 hero. The phone crop is only
+296 × 370. Do not present an upscaled image as a native high-resolution master. The summary records the
+public OpenAI terms reviewed, their limitations, and the remaining account-specific rights and owner-approval
+gates.
 
 ## Homepage imagery library (BB-BRAND-004, internal)
 

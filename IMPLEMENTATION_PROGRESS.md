@@ -9,9 +9,9 @@
   `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
   **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). Only the owner can record
   the review outcome.
-- BB-BRAND-004 remains **Blocked (partial)**: a deterministic responsive homepage imagery library was built
-  from the original vector coastal artwork and browser-verified, but the owner-authorised generated
-  coastal imagery could not be found anywhere, so its provenance and rights cannot be documented.
+- BB-BRAND-004 remains **Blocked (partial)**: newly supplied AI-generated coastal café contact sheets have
+  been inventoried, selected and prepared as responsive review drafts. The hero source is only 861 × 377,
+  account-specific and third-party rights are unverified, and final owner approval is pending.
 - BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
   accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
   **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
@@ -20,7 +20,8 @@
 - BB-BRAND-002/003/005 are **Done** and BB-BRAND-004 is **Blocked (partial)**. The work uses the
   owner-selected Coastal Wave reference (design direction approved). The traced vector logo system, icons,
   brand guide and sign-in artwork await the owner's final visual review. Production browsers passed
-  **3/3**, with lint, types and split build also passing. Homepage photography is missing.
+  **3/3**, with lint, types and split build also passing. The newer photographic-style café imagery is
+  AI-generated and remains an unapproved, low-resolution draft.
 - BB-ROSTER-011 is **Done**: opt-in keyboard shortcuts, scoped display-only
   team-member search, guarded draft-deletion confirmation and existing quick
   undo. Focused Node **21/21**, applied pgTAP **190/190**, authenticated
@@ -78,9 +79,9 @@
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
   visuals, Google Ads, social media, email and sales materials. BRAND-001,
-  002, 003 and 005 are Done. BRAND-004 is Blocked on missing licensed photography. BRAND-006 to 010
-  remain Backlog. The concept catalogue exists, but its referenced image binaries,
-  approved logos and approved campaigns are not asserted to exist.
+  002, 003 and 005 are Done. BRAND-004 is Blocked on suitable-resolution masters, rights verification and
+  final owner approval; supplied AI café concepts are available for internal review. BRAND-006 to 010
+  remain Backlog. The earlier five named concept binaries and approved campaigns are not asserted to exist.
 - BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
   all four criteria are verified. QR pgTAP passed **62/62** against the
   isolated applied migration and **62/62** in the earlier rollback replay;
@@ -724,6 +725,42 @@ settings/delivery still require their own implementation and verification.
   unverified. No live records were altered and legal or payroll compliance
   is not claimed.
 
+## BB-BRAND-004 — Supplied café imagery review (2026-11-03)
+
+The owner supplied two AI-generated contact sheets and 15 separated scene cuts in commit `324e072`. The
+supplier's README reports OpenAI ChatGPT image generation on 2026-11-03 and describes the images as fictional
+illustrations, not real venues or people. The exact generation prompt, model/version and account record are
+not supplied. The previous five named historical concept files remain missing and have not been relabelled.
+
+The proposed hero, team, operations and supporting selections are in
+`branding/website/CAFE_IMAGERY_SELECTION.md`; `branding/website/cafe-concepts/preview.html` is a standalone
+review harness, not a deployed page. `scripts/build-coastal-cafe-imagery.mjs` produces 49 draft outputs
+(AVIF/WebP at three widths and a JPEG fallback for each of seven sets) directly from fingerprinted source
+PNGs. The crops exclude adjacent collage gutters, strip metadata and do not enlarge the source. Their
+manifest and the 202-row asset catalogue record actual sizes, hashes, intended use and pending approvals.
+
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| BRAND-004.1 — approved, rights-cleared imagery and truthful labelling | Supplied README; selection summary; visible AI disclosure and descriptive alt text in the preview; public OpenAI terms and sharing policy linked with their limits | Public terms reviewed 2026-11-03, but generating-account terms, input/third-party rights and owner approval of specific assets are unverified. These are not photos or actual UI screenshots. | **Blocked** |
+| BRAND-004.2 — responsive formats, suitable sizes and retained originals | Preserved sheets at 1536 × 1024 and 1672 × 941; supplied hero JPEG 861 × 377; clean hero region 859 × 377. Review outputs range up to 848 × 371 for the wide hero and 296 × 370 for the phone crop. | Image checks confirm 49 decodable files, correct dimensions, hashes, no enlargement and no EXIF/IPTC/XMP/ICC; originals unchanged. The hero does not meet the brief's native 3200 × 1800 master, and the drafts can look soft on large or high-density screens. | **Blocked for production** |
+| BRAND-004.3 — meaningful or empty alt text as appropriate | Manifest and preview: descriptive alt text identifies each informative scene as AI-generated. The existing vector library uses empty alt for decorative images. | Browser checks confirmed all six preview images have descriptive AI-labelled alt text. | Pass for draft |
+| BRAND-004.4 — mobile/desktop presentation and loading | Standalone preview uses responsive `<picture>` sources, intrinsic dimensions, an eager hero, lazy supporting images and JPEG fallbacks; text is placed beside/above the image. | Chromium checks at 320, 390 and 1440 px: correct portrait/wide AVIF selection, no overflow or failed requests, no measured hero size shift, zero axe WCAG 2.1 AA violations; mobile/desktop JPEG fallbacks decoded. Screenshots visually reviewed. No real homepage deployment was tested. | Pass for draft; deployed placement remains unverified |
+
+Image-specific verification: `node --test tests/website-imagery.test.mjs` **4/4**; isolated
+`npx playwright test tests/e2e/website-imagery.spec.mjs` **4/4**; changed-file ESLint and
+`tsc --noEmit --incremental false` passed. All **202** catalogue records and 24 local documentation links
+passed integrity checks. Largest
+outputs used mean absolute channel error ≤ 4.20/255 versus their uncompressed source crops (test budget ≤ 6);
+all 49 files total 1,069,112 bytes, with no individual file above 68,784 bytes. Regeneration produced
+identical manifest and preview hashes on the installed Sharp/libvips version.
+
+**Deferred:** publication review, actual deployed-page loading, higher-resolution masters, the account-specific
+rights and owner selection; full application regression and production build were not run because no app
+route, server boundary or application workflow changed. The isolated showcase on port 3137 was not stopped,
+reset or rebuilt.
+**Documentation: updated** — brand guide, catalogue, provenance and visual selection summary. User Guide:
+not applicable; these are undeployed marketing review assets and do not change a user-facing app workflow.
+
 ## Current story
 
 **BB-REPORT-002 — Overtime and exceptions report: In Progress (Planning), paused.**
@@ -855,10 +892,10 @@ component. Verify fidelity, small sizes, contrast, the catalogue and the real si
 | BRAND-003.2 — examples, misuse, accessibility | Variant/background table, misuse list, contrast rules | Every listed file exists in the catalogue | Pass |
 | BRAND-003.3 — contrast, approval, version history | Contrast table computed with the WCAG 2.x formula; version history 1.0 → 2.0 draft | Charcoal on white 15.25:1, ocean on white 11.44:1, muted on white 5.82:1, charcoal on gold 8.07:1; teal on white 3.21:1 restricted to large text and graphics; gold on white 1.89:1 prohibited for text | Pass |
 | BRAND-003.4 — concept vs approved labelling | Status table at top of the guide and README | The direction is the only approved item; everything else is labelled draft | Pass |
-| BRAND-004.1 — approved rights-cleared imagery | Owner authorised the generated coastal imagery as the creative direction (2026-11-03). Repository, all Git history, operator Mac (Spotlight, Downloads, Desktop, Pictures) and agent session files searched for the five catalogued files | **None found** — generator, date, prompt and usage terms cannot be documented; they stay `missing`. The library uses only original repository vector artwork, labelled as illustration (never photography or screenshots); external rights clearance and owner final visual review pending. The owner's 2026-11-03 photography brief is recorded in `branding/briefs/BB-BRAND-004-homepage-photography-brief.md`; no images exist yet because this environment cannot generate them | **Blocked** |
-| BRAND-004.2 — responsive optimised formats | Original sets in `branding/website/` plus `branding/website/homepage/` from `scripts/build-homepage-imagery.mjs`: hero-wide 640–2560 w (16:7), hero-portrait 480–960 w (4:5, sun-preserving crop), section-band 800–2400 w (4:1), feature tile 480/960 w; AVIF + WebP; `manifest.json` with sizes, bytes and SHA-256 | 26 files, 192 KB total; rebuild is byte-identical; source SVG and earlier derivatives unchanged; catalogued in `ASSET_INDEX.csv` | Pass |
-| BRAND-004.3 — alt text | Decorative hero/band sets use `alt=""`; the wordmark tile has "Butterbox logo above a calm coastal sunrise illustration" | Verified in the rendered preview | Pass |
-| BRAND-004.4 — mobile/desktop presentation and loading | `preview.html` harness (no homepage is deployed or required for the Showcase) | Playwright Chromium at 390×844 and 1440×900 (DPR 2): phones load the portrait AVIF and desktops the wide AVIF; heroes eager, others lazy; no failed requests or horizontal overflow; axe WCAG 2.1 AA 0 violations. Screenshot review found a cropped sun and text over the sun on phones; fixed by crop gravity and stacking copy above the image | Pass (harness only) |
+| BRAND-004.1 — approved rights-cleared imagery | New supplied AI concepts and owner-review summary; see the current evidence above | Account-specific/third-party rights and owner approval remain unverified; imagery is labelled as illustration | **Blocked** |
+| BRAND-004.2 — responsive optimised formats | Existing vector sets and 49 new café review outputs; source contact sheets retained | Drafts pass integrity and no-enlargement checks, but the supplied hero is below the brief's 3200 × 1800 native master size | **Blocked for production** |
+| BRAND-004.3 — alt text | Decorative vector images use empty alt; informative café concepts have AI-labelled descriptive alt | Verified in the review preview | Pass for draft |
+| BRAND-004.4 — mobile/desktop presentation and loading | Standalone café and vector preview harnesses | Café preview: 4/4 isolated browser tests passed at 320/390/1440 px including axe and JPEG fallback; actual deployment not tested | Pass for draft |
 | BRAND-005.1 — artwork without changing auth | `auth-layout.tsx` uses an inline vector artwork panel; form, links and actions unchanged | Signup, setup, cross-tab logout and recovery browser test passed | Pass (owner visual review pending) |
 | BRAND-005.2 — mobile, desktop, low bandwidth | Inline SVG, no image request; 110 px mobile / 150 px sm / clamp(200–380 px) desktop | Screenshots at 1280×800 and 375×812 for `/login` and `/signup`: scrollWidth equals clientWidth, artwork clear of text | Pass |
 | BRAND-005.3 — contrast, keyboard, alt treatment | Artwork `aria-hidden`; logo `role="img"` with `aria-label="Butterbox"`; ocean/ink text on `#FBF6EE` ≥ 10.6:1 | WCAG axe, keyboard and screen-reader browser test passed | Pass |
@@ -3045,12 +3082,11 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- **BB-DEMO-001/002** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and 005 are
-  Done with final visual review pending. DEMO-003 is Done (rerun the adapted showcase spec on the operator's
-  showcase before its next refresh). DEMO-004 is Blocked (prepared): the operator runs the README acceptance
-  checklist on the showcase, then the owner records the review. BRAND-004 needs licensed photography.
-  Select ready P1 operational work; inspect roster-change safeguards required
-  before scenario-driven staffing changes. ATTEND-006, REPORT-001, BRAND-001
+- **BB-DEMO-001/002/003** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and
+  005 are Done with final visual review pending. The DEMO-004 acceptance checklist passed on `dfaf495`;
+  the owner's personal review is still pending. BRAND-004 has AI imagery drafts but remains Blocked on
+  resolution, rights and final owner approval. Resume the active BB-REPORT-002 planning and implementation.
+  ATTEND-006, REPORT-001, BRAND-001
   and DOC-001/002/003 are Done; do not rebuild them.
   Other BRAND delivery still requires its specific assets and approvals.
   Keep **BB-ORG-006** Blocked until its full criteria and

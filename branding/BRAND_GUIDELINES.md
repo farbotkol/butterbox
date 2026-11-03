@@ -10,7 +10,7 @@
 | Coastal Wave logo **design direction** ([reference](originals/butterbox-approved-logo.png)) | **Owner-approved** |
 | Traced vector masters, variants, favicons and app icons in this folder | Draft. Awaiting the owner's final visual review |
 | Exact colour values, typography and the rules in this guide | Draft. Awaiting owner review |
-| Coastal café photography | Not available in the repository. See [Photography](#photography-direction) |
+| Coastal café imagery | AI-generated photographic-style concepts supplied; draft only, with resolution and rights limits. See [Photography](#photography-direction) |
 
 Nothing in this guide is a registered trademark, legal clearance or production
 launch approval. Trademark, business-name and photography rights checks are
@@ -231,12 +231,13 @@ Do not:
 - Use genuine photography only with a documented licence or permission. Never present generated scenes as photos of
   a real venue.
 
-**Status:** The concept photography referenced in the governed catalogue (`concept-team`, `concept-roster`,
-`concept-attendance`, `concept-confidence`, `concept-board`) is **missing from the repository**. Until licensed
-photography is supplied, product surfaces use the vector coastal artwork below. The owner authorised the
-generated coastal imagery direction on 2026-11-03, but the original files were not found anywhere, so they cannot be
-used or rights-documented. The responsive homepage library in `website/homepage/` is built from the vector
-artwork instead (see `branding/README.md`).
+**Status:** The five historical concept files (`concept-team`, `concept-roster`, `concept-attendance`,
+`concept-confidence`, `concept-board`) are still missing. A different set of AI-generated, photographic-style
+coastal café illustrations was supplied on 2026-11-03. The
+[selection summary](website/CAFE_IMAGERY_SELECTION.md) and `website/cafe-concepts/` contain low-resolution
+review drafts, **not real photographs or product screenshots**. Their applicable account terms, third-party
+rights and final owner approval are unverified; do not publish them as cleared marketing assets. Product
+surfaces continue to use the vector artwork below.
 
 ### Illustration
 
