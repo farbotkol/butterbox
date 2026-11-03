@@ -742,6 +742,54 @@ calculated. Each displayed estimate rounds once to cents, so rounded department
 figures may differ from the rounded business total. The report is read-only;
 it does not approve hours, export payroll or transmit data to a provider.
 
+#### Download roster and attendance reports
+
+The following export controls are implemented in isolated development. The
+protected showcase retains its earlier report page until the owner authorizes
+an update.
+
+1. As a business owner, open **Hours & labour** and find **Download business
+   reports**. Choose an **Export venue** and **Export week containing**, then
+   select **Download roster CSV** or **Download attendance CSV**. Admins,
+   managers and employees cannot request these exports, even if they can view
+   their own rosters or timesheets.
+2. Each file covers one venue's Monday-to-Monday timesheet week in that
+   venue's timezone, including daylight-saving changes. The CSV identifies
+   the week and its UTC start and exclusive end. A shift belongs to the week
+   in which it starts, even if it ends later. An attendance session uses its
+   effective clock-in, its clock-out if clock-in is missing, or its creation
+   time if both are missing; the reference and basis are included in the CSV.
+   The supported selection dates are 8 January 0001 to 24 December 9998.
+3. Roster rows include scheduled or cancelled, published or draft, assigned
+   or unassigned shifts. Attendance rows include open, incomplete, unapproved
+   and approved sessions. Blank durations are not zero; `has_exceptions`
+   indicates that the source has one or more flags, which can include a
+   previously reviewed flag. The status reflects the time of generation.
+   Review the source roster or timesheet for changes and context.
+4. Files include worker names, IDs, departments and work times, which are
+   personal information; handle and store them appropriately. They exclude
+   contact details, captured GPS positions, payroll/provider identifiers and
+   pay amounts. Cells are quoted and potentially formula-like text is prefixed
+   with an apostrophe to reduce spreadsheet formula execution.
+5. A file can contain at most 10,000 rows. Larger reports fail rather than
+   download a truncated file; select another venue or week. A week with no
+   entries produces headers only. If the desired single venue/week exceeds the
+   limit, this version cannot export that complete period. Attendance exports
+   for venues with substantial history can also time out below this limit;
+   retry later or ask an administrator for help if generation fails.
+6. Each generated dataset creates an attributed event in **Audit history**
+   under **Roster and attendance CSV exports**. The `export_event_id` in
+   populated rows identifies that event. The audit records the venue, week,
+   report type, venue timezone, UTC period bounds and row count rather than
+   the CSV contents. Generation can be recorded even if validation, a network
+   problem or the browser prevents the file arriving; the event does not prove
+   delivery.
+
+These are operational reports, not a payroll export or an award calculation.
+They do not approve timesheets, pay staff or send data to any external
+provider. If used in a separately authorized synthetic showcase, filenames and
+populated rows are labelled **SIMULATION ONLY - NOT FOR PAYROLL**.
+
 ### Overtime and exceptions — managers
 
 1. Select **Exceptions** under **Team Management** in the main navigation. Owners, admins,

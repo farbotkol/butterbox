@@ -7,9 +7,10 @@ import {
   illustrativeCostCents, parseHoursLabour, parseIllustrativeRate, parseReportFilter, totalHoursLabour,
   type HoursLabourScope,
 } from "@/lib/hours-labour";
+import { helpHref } from "@/lib/help";
 import { readAllPages } from "@/lib/paginated-rows";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { timesheetWeek } from "@/lib/weekly-timesheet";
+import { parseTimesheetEmployees, timesheetWeek } from "@/lib/weekly-timesheet";
 import { formatWorkedDuration } from "@/lib/worked-time";
 import { getWorkspace } from "@/lib/workspace";
 
@@ -78,6 +79,12 @@ export default async function HoursLabourPage({ searchParams }: {
   });
   const selectedRate = rate ?? null;
   const control = "min-h-11 min-w-0 rounded-lg border border-line bg-white px-3 py-2 text-sm";
+  const exportVenues = parseTimesheetEmployees(venues.data);
+  const exportUnavailable = Boolean(venues.error || !exportVenues ||
+    !exportVenues.some((item) => item.id === workspace.venue.id));
+  if (exportUnavailable && !venues.error) {
+    console.error("Could not load complete venues for business report exports.");
+  }
 
   return <AppShell {...shell}>
     <h1 className="text-2xl font-semibold sm:text-3xl">Hours and labour</h1>
@@ -110,6 +117,49 @@ export default async function HoursLabourPage({ searchParams }: {
         Apply filters
       </button>
     </form>
+    <section aria-labelledby="business-export-heading" className="mt-6 rounded-xl border border-line bg-white p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 id="business-export-heading" className="text-lg font-semibold">Download business reports</h2>
+          <p className="mt-1 text-sm text-muted">Owner-only CSVs for one venue and a Monday-based week.</p>
+        </div>
+        <Link href={helpHref("hours", workspace.business.id, workspace.venue.id)}
+          className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+          How to export reports
+        </Link>
+      </div>
+      <p id="business-export-details" className="mt-3 text-sm leading-6">
+        Rosters include drafts, published and cancelled shifts, including unassigned shifts.
+        Attendance includes open and unapproved sessions and may need review; it is not a payroll calculation.
+        Files contain worker names, IDs and work times. Each download is recorded in audit history.
+      </p>
+      {exportUnavailable ? <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+        We couldn&apos;t load the venues for export. Refresh and check your access before trying again.
+      </p> : <form action="/reports/export" method="post" aria-label="Business report export"
+        aria-describedby="business-export-details" className="mt-4 grid gap-3 sm:grid-cols-2">
+        <input type="hidden" name="business" value={workspace.business.id} />
+        <label className="grid gap-1 text-sm">Export venue
+          <select name="venue" defaultValue={workspace.venue.id} className={control}>
+            {exportVenues?.map((row) => <option key={row.id} value={row.id}>{row.name}</option>)}
+          </select>
+        </label>
+        <label className="grid gap-1 text-sm">Export week containing
+          <input type="date" name="week" min="0001-01-08" max="9998-12-24"
+            defaultValue={week ?? ""} className={control} required />
+        </label>
+        <div className="flex flex-wrap gap-3 sm:col-span-2">
+          <button type="submit" name="type" value="roster"
+            className="min-h-11 rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white hover:bg-ocean/90">
+            Download roster CSV
+          </button>
+          <button type="submit" name="type" value="attendance"
+            className="min-h-11 rounded-lg border border-ocean px-4 py-2 text-sm font-semibold text-ocean hover:bg-cloud">
+            Download attendance CSV
+          </button>
+        </div>
+        <p className="text-xs text-muted sm:col-span-2">A report can contain up to 10,000 rows. Empty weeks download headers only.</p>
+      </form>}
+    </section>
     {loadError ? <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">
       We couldn&apos;t load a complete report. Check your connection and access, then try again.
     </p> : !scope ? <p role="alert" className="mt-5 rounded-xl bg-red-50 p-4 text-sm text-red-800">

@@ -284,6 +284,237 @@ test("scoped announcements publish immutable plain-text history with real acknow
   }
 });
 
+test("owner business report exports download scoped CSVs with audited generation and accessible controls", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const { sql, holdLock, waitForLock } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, secondVenueId, outsideVenueId, departmentId, secondDepartmentId,
+    outsideDepartmentId, workerId, secondWorkerId, outsideWorkerId, sessionId, openSessionId] =
+    Array.from({ length: 13 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const week = "2024-09-30";
+  const reportUrl = `/reports/hours?business=${businessId}&contextVenue=${venueId}&week=${week}`;
+  const fields = { business: businessId, venue: venueId, week: "2024-10-04", type: "roster" };
+  const eventCount = async () => Number(await sql(
+    `select count(*) from public.business_report_export_events where business_id = '${businessId}'::uuid`,
+  ));
+  try {
+    for (const role of ["owner", "manager", "worker", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `report-export-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Report export UI cafe" }, { id: outsideId, name: "Outside export cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Sydney export venue", timezone: "Australia/Sydney" },
+      { id: secondVenueId, business_id: businessId, name: "UTC export venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside export venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: secondDepartmentId, business_id: businessId, venue_id: secondVenueId, name: "UTC team" },
+      { id: outsideDepartmentId, business_id: outsideId, venue_id: outsideVenueId, name: "Outside team" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+        auth_user_id: users.worker, name: " =2+2", email: "private-export@example.test", role_title: "Server" },
+      { id: secondWorkerId, business_id: businessId, venue_id: secondVenueId, department_id: secondDepartmentId,
+        name: "Other venue worker", role_title: "Server" },
+      { id: outsideWorkerId, business_id: outsideId, venue_id: outsideVenueId, department_id: outsideDepartmentId,
+        name: "Outside business worker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: workerId,
+        role_title: "+Server", starts_at: "2024-09-29T14:00:00Z", ends_at: "2024-09-29T15:00:00Z",
+        status: "scheduled", is_published: true },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: null,
+        role_title: "Draft", starts_at: "2024-10-02T01:00:00Z", ends_at: "2024-10-02T02:00:00Z",
+        status: "scheduled", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: workerId,
+        role_title: "Cancelled", starts_at: "2024-10-03T01:00:00Z", ends_at: "2024-10-03T02:00:00Z",
+        status: "cancelled", is_published: false },
+      { business_id: businessId, venue_id: venueId, department_id: departmentId, employee_id: workerId,
+        role_title: "Next week", starts_at: "2024-10-06T13:00:00Z", ends_at: "2024-10-06T14:00:00Z",
+        status: "scheduled", is_published: false },
+      { business_id: businessId, venue_id: secondVenueId, department_id: secondDepartmentId, employee_id: secondWorkerId,
+        role_title: "Second venue", starts_at: "2024-10-01T01:00:00Z", ends_at: "2024-10-01T02:00:00Z",
+        status: "scheduled", is_published: false },
+      { business_id: outsideId, venue_id: outsideVenueId, department_id: outsideDepartmentId, employee_id: outsideWorkerId,
+        role_title: "Outside", starts_at: "2024-10-01T01:00:00Z", ends_at: "2024-10-01T02:00:00Z",
+        status: "scheduled", is_published: false },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([sessionId, openSessionId].map((id) => ({
+      id, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      employee_id: workerId, started_by: users.worker,
+    })))).error).toBeNull();
+    await sql(`insert into public.attendance_events
+      (session_id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, occurred_at, source)
+      select s.id, s.business_id, s.venue_id, s.department_id, s.employee_id, s.started_by, gen_random_uuid(),
+        t.event_type, t.occurred_at::timestamptz, 'server_clock'
+      from (values
+        ('${sessionId}', 'clock_in', '2024-09-29 14:00:00+00'),
+        ('${sessionId}', 'clock_out', '2024-09-29 15:00:00.000001+00'),
+        ('${openSessionId}', 'clock_in', '2024-10-02 03:00:00+00')
+      ) t(session_id, event_type, occurred_at)
+      join public.attendance_sessions s on s.id = t.session_id::uuid`);
+
+    await signIn(page, `report-export-ui-owner-${suffix}@example.test`, password);
+    await page.goto(reportUrl);
+    const form = page.getByRole("form", { name: "Business report export" });
+    await expect(form).toBeVisible();
+    await form.getByLabel("Export venue").selectOption(venueId);
+    await form.getByLabel("Export week containing").fill("2024-10-04");
+    const rosterButton = form.getByRole("button", { name: "Download roster CSV" });
+    const [rosterDownload, rosterResponse] = await Promise.all([
+      page.waitForEvent("download"),
+      page.waitForResponse((response) => new URL(response.url()).pathname === "/reports/export"),
+      rosterButton.click(),
+    ]);
+    expect(rosterResponse.status()).toBe(200);
+    expect(rosterResponse.headers()["cache-control"]).toContain("no-store");
+    expect(rosterResponse.headers()["x-content-type-options"]).toBe("nosniff");
+    expect(rosterDownload.suggestedFilename()).toMatch(/^butterbox-roster-2024-09-30-[0-9a-f-]+\.csv$/);
+    const rosterCsv = await readFile(await rosterDownload.path(), "utf8");
+    expect(rosterCsv.startsWith('\uFEFF"export_event_id"')).toBe(true);
+    expect(rosterCsv).toContain(`"${venueId}"`);
+    expect(rosterCsv).toContain(`"${workerId}"`);
+    expect(rosterCsv).toContain(`"' =2+2"`);
+    expect(rosterCsv).toContain(`"'+Server"`);
+    expect(rosterCsv).toContain('"Draft"');
+    expect(rosterCsv).toContain('"cancelled"');
+    expect(rosterCsv).toContain('"2024-09-29T14:00:00.000000Z"');
+    expect(rosterCsv).toContain('"2024-10-06T13:00:00.000000Z"');
+    expect(rosterCsv).not.toContain('"Next week"');
+    expect(rosterCsv).not.toContain("private-export@example.test");
+    expect(rosterCsv).not.toContain("Other venue worker");
+    expect(rosterCsv).not.toContain("Outside business worker");
+
+    const [attendanceDownload] = await Promise.all([
+      page.waitForEvent("download"), form.getByRole("button", { name: "Download attendance CSV" }).click(),
+    ]);
+    const attendanceCsv = await readFile(await attendanceDownload.path(), "utf8");
+    expect(attendanceDownload.suggestedFilename()).toMatch(/^butterbox-attendance-2024-09-30-[0-9a-f-]+\.csv$/);
+    expect(attendanceCsv).toContain(`"${sessionId}"`);
+    expect(attendanceCsv).toContain(`"${openSessionId}"`);
+    expect(attendanceCsv).toContain('"3600.000001"');
+    expect(attendanceCsv).toContain('"pending"');
+    expect(attendanceCsv).not.toContain("private-export@example.test");
+    expect(attendanceCsv).not.toContain("gps");
+
+    await form.getByLabel("Export week containing").fill("2020-01-06");
+    const [emptyDownload] = await Promise.all([page.waitForEvent("download"), rosterButton.click()]);
+    expect((await readFile(await emptyDownload.path(), "utf8")).split("\r\n")).toHaveLength(2);
+    await form.getByLabel("Export venue").selectOption(secondVenueId);
+    await form.getByLabel("Export week containing").fill("2024-10-04");
+    const [secondDownload] = await Promise.all([page.waitForEvent("download"), rosterButton.click()]);
+    const secondCsv = await readFile(await secondDownload.path(), "utf8");
+    expect(secondCsv).toContain("Other venue worker");
+    expect(secondCsv).not.toContain(`"${workerId}"`);
+    expect(secondCsv).not.toContain("Outside business worker");
+    expect(await eventCount()).toBe(4);
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      expect(await page.locator("body").evaluate((body) =>
+        body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+      for (const control of [
+        form.getByLabel("Export venue"), form.getByLabel("Export week containing"),
+        rosterButton, form.getByRole("button", { name: "Download attendance CSV" }),
+      ]) {
+        const bounds = await control.boundingBox();
+        expect(bounds?.height).toBeGreaterThanOrEqual(44);
+      }
+      await form.getByLabel("Export venue").focus();
+      await page.keyboard.press("Tab");
+      await expect(form.getByLabel("Export week containing")).toBeFocused();
+      for (let segment = 0; segment < 5; segment += 1) {
+        await page.keyboard.press("Tab");
+        if (await rosterButton.evaluate((button) => document.activeElement === button)) break;
+        await expect(form.getByLabel("Export week containing")).toBeFocused();
+      }
+      await expect(rosterButton).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(form.getByRole("button", { name: "Download attendance CSV" })).toBeFocused();
+      findingsMustBeEmpty(await accessibilityFindings(page, `${width}px business reports`));
+    }
+
+    await page.getByRole("link", { name: "How to export reports" }).click();
+    await expect(page.getByRole("heading", { name: "Download roster and attendance reports" })).toBeVisible();
+    await expect(page.getByText("A file can contain at most 10,000 rows.", { exact: false })).toBeVisible();
+
+    for (const role of ["manager", "worker", "outside"]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const target = await context.newPage();
+      await signIn(target, `report-export-ui-${role}-${suffix}@example.test`, password);
+      await target.goto(reportUrl);
+      await expect(target.getByRole("main").getByRole("alert")).toContainText(role === "outside"
+        ? "selected business or venue is unavailable" : "Only a business owner");
+      expect((await context.request.post("/reports/export", {
+        headers: { origin: appUrl }, form: fields,
+      })).status()).toBe(role === "outside" ? 404 : 403);
+    }
+    const anonymous = await browser.newContext({ baseURL: appUrl });
+    contexts.push(anonymous);
+    expect((await anonymous.request.post("/reports/export", { headers: { origin: appUrl }, form: fields })).status())
+      .toBe(401);
+    expect((await page.request.get("/reports/export")).status()).toBe(405);
+    expect((await page.request.post("/reports/export", {
+      headers: { origin: "https://evil.example.test" }, form: fields,
+    })).status()).toBe(403);
+    const duplicated = new URLSearchParams(fields);
+    duplicated.append("business", businessId);
+    expect((await page.request.post("/reports/export", {
+      headers: { origin: appUrl, "content-type": "application/x-www-form-urlencoded" }, data: duplicated.toString(),
+    })).status()).toBe(400);
+    expect(await eventCount()).toBe(4);
+
+    await page.goto(`/settings/audit?business=${businessId}&contextVenue=${venueId}&source=business_report_export_events`);
+    await expect(page.getByRole("main").getByRole("status")).toContainText("4 audit records match");
+    const auditRows = page.getByRole("list", { name: "Sensitive action history" }).getByRole("listitem");
+    await expect(auditRows).toHaveCount(4);
+    await auditRows.first().getByText("Before and after values").click();
+    await expect(auditRows.first().getByText('"entry_count": 1')).toBeVisible();
+
+    const changingTimezone = await holdLock(
+      `update public.venues set timezone = 'UTC' where id = '${venueId}'::uuid returning id`, venueId,
+    );
+    let staleExport;
+    try {
+      staleExport = page.request.post("/reports/export", { headers: { origin: appUrl }, form: fields });
+      await waitForLock("generate_business_report_export");
+      await changingTimezone.release(true);
+      const staleResponse = await staleExport;
+      expect(staleResponse.status()).toBe(500);
+      expect(await staleResponse.text()).toContain("Refresh the report and try again");
+    } finally {
+      await changingTimezone.release(false);
+      await Promise.allSettled([staleExport].filter(Boolean));
+    }
+    expect(await eventCount()).toBe(5);
+    await page.reload();
+    await expect(page.getByRole("main").getByRole("status")).toContainText("5 audit records match");
+    await auditRows.first().getByText("Before and after values").click();
+    await expect(auditRows.first().getByText('"venue_timezone": "UTC"')).toBeVisible();
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const id of Object.values(users)) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("owner hours and labour report reconciles approved time with mobile filters and estimated costs", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);

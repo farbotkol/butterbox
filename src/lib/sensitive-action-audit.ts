@@ -41,6 +41,7 @@ export const auditSources = {
   attendance_bulk_edit_lock_batches: "Bulk attendance locks",
   payroll_period_events: "Payroll finalisation and reopening",
   generic_payroll_export_batches: "Payroll CSV exports",
+  business_report_export_events: "Roster and attendance CSV exports",
   generic_payroll_reconciliations: "Payroll export reconciliation",
   payroll_mapping_connections: "Payroll mapping destinations",
   payroll_employee_mapping_events: "Payroll employee mapping changes",

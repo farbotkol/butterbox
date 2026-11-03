@@ -71,6 +71,12 @@ test("every audited source has a documented label and a database audit producer"
   )].map((match) => match[1]);
   assert.deepEqual(announcementTriggers.sort(), ["announcement_recipients", "announcements"]);
   sources.push(...announcementTriggers);
+  const reportMigration = readFileSync(new URL("../supabase/migrations/20261104080000_business_report_exports.sql", import.meta.url), "utf8");
+  const reportTrigger = reportMigration.match(
+    /create trigger sensitive_action_audit\s+after insert on public\.([a-z_]+)\s+for each row execute function public\.record_sensitive_action_audit\(\)/,
+  );
+  assert.equal(reportTrigger?.[1], "business_report_export_events");
+  sources.push(reportTrigger[1]);
   const migrationDirectory = new URL("../supabase/migrations/", import.meta.url);
   const manualSources = readdirSync(migrationDirectory).filter((file) => file.endsWith(".sql"))
     .flatMap((file) => [...readFileSync(new URL(file, migrationDirectory), "utf8")
