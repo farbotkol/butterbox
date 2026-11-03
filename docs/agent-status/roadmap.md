@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## Local application refresh checkpoint
+
+- **Last report:** 2026-11-03 12:44 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Complete at this checkpoint; the local apps remain running, with no background scheduling claim.
+- **Current work:** User-directed refresh of the ordinary app and existing BB-DEMO-001 showcase; no story status changed.
+- **Criteria:** Load the latest branch code in both local apps while preserving the isolated showcase, its owner login and all existing data.
+- **Phase:** Complete.
+- **Activity:** Delivered the Coastal Wave integration from development commit `6d5c4e7a4a33324d1c1100d628298bd936588e77` to both loopback apps.
+- **Progress since previous report:** Fast-forwarded the branch, verified the development app's hot update, built the showcase in a separate private snapshot, browser-tested the preview and gracefully replaced only the old showcase app. No database migration or reset was needed.
+- **Tests and results:** Showcase split production build and TypeScript passed; desktop/mobile login and logo checks passed for the ordinary app and showcase preview. The live showcase owner signed in, saw 14 fictional staff, verified cookie isolation and reloaded the roster. Both live apps served the new manifest and exact icon bytes; health, six-service isolation and read-only pre/post database counts passed.
+- **Failing tests:** None known for this refresh.
+- **Blockers/risks:** No local refresh blocker. The showcase remains internal-only and simulated; hosted access, final brand review and production/release regression remain separate.
+- **Documentation:** Not applicable — this was an operational refresh of existing upstream changes; the updated User Guide was bundled and verified.
+- **Next concrete action:** Refresh the open browser tabs to load the updated apps; resume roadmap story selection separately.
+- **Latest development commit:** `6d5c4e7a4a33324d1c1100d628298bd936588e77` (brand integration).
+- **Push outcome:** Upstream development commit `6d5c4e7a4a33324d1c1100d628298bd936588e77` was fetched and verified; this status checkpoint is pending.
+- **Backlog:** 127 total; 62 Done, 1 In Progress, 7 Blocked, 57 Backlog.
+
 ## Local showcase setup checkpoint
 
 - **Last report:** 2026-11-03 12:15 AEDT (UTC+1100), observed on the local operator's clock.
