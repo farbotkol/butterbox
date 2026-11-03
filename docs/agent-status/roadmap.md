@@ -1,5 +1,16 @@
 # Roadmap Agent — Activity Status
 
+## Owner acceptance of BB-DEMO-004 — 2026-11-03
+
+- **Owner decision:** BB-DEMO-004 is **Done** — owner accepted delivery of the internal, functioning isolated Butterbox Showcase MVP, superseding earlier pending-review milestone notes.
+- **Basis:** Prior isolated operator acceptance: six-container verification, synthetic reset/reseed, integration 1/1, Chromium 15/15, successful owner login. Owner additionally confirmed `http://127.0.0.1:3137` accessible and working.
+- **Boundary:** This is showcase **delivery** acceptance, not owner approval of each feature, screen, UX, artwork, external exposure, compliance or production readiness. Consolidated functional/UX feedback will be supplied separately.
+- **Safety:** GitHub documentation-only update; no local service, database, data reset or redeployment touched.
+- **Remaining P0:** BB-BRAND-004 Blocked on native hero resolution, rights and owner imagery selection/approval.
+- **Backlog:** 127 total, 65 Done, 0 In Progress, 7 Blocked, 55 Backlog. Showcase P0 56/57 Done (98.2%) and 1 Blocked.
+- **Next action:** Main Agent should refresh `copilot/finish-roadmap-for-app` and select the next unblocked roadmap task, without disturbing the live showcase. This repository update does not start the Codespace agent.
+
+
 ## Roadmap recovery checkpoint after BB-REPORT-002
 
 - **Last report:** 2026-11-03 17:20 AEDT (UTC+1100), observed on the local operator's clock.
