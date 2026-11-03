@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## Public showcase access — operator request
+
+- **Last report:** 2026-11-03 21:23 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current work:** Public access to the isolated synthetic showcase; no backlog story has been started or changed.
+- **Acceptance criteria:** Reach the synthetic showcase over HTTPS, verify sign-in and the intended reviewer workflows, retain tenant and department authorization, and keep the ordinary application and all backend ports private.
+- **Phase:** Planning and safety verification.
+- **Activity:** Investigating an encrypted public route without restarting or reseeding the showcase.
+- **Progress:** The ordinary network is behind carrier NAT. A free OpenTunnel client was downloaded from the pinned upstream release and checksum verified. Its published client source generates the TLS private key locally and terminates visitor TLS on the local machine. A temporary route exposed only a non-sensitive connectivity page, not the app or database.
+- **Tests and results:** The temporary HTTPS page returned **200**; its public certificate fingerprint matched the locally stored certificate. The showcase login returned **200** and its API/database ports remained loopback-only.
+- **Failing tests:** None so far. The tunnel has not yet been connected to the application, and no public sign-in or reviewer workflow is claimed.
+- **Blockers requiring intervention:** Browser-side attendance and invitation components reference the local Supabase URL; remote behavior and a safe application-only gateway need verification. The existing showcase is deliberately guarded as local-only, and email delivery remains unavailable.
+- **Documentation:** Status checkpoint only; user guidance must be updated if public access is delivered.
+- **Next concrete action:** Verify an application-only, host-validated HTTPS gateway and remote role workflows without exposing backend ports or disrupting the live showcase.
+- **Latest development commit:** `1865111a81fba062bc60fc66b1c751456092b887`; latest repository checkpoint before this update was `a04f256`.
+- **Push outcome:** This documentation checkpoint is pending.
+
 ## Owner approval of BB-BRAND-004 visual selection — 2026-11-03
 
 - **Last report:** 2026-11-03 18:07 AEDT (UTC+1100), as provided with the owner's message.
