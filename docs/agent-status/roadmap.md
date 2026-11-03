@@ -1,5 +1,15 @@
 # Roadmap Agent — Activity Status
 
+## BB-BRAND-004 closed by owner — internal showcase scope only
+
+- **Decision:** Owner expressly accepts the present AI-generated coastal café images as temporary imagery for the **private internal Showcase P0**, with replacement planned for production. BB-BRAND-004 status: **Done**. This does not claim production imagery standards are satisfied.
+- **Evidence retained:** 15 scenes, 49 optimized review variants, truthful AI labelling and alt text, prior owner visual selection, image tests 4/4 and isolated browser preview tests 4/4.
+- **Deferred mandatory production/public launch requirements:** Native 3200 × 1800 hero replacement (current source 861 × 377), verified generation-account terms and input/third-party rights, and explicit public marketing publication approval. All remain unverified; not waived or represented as legally cleared.
+- **Backlog:** 127 total; 66 Done, 0 In Progress, 6 Blocked, 55 Backlog; **Showcase P0 57/57 Done (100% by count)**.
+- **Safety:** Documentation-only GitHub commits. No app, database, showcase on port 3137, or live web deployment was accessed or altered.
+- **Next action:** Preserve the showcase for later consolidated owner UX feedback. Codespace agent can refresh and select the next ready task; these commits do not start it.
+
+
 ## Owner approval of BB-BRAND-004 visual selection — 2026-11-03
 
 - **Last report:** 2026-11-03 18:07 AEDT (UTC+1100), as provided with the owner's message.
