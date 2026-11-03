@@ -1,5 +1,24 @@
 # Roadmap Agent — Activity Status
 
+## BB-REPORT-002 completion checkpoint
+
+- **Last report:** 2026-11-03 17:18 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-REPORT-002 — Overtime and exceptions report (Done, Showcase P1).
+- **Acceptance criteria:** Summarise overlaps, excessive hours and missing clock events; provide source drill-down; do not infer award breaches without verified rules. All three are recorded as Pass in implementation progress.
+- **Phase:** Complete.
+- **Activity:** Recording the verified report commit and reassessing remaining Showcase P1 work.
+- **Progress since previous report:** Added an explicit supported date range after reproducing an existing early-year roster source limitation. Verified exact shift and session links, including an unavailable profile and the earliest supported week. Committed the report and its acceptance evidence.
+- **Tests and results:** Focused pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, authenticated HTTP **1/1**, adjacent concurrency **3/3**, and production Chromium **1/1** including desktop/mobile axe passed. Changed-file ESLint, TypeScript, split production build and diff checks passed.
+- **Failing tests:** None remain. One HTTP invocation was refused before fixture operations because the disposable flag was omitted; the corrected run passed.
+- **Blockers requiring intervention:** BRAND-004 still requires suitable native-resolution masters, applicable rights verification and the owner's visual selection. DEMO-004 still requires the owner's personal review.
+- **Documentation:** Updated — role-based User Guide, contextual help, backlog and per-criterion evidence. The report is not deployed to the running showcase.
+- **Safety:** Test work used only disposable project `butterbox-report-002-55b9` on loopback ports 58421/58422/58424. The showcase login on 3137 returned HTTP 200; it was not restarted or reset.
+- **Next concrete action:** Stop only the verified disposable report-test project, then evaluate the remaining ready Showcase P1 stories without inventing employment rules or claiming unapproved brand assets.
+- **Latest development commit:** `bed7416c0b091841692382ae2b9bf884d50c9195` (BB-REPORT-002).
+- **Push outcome:** `bed7416` was pushed and its remote SHA verified; this status checkpoint is pending.
+- **Backlog:** 127 total; 64 Done, 0 In Progress, 8 Blocked, 55 Backlog.
+
 ## BB-REPORT-002 source-link and privacy checkpoint
 
 - **Last report:** 2026-11-03 17:13 AEDT (UTC+1100), observed on the local operator's clock.
