@@ -2,21 +2,21 @@
 
 ## BB-REPORT-003 — Export Business Reports
 
-- **Last report:** 2026-11-04 09:30 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:40 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-REPORT-003 — Export business reports (P2, In Progress).
 - **Acceptance criteria:** CSV exports for rostering and attendance respect tenant permissions and the chosen period; sensitive fields are excluded unless explicitly allowed; each generated event is audited.
 - **Phase:** Coding.
-- **Activity:** Building the scoped export database function and preparing the CSV download interface.
+- **Activity:** Implemented the first CSV download interface and preparing isolated browser verification.
 - **Plan:** Add separate owner-only CSVs for an explicitly selected venue and week, minimise exported fields, neutralise spreadsheet formulas, record attributed immutable generation events and verify role/tenant isolation, boundaries, failures, audit and browser behavior in the disposable project.
-- **Progress since previous report:** Applied the initial, uncommitted export migration only to verified disposable project `butterbox-report-002-55b9` (database port 58422). The initial SQL provides owner-only venue/week roster and attendance data, a field allowlist, transactional immutable export events and a 10,000-row limit. CSV serialization, interface, concurrent revocation and end-to-end verification remain unfinished.
-- **Tests and results:** Initial focused pgTAP **43/43 passed**, including role and tenant denials, Sydney daylight-saving week boundaries, allowlisted fields, audit attribution/immutability and 10,000/10,001-row limits. Subsequent implementation changes still require rerunning these checks.
-- **Failing tests:** None in the initial selected database test. Concurrent permission changes, CSV and browser tests have not run.
+- **Progress since previous report:** The uncommitted database migration, CSV serializer, POST route, owner report form and audit category are implemented in isolated development. Exports include explicit UTC period metadata, spreadsheet-formula neutralization, a 10,000-row cap and an immutable generation event. The role and venue rows are locked during generation; neither protected showcase was changed.
+- **Tests and results:** Focused pgTAP **47/47 passed** on verified disposable project `butterbox-report-002-55b9`, including role/tenant denials, DST bounds, missing attendance events, field allowlists, audit and the row cap. Deterministic owner-revocation and timezone concurrency integration **1/1 passed**. CSV/request/payroll-helper/audit unit tests **20/20 passed**; TypeScript and selected ESLint passed before the latest integration-test addition.
+- **Failing tests:** None in the selected checks. Actual browser downloads, access-denial paths, mobile accessibility, production build and updated documentation remain unverified.
 - **Blockers requiring intervention:** None identified for the selected isolated reporting scope. The protected local and public showcases must not be reset, reconfigured or redeployed; owner UX review remains separate.
 - **Documentation:** Pending implementation and verification.
-- **Next concrete action:** Finish precise attendance period metadata and concurrency protections; add a validated CSV download route and owner interface, then rerun the focused isolated tests.
+- **Next concrete action:** Add end-to-end owner downloads, denied roles and tenant checks, test the five required viewport sizes and accessibility in the isolated app, then document verified behavior.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa` (navigation test corrections; no BB-REPORT-003 development commit yet).
-- **Push outcome:** Story-start checkpoint `868dbe7dda442f266a59b2bf069258d74d2a4e08` was pushed and its remote SHA verified; this coding-status checkpoint is pending push.
+- **Push outcome:** Documentation-only coding checkpoint `eebf74a12f4b68f1f707bc1c6487cadcae583513` was pushed and its remote SHA verified; this milestone checkpoint is pending push.
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
