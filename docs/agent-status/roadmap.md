@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 10:45 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state:** Blocked at this checkpoint; no continuing agent activity is implied.
+- **Last report:** 2026-11-04 10:55 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL only; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and other protected showcase; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts.
-- **Phase:** Blocked.
-- **Activity:** Documenting a shared-database incompatibility and the unchanged public baseline; no deployment attempted.
-- **Progress since previous report:** Verified the public app uses port `3141` behind gateway `3140`, the local showcase uses port `3137`, and both use the same `butterbox-showcase` Supabase project at API port `57421`. The live database ends at migration `20261103210000`; the UXFIX-only revision `5968d863b383ade37aebe3aa83c87a3cad45e490` needs later migrations. `20261104070000` revokes the legacy payroll mapping RPC that the protected local app still calls, so migration would alter and break that environment. The existing supervisor also couples app exit to tunnel shutdown.
+- **Phase:** Planning.
+- **Activity:** Preparing a verified recovery backup, separate UXFIX-only build and migration rehearsal after owner approval to use the shared database.
+- **Progress since previous report:** The owner explicitly approved sharing the existing database. Reconfirmed the same public and local process IDs, project identity, PostgreSQL 17.11, available disk space and matching package lock. The known legacy local payroll-RPC incompatibility and supervisor-coupled tunnel restart remain to be resolved safely before migration or cutover.
 - **Tests and results:** At 10:45 AEDT both login endpoints returned HTTP **200**; the public TLS certificate matched the local tunnel certificate. Public synthetic owner, FOH manager and employee sign-ins passed with secure/HttpOnly cookies; no mobile landing-page overflow was found. The owner saw **0/4** new navigation groups. Public signup, Auth admin and readiness routes returned **404**. No post-deployment tests are claimed.
 - **Failing tests:** The requested new public UX is not present; its post-deployment smoke tests cannot run until deployment is safe.
-- **Blockers requiring intervention:** An explicit owner-approved approach is needed for the shared database and local showcase compatibility, or for isolating the public backend while preserving the same URL and data. Both involve decisions outside the current prohibition on modifying other showcases or creating a separate showcase.
-- **Documentation:** Operational blocker and actual baseline results recorded in `IMPLEMENTATION_PROGRESS.md`; user-facing guidance not applicable because no feature was deployed.
-- **Next concrete action:** Push this checkpoint and update issue #5; stop until the owner authorises a compatible deployment plan.
+- **Blockers requiring intervention:** The owner approved the shared database, but the old local app still calls a payroll RPC that the required migration revokes. Do not bypass the new scoped-write controls or silently disrupt the local app; establish a compatible, authorised cutover plan. No recovery backup or migration has been performed yet.
+- **Documentation:** Existing blocker and baseline results are recorded in `IMPLEMENTATION_PROGRESS.md`; update them with actual deployment results.
+- **Next concrete action:** Verify a private backup, prepare the exact UXFIX build and rehearse migrations without touching the live schema.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Prior checkpoint `0a6e3f4deea1b36c8e48af2559db3e38d662028e` was pushed and verified; this blocker checkpoint is pending push.
+- **Push outcome:** Prior blocker checkpoint `ca0a730c1f6f713459fdeaa7cd08a8f88a79ffec` was pushed and verified; this approval checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 
