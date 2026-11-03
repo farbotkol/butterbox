@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 07:55 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 07:57 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
 - **Phase:** Testing.
-- **Activity:** Running the full transaction-scoped pgTAP suite against the identified disposable project before the broader browser regression.
+- **Activity:** Running the full serialized browser regression against the disposable project and isolated app snapshot.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** The full serial Node/integration run completed and its seven failures were investigated and rerun successfully. The protected local showcase login returned HTTP **200** at 07:55 AEDT.
-- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, and isolated production build passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. Full pgTAP is running; broader browser checks remain pending.
+- **Progress since previous report:** Full transaction-scoped pgTAP passed. The protected local showcase login returned HTTP **200** at 07:57 AEDT; neither protected showcase was changed.
+- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated build and full pgTAP **2,964/2,964** across 65 files passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. The full browser regression is running.
 - **Failing tests:** None remain in completed affected reruns. The skipped integration requires the protected showcase workdir and was intentionally not run.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and deployment to either protected showcase remain separate.
 - **Documentation:** Updated in the working tree; browser verification is pending.
-- **Next concrete action:** Inspect the pgTAP results, run the broader browser regression and rerun final lint/types after all fixes.
+- **Next concrete action:** Inspect the serialized browser results, resolve any failures and rerun final lint/types.
 - **Latest development commit:** `401c9b8767151ecf55d22d80e057dc2abb5c0b26`.
-- **Push outcome:** Regression checkpoint `832190cd9745460f443a56a55b1f8e3106ca9fb2` was pushed and its remote SHA verified. This checkpoint is pending push.
+- **Push outcome:** Integration checkpoint `2825516e15af205b5af2a223e0240c1c8a123a6d` was pushed and its remote SHA verified. This checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
