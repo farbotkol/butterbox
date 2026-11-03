@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-003 — Business Permissions
 
-- **Last report:** 2026-11-04 01:26 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:29 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-003 — Business Permissions directory and focused access editing (P1, In Progress).
 - **Acceptance criteria:** Searchable/filterable/sortable member directory; read-first detail and focused edit with before/after confirmation; preserved role scopes, last-owner concurrency protection, audit and tenant isolation; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Planning.
-- **Activity:** Inspecting the existing permissions page, owner-only server action, scoped membership RPC, audit trigger and tests.
+- **Phase:** Coding.
+- **Activity:** Implementing the validated directory context, selected-member editor and checked membership mutation.
 - **Plan:** Reuse the directory/detail/edit pattern without broadening the existing owner-only membership administration. Add stale-write protection around the authoritative mutation, retain its last-owner locking and audit, and verify role/tenant isolation, accessibility, mobile layouts and documentation in the disposable environment.
-- **Progress since previous report:** BB-UXFIX-002 passed its targeted checks, was committed as `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7` and pushed. The first feature push disconnected before reaching the remote; retrying over HTTP/1.1 succeeded and the remote SHA matched. The protected showcases were not updated.
-- **Tests and results:** Previous story: **292/292** focused pgTAP assertions, competing-write integration **1/1**, ten targeted browser scenarios across runs, directory/Help units **14/14**, lint, types and isolated production build passed. No BB-UXFIX-003 tests have run yet.
-- **Failing tests:** None known for the completed prior story. No current-story tests have run yet.
+- **Progress since previous report:** Confirmed the existing mutation serializes membership changes with a business-level advisory lock and the audit trigger records membership updates. Captured five actual pre-change screenshots in the disposable app. Started the directory-filter helper; product changes are not yet verified or committed.
+- **Tests and results:** Current-story pre-change production-browser baseline **6/6** passed: the five-width capture and all five existing live role-transition scenarios. Previous-story results remain in the implementation progress.
+- **Failing tests:** None in the baseline. The new directory helper and subsequent implementation have not yet been tested.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
 - **Documentation:** Not applicable yet; no BB-UXFIX-003 user-visible changes have been made. User Guide and Help updates are required before completion.
-- **Next concrete action:** Finish inspecting the permissions mutation, audit and existing coverage; capture the pre-change browser baseline; then implement the selected-member journey.
+- **Next concrete action:** Implement the read-first directory/detail, deliberate confirmation and checked mutation; add role, tenant, audit and competing-write tests.
 - **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
-- **Push outcome:** BB-UXFIX-002 is present on the remote branch at the verified SHA above. This story-start documentation checkpoint is pending push.
+- **Push outcome:** BB-UXFIX-002 and story-start checkpoint `3906b82a3d4071116602a45d3360b7a97e51e5c5` were pushed and their remote SHAs verified. This updated documentation-only checkpoint is pending push.
 
 ## BB-UXFIX-002 — Departments and Roles
 
