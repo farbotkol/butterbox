@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 08:28 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 08:33 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
 - **Phase:** Debugging.
-- **Activity:** Investigating two failures while the full serialized browser regression continues against the disposable project and isolated app snapshot.
+- **Activity:** Rerunning six browser failures and updated Help coverage serially against the disposable project and isolated app snapshot.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** The browser run reached 81 completed scenarios at 08:27 AEDT. The 25×7 roster benchmark did not show a publication success message within the test timeout; no threshold result was reached. The protected local showcase login returned HTTP **200** at 08:28 AEDT; neither protected showcase was changed.
-- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. Focused Help/navigation units passed **18/18** after the label correction. At 08:27 AEDT, **75 browser scenarios passed and six failed**; the run continues.
+- **Progress since previous report:** The full browser run completed; the final User Guide and updated tests were synchronized into the isolated snapshot for a serial rerun. The protected local showcase login returned HTTP **200** at 08:33 AEDT; neither protected showcase was changed.
+- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. Focused Help/navigation units passed **18/18** after the label correction. The full browser run reported **95 passed, six failed and one public-mode-only test skipped**; the skipped scenario was separately verified during UXFIX-001, not in this run.
 - **Failing tests:** The quick-roster keyboard scenario did not select Duplicate after ArrowDown. Signup received an authentication-service **504 context deadline exceeded**. A department test encountered an ambiguous selector after navigation gained a second **Venue settings** link; a scoped selector is pending rerun. Attendance-correction and roster-benchmark tests did not find their expected save/publication success messages. A payroll-period test encountered database statement timeouts and several simultaneous alerts. These failures have not yet been rerun. The skipped integration requires the protected showcase workdir and was intentionally not run.
 - **Blockers requiring intervention:** None identified yet. Consolidated owner UX review and deployment to either protected showcase remain separate.
 - **Documentation:** Updated, including the attendance label correction; full browser Help verification remains pending.
-- **Next concrete action:** Allow the serialized browser run to finish, inspect failures, and rerun affected scenarios without overlapping the disposable project.
+- **Next concrete action:** Inspect the six targeted reruns and Help verification, diagnose any repeated failures, and keep the story open until acceptance evidence is complete.
 - **Latest development commit:** `b1a9c5350da7d773fd90c49855433efd035354b6`.
-- **Push outcome:** Status checkpoint `a878aa70fe67cb29b126d5a63435dfe86d21c1e7` was pushed and its remote SHA verified; this checkpoint is pending push.
+- **Push outcome:** Status checkpoint `fb6ccb3592d3d0cc84c79f2596eb8061ae50e323` was pushed and its remote SHA verified; this checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
