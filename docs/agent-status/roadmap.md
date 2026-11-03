@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## BB-BRAND-004 supplied imagery checkpoint
+
+- **Last report:** 2026-11-03 16:42 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-BRAND-004 — Prepare homepage imagery.
+- **Acceptance criteria:** Select approved, rights-cleared imagery and distinguish illustrations from actual screenshots; retain originals and provide responsive optimized formats; supply appropriate alt text; verify desktop/mobile presentation and loading before deployment.
+- **Phase:** Planning.
+- **Activity:** Inspecting the newly supplied contact sheets and image crops before selecting and building review assets.
+- **Progress since previous report:** Fast-forwarded to `324e072`, which adds 15 supplied scenes and two preserved contact sheets. The source README identifies AI-generated illustrations, not authentic photographs. Measured the contact sheets at 1536 × 1024 and 1672 × 941 pixels, and the proposed hero crop at 861 × 377; these do not meet the brief's 3200 × 1800 native hero requirement.
+- **Tests and results:** Source image dimensions and metadata inspected with Sharp; the isolated showcase login on port 3137 returned HTTP 200 before work began. No new browser or accessibility tests have run yet.
+- **Failing tests:** None observed. A one-off backlog inspection command could not load an absent optional `csv-parse` package; use the standard-library CSV reader instead.
+- **Blockers requiring intervention:** Written final visual selection, applicable usage-rights confirmation and a native-resolution hero remain outstanding; do not claim publication approval. BB-DEMO-004 still awaits owner review.
+- **Documentation:** Pending updates to the catalogue, provenance and visual selection summary.
+- **Next concrete action:** Inspect the individual scenes, identify suitable crops without upscaling, build and test an isolated review library, and preserve the running showcase.
+- **Latest development commit:** `324e07250ed507eb3dc9c54e4fa0f2821ecd1090` (supplied website imagery).
+- **Push outcome:** `324e072` was fetched from the development branch; this status checkpoint is pending.
+
 ## Showcase P0 unblock checkpoint (BB-BRAND-004, BB-DEMO-004)
 
 - **Last report:** 2026-11-03 13:49 AEDT (UTC+1100), observed on the local operator's clock.
