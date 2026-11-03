@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 02:37 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 02:48 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Planning.
-- **Activity:** Reviewing the authoritative mapping RPC and designing the scoped editor after capturing the isolated pre-change baseline.
+- **Phase:** Debugging.
+- **Activity:** Investigating the first focused production-browser failure while completing the directory/detail and scoped mutation tests.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** The existing mapping and generic CSV browser journeys passed in the isolated app; five synthetic before screenshots were captured. Existing mapping writes serialize on the business lock and preserve revision, uniqueness and audit, but the legacy RPC is business-scoped and does not receive the selected venue. The new UI path needs an atomic selected-venue check and deliberate destination/removal confirmation without removing the existing RPC contract.
-- **Tests and results:** Pre-change isolated production build and mapping/generic CSV browser baseline **2/2** passed. Focused mapping/export pgTAP and unit baselines are running. BB-UXFIX-003 previously finished with **141/141** targeted database assertions, concurrency **1/1**, units **20/20** and **13** distinct targeted browser scenarios passing.
-- **Failing tests:** None in completed checks; database and unit baseline results are pending.
+- **Progress since previous report:** Implemented the first destination-scoped directory/detail/edit slice, separate Add destination flow and selected-venue/confirmation wrapper. Applied its migration only to the verified disposable project. Existing revision, unique-ID and audit mutation remains authoritative; the legacy direct RPC contract is unchanged. Captured five synthetic before screenshots.
+- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, existing mapping/export/canonical pgTAP **141/141**, baseline units **18/18**, new scoped-mapping pgTAP **17/17**, focused directory/mapping units **7/7**, TypeScript, changed-file ESLint and the first isolated production build passed. A deterministic concurrency test has been written but not run.
+- **Failing tests:** The first updated browser journey timed out locating the provider control immediately after navigation to Add destination; its error snapshot showed the expected form. The test now explicitly waits for the destination page and uses its accessible combobox; a rerun is required.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Pending implementation; the existing User Guide and contextual Help will be updated to match tested behavior.
-- **Next concrete action:** Inspect the pending baseline results, implement a destination-scoped directory/detail workflow and checked selected-venue mutation, then run the targeted negative and concurrency tests.
+- **Next concrete action:** Rerun the affected browser journey, fix any underlying defect, then run deterministic concurrency and the remaining role, isolation, state and five-width checks.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Planning checkpoint `c25c536fdffb6443a7aad2875389a1394c49c0ab` was pushed and its remote SHA verified. This baseline checkpoint is pending push.
+- **Push outcome:** Baseline checkpoint `9dec3a49b81266381e04f2a89de65cebd3621ff1` was pushed and its remote SHA verified. This debugging checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
