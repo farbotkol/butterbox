@@ -1086,6 +1086,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                           {employeeShifts.map((shift) => (
                             <article
                               key={shift.id}
+                              id={`roster-shift-${shift.id}`}
                               className={`rounded-md border px-2 py-2 ${shift.is_published ? "border-teal-200 bg-[#eaf7f4]" : "border-sky-200 bg-[#eef6fb]"}`}
                             >
                               <p className="text-[11px] font-semibold leading-4 text-ink">

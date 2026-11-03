@@ -28,11 +28,12 @@ test("help visibility is derived from effective roles, not a requested topic or 
   const employee = helpTopics(source, "employee");
   const manager = helpTopics(source, "foh_manager");
   const owner = helpTopics(source, "owner");
-  for (const id of ["permissions", "people", "rosters", "timesheets", "payroll", "hours", "audit", "kiosk", "alerts"]) {
+  for (const id of ["permissions", "people", "rosters", "timesheets", "payroll", "hours", "exceptions", "audit", "kiosk", "alerts"]) {
     assert.ok(!employee.some((topic) => topic.id === id), id);
     assert.ok(!searchHelp(employee, "").some((topic) => topic.id === id), id);
   }
   assert.ok(manager.some((topic) => topic.id === "timesheets"));
+  assert.ok(manager.some((topic) => topic.id === "exceptions"));
   for (const id of ["permissions", "payroll", "hours", "audit", "kiosk"]) {
     assert.ok(!manager.some((topic) => topic.id === id), id);
   }

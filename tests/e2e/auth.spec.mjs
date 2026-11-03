@@ -473,6 +473,248 @@ test("owner hours and labour report reconciles approved time with mobile filters
   }
 });
 
+test("overtime and exceptions report is scoped, source-linked and accessible", async ({ page, browser }) => {
+  test.setTimeout(180_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, fohId, bohId, workerId, kitchenId,
+    publishedId, draftId, bohPublishedId, approvedId, bohApprovedId, missingId, kitchenMissingId] =
+    Array.from({ length: 15 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const ownerApi = createClient(apiUrl, anonKey, options);
+  const week = "2024-09-30";
+  const reportUrl = `/reports/exceptions?business=${businessId}&venue=${venueId}&week=${week}`;
+  try {
+    for (const role of ["owner", "foh", "boh", "worker", "outside"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `exception-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users[role] = created.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Exception UI cafe" }, { id: outsideId, name: "Outside exception cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Exception Sydney", timezone: "Australia/Sydney" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Private BOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner, role: "owner" },
+      { business_id: businessId, user_id: users.foh, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users.worker, role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "Shared report worker", role_title: "Server" },
+      { id: kitchenId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        name: "Private kitchen worker", role_title: "Cook" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: workerId, department_id: bohId,
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: publishedId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Server", starts_at: "2024-10-01T01:00:00Z",
+        ends_at: "2024-10-01T05:00:00Z", is_published: true },
+      { id: draftId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: workerId, role_title: "Draft", starts_at: "2024-10-01T03:00:00Z",
+        ends_at: "2024-10-01T04:00:00Z", is_published: false },
+      { id: bohPublishedId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: workerId, role_title: "Cook", starts_at: "2024-10-01T06:00:00Z",
+        ends_at: "2024-10-01T08:00:00Z", is_published: true },
+    ])).error).toBeNull();
+    expect((await admin.from("attendance_sessions").insert([
+      { id: approvedId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users.worker },
+      { id: bohApprovedId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: workerId, started_by: users.worker },
+      { id: missingId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, started_by: users.worker },
+      { id: kitchenMissingId, business_id: businessId, venue_id: venueId, department_id: bohId,
+        employee_id: kitchenId, started_by: users.owner },
+    ])).error).toBeNull();
+    await sql(`insert into public.attendance_events (
+      session_id, business_id, venue_id, department_id, employee_id, actor_id, request_id, event_type, occurred_at, source
+    ) select s.id, s.business_id, s.venue_id, s.department_id, s.employee_id, s.started_by, gen_random_uuid(),
+      t.event_type, t.occurred_at::timestamptz, 'server_clock'
+    from (values
+      ('${approvedId}', '2024-10-01 01:00+00', '2024-10-01 04:00+00'),
+      ('${bohApprovedId}', '2024-10-01 06:00+00', '2024-10-01 08:00+00'),
+      ('${missingId}', '2024-10-02 01:00+00', null),
+      ('${kitchenMissingId}', '2024-10-02 02:00+00', null)
+    ) f(id, starts_at, ends_at)
+    join public.attendance_sessions s on s.id = f.id::uuid
+    cross join lateral (values ('clock_in', f.starts_at), ('clock_out', f.ends_at)) t(event_type, occurred_at)
+    where t.occurred_at is not null;`);
+    expect((await ownerApi.auth.signInWithPassword({ email: `exception-ui-owner-${suffix}@example.test`, password })).error).toBeNull();
+    const editable = await ownerApi.rpc("list_weekly_worked_time_for_edit", {
+      p_business_id: businessId, p_venue_id: venueId, p_week_start: week,
+    });
+    expect(editable.error).toBeNull();
+    for (const id of [approvedId, bohApprovedId]) {
+      const entry = editable.data.find((item) => item.session_id === id);
+      expect(entry).toBeDefined();
+      expect((await ownerApi.rpc("decide_attendance_timesheet", {
+        p_business_id: businessId, p_venue_id: venueId, p_session_id: id,
+        p_request_id: randomUUID(), p_expected_revision: entry.edit_revision, p_decision: "approved", p_reason: null,
+      })).error).toBeNull();
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    page.setDefaultTimeout(20_000);
+    await signIn(page, `exception-ui-owner-${suffix}@example.test`, password);
+    await page.goto(reportUrl);
+    await expect(page.getByRole("heading", { name: "Overtime and exceptions" })).toBeVisible();
+    await openMainNavigation(page);
+    await expect(page.getByRole("navigation", { name: "Main navigation" })
+      .getByRole("link", { name: "Exceptions report" })).toBeVisible();
+    const totals = page.getByLabel("Exception totals");
+    const total = (label) => totals.locator("div").filter({ hasText: label });
+    await expect(total("Overlapping shifts")).toContainText("2");
+    await expect(total("Sessions missing a clock event")).toContainText("2");
+    await expect(total("People above scheduled threshold")).toContainText("Not evaluated");
+    await expect(total("People above approved worked threshold")).toContainText("Not evaluated");
+    await expect(page.getByText("Private kitchen worker")).toBeVisible();
+    const form = page.getByRole("form", { name: "Exceptions report filters" });
+    await form.getByLabel("Optional weekly hours threshold").fill("3.5");
+    await form.getByRole("button", { name: "Apply filters" }).click();
+    await expect(total("People above scheduled threshold")).toContainText("1");
+    await expect(total("People above approved worked threshold")).toContainText("1");
+    await expect(page.getByText("Scheduled: 6h 0m 0s", { exact: false })).toBeVisible();
+    await expect(page.getByText("Approved worked: 5h 0m 0s", { exact: false })).toBeVisible();
+    expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
+    findingsMustBeEmpty(await accessibilityFindings(page, "mobile exceptions report"));
+    await page.setViewportSize({ width: 1280, height: 900 });
+    findingsMustBeEmpty(await accessibilityFindings(page, "desktop exceptions report"));
+
+    const missingSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Missing clock events" }) });
+    const source = missingSection.locator("li").filter({ hasText: "Shared report worker" })
+      .getByRole("link", { name: "Review source timesheet" });
+    const sourceUrl = new URL(await source.getAttribute("href"), appUrl);
+    expect(sourceUrl.pathname).toBe("/timesheets");
+    expect(sourceUrl.searchParams.get("employee")).toBe(workerId);
+    expect(sourceUrl.searchParams.get("week")).toBe(week);
+    expect(sourceUrl.hash).toBe(`#timesheet-session-${missingId}`);
+    await source.click();
+    await expect(page.locator(`#timesheet-session-${missingId}`)).toBeVisible();
+    await page.goto(`${reportUrl}&threshold=5`);
+    await expect(total("People above scheduled threshold")).toContainText("1");
+    await expect(total("People above approved worked threshold")).toContainText("0");
+    const overlapSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Overlapping shifts" }) });
+    const rosterSource = overlapSection.getByRole("link", { name: "Review source roster" }).first();
+    const rosterUrl = new URL(await rosterSource.getAttribute("href"), appUrl);
+    expect(rosterUrl.pathname).toBe("/roster");
+    expect(rosterUrl.searchParams.get("department")).toBe(fohId);
+    expect(rosterUrl.searchParams.has("q")).toBe(false);
+    expect(rosterUrl.hash).toBe(`#roster-shift-${publishedId}`);
+    await rosterSource.click();
+    await expect(page.getByRole("heading", { name: "Weekly roster" })).toBeVisible();
+    const sourceShift = page.locator(`#roster-shift-${publishedId}`);
+    await expect(sourceShift).toBeVisible();
+    await expect(sourceShift).toContainText("Server");
+    await expect(sourceShift).toContainText("Published");
+    await expect(sourceShift).toContainText("11:00");
+    await page.goto(`${reportUrl}&threshold=6`);
+    await expect(page.getByText("No employee exceeds the selected threshold in this scope.")).toBeVisible();
+    await page.goto(`${reportUrl}&threshold=3.5&threshold=4`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("use each filter once");
+    await expect(totals).toHaveCount(0);
+    await page.goto(`/reports/exceptions?business=${businessId}&venue=${venueId}&week=2024-02-30`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Choose a valid venue and week");
+    await page.goto(`/reports/exceptions?business=${businessId}&venue=${venueId}&week=0001-01-01`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("6 January 1000");
+    await expect(totals).toHaveCount(0);
+    await page.goto(reportUrl);
+    await page.getByRole("link", { name: "How to use this report" }).click();
+    await expect(page.getByRole("heading", { name: "Overtime and exceptions" })).toBeVisible();
+    await expect(page.getByText("This is not an overtime-pay or award-breach assessment.", { exact: false })).toBeVisible();
+
+    for (const role of ["foh", "boh", "worker", "outside"]) {
+      const context = await browser.newContext({ baseURL: appUrl, viewport: { width: 390, height: 844 } });
+      contexts.push(context);
+      const target = await context.newPage();
+      target.setDefaultTimeout(20_000);
+      await signIn(target, `exception-ui-${role}-${suffix}@example.test`, password);
+      await target.goto(`${reportUrl}&threshold=3.5`);
+      if (role === "foh" || role === "boh") {
+        await expect(target.getByRole("heading", { name: "Overtime and exceptions" })).toBeVisible();
+        await expect(target.getByLabel("Exception totals")).toContainText("1");
+        if (role === "foh") {
+          await expect(target.getByText("Private kitchen worker")).toHaveCount(0);
+          await expect(target.getByText("Private BOH", { exact: false })).toHaveCount(0);
+          await expect(target.getByText("Approved worked: 3h 0m 0s", { exact: false })).toBeVisible();
+        } else {
+          await expect(target.getByText("Private kitchen worker")).toBeVisible();
+        }
+      } else if (role === "worker") {
+        await expect(target).toHaveURL(/\/\?error=permission/);
+        await expect(target.getByLabel("Exception totals")).toHaveCount(0);
+      } else {
+        await expect(target.getByRole("main").getByRole("alert")).toContainText("selected business or venue is unavailable");
+        await expect(target.getByLabel("Exception totals")).toHaveCount(0);
+      }
+    }
+
+    const [formerWorkerId, formerShiftId, secondFormerShiftId] = Array.from({ length: 3 }, () => randomUUID());
+    expect((await admin.from("employees").insert({
+      id: formerWorkerId, business_id: businessId, venue_id: venueId, department_id: bohId,
+      name: "Former report worker", role_title: "Cook",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: formerShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: formerWorkerId, role_title: "Historical FOH shift", starts_at: "2024-10-03T01:00:00Z",
+        ends_at: "2024-10-03T04:00:00Z", is_published: false },
+      { id: secondFormerShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: formerWorkerId, role_title: "Historical FOH conflict", starts_at: "2024-10-03T02:00:00Z",
+        ends_at: "2024-10-03T03:00:00Z", is_published: false },
+    ])).error).toBeNull();
+    const historicalContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(historicalContext);
+    const historicalPage = await historicalContext.newPage();
+    await signIn(historicalPage, `exception-ui-foh-${suffix}@example.test`, password);
+    await historicalPage.goto(reportUrl);
+    const historicalSection = historicalPage.locator("section").filter({
+      has: historicalPage.getByRole("heading", { name: "Overlapping shifts" }),
+    });
+    await expect(historicalSection.getByText("Former report worker", { exact: false })).toHaveCount(0);
+    const historicalSource = historicalSection.locator("li").filter({ hasText: "Former team member" })
+      .getByRole("link", { name: "Review source roster" }).first();
+    await historicalSource.click();
+    await expect(historicalPage.getByText("Former team member", { exact: true })).toBeVisible();
+    await expect(historicalPage.locator(`#roster-shift-${formerShiftId}`)).toBeVisible();
+
+    const [earlyShiftId, secondEarlyShiftId] = Array.from({ length: 2 }, () => randomUUID());
+    expect((await admin.from("shifts").insert([
+      { id: earlyShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Early source shift", starts_at: "1000-01-07T01:00:00Z",
+        ends_at: "1000-01-07T04:00:00Z", is_published: false },
+      { id: secondEarlyShiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        employee_id: workerId, role_title: "Early conflict", starts_at: "1000-01-07T02:00:00Z",
+        ends_at: "1000-01-07T03:00:00Z", is_published: false },
+    ])).error).toBeNull();
+    await historicalPage.goto(`/reports/exceptions?business=${businessId}&venue=${venueId}&week=1000-01-06`);
+    const earlySource = historicalPage.locator("section").filter({
+      has: historicalPage.getByRole("heading", { name: "Overlapping shifts" }),
+    }).getByRole("link", { name: "Review source roster" }).first();
+    expect(new URL(await earlySource.getAttribute("href"), appUrl).hash).toBe(`#roster-shift-${earlyShiftId}`);
+    await earlySource.click();
+    await expect(historicalPage.locator(`#roster-shift-${earlyShiftId}`)).toBeVisible();
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const id of Object.values(users)) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
 test("attendance alerts support scoped mobile review and per-manager notifications", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);

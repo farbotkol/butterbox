@@ -12,6 +12,7 @@
 [Rostering](#rostering) | [Open shifts and swaps](#open-shifts-and-swaps) |
 [Attendance](#attendance) | [Timesheets and payroll](#timesheets-and-payroll-preparation) |
 [Hours and labour](#hours-and-labour--owners) |
+[Overtime and exceptions](#overtime-and-exceptions--managers) |
 [Internal showcase](#internal-synthetic-showcase) | [Troubleshooting](#troubleshooting)
 
 ## Internal synthetic showcase
@@ -605,6 +606,49 @@ calculated. Each displayed estimate rounds once to cents, so rounded department
 figures may differ from the rounded business total. The report is read-only;
 it does not approve hours, export payroll or transmit data to a provider.
 
+### Overtime and exceptions — managers
+
+1. Select **Exceptions report** in the main navigation. Owners, admins,
+   general managers and scoped department managers can use it; employees
+   cannot. Results cover only the departments you can manage in the selected
+   venue, not the whole business.
+2. Select a **Venue** and **Week containing**, then **Apply filters**. The week
+   starts on Monday in that venue's timezone. A shift belongs to the week in
+   which it starts; a session uses its effective clock-in, or its clock-out or
+   creation time if clock-in is absent. Dates from 6 January 1000 through
+   24 December 9998 are accepted; earlier dates are unsupported because the
+   roster source view cannot reliably display them. Entries count in full even
+   if they end later. Refresh after roster, attendance or approval changes.
+3. **Overlapping shifts** counts affected assigned draft or published shifts,
+   not pairs. A second shift can be outside your scope; its details are not
+   disclosed. Select **Review source roster** to inspect the visible shift.
+   If a worker's profile is no longer visible to you, the report and roster
+   show **Former team member** rather than the profile name.
+4. **Missing clock events** lists existing sessions without a clock-in or
+   clock-out. A currently open session can be normal; a shift with no session
+   at all cannot be matched or identified by this report. Select **Review
+   source timesheet** for the session and its history.
+5. To evaluate hours, enter your own **Optional weekly hours threshold** from
+   0.01 to 1,000 hours, with at most two decimal places. Leave it blank for
+   **Not evaluated**. The report compares each person's scheduled hours and
+   currently approved worked hours **separately**, flagging only totals
+   strictly above the threshold. Follow **Review source roster** or **Review
+   source timesheets** to investigate. The threshold is a user-selected
+   review aid, not a configured employment rule.
+
+Scheduled hours are full elapsed time for published, assigned, scheduled
+shifts; planned breaks are not deducted. Approved worked hours deduct all
+recorded breaks and exclude incomplete, pending, returned, resubmitted and
+outdated approvals. Hours across other venues or unmanaged departments are not
+included, so a scoped total is not the person's business-wide total. Comparisons
+use exact durations; displayed durations round to the nearest second. Invalid
+filters or incomplete report loads display an error, not a partial report.
+
+**This is not an overtime-pay or award-breach assessment.** No pay rates,
+awards, penalties, statutory overtime rules or provider submissions are
+calculated. Review the underlying records and obtain appropriate advice before
+making employment or payroll decisions.
+
 ### Audit history
 
 Business owners can review sensitive staffing, permission, roster, attendance and payroll changes in **Audit history**, with scoped filters and pagination. Audit records may contain personal information and should be shared only with appropriately authorized users.
@@ -896,6 +940,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-COMMS-002 | For employees — Notifications and distinction from task decisions |
 | BB-RULES-001 | Maintain profiles, qualifications and invitations — effective-dated employment metadata |
 | BB-REPORT-001 | Hours and labour — owners — definitions, filtering, reconciliation and illustrative costs |
+| BB-REPORT-002 | Overtime and exceptions — managers — scope, review threshold, source links and limitations |
 | BB-SAAS-004 | For employees — Mobile and keyboard use; engineering performance work has no separate user operation |
 | BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
 | BB-BRAND-002/003 | Accounts and business access — logo and icon appearance; [brand guidelines](../branding/BRAND_GUIDELINES.md) (draft, final owner visual review pending) |

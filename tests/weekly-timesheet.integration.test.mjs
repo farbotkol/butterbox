@@ -110,6 +110,7 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
     const rpcNames = [
       "list_weekly_planned_shifts", "list_weekly_worked_time", "list_weekly_timesheet_events",
       "list_weekly_worked_time_for_edit", "list_weekly_timesheet_events_for_edit",
+      "get_weekly_exceptions_report",
     ];
     for (const rpcName of rpcNames) {
       for (const role of ["worker", "outside"]) {
@@ -129,6 +130,11 @@ test("weekly timesheet HTTP RPCs enforce tenant, venue, department and live memb
     const fohTime = await clients.get("foh").rpc("list_weekly_worked_time", scope);
     assert.ifError(fohTime.error);
     assert.deepEqual(fohTime.data.map((row) => row.session_id), [fohSession]);
+    const fohReport = await clients.get("foh").rpc("get_weekly_exceptions_report", scope);
+    assert.ifError(fohReport.error);
+    assert.deepEqual(fohReport.data.planned.map((row) => row.department_id), [foh]);
+    assert.deepEqual(fohReport.data.actual.map((row) => row.session_id), [fohSession]);
+    assert.ok(!JSON.stringify(fohReport.data).includes("Weekly HTTP cook"));
     const fohEvents = await clients.get("foh").rpc("list_weekly_timesheet_events", scope);
     assert.ifError(fohEvents.error);
     assert.equal(fohEvents.data.length, 2);

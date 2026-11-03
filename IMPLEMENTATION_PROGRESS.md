@@ -3,8 +3,13 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **63**.
-  In Progress: **1**. Blocked: **8**. Not started (Backlog): **55**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **64**.
+  In Progress: **0**. Blocked: **8**. Not started (Backlog): **55**.
+- BB-REPORT-002 is **Done**: a manager-scoped read-only exceptions report highlights overlapping shifts,
+  incomplete sessions and optional operational hours thresholds, without inferring award breaches. Focused
+  pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent
+  concurrency **3/3** and a production browser scenario **1/1** passed. User Guide and contextual help
+  updated; the new report has not been deployed to the running showcase.
 - BB-DEMO-004 is **Blocked only on the owner's review**: the authorised operator acceptance run on
   `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
   **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). Only the owner can record
@@ -761,30 +766,43 @@ reset or rebuilt.
 **Documentation: updated** — brand guide, catalogue, provenance and visual selection summary. User Guide:
 not applicable; these are undeployed marketing review assets and do not change a user-facing app workflow.
 
-## Current story
+## BB-REPORT-002 — Overtime and exceptions report (2026-11-03)
 
-**BB-REPORT-002 — Overtime and exceptions report: In Progress (Planning), paused.**
-Paused on 2026-11-03 for the owner's explicit priority instruction (Coastal Wave brand identity, then Showcase
-P0 DEMO-003/004). The BRAND-002 blocker noted below was resolved when the owner supplied the reference
-image. No REPORT-002 code exists; the untracked
-`supabase/migrations/20261103220000_scoped_exceptions_report.sql` belongs to other work, is preserved
-and is not committed by the Roadmap Agent.
-BB-ROSTER-011 is verified below. Select a scoped, read-only report of
-overlapping shifts, hours and missing attendance events, with source drill-down
-and no award-breach inference. Use a user-entered operational weekly threshold
-with no fixed default, comparing published scheduled hours and approved worked
-hours separately; an unset threshold must be visibly unevaluated. This is a
-pragmatic implementation choice after the user was unavailable for the
-definition, not an owner-approved employment or payroll rule.
+**Status: Done.** Owners and managers can inspect a read-only report for the departments they manage in
+one selected venue. A single scoped PostgreSQL statement returns published planned shifts, existing
+attendance sessions and overlapping assigned draft or published shifts from one statement snapshot. An
+optional user-entered weekly threshold has no default: scheduled elapsed hours and currently approved worked
+hours are compared separately, using exact microseconds and a strict greater-than test. It is an operational
+review aid, not an owner-approved employment rule or payroll calculation. The report masks employee profile
+names that the viewer cannot otherwise access.
 
-Next-selection check at 2026-11-02 23:23 UTC: Showcase P0 BRAND-002 has no
-owner-approved vector or verified rights; downstream branding and DEMO-003/004
-depend on it. P1 employment-change and minimum-engagement stories lack
-validated configured restrictions. The product has no existing definition
-for "excessive hours"; the report must not manufacture one or imply wage
-calculation. First inspect existing permission, overlap, attendance, shared
-worker and reporting primitives; record any genuine implementation blocker.
-**Documentation: pending.** No REPORT-002 criterion has been verified.
+| Criterion | Implementation evidence | Test and actual result | Status |
+| --- | --- | --- | --- |
+| REPORT-002.1 — Summarise overlaps, excessive hours and missing clock events | `supabase/migrations/20261103230000_scoped_exceptions_report.sql`; `src/lib/exceptions-report.ts`; `src/app/reports/exceptions/page.tsx` | Focused pgTAP **30/30** covered scoped data, conflicts, approvals, missing events and date bounds; Node **31/31** covered threshold boundaries, exact durations, malformed results, dates and direct helper dependencies. Production browser **1/1** verified the summary, optional threshold and filters. | Pass |
+| REPORT-002.2 — Drill down to source | Exact roster shift anchors and timesheet session anchors preserve business, venue, week and appropriate filters. Historical employees no longer visible in the selected department use a placeholder. | Production browser **1/1** followed links to the exact shift and session, including an unavailable-profile shift and the earliest supported week. Scoped pgTAP checked unavailable profile names across planned, actual and overlap arrays. | Pass |
+| REPORT-002.3 — No unverified award-breach inference | Visible report disclaimer, definitions and User Guide explicitly describe the threshold as user-entered, non-statutory and not an overtime-pay or compliance determination. | Production browser verified the disclaimer and contextual help; unit checks verified that no default threshold is evaluated. No award rules or legal compliance were asserted. | Pass |
+
+**Authorization and isolation:** Report pgTAP covered owner, FOH/BOH managers, employee denial, cross-tenant
+and cross-venue denial, a hidden linked-venue conflict and revoked execution grants. The authenticated
+weekly-timesheet HTTP integration **1/1** also verified the new RPC and revoked membership. The earlier related
+weekly-timesheet, roster-overlap, shared-worker, tenant-isolation and hours/labour pgTAP suites passed
+**167/167**; adjacent weekly-timesheet, bulk-lock and approval concurrency integrations passed **3/3**. The first
+HTTP rerun omitted the explicit disposable flag and was refused before fixture operations; the corrected run
+passed. The production Chromium scenario also covered 390/1280 px layout and axe, role denial, privacy,
+invalid filters and help. Changed-file ESLint, TypeScript and the split production build passed.
+
+**Limitations and testing selection:** Only existing attendance sessions can be flagged as missing clock
+events; an open session can be normal and shifts with no session are not matched. Published scheduled elapsed
+hours do not deduct planned breaks, and hours from other venues or unmanaged departments are excluded.
+Report input dates are limited to 6 January 1000 through 24 December 9998 because the existing roster source
+view does not reliably render earlier years. Related focused tests were selected for scoped read paths and
+attendance/roster dependencies. Full suites, dedicated report load testing and broader release regression
+were not run; use the wider policy before a release or shared-authorization change.
+
+**Documentation: updated** — the role-based User Guide and its in-app contextual help describe actual
+permissions, source links, definitions, date range and limitations. The migration and application were tested
+only in disposable project `butterbox-report-002-55b9` (loopback API/DB/mail ports 58421/58422/58424); they
+have not been applied to or deployed on the running showcase at port 3137.
 
 ## BB-DEMO-004 — Acceptance evidence (Blocked: awaiting owner review)
 
@@ -3085,8 +3103,8 @@ but has not yet run remotely.
 - **BB-DEMO-001/002/003** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and
   005 are Done with final visual review pending. The DEMO-004 acceptance checklist passed on `dfaf495`;
   the owner's personal review is still pending. BRAND-004 has AI imagery drafts but remains Blocked on
-  resolution, rights and final owner approval. Resume the active BB-REPORT-002 planning and implementation.
-  ATTEND-006, REPORT-001, BRAND-001
+  resolution, rights and final owner approval. REPORT-002 is Done and has not been deployed to the showcase.
+  ATTEND-006, REPORT-001, REPORT-002, BRAND-001
   and DOC-001/002/003 are Done; do not rebuild them.
   Other BRAND delivery still requires its specific assets and approvals.
   Keep **BB-ORG-006** Blocked until its full criteria and

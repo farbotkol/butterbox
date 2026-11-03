@@ -27,6 +27,7 @@ const definitions: readonly TopicDefinition[] = [
   { id: "timesheets", title: "Reviewing and approving timesheets", heading: "Review, approve and finalise time", category: "Timesheets and payroll", roles: managers },
   { id: "payroll", title: "Preparing and reconciling payroll CSV", heading: "Timesheets and payroll preparation", category: "Timesheets and payroll", roles: ["owner", "admin", "general_manager"] },
   { id: "hours", title: "Hours and labour", heading: "Hours and labour — owners", category: "Timesheets and payroll", roles: ["owner"] },
+  { id: "exceptions", title: "Overtime and exceptions", heading: "Overtime and exceptions — managers", category: "Timesheets and payroll", roles: managers },
   { id: "audit", title: "Audit history", heading: "Audit history", category: "Business", roles: ["owner"] },
   { id: "announcements", title: "Announcements", heading: "Announcements", category: "Business", roles: members },
   { id: "employee", title: "Employee self-service", heading: "For employees", category: "Employee", roles: members },

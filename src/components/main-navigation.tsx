@@ -21,6 +21,7 @@ const everyday: NavigationItem[] = [
 const team: NavigationItem[] = [
   { href: "/timesheets", label: "Timesheet review", icon: ClipboardCheck },
   { href: "/work-time", label: "Work time", icon: Hourglass },
+  { href: "/reports/exceptions", label: "Exceptions report", icon: ChartColumn },
   { href: "/people", label: "People", icon: UsersRound },
   { href: "/settings/organisation", label: "Departments", icon: Building2 },
 ];
