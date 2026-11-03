@@ -164,6 +164,47 @@ As an authorised payroll/operations administrator, **I want to select a payroll 
 
 **Dependencies:** BB-PAY-001 (generic payroll data/export foundation); BB-PEOPLE-001. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed fourth in sequence. **Exclusions:** Provider API integration, Xero/Dayforce adapter work, payslip/payment execution, award interpretation and employment-law certification.
 
+### BB-UXFIX-005 — Hospitality workflow-based application navigation [P1]
+
+**Problem / observed gap**
+
+The proposed Butterbox menu architecture groups destinations by how hospitality teams work rather than by technical modules or an undifferentiated settings area. The owner approved the attached-in-conversation design reference, “Proposed Butterbox Navigation — Built around how hospitality works”. Current navigation should be audited and reorganised without silently removing existing capabilities.
+
+**User story**
+
+As a Butterbox employee, team manager or business administrator, **I want the navigation grouped into My Work, Team Management, Venue Management and Business**, so that I can quickly find everyday actions appropriate to my role while understanding the separation between personal, team, venue and business tasks.
+
+**Proposed menu architecture — exact item order and labels**
+
+1. **MY WORK:** Dashboard; My schedule; Clock in / out; My availability; Notifications.
+2. **TEAM MANAGEMENT:** Rostering; People; Announcements; Timesheet review; Work time; Exceptions.
+3. **VENUE MANAGEMENT:** Clock kiosks; Departments & roles; Venue settings.
+4. **BUSINESS:** Payroll; Hours & labour; Permissions; Audit history.
+
+**Expected UX / acceptance criteria**
+
+1. **Grouping and information hierarchy.** The primary app navigation uses exactly the four named groups and their listed destinations in the specified sequence; section labels are clearly distinguished from clickable items. Follow the reference's clean, icon-led aesthetic; do not force its two-column presentation into a narrow sidebar or mobile viewport.
+2. **Findability and orientation.** Use concise labels, consistent outline icons, a clearly indicated active route and understandable group state. Each implemented destination navigates correctly, including deep links, refresh and browser back/forward.
+3. **Role-sensitive visibility and security.** Show only relevant, authorised destinations for employee, department/venue manager and business owner/admin roles, across active business, venue and department context. Do not rely on menu hiding as a security control: existing server actions, routes, RLS and API enforcement remain authoritative. No role escalation or cross-tenant leakage.
+4. **Responsive and accessible navigation.** Desktop navigation remains scannable; mobile uses an accessible drawer/collapsible pattern with adequate touch targets. Keyboard navigation, visible focus, screen-reader labels, semantic groups and contrast are verified at 375, 390, 768, 1024 and 1440px.
+5. **Existing feature and URL preservation.** Inventory current routes and entry points, map them to the new taxonomy, preserve permitted functionality and existing navigation semantics, and use intentional redirects for changed URLs. No broken destinations, loss of user state or accidental changes to the protected showcase deployments.
+6. **Feature readiness and honest states.** Incomplete destinations must be deliberately hidden or marked unavailable/coming soon, not connected to empty broken pages or presented as functional. Distinguish planned screens from delivered screens.
+7. **Context and feedback.** Maintain correct business/venue selection and role scope; evaluate where notification and exception badges belong without clutter. No new backend notification, payroll, scheduling or time-calculation functionality is required.
+8. **Regression and design validation.** Test employee/manager/owner views and multi-tenant isolation; verify route coverage, permission-denied, loading and small-screen states; run relevant existing workflow regression, accessibility, lint, typecheck and build. Capture before/after navigation views against an isolated environment and do not claim completion without evidence.
+
+**Functional acceptance scenarios**
+
+- An employee can find Dashboard, My schedule, Clock in / out, My availability and Notifications without seeing restricted business administration links.
+- An authorised venue manager sees scoped Rostering, People, Timesheet review and appropriate venue controls, without access to unauthorised business-level administration.
+- An authorised business owner finds Payroll, Hours & labour, Permissions and Audit history; navigation retains the correct active business and venue.
+- Direct URLs and server-side actions deny users who lack permissions even when the menu item is hidden; alternate-tenant access fails.
+- Desktop, tablet and mobile navigation retain the exact logical groups; keyboard, screen-reader and full regression checks pass.
+
+**Code / integration touchpoints:** Audit existing app shell/navigation components, route mapping, permission-aware menu configuration and existing responsive layout; reuse role checks. The reference screenshot was provided in the owner conversation and is not currently stored in this Git branch.
+
+**Dependencies:** BB-FOUND-004 (permissions); BB-ORG-004 (business/venue context); existing app shell and route structure. **Status:** Backlog. **Priority:** P1. **Exclusions:** Implementing unbuilt feature modules, changing payroll/time/roster business logic, rewriting backend authorisation or redeploying showcases.
+
+
 ### UXFIX Wave 1 — shared Definition of Done
 
 These four owner-prioritised stories form **Wave 1: list / detail / contextual edit**. They are independent implementation stories, not a single enormous screen rewrite. Implement BB-UXFIX-001 first to establish reusable patterns, then 002 → 003 → 004 unless owner priorities or real dependencies change.
