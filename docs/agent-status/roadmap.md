@@ -1,22 +1,22 @@
 # Roadmap Agent — Activity Status
 
-## BB-UXFIX-001 — People Directory and Employee Profile
+## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 00:46 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 00:47 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, Done; feature commit pending).
-- **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
-- **Phase:** Complete; preparing the verified feature commit.
-- **Activity:** Recording criterion-by-criterion evidence and reviewing the feature diff before committing and pushing it.
-- **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** The final isolated production-build run passed all seven serialized People and preserved-workflow scenarios. All 35 actual synthetic before/after screenshots were refreshed and verified pixel-identical to their lossless WebP copies. Acceptance criteria and deferred risks are recorded in implementation progress. No UX changes have been deployed to either showcase.
-- **Tests and results:** Focused People and related pgTAP **333/333**; competing creation/profile/employment/section writes and revoked permission **1/1**; final People workflow browsers **7/7**; public-mode browser **1/1**; loading/recovery browser **1/1**; People/help unit tests **15/15**; changed-file ESLint, TypeScript and isolated split production build passed. Qualified-role and four corrected adjacent browser regressions also passed in separate runs. Both protected showcase login endpoints returned **200** at 00:45 AEDT.
-- **Failing tests:** No unresolved targeted failure. Two sandboxed Turbopack attempts and one subsequent mixed-cache attempt failed before tests; a single-pass public-mode webpack build passed, and the final normal split build and seven browser scenarios passed after clearing only the disposable snapshot build output.
-- **Blockers requiring intervention:** None for BB-UXFIX-001. Consolidated owner UX review and any deployment to the existing showcases remain separate; full-repository and physical-device regression were not run.
-- **Documentation:** Updated — User Guide, contextual Help, acceptance evidence and 35 real synthetic review screenshots.
-- **Next concrete action:** Review the staged feature and evidence for secrets, commit and push it, verify the remote SHA, then start BB-UXFIX-002.
-- **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
-- **Push outcome:** Documentation checkpoint `9bb0009584828c125e7cddae418763535a2222a3` was pushed and its remote SHA verified. The verified feature commit is pending.
+- **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, In Progress).
+- **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
+- **Phase:** Planning.
+- **Activity:** Inspecting existing organisation settings, role restrictions, server actions and relevant tests; preparing an isolated baseline.
+- **Plan:** Preserve venue settings and authoritative actions; introduce a compact department directory and selected detail with reusable focused editors; add server-side concurrency protection, then test permissions, history, restriction behaviour, five viewport sizes and documentation without deploying to either showcase.
+- **Progress since previous report:** BB-UXFIX-001 passed its acceptance checks, was committed as `4e2fef2881fb26d4754109256c9d37193145ba38` and pushed. UXFIX-002 requirements and completed dependencies were reviewed; no UXFIX-002 implementation has started.
+- **Tests and results:** Previous People story: focused pgTAP **333/333**, competing-write integration **1/1**, final browser workflows **7/7**, public-mode **1/1**, recovery **1/1**, People/help units **15/15**, ESLint, TypeScript and isolated production build passed. UXFIX-002 tests and screenshots have not yet run. Both protected showcase login endpoints returned **200** at 00:45 AEDT.
+- **Failing tests:** No unresolved targeted People failure. UXFIX-002 validation is pending.
+- **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
+- **Documentation:** BB-UXFIX-001 updated; BB-UXFIX-002 user guidance and criterion evidence pending implementation.
+- **Next concrete action:** Capture five-width organisation baselines in the disposable app, then implement the scoped directory and focused role/detail controls.
+- **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
+- **Push outcome:** The first UXFIX-001 push returned HTTP 400; retrying over HTTP/1.1 succeeded and the remote SHA matched `4e2fef2881fb26d4754109256c9d37193145ba38`. This documentation checkpoint is pending push.
 
 ## Public synthetic showcase — completed operator request
 

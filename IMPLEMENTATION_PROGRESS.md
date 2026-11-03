@@ -2,7 +2,7 @@
 
 ## Execution summary
 
-- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 Done; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** People now uses a directory → selected detail → contextual Edit/Save/Cancel pattern. The next story is Departments & Roles. The existing showcases have not received these changes and must not be changed or redeployed without owner approval.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 Done; BB-UXFIX-002 In Progress; BB-UXFIX-003 and BB-UXFIX-004 Backlog (P1).** People now uses a directory → selected detail → contextual Edit/Save/Cancel pattern. Departments & Roles is starting with a scoped directory and focused editors while keeping venue settings and qualification restrictions intact. The existing showcases have not received these changes and must not be changed or redeployed without owner approval.
 
 - **BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, Backlog, not started).** Owner-approved four-group menu architecture: My Work, Team Management, Venue Management and Business. Story added to master backlog and index; implementation, screenshots, permission regression and accessibility checks remain pending. This is separate from the first four Wave 1 directory/detail/edit stories; no product code or showcase changed.
 
@@ -52,7 +52,7 @@
 
 - Total stories: **132** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **67**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **59**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **58**.
 - **Owner-requested public synthetic preview, 2026-11-03:** The existing
   showcase database remains isolated and shared with its local review app.
   A separately built app snapshot (`dfaf495` baseline plus the public-preview
