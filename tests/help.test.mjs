@@ -36,6 +36,15 @@ test("payroll help describes the focused mapping workflow and its permissions", 
   }
 });
 
+test("attendance help uses the current clock navigation label", () => {
+  const topics = helpTopics(source, "owner");
+  for (const id of ["attendance", "alerts", "kiosk", "employee"]) {
+    const topic = topics.find((candidate) => candidate.id === id);
+    assert.ok(topic, id);
+    assert.match(topic.markdown, /\*\*Clock in \/ out\*\*/, id);
+  }
+});
+
 test("help visibility is derived from effective roles, not a requested topic or search", () => {
   const employee = helpTopics(source, "employee");
   const manager = helpTopics(source, "foh_manager");

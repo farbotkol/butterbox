@@ -510,7 +510,7 @@ Both employees receive in-app outcomes; verify the resulting published shifts.
 
 #### Configure and review attendance alerts
 
-1. Open **Attendance**, select the venue and choose **Review attendance
+1. Open **Clock in / out**, select the venue and choose **Review attendance
    alerts**. Owners can set **Monitoring** to **On**, choose a **Grace period
    (minutes)** from 0 to 240, and a **No-show threshold (minutes)** greater
    than the grace period and no more than 1,440. Select **Save monitoring
@@ -556,7 +556,7 @@ pay or prove award breaches. External alert delivery is not enabled.
    choose the event, proposed local time and reason. If a daylight-saving time
    occurs twice, choose the correct occurrence; a nonexistent local time is
    rejected. Submission does not itself change recorded attendance.
-4. Managers review these requests in **Attendance**. Compare the recorded event
+4. Managers review these requests in **Clock in / out**. Compare the recorded event
    and reported time, enter **Reason for review**, then **Approve if time already
    matches**, **Approve and apply proposed time**, or **Reject request**.
    Creating a missing session or completing an open session requires explicit
@@ -595,7 +595,7 @@ fallback is available.
 
 #### Set up a QR clock kiosk
 
-1. As a business owner, open **Attendance**, select the venue and choose
+1. As a business owner, open **Clock in / out**, select the venue and choose
    **Manage kiosk devices**. Enter a device name and select **Create activation
    code**. Only an owner can create, list or revoke these devices.
 2. On the venue device, use a separate guest or managed browser without an
@@ -858,7 +858,7 @@ opens the full currently permitted history.
 2. Open your own roster/schedule to see assigned shifts and publication updates.
 3. Set weekly availability and enter date-specific unavailability or leave requests. Track status rather than assuming a request was approved.
 4. Respond to open-shift offers or propose shift swaps if your business uses those workflows.
-5. Clock in/out, record breaks, review personal attendance history and request corrections where needed. At a configured kiosk, sign in on your own phone first, scan the current code, check the venue and confirm the QR clock. If a code has expired or was used, wait for the display to refresh and scan again. End an open break in **Attendance** before using a QR to clock out.
+5. Clock in/out, record breaks, review personal attendance history and request corrections where needed. At a configured kiosk, sign in on your own phone first, scan the current code, check the venue and confirm the QR clock. If a code has expired or was used, wait for the display to refresh and scan again. End an open break in **Clock in / out** before using a QR to clock out.
 6. Use the in-app notification centre for relevant outcomes and updates; read
    **Announcements** and explicitly acknowledge a required notice where appropriate.
 
@@ -866,7 +866,7 @@ opens the full currently permitted history.
 open-shift offers/outcomes, swap events and recent announcement previews; scoped
 managers also see attendance alerts. Opening/marking a notice read does not acknowledge a shift, consent to a
 swap, confirm an open-shift claim or approve time. Use the linked task screen for
-those decisions. Use **View your attendance history** from **Attendance** for
+those decisions. Use **View your attendance history** from **Clock in / out** for
 your own historical effective clocks and correction decisions.
 
 **Navigation, mobile and keyboard use:** In the updated development
