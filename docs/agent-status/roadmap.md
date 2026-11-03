@@ -2,20 +2,20 @@
 
 ## Local showcase setup checkpoint
 
-- **Last report:** 2026-11-03 12:05 AEDT (UTC+1100), observed on the local operator's clock.
+- **Last report:** 2026-11-03 12:13 AEDT (UTC+1100), observed on the local operator's clock.
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current work:** User-directed BB-DEMO-001 operator setup and test-owner option; the completed story is not being reopened.
 - **Criteria:** A separately verified internal-only showcase, 12–15 fictional FOH/BOH staff and realistic sample workflows, no production data, real messaging or live payroll, and guarded reset; the designated login must be test-only and scoped to the isolated project.
 - **Phase:** Testing.
-- **Activity:** Preparing to rebuild the showcase with a distinct authentication-cookie namespace across server, proxy, browser and offline session handling.
-- **Progress since previous report:** Cloning the snapshot dependencies fixed the initial build failure. The app is running and five real owner, manager and employee browser journeys passed after installing the missing Chromium runtime. A new browser check reproduced a shared-cookie collision between the two local ports; a scoped fix has been implemented.
-- **Tests and results:** 24/24 focused showcase/offline unit tests, 2/2 live integration runs, isolated reset/reseed, the production build, five pre-fix browser journeys, changed-code ESLint, TypeScript and diff checks passed. The new cookie-preservation browser test failed against the pre-fix build as expected; the rebuilt app and regression tests remain pending.
-- **Failing tests:** The reproduced cookie-collision baseline fails on the old build; verification of the fix has not yet run.
-- **Blockers/risks:** The currently running showcase build still uses the old cookie namespace until rebuilt. The brand, hosted-review and production gates below remain unchanged.
-- **Documentation:** Draft operator and user-guide updates added; verify against the resulting workflow.
-- **Next concrete action:** Rebuild the isolated app, rerun the cookie-preservation and scoped browser journeys, and confirm the original workspace remains available.
-- **Latest development commit:** `20742da5d9f6b5baf2096607e79330e330022cc9`; branch head at observation was status-only `7fb47049b82f6d21a923dec67d52afd7faa284dc`.
-- **Push outcome:** Status-only checkpoint `c8adf4a77522c7bc95a7d8371745282425ed078d` was pushed and its remote SHA verified; this update has not yet been pushed.
+- **Activity:** Finishing evidence and the delivery checkpoint for the verified local showcase and separate-cookie fix.
+- **Progress since previous report:** Rebuilt the showcase, verified both apps on loopback, passed cross-port session isolation and restored the updated user guide into the running snapshot. The ordinary workspace's aggregate data and disabled demo seed remain unchanged.
+- **Tests and results:** 35/35 focused Node tests, 3/3 live integration runs, 7/7 production Chromium scenarios, a reciprocal ordinary-app session check, guarded isolated reset/reseed, production build, changed-code ESLint, TypeScript and diff checks passed. The previously reproduced old-build cookie collision passed after the fix.
+- **Failing tests:** None known for this local setup.
+- **Blockers/risks:** The operator must confirm the designated alias is test-only. Hosted access, production/release regression, award compliance and final brand gates are not established by this setup. A concurrent branding commit arrived after the historical blocker below; its current approval status was not verified here.
+- **Documentation:** README and user guide updated for test-owner isolation, separate passwords, reset and operator responsibilities; acceptance evidence recorded in implementation progress.
+- **Next concrete action:** Commit the verified source, tests and documentation; push without force and verify the remote SHA.
+- **Latest development commit:** `677a33e681d56ab460749398d5801274b3bce072` (concurrent branding assets, fast-forwarded without changing this setup); the showcase changes are not yet committed.
+- **Push outcome:** Previous status checkpoint `82a3b90d6e43bea4bbcb53fb98e2628e4123ba06` was pushed and verified; this checkpoint has not yet been pushed.
 
 The prior Roadmap planning and brand blocker remain below; their current execution state is not verified by this local checkpoint.
 
