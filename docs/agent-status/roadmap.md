@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 10:55 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 10:59 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL only; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and other protected showcase; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts.
-- **Phase:** Planning.
-- **Activity:** Preparing a verified recovery backup, separate UXFIX-only build and migration rehearsal after owner approval to use the shared database.
-- **Progress since previous report:** The owner explicitly approved sharing the existing database. Reconfirmed the same public and local process IDs, project identity, PostgreSQL 17.11, available disk space and matching package lock. The known legacy local payroll-RPC incompatibility and supervisor-coupled tunnel restart remain to be resolved safely before migration or cutover.
-- **Tests and results:** At 10:45 AEDT both login endpoints returned HTTP **200**; the public TLS certificate matched the local tunnel certificate. Public synthetic owner, FOH manager and employee sign-ins passed with secure/HttpOnly cookies; no mobile landing-page overflow was found. The owner saw **0/4** new navigation groups. Public signup, Auth admin and readiness routes returned **404**. No post-deployment tests are claimed.
-- **Failing tests:** The requested new public UX is not present; its post-deployment smoke tests cannot run until deployment is safe.
-- **Blockers requiring intervention:** The owner approved the shared database, but the old local app still calls a payroll RPC that the required migration revokes. Do not bypass the new scoped-write controls or silently disrupt the local app; establish a compatible, authorised cutover plan. No recovery backup or migration has been performed yet.
+- **Phase:** Testing.
+- **Activity:** Rehearsing restoration and the required migrations in a new scratch database inside the separately verified disposable test project.
+- **Progress since previous report:** Verified the shared project's expected 16 synthetic identities, two businesses, one venue and 14 employees. Created a private database archive and verified its manifest and checksum; staged and successfully built the exact UXFIX-only revision separately. The first scratch restore stopped because `pg_cron` can be created only in the test cluster's primary database; retrying with its platform-specific entries excluded. Neither running app, tunnel nor live schema was changed.
+- **Tests and results:** Separate UXFIX production compile, TypeScript and generation passed. At 10:59 AEDT both login endpoints returned HTTP **200**. Previous public synthetic owner, FOH manager and employee sign-ins passed; public blocked endpoints returned 404; mobile landing width had no horizontal overflow. The public owner previously saw **0/4** new navigation groups.
+- **Failing tests:** Initial scratch restore failed on the test cluster's `pg_cron` database restriction; a corrected rehearsal is pending. The requested new public UX is not present; post-deployment smoke tests have not run.
+- **Blockers requiring intervention:** The old local app still calls a payroll RPC that the required migration revokes. Do not bypass the scoped-write controls or silently disrupt the local app; establish a compatible, authorised cutover plan.
 - **Documentation:** Existing blocker and baseline results are recorded in `IMPLEMENTATION_PROGRESS.md`; update them with actual deployment results.
-- **Next concrete action:** Verify a private backup, prepare the exact UXFIX build and rehearse migrations without touching the live schema.
+- **Next concrete action:** Retry the scratch restore excluding only platform-specific cron entries, then rehearse the exact migration sequence and security checks without touching the live schema.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Prior blocker checkpoint `ca0a730c1f6f713459fdeaa7cd08a8f88a79ffec` was pushed and verified; this approval checkpoint is pending push.
+- **Push outcome:** Approval checkpoint `c48728ff1ed99a79cea36fc948b8b398380634a2` was pushed and verified; this build and recovery checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 
