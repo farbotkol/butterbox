@@ -1243,7 +1243,7 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 2. Sensitive fields excluded unless explicitly allowed.
 3. Generated event is audited.
 
-**Status:** In Progress in isolated development. Initial scope is owner-only, selected venue and week, separate roster and attendance CSVs, an explicit field allowlist and auditable generation; no showcase deployment is authorised.
+**Status:** Done in isolated development. Owner-only, selected-venue/week roster and attendance CSVs use explicit field allowlists and immutable generation audit. Targeted permission, period, failure, browser and accessibility checks passed; the User Guide and contextual Help are updated. Attendance exports for venues with substantial history may time out, and no showcase deployment is authorised. See `IMPLEMENTATION_PROGRESS.md` for criterion-level evidence and verification limitations.
 
 
 ## Epic SAAS — Subscriptions, operations and scale (P1/P2)
