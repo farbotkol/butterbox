@@ -2,11 +2,21 @@
 
 ## Owner approval of BB-BRAND-004 visual selection — 2026-11-03
 
-- **Owner decision:** The owner approved the proposed coastal café imagery selection: “im happy with the propsed images” (message received 2026-11-03 at 18:07 AEDT).
-- **Scope:** This records selection approval for the proposed desktop/mobile hero, team and alternative, café operations, terrace and service images. It does not attest usage rights, approve publication or establish native resolution.
-- **Remaining P0:** BB-BRAND-004 remains Blocked on the supplied 861 × 377 hero falling short of the 3200 × 1800 brief and on unverified applicable generation-account, input and third-party rights.
-- **Documentation:** Selection summary, brand README/guidelines, asset catalogue, backlog and implementation evidence updated. No public homepage was deployed.
-- **Safety:** No application, database, showcase service or data was changed for this approval record.
+- **Last report:** 2026-11-03 18:07 AEDT (UTC+1100), as provided with the owner's message.
+- **Execution state:** Completed approval-record update; no continuing background work is implied.
+- **Current story:** BB-BRAND-004 — Prepare homepage imagery (Blocked, partial; Showcase P0).
+- **Acceptance criteria:** Visual selection approved and truthfully labelled; rights clearance and a sufficiently sized production master remain unverified. Draft responsive variants, alt text and preview checks are recorded.
+- **Phase:** Complete for this approval update; the story itself remains Blocked.
+- **Activity:** Recording the owner's selection decision without treating it as rights or publication authorization.
+- **Progress:** Owner message: “im happy with the propsed images”. The proposed desktop/mobile hero, team and alternative, café operations, terrace and service images are selected for the internal imagery library.
+- **Tests and results:** Catalogue regression **4/4** passed, including source hashes, image dimensions, no-upscaling and approval/rights metadata. CSV validation confirmed 202 catalogue rows and 51 review entries remain `draft`; `git diff --check` passed.
+- **Failing tests:** The first catalogue run exposed its stale expectation that owner selection was pending; the assertion now accepts recorded selection approval while retaining rights checks, and the rerun passed **4/4**.
+- **Blockers requiring intervention:** The supplied hero is 861 × 377 versus the brief's native 3200 × 1800 requirement. Applicable generation-account terms, input/third-party rights and publication clearance remain unverified.
+- **Documentation:** Selection summary, brand README/guidelines, asset catalogue, backlog and implementation evidence updated.
+- **Safety:** No app, database, showcase service or data was changed; no public homepage was deployed.
+- **Next concrete action:** Obtain verifiable usage-rights evidence and a suitable native-resolution hero before publication; keep BB-BRAND-004 Blocked until its criteria are met.
+- **Latest development commit:** `1865111a81fba062bc60fc66b1c751456092b887` (owner visual selection approval).
+- **Push outcome:** Commit `1865111` was pushed to `copilot/finish-roadmap-for-app`; remote SHA verified.
 - **Backlog:** 127 total, 65 Done, 0 In Progress, 7 Blocked, 55 Backlog. BB-DEMO-004 internal delivery remains Done; this image decision is not production or rights approval.
 
 ## Owner acceptance of BB-DEMO-004 — 2026-11-03
