@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 03:44 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 04:32 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Testing.
-- **Activity:** Rerunning the expanded isolated production-browser suite after repairing its synthetic fixture.
+- **Phase:** Debugging.
+- **Activity:** Investigating history restoration and correcting expanded browser assertions before rerunning the failed scenarios.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** The focused mapping journey passed after the explicit navigation/accessible-control wait; deterministic competing edits, duplicate-ID race and queued revocation also passed. Added further isolated browser cases and keyed destination/filter controls for safe back/forward navigation. The expanded run initially failed because its synthetic employees lacked required department IDs; the fixture was corrected and the run is underway.
-- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, existing mapping/export/canonical pgTAP **141/141**, new scoped-mapping pgTAP **17/17**, baseline units **18/18**, focused directory/mapping units **7/7**, concurrency integration **1/1**, TypeScript, changed-file ESLint and the isolated production build passed. Five actual synthetic before screenshots were captured.
-- **Failing tests:** The first expanded five-scenario browser run failed **5/5** during fixture setup with the database's required-department constraint; no journey ran. The corrected fixture is being rerun and remains unverified.
+- **Progress since previous report:** Corrected the synthetic employee departments, expanded authorization/forged-action and pagination cases, updated the User Guide and added a contextual Help link. The browser rerun exposed a real Back-navigation selection mismatch; keyed controls alone did not resolve it. Five before and two widths of after synthetic screenshots exist.
+- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, existing mapping/export/canonical pgTAP **141/141**, scoped-mapping pgTAP **17/17**, concurrency integration **1/1**, User Guide/Help and directory units **20/20**, earlier TypeScript, changed-file ESLint and isolated production build passed.
+- **Failing tests:** The expanded rerun failed **5/5**: incorrect destination selection after Back, a test RPC missing its required venue, a loading locator expecting different text, and stale/five-width scenarios timing out at 180 seconds. These issues are under investigation; partial screenshots are not complete acceptance evidence.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
-- **Documentation:** Pending implementation; the existing User Guide and contextual Help will be updated to match tested behavior.
-- **Next concrete action:** Finish the expanded browser run, correct any real failures, verify five-width screenshots and update the User Guide and contextual Help before final checks.
+- **Documentation:** Updated in the working tree; final behavior and Help checks remain subject to browser verification.
+- **Next concrete action:** Fix and verify browser-history restoration, correct test setup/labels, rerun all failures and finish five-width checks.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Debugging checkpoint `a0dd68a580b9966e4d66c0f4daa3eaa59507ec3d` was pushed and its remote SHA verified. This testing checkpoint is pending push.
+- **Push outcome:** Testing checkpoint `b2f0412ea909eb26d0fa5bb32f792b73cb20c661` was pushed and its remote SHA verified. This debugging checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
