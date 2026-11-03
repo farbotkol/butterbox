@@ -2,7 +2,9 @@
 
 ## Execution summary
 
-- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 and BB-UXFIX-002 Done; BB-UXFIX-003 and BB-UXFIX-004 Backlog (P1).** People and Departments & Roles now use scoped directory → selected detail → contextual Edit/Save/Cancel workflows. Venue settings and the existing qualification rules remain available. The protected showcases have not received these changes and must not be changed or redeployed without owner approval.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 and BB-UXFIX-002 Done; BB-UXFIX-003 In Progress; BB-UXFIX-004 Backlog (P1).** People and Departments & Roles now use scoped directory → selected detail → contextual Edit/Save/Cancel workflows. Business Permissions is in planning. Venue settings and the existing qualification rules remain available. The protected showcases have not received these changes and must not be changed or redeployed without owner approval.
+
+- **BB-UXFIX-003 — Business Permissions directory and focused access editing, 2026-11-04 01:26 AEDT: In Progress (Planning).** The existing member list and mutations are owner-only; preserve that current authorization rather than broadening access to administrators. Plan a searchable, scoped directory and one read-first member detail with a focused edit, before/after confirmation, stale-write handling and existing role-scope validation. Preserve the authoritative last-owner lock and sensitive-action audit. Capture baseline and final synthetic browser evidence, verify tenant/role isolation and concurrency, and update the User Guide before completion. **Documentation: pending; no user-visible change yet.** The next action is to finish inspecting the existing permissions RPCs, audit and tests, then capture the pre-change baseline in the disposable environment.
 
 - **BB-UXFIX-002 — Departments & Roles directory and detail management, 2026-11-04 01:24 AEDT: Done.** Implemented and verified only against the disposable `butterbox-report-002-55b9` database and a separate application snapshot. The protected local and public showcase login endpoints returned HTTP **200** at 01:23 AEDT; neither showcase was reset, reseeded, redeployed or reconfigured.
 

@@ -1,22 +1,40 @@
 # Roadmap Agent — Activity Status
 
+## BB-UXFIX-003 — Business Permissions
+
+- **Last report:** 2026-11-04 01:26 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-UXFIX-003 — Business Permissions directory and focused access editing (P1, In Progress).
+- **Acceptance criteria:** Searchable/filterable/sortable member directory; read-first detail and focused edit with before/after confirmation; preserved role scopes, last-owner concurrency protection, audit and tenant isolation; five-width accessible production-browser checks and actual before/after screenshots.
+- **Phase:** Planning.
+- **Activity:** Inspecting the existing permissions page, owner-only server action, scoped membership RPC, audit trigger and tests.
+- **Plan:** Reuse the directory/detail/edit pattern without broadening the existing owner-only membership administration. Add stale-write protection around the authoritative mutation, retain its last-owner locking and audit, and verify role/tenant isolation, accessibility, mobile layouts and documentation in the disposable environment.
+- **Progress since previous report:** BB-UXFIX-002 passed its targeted checks, was committed as `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7` and pushed. The first feature push disconnected before reaching the remote; retrying over HTTP/1.1 succeeded and the remote SHA matched. The protected showcases were not updated.
+- **Tests and results:** Previous story: **292/292** focused pgTAP assertions, competing-write integration **1/1**, ten targeted browser scenarios across runs, directory/Help units **14/14**, lint, types and isolated production build passed. No BB-UXFIX-003 tests have run yet.
+- **Failing tests:** None known for the completed prior story. No current-story tests have run yet.
+- **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
+- **Documentation:** Not applicable yet; no BB-UXFIX-003 user-visible changes have been made. User Guide and Help updates are required before completion.
+- **Next concrete action:** Finish inspecting the permissions mutation, audit and existing coverage; capture the pre-change browser baseline; then implement the selected-member journey.
+- **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
+- **Push outcome:** BB-UXFIX-002 is present on the remote branch at the verified SHA above. This story-start documentation checkpoint is pending push.
+
 ## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 01:24 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:26 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, Done pending commit and push).
+- **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, Done).
 - **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
 - **Phase:** Complete.
-- **Activity:** Reviewing the verified feature, criterion-by-criterion evidence and synthetic screenshots before the development commit.
+- **Activity:** Verified feature, criterion-by-criterion evidence and synthetic screenshots committed and pushed.
 - **Plan:** Keep `/settings/organisation` available for venue settings; add a Departments & Roles workspace with selected department/role editors, reuse the existing server rules and add checked concurrency/lifecycle wrappers. Verify restrictions, history, authorization and five viewport sizes in the disposable environment; update guide/help and evidence without deploying to either showcase.
 - **Progress since previous report:** The expanded five-width scope scenario passed after waiting for save completion before refresh; administrator/general-manager edits, cross-venue forged actions, inactive-role feedback and stale edits were verified. Publication settings passed after scoping an ambiguous alert locator. Thirty actual synthetic before/after screenshots were converted to pixel-identical lossless WebP. Both protected showcase login endpoints returned **200** at 01:23 AEDT; neither deployment was modified.
 - **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and final isolated production build passed. Ten distinct targeted production-browser scenarios passed across runs; the final scope/lifecycle/publication rerun passed **3/3**, and the final publication-only rerun passed **1/1**. Five-width keyboard, overflow and serious/critical axe checks passed.
 - **Failing tests:** None remain in the selected checks. The earlier long-name overflow, immediate-refresh test sequencing and ambiguous alert locator were corrected and rerun successfully.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
 - **Documentation:** Updated — BB-UXFIX-002 User Guide, contextual Help, acceptance evidence and 30 synthetic screenshots.
-- **Next concrete action:** Review the staged diff for secrets/unrelated work, commit and push BB-UXFIX-002, verify the remote SHA, then begin BB-UXFIX-003.
-- **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
-- **Push outcome:** UXFIX-001 and documentation checkpoint `cb496fbab70b7fd7809b8f05e812732b6ca03b1a` were pushed and their remote SHAs verified. The verified BB-UXFIX-002 development commit is pending.
+- **Next concrete action:** Continue with BB-UXFIX-003 without changing the protected showcases.
+- **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
+- **Push outcome:** The first push disconnected before reaching the remote; retry succeeded and the remote SHA matched `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
 
 ## Public synthetic showcase — completed operator request
 
