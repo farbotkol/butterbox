@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 07:48 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 07:52 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
 - **Phase:** Testing.
-- **Activity:** Rerunning isolated route and context checks after correcting contextual Help/audit links and browser selectors.
+- **Activity:** Running the serial Node/integration regression against the disposable project before broader browser and database checks.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** Five-width navigation checks passed and the protected local showcase login returned HTTP **200** at 07:44 AEDT. Inspection found contextual Help and audit entry points that dropped venue selection; their working-tree fixes and expanded assertions are rerunning.
-- **Tests and results:** Pre-change navigation regression and screenshot baseline **2/2**, focused units **21/21**, TypeScript, changed-file ESLint, owner route/history **1/1**, role/direct-route **1/1** and five-width keyboard/axe **5/5** passed. The isolated production build passed.
-- **Failing tests:** Two initial scenarios failed on ambiguous locators; the corrected role test passed. The context test then timed out on a member-label selector mismatch; it and the missed link-context fixes require the running rerun. Broader regression remains pending.
+- **Progress since previous report:** Contextual Help/audit links now retain venue selection. All expanded role, route and context scenarios passed; nineteen actual synthetic before/after screenshots were converted to dimension- and pixel-identical lossless WebP.
+- **Tests and results:** Pre-change baseline **2/2**, focused units **21/21**, initial TypeScript and changed-file ESLint, final role/route/context **3/3**, five-width keyboard/axe **5/5**, and a fresh isolated production build passed. Full serial Node/integration regression is running; broader browser/database checks remain pending.
+- **Failing tests:** None in the final completed selected checks. Earlier ambiguous selectors, a member-label timeout and lost context on contextual links were corrected and the expanded scenarios passed.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and deployment to either protected showcase remain separate.
 - **Documentation:** Updated in the working tree; browser verification is pending.
-- **Next concrete action:** Inspect the expanded browser results, resolve failures and run affected regressions, final lint/build and visual evidence.
+- **Next concrete action:** Inspect the Node/integration results, run broader browser/database regression and rerun final lint/types after all fixes.
 - **Latest development commit:** `401c9b8767151ecf55d22d80e057dc2abb5c0b26`.
-- **Push outcome:** Testing checkpoint `f3bec337e3c7b5e29ae7feb9ca6a1b4319054d2b` was pushed and its remote SHA verified. This checkpoint is pending push.
+- **Push outcome:** Context checkpoint `59612143a7ca3657390a4c7f6df50547bea888d0` was pushed and its remote SHA verified. This checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
