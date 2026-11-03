@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## Public synthetic showcase — testing milestone
+
+- **Last report:** 2026-11-03 21:48 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current work:** Owner-requested internet access to the isolated synthetic showcase; no backlog story status changed.
+- **Acceptance criteria:** Encrypted public login and role workflows; scoped tenant/department access; synthetic data only; ordinary app and backend ports remain private.
+- **Phase:** Testing and documentation.
+- **Activity:** Finalising the public preview and its operational/user guidance without resetting or stopping the original local showcase.
+- **Progress:** A separate production snapshot, host/origin-validated application-only gateway and locally terminated HTTPS tunnel are running. Public sessions use Secure/HttpOnly cookies; signup, password changes/recovery, invitations and offline claims are unavailable. The public and local apps share the synthetic database.
+- **Tests and results:** Live Chromium **7/7** passed: login/sign-out, direct disabled-action requests, owner, FOH/BOH managers, employee mobile layout/axe, reports, simulation-only CSV, tenant and department restrictions. Focused Node **9/9**, changed-file ESLint, TypeScript and split production build passed. Public TLS certificate matched the local certificate. Deliberately stopping the separate app or tunnel stopped the other public services; graceful stop also succeeded. Original port 3137 returned **200** and API/database listeners remained on loopback.
+- **Failing tests:** The first cross-tenant browser run timed out during sign-out because the control business has no venue; using its existing **Choose a business** sign-out route resolved it. The complete rerun passed. A harmless direct password-change request initially reached its validation; a server-side public-mode guard was added and verified. Startup TLS attempts briefly failed before the tunnel connected, then returned **200**.
+- **Blockers requiring intervention:** None for temporary preview. Durable hosting, production approval, public marketing-image rights and an actual public clock mutation remain unverified; BB-REPORT-002 is not deployed in this snapshot.
+- **Documentation:** README and User Guide updated; the revised guide still needs copying to the public standalone Help build and a final live check.
+- **Next concrete action:** Deploy the guide, rerun final focused checks, inspect and commit the code without credentials, push and verify the remote SHA.
+- **Latest development commit:** `1865111a81fba062bc60fc66b1c751456092b887`; current repository merge checkpoint `546652badf7db6707105e1aae7eeada0aa431310`; public-preview code is uncommitted.
+- **Push outcome:** Repository merge checkpoint `546652b` was pushed and its remote SHA matched. This status checkpoint is pending push.
+
 ## Public showcase access — operator request
 
 - **Last report:** 2026-11-03 21:23 AEDT (UTC+1100), observed on the operator's clock.
