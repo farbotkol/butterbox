@@ -2,21 +2,21 @@
 
 ## BB-REPORT-003 — Export Business Reports
 
-- **Last report:** 2026-11-04 09:50 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:56 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-REPORT-003 — Export business reports (P2, In Progress).
 - **Acceptance criteria:** CSV exports for rostering and attendance respect tenant permissions and the chosen period; sensitive fields are excluded unless explicitly allowed; each generated event is audited.
 - **Phase:** Testing.
-- **Activity:** Resolving a native date-input keyboard-test mismatch and adding exact timezone/boundary details to immutable export audit events before the next isolated rerun.
+- **Activity:** Running adjacent database regressions and preparing final lint, types and criterion-level evidence after the isolated browser journey passed.
 - **Plan:** Add separate owner-only CSVs for an explicitly selected venue and week, minimise exported fields, neutralise spreadsheet formulas, record attributed immutable generation events and verify role/tenant isolation, boundaries, failures, audit and browser behavior in the disposable project.
-- **Progress since previous report:** The isolated production build and existing hours-report browser scenario passed. The first new download scenario failed while creating a synthetic fixture because a bulk insert omitted explicit status values; the corrected rerun reached actual CSV downloads and failed at a keyboard assertion. A separate minimal Chromium reproduction showed that the native date input has multiple tab stops; the test now allows only those date segments before requiring the next button. Added a minimum supported export week for exact historical UTC formatting. Audit events now also capture timezone and exact period boundaries in the uncommitted migration; these latest changes have not yet been applied or tested.
-- **Tests and results:** Focused pgTAP **53/53 passed** on verified disposable project `butterbox-report-002-55b9` before the latest audit-field additions, including service-role denial and rollback on audit failure. Owner-revocation and timezone concurrency **1/1**, CSV/request/payroll-helper/audit/Help units **35/35**, TypeScript, selected ESLint and an isolated split production build passed. Existing hours-report browser scenario passed **1/1**.
-- **Failing tests:** The initial fixture failure was corrected, but its rerun failed at the native date-input tab assertion; the corrected keyboard test has not yet been rerun. Final audit metadata, all access-denial paths, five-width accessibility and attendance capacity near the row limit remain unverified.
+- **Progress since previous report:** The corrected production-browser journey passed with real roster, attendance, empty and second-venue downloads; denied roles/tenants, audit and Help; keyboard, overflow, target sizes and axe at all five widths; and a deterministic stale-timezone request. Audit records now retain the venue timezone and exact UTC boundaries even if the venue later changes. Neither protected showcase was changed.
+- **Tests and results:** Final focused pgTAP **56/56 passed** on verified disposable project `butterbox-report-002-55b9`, including roster and attendance limits of 10,000/10,001, service-role denial and audit-failure rollback; its large attendance assertions use a 30-second test statement budget. Owner-revocation/timezone concurrency **1/1**, final export browser **1/1**, existing hours browser **1/1**, and isolated split production build passed. Earlier CSV/request/payroll-helper/audit/Help units **35/35**, TypeScript and selected ESLint passed; final reruns remain pending.
+- **Failing tests:** No current selected functional failures. The earlier browser fixture and native-date keyboard assertion failures were corrected and the complete case passed. In a separate rolled-back 8-second synthetic probe, 10,000 unclocked attendance sessions exported in 2.940 seconds and 10,001 were explicitly rejected in 5.222 seconds on a fresh transaction; a repeated over-limit request in the first transaction timed out at 8.014 seconds. Large or long-history attendance exports therefore have a documented capacity risk; these timings are not a production benchmark.
 - **Blockers requiring intervention:** None identified for the selected isolated reporting scope. The protected local and public showcases must not be reset, reconfigured or redeployed; owner UX review remains separate.
-- **Documentation:** User Guide changes are drafted; final behavior and wording await verification.
-- **Next concrete action:** Apply and test the updated audit fields only in the identified disposable database, then rerun the corrected browser journey and verify access, concurrency, capacity and criterion-level evidence.
+- **Documentation:** User Guide and contextual Help updated, including sensitive-field, audit-delivery, row-limit and attendance-timeout limitations; final evidence review remains pending.
+- **Next concrete action:** Read the adjacent database regression, rerun focused units, TypeScript and changed-file ESLint, then update criterion evidence and checkpoint verified changes.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa` (navigation test corrections; no BB-REPORT-003 development commit yet).
-- **Push outcome:** Documentation-only milestone checkpoint `c173c8053dd14fb702c9533c3cd1e1ff98bc5d1a` was pushed and its remote SHA verified; this testing checkpoint is pending push.
+- **Push outcome:** Documentation-only verification checkpoint `b6f2b8ee92655a7639676b5bbf230c69af31b650` was pushed and its remote SHA verified; this milestone checkpoint is pending push.
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
