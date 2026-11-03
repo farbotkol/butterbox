@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 07:32 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 07:42 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
-- **Phase:** Coding.
-- **Activity:** Implementing the ordered, role-aware menu and preserving selected context.
+- **Phase:** Testing.
+- **Activity:** Running isolated role, route, context, keyboard and five-width browser checks.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** Inventoried the shell and destination permissions. The isolated existing owner/manager/employee navigation regression and five-width synthetic before capture passed **2/2**.
-- **Tests and results:** Pre-change navigation regression and screenshot baseline **2/2** passed; no new menu tests have run yet. The preceding payroll story's focused checks and five-width browser suite passed as recorded below.
-- **Failing tests:** None in the baseline; implementation verification remains pending.
+- **Progress since previous report:** Implemented the four ordered role-aware groups, separate Help utility, responsive navigation and server-selected venue context in the working tree. Business-wide report, permission, audit and Help views retain context without automatically narrowing their filters. User Guide wording was updated pending browser verification.
+- **Tests and results:** Pre-change navigation regression and screenshot baseline **2/2**, focused navigation/permissions/Help units **21/21** and TypeScript passed. Isolated role/route/context and five-width browser tests are running.
+- **Failing tests:** None in completed checks; the browser run and affected regression remain pending.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and deployment to either protected showcase remain separate.
-- **Documentation:** Pending implementation and verified navigation wording.
-- **Next concrete action:** Implement the role-aware menu and context handling, then run focused unit and isolated browser tests.
+- **Documentation:** Updated in the working tree; browser verification is pending.
+- **Next concrete action:** Inspect the browser results, fix any failures and run affected regressions, lint and final visual evidence.
 - **Latest development commit:** `401c9b8767151ecf55d22d80e057dc2abb5c0b26`.
-- **Push outcome:** Planning checkpoint `21cee922cb14f35330cfff0e0ebaaf49920ddb50` was pushed and its remote SHA verified. This baseline checkpoint is pending push.
+- **Push outcome:** Baseline checkpoint `a0e764d977cf62c21ec3b413e16ae387e8c5496c` was pushed and its remote SHA verified. This testing checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
