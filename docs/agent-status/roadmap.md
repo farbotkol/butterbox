@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-UXFIX-001 — People Directory and Employee Profile
+
+- **Last report:** 2026-11-03 23:29 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
+- **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
+- **Phase:** Planning.
+- **Activity:** Mapping the existing People queries, actions and authorization before extracting directory and profile views.
+- **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
+- **Progress since previous report:** Fetched and fast-forwarded to the owner's UXFIX specifications at `8587fea`; read all four stories and confirmed BB-UXFIX-001 prerequisites are Done.
+- **Tests and results:** Existing local and public synthetic showcase login endpoints both returned **200** before work began. No UXFIX tests or screenshots have been run yet.
+- **Failing tests:** None observed for this story; verification has not started.
+- **Blockers requiring intervention:** None identified. A disposable development/test project must be positively verified before any test data is changed; neither running showcase may be reset, reseeded or redeployed.
+- **Documentation:** User Guide and contextual Help updates are required with the implemented behavior.
+- **Next concrete action:** Trace People data/action boundaries and identify the existing isolated acceptance environment and screenshot runner.
+- **Latest development commit:** `cfcabb51a3cd0b890f51bd05b21b48a5a3aa79dd`; latest repository planning commit `8587feab33c66cc705c7e8bc536c9f5934d1ace0`.
+- **Push outcome:** Owner specifications fetched from `copilot/finish-roadmap-for-app`; this starting checkpoint is pending push.
+
 ## Public synthetic showcase — completed operator request
 
 - **Last report:** 2026-11-03 21:55 AEDT (UTC+1100), observed on the operator's clock.

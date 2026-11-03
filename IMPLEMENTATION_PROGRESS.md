@@ -2,11 +2,11 @@
 
 ## Execution summary
 
-- **New owner-prioritised UXFIX Wave 1: BB-UXFIX-001 through BB-UXFIX-004 (P1, all Backlog).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. UXFIX-001 is the first focus; 002/003/004 are independently scoped follow-on stories. Detailed acceptance tests preserve existing actions, tenant/role scope, qualification rules, last-owner checks, mapping revision/audit behavior and mobile accessibility. This is a product-backlog planning change only; no application code, database or showcase services were changed. Further UXFIX observations can be added later.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 In Progress; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. Start with People, preserving existing actions, tenant/role scope and dated employment rules. Before/after screenshots, all five required viewport checks and isolated role/security acceptance remain pending. The existing showcases must not be changed or redeployed.
 
 - Total stories: **131** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.
-  In Progress: **0**. Blocked: **6**. Not started (Backlog): **59**.
+  In Progress: **1**. Blocked: **6**. Not started (Backlog): **58**.
 - **Owner-requested public synthetic preview, 2026-11-03:** The existing
   showcase database remains isolated and shared with its local review app.
   A separately built app snapshot (`dfaf495` baseline plus the public-preview
