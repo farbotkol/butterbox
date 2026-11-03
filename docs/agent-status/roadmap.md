@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 04:32 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 04:54 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Debugging.
-- **Activity:** Investigating history restoration and correcting expanded browser assertions before rerunning the failed scenarios.
+- **Phase:** Testing.
+- **Activity:** Running the targeted database, type-check and lint regressions after enforcing checked payroll writes.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** Corrected the synthetic employee departments, expanded authorization/forged-action and pagination cases, updated the User Guide and added a contextual Help link. The browser rerun exposed a real Back-navigation selection mismatch; keyed controls alone did not resolve it. Five before and two widths of after synthetic screenshots exist.
-- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, existing mapping/export/canonical pgTAP **141/141**, scoped-mapping pgTAP **17/17**, concurrency integration **1/1**, User Guide/Help and directory units **20/20**, earlier TypeScript, changed-file ESLint and isolated production build passed.
-- **Failing tests:** The expanded rerun failed **5/5**: incorrect destination selection after Back, a test RPC missing its required venue, a loading locator expecting different text, and stale/five-width scenarios timing out at 180 seconds. These issues are under investigation; partial screenshots are not complete acceptance evidence.
+- **Progress since previous report:** Fixed the Back/Forward selection mismatch and passed the focused browser rerun. Added a new isolated migration revoking authenticated access to the legacy direct mutation; the checked wrapper still invokes the original revision/uniqueness/audit implementation. This intentionally changes the direct RPC contract and requires app/database rollout together. Corrected the required venue and loading test assertions; expanded browser reruns are pending.
+- **Tests and results:** Pre-change mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, destination/history rerun **1/1**, earlier mapping/export/canonical pgTAP **141/141**, scoped pgTAP **17/17**, concurrency **1/1**, Help/directory units **20/20**, earlier TypeScript/lint and isolated build passed. New targeted pgTAP and final TypeScript/lint are running.
+- **Failing tests:** The history mismatch is fixed and its focused test passes. The previously failed role/state scenarios and two timed-out stale/five-width scenarios have not yet been rerun; partial screenshots are not complete acceptance evidence.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Updated in the working tree; final behavior and Help checks remain subject to browser verification.
-- **Next concrete action:** Fix and verify browser-history restoration, correct test setup/labels, rerun all failures and finish five-width checks.
+- **Next concrete action:** Review the running database and type-check results, rerun concurrency/finalisation integration, then rerun the expanded browser scenarios and complete all five widths.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Testing checkpoint `b2f0412ea909eb26d0fa5bb32f792b73cb20c661` was pushed and its remote SHA verified. This debugging checkpoint is pending push.
+- **Push outcome:** Debugging checkpoint `4aae78336e4e1fd0d9ec1cbf8d66f439846e4b9e` was pushed and its remote SHA verified. This testing checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
