@@ -96,7 +96,7 @@ As an authorised hospitality owner or manager, **I want to find a department, re
 
 **Code / integration touchpoints:** \`src/app/settings/organisation/page.tsx\`, existing \`saveDepartmentAction\`, \`saveJobRoleAction\`, \`setJobRoleAutoRestrictionAction\` and \`setJobRoleManualRestrictionAction\`, existing venue/role authorization and roster restrictions. Prefer composable components and routes over a single oversized page.
 
-**Dependencies:** BB-ORG-003; BB-ORG-004; BB-PEOPLE-002. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed second in sequence. **Exclusions:** No alteration of rostering rules, historical records, or employment legislation.
+**Dependencies:** BB-ORG-003; BB-ORG-004; BB-PEOPLE-002. **Status:** Done in the isolated development application; owner UX review and showcase deployment remain separate. **Priority:** P1, owner-prioritised Wave 1, second in sequence. **Exclusions:** No alteration of rostering rules, historical records, or employment legislation.
 
 ### BB-UXFIX-003 — Business Permissions directory and focused access editing [P1]
 

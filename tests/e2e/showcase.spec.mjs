@@ -150,7 +150,7 @@ test("guided showcase owner reviews provisioned setup, people, roster and approv
   await expect(page.getByRole("heading", { name: "Set up your workspace" })).toHaveCount(0);
   await navigate(page, "Departments", "Departments and roles");
   for (const department of ["FOH", "BOH"]) {
-    await expect(page.getByRole("region", { name: `Department ${department}`, exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: new RegExp(`${department}.*View`) })).toBeVisible();
   }
   await navigate(page, "People", "Your people");
   await expect(page.getByRole("list", { name: "People directory", exact: true }).getByRole("listitem")).toHaveCount(14);

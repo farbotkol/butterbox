@@ -29,7 +29,7 @@ import {
 } from "@/lib/workspace";
 
 type HomePageProps = {
-  searchParams: Promise<{ week?: string; business?: string }>;
+  searchParams: Promise<{ week?: string; business?: string; error?: string }>;
 };
 
 function SetupNotice() {
@@ -190,6 +190,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       role={workspace.membership.role}
       venueName={workspace.venue.name}
     >
+      {params.error === "permission" && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+        You don&apos;t have permission to access that page or make that change. No changes were saved.
+      </p>}
+      {params.error === "workspace" && <p role="alert" className="mb-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+        We couldn&apos;t verify the requested workspace. Check your access and try again.
+      </p>}
       <section className="relative isolate overflow-hidden rounded-lg border border-[#d8e9e7] bg-[#eff8f6] px-5 py-6 sm:px-8 sm:py-7">
         <div className="pointer-events-none absolute inset-y-0 right-0 hidden w-[43%] opacity-35 md:block">
           <CoastalIllustration className="h-full w-full" />

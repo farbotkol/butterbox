@@ -14,6 +14,7 @@ import { authCallbackUrl, invitationEmailUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
+import { departmentHref, parseDepartmentFilterContext } from "@/lib/department-directory";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { employmentMetadataFailure, isEmploymentBasis, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
@@ -97,6 +98,75 @@ function peopleDestination(formData: FormData, businessId: string, venueId: stri
     redirect(withBusiness(`/people?venue=${encodeURIComponent(venueId)}&error=filter`, businessId));
   }
   return peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+}
+
+function departmentDestination(formData: FormData, businessId: string, venueId: string, createdId?: string) {
+  const origins = formData.getAll("department_origin");
+  if (origins.length === 0) return withBusiness(`/settings/organisation?venue=${encodeURIComponent(venueId)}`, businessId);
+  const contexts = formData.getAll("department_filters");
+  const filters = contexts.length === 1 ? parseDepartmentFilterContext(contexts[0]) : null;
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const roleIds = uuidList(formData, "job_role_id", 1);
+  const departmentId = createdId ?? departmentIds?.[0];
+  if (origins.length !== 1 || !["list", "department", "role"].includes(String(origins[0])) || !filters ||
+    !departmentIds || !roleIds || (origins[0] !== "list" && !departmentId) ||
+    (origins[0] === "list" && (departmentIds.length !== 0 || roleIds.length !== 0)) ||
+    (origins[0] === "department" && roleIds.length !== 0) ||
+    (origins[0] === "role" && roleIds.length !== 1) ||
+    (createdId !== undefined && !isPayrollUuid(createdId))) {
+    console.error("Invalid department return context.");
+    redirect(withBusiness(`/settings/departments?venue=${encodeURIComponent(venueId)}&error=filter`, businessId));
+  }
+  return departmentHref(businessId, venueId, filters,
+    origins[0] !== "list" || createdId ? departmentId : undefined,
+    origins[0] === "role" ? roleIds[0] : undefined);
+}
+
+function formBoolean(formData: FormData, key: string) {
+  const value = singleFormString(formData, key);
+  return value === "true" ? true : value === "false" ? false : null;
+}
+
+function organisationName(formData: FormData, key: string) {
+  const value = singleFormString(formData, key);
+  if (value === null) return null;
+  const name = value.trim();
+  return name.length >= 1 && name.length <= 80 ? name : null;
+}
+
+async function departmentActionWorkspace(formData: FormData) {
+  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not verify the department action workspace.", { message: workspace.message });
+    redirect("reason" in workspace && workspace.reason === "business_unavailable" ? "/?error=permission" : "/?error=workspace");
+  }
+  return workspace;
+}
+
+function departmentFailureDestination(
+  formData: FormData, businessId: string, venueId: string, destination: string, code: string,
+) {
+  if (code !== "permission" || !formData.has("department_origin")) return destination;
+  const filters = parseDepartmentFilterContext(singleFormString(formData, "department_filters"));
+  return filters ? departmentHref(businessId, venueId, filters) : destination;
+}
+
+async function requireDepartmentActionScope(
+  workspace: Awaited<ReturnType<typeof departmentActionWorkspace>>, formData: FormData,
+  venueId: string, departmentId: string, destination: string,
+) {
+  const { data, error } = await workspace.supabase.from("departments").select("id")
+    .eq("business_id", workspace.business.id).eq("venue_id", venueId).eq("id", departmentId).maybeSingle();
+  if (error) {
+    console.error("Could not verify the department action scope.", { code: error.code, message: error.message });
+    redirect(`${destination}&error=save`);
+  }
+  if (!data) {
+    console.error("The submitted department is outside the selected venue or permitted scope.");
+    redirect(`${departmentFailureDestination(formData, workspace.business.id, venueId, destination, "permission")}&error=permission`);
+  }
 }
 
 function revalidatePeople(formData: FormData) {
@@ -518,6 +588,11 @@ const organisationErrors: Record<string, string> = {
   "Department name already exists": "duplicate",
   "Job role name already exists": "duplicate",
   "Department is inactive": "inactive",
+  "Department changed; refresh before saving": "stale",
+  "Job role changed; refresh before saving": "stale",
+  "Role restrictions changed; refresh before saving": "stale",
+  "Confirm department status change": "confirm",
+  "Confirm job role status change": "confirm",
 };
 
 function activeFlag(formData: FormData) {
@@ -730,72 +805,125 @@ export async function saveVenueRosterWeekAction(formData: FormData) {
 }
 
 export async function saveDepartmentAction(formData: FormData) {
-  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
-  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
-  if (workspace.status !== "ready") redirect("/");
+  const workspace = await departmentActionWorkspace(formData);
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
-  const active = activeFlag(formData);
-  if (active === null) redirect(`${destination}&error=save`);
-
-  const { error } = await workspace.supabase.rpc("save_department", {
+  const destination = departmentDestination(formData, workspace.business.id, venueId);
+  const checked = formData.has("department_origin");
+  const active = checked ? formBoolean(formData, "active") : activeFlag(formData);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const name = checked ? organisationName(formData, "name") : text(formData, "name", 80);
+  if (active === null || !departmentIds || !name) {
+    console.error("Invalid department details submitted.");
+    redirect(`${destination}&error=save`);
+  }
+  const departmentId = departmentIds[0] ?? null;
+  const expectedName = checked && departmentId ? singleFormString(formData, "expected_name") : null;
+  const expectedActive = checked && departmentId ? formBoolean(formData, "expected_active") : null;
+  const args = {
     p_business_id: workspace.business.id,
     p_venue_id: venueId,
-    p_department_id: text(formData, "department_id", 36) || null,
-    p_name: text(formData, "name", 80),
+    p_department_id: departmentId,
+    p_name: name,
     p_active: active,
-  });
+  };
+  const { data, error } = checked
+    ? await workspace.supabase.rpc("save_department_checked", {
+      ...args, p_expected_name: expectedName, p_expected_active: expectedActive,
+      p_confirm_lifecycle: singleFormString(formData, "confirm_lifecycle") === "true",
+    })
+    : await workspace.supabase.rpc("save_department", args);
   if (error) {
     console.error("Department save failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${organisationErrors[error.message] ?? "save"}`);
+    const code = error.code === "23505" ? "duplicate" : organisationErrors[error.message] ?? "save";
+    redirect(`${departmentFailureDestination(formData, workspace.business.id, venueId, destination, code)}&error=${code}`);
   }
-  redirect(`${destination}&saved=department`);
+  if (checked && !departmentId && !isPayrollUuid(data)) {
+    console.error("Department creation returned an invalid identifier.");
+    redirect(`${destination}&error=save`);
+  }
+  const success = checked && !departmentId
+    ? departmentDestination(formData, workspace.business.id, venueId, data) : destination;
+  revalidatePath("/settings/departments");
+  redirect(`${success}&saved=department`);
 }
 
 export async function saveJobRoleAction(formData: FormData) {
-  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
-  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
-  if (workspace.status !== "ready") redirect("/");
+  const workspace = await departmentActionWorkspace(formData);
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
-  const active = activeFlag(formData);
-  if (active === null) redirect(`${destination}&error=save`);
-
-  const { error } = await workspace.supabase.rpc("save_job_role", {
+  const destination = departmentDestination(formData, workspace.business.id, venueId);
+  const checked = formData.has("department_origin");
+  const active = checked ? formBoolean(formData, "active") : activeFlag(formData);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const roleIds = uuidList(formData, "job_role_id", 1);
+  const name = checked ? organisationName(formData, "name") : text(formData, "name", 80);
+  if (active === null || !departmentIds || departmentIds.length !== 1 || !roleIds || !name) {
+    console.error("Invalid job role details submitted.");
+    redirect(`${destination}&error=save`);
+  }
+  if (checked) await requireDepartmentActionScope(workspace, formData, venueId, departmentIds[0], destination);
+  const roleId = roleIds[0] ?? null;
+  const args = {
     p_business_id: workspace.business.id,
-    p_department_id: text(formData, "department_id", 36),
-    p_job_role_id: text(formData, "job_role_id", 36) || null,
-    p_name: text(formData, "name", 80),
+    p_department_id: departmentIds[0],
+    p_job_role_id: roleId,
+    p_name: name,
     p_active: active,
-  });
+  };
+  const { error } = checked
+    ? await workspace.supabase.rpc("save_job_role_checked", {
+      ...args,
+      p_expected_name: roleId ? singleFormString(formData, "expected_name") : null,
+      p_expected_active: roleId ? formBoolean(formData, "expected_active") : null,
+      p_confirm_lifecycle: singleFormString(formData, "confirm_lifecycle") === "true",
+    })
+    : await workspace.supabase.rpc("save_job_role", args);
   if (error) {
     console.error("Job role save failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${organisationErrors[error.message] ?? "save"}`);
+    const code = error.code === "23505" ? "duplicate" : organisationErrors[error.message] ?? "save";
+    redirect(`${departmentFailureDestination(formData, workspace.business.id, venueId, destination, code)}&error=${code}`);
   }
+  revalidatePath("/settings/departments");
   redirect(`${destination}&saved=role`);
 }
 
 async function setJobRoleRestriction(formData: FormData, mode: "automatic" | "manual") {
-  const workspace = await getWorkspace(contextVenue(formData), businessContext(formData));
-  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
-  if (workspace.status !== "ready") redirect("/");
+  const workspace = await departmentActionWorkspace(formData);
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/settings/organisation?venue=${encodeURIComponent(venueId)}`;
-  const restricted = formData.get("restricted");
-  if (restricted !== "true" && restricted !== "false") {
+  const destination = departmentDestination(formData, workspace.business.id, venueId);
+  const checked = formData.has("department_origin");
+  const restricted = formBoolean(formData, "restricted");
+  const roleIds = uuidList(formData, "job_role_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  if (restricted === null || !roleIds || roleIds.length !== 1 || !departmentIds ||
+    (checked && departmentIds.length !== 1)) {
     console.error("Invalid role restriction submitted.");
     redirect(`${destination}&error=save`);
   }
-  const { error } = await workspace.supabase.rpc(
-    mode === "automatic" ? "set_job_role_auto_restriction" : "set_job_role_manual_restriction", {
+  if (checked) await requireDepartmentActionScope(workspace, formData, venueId, departmentIds[0], destination);
+  const { error } = checked
+    ? await workspace.supabase.rpc("set_job_role_restriction_checked", {
+     p_business_id: workspace.business.id,
+     p_department_id: departmentIds[0],
+     p_job_role_id: roleIds[0],
+     p_mode: mode,
+     p_restricted: restricted,
+     p_expected_name: singleFormString(formData, "expected_name"),
+     p_expected_active: formBoolean(formData, "expected_active"),
+     p_expected_auto: formBoolean(formData, "expected_auto"),
+     p_expected_manual: formBoolean(formData, "expected_manual"),
+    })
+    : await workspace.supabase.rpc(
+     mode === "automatic" ? "set_job_role_auto_restriction" : "set_job_role_manual_restriction", {
       p_business_id: workspace.business.id,
-      p_job_role_id: text(formData, "job_role_id", 36),
-      p_restricted: restricted === "true",
+      p_job_role_id: roleIds[0],
+      p_restricted: restricted,
     });
   if (error) {
     console.error("Role restriction save failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "save"}`);
+    const code = organisationErrors[error.message] ?? "save";
+    redirect(`${departmentFailureDestination(formData, workspace.business.id, venueId, destination, code)}&error=${code}`);
   }
+  revalidatePath("/settings/departments");
   redirect(`${destination}&saved=${mode === "automatic" ? "restriction" : "manual-restriction"}`);
 }
 

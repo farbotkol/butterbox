@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 01:19 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:24 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, In Progress).
+- **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, Done pending commit and push).
 - **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
-- **Phase:** Debugging.
-- **Activity:** Rerunning the expanded scope scenario after correcting its immediate save/refresh sequencing, with additional inactive-department and administrator coverage.
+- **Phase:** Complete.
+- **Activity:** Reviewing the verified feature, criterion-by-criterion evidence and synthetic screenshots before the development commit.
 - **Plan:** Keep `/settings/organisation` available for venue settings; add a Departments & Roles workspace with selected department/role editors, reuse the existing server rules and add checked concurrency/lifecycle wrappers. Verify restrictions, history, authorization and five viewport sizes in the disposable environment; update guide/help and evidence without deploying to either showcase.
-- **Progress since previous report:** Added a selected-venue check to focused role actions and verified that forged role creation and restriction requests targeting another venue are denied. Moved Add department nearer the top and captured 25 new browser screenshots. The scope test reached its new general-manager save check but failed after an immediate reload; the test now waits for the save result before reloading. Added explicit guidance for an active role in an inactive department; the latest test and copy changes need verification. Both protected showcase login endpoints returned **200** at 01:13 AEDT; neither deployment was modified.
-- **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and isolated production build passed. The latest nine-scenario browser run passed **8/9**: geofence, planning week, conflict settings, department/role lifecycle, loading/recovery, automatic qualifications, manual restrictions and onboarding. The failing scope scenario completed its five-width layout and forged cross-venue checks before failing at the new general-manager refresh assertion.
-- **Failing tests:** The expanded scope scenario did not find the saved general-manager role name after an immediate reload. No failed-save message was logged; a premature refresh is suspected but not yet proven. The test now waits for the saved heading before refresh, and a rerun is pending. The earlier long-name mobile overflow was fixed and passed its five-width checks.
+- **Progress since previous report:** The expanded five-width scope scenario passed after waiting for save completion before refresh; administrator/general-manager edits, cross-venue forged actions, inactive-role feedback and stale edits were verified. Publication settings passed after scoping an ambiguous alert locator. Thirty actual synthetic before/after screenshots were converted to pixel-identical lossless WebP. Both protected showcase login endpoints returned **200** at 01:23 AEDT; neither deployment was modified.
+- **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and final isolated production build passed. Ten distinct targeted production-browser scenarios passed across runs; the final scope/lifecycle/publication rerun passed **3/3**, and the final publication-only rerun passed **1/1**. Five-width keyboard, overflow and serious/critical axe checks passed.
+- **Failing tests:** None remain in the selected checks. The earlier long-name overflow, immediate-refresh test sequencing and ambiguous alert locator were corrected and rerun successfully.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
-- **Documentation:** Updated — BB-UXFIX-002 User Guide and contextual Help guidance; criterion-by-criterion evidence remains pending browser verification.
-- **Next concrete action:** Rerun the expanded scope/lifecycle scenarios and publication-settings regression, investigate any persistent failure, then complete final static checks and screenshot/criterion evidence.
+- **Documentation:** Updated — BB-UXFIX-002 User Guide, contextual Help, acceptance evidence and 30 synthetic screenshots.
+- **Next concrete action:** Review the staged diff for secrets/unrelated work, commit and push BB-UXFIX-002, verify the remote SHA, then begin BB-UXFIX-003.
 - **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
-- **Push outcome:** UXFIX-001 and documentation checkpoint `da508b0d77af22152efdee0f5fea3d6a4db01759` were pushed and their remote SHAs verified. This updated documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
+- **Push outcome:** UXFIX-001 and documentation checkpoint `cb496fbab70b7fd7809b8f05e812732b6ca03b1a` were pushed and their remote SHAs verified. The verified BB-UXFIX-002 development commit is pending.
 
 ## Public synthetic showcase — completed operator request
 

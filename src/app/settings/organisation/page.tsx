@@ -2,15 +2,11 @@ import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
-  saveDepartmentAction,
-  saveJobRoleAction,
   saveRosterPublicationModeAction,
   saveVenueRosterWeekAction,
   saveVenueConflictPolicyAction,
   saveVenueGeofenceAction,
   setVenueClockGeofenceAction,
-  setJobRoleAutoRestrictionAction,
-  setJobRoleManualRestrictionAction,
 } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import type { ConflictPolicyValues } from "@/lib/conflict-policy";
@@ -20,15 +16,6 @@ import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace } from "@/lib/workspace";
 
-type Department = { id: string; name: string; active: boolean };
-type JobRole = {
-  id: string;
-  name: string;
-  active: boolean;
-  department_id: string;
-  restrict_auto_assignment: boolean;
-  restrict_manual_assignment: boolean;
-};
 type GeofenceValues = { latitude: number | null; longitude: number | null; radius_meters: number | null };
 type GeofenceEvent = {
   id: string;
@@ -56,12 +43,11 @@ type ConflictPolicyEvent = {
 };
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
-const departmentManagerRoles = ["owner", "admin", "general_manager"];
 
 const errorMessages: Record<string, string> = {
   duplicate: "That name is already used here. Choose a different name.",
   permission: "You don't have permission to make that change.",
-  inactive: "Reactivate the department before adding or reactivating its roles.",
+  inactive: "Reactivate the department before saving an active role.",
   filter: "That venue is not available to you.",
   geofence: "Enter latitude from -90 to 90, longitude from -180 to 180 (up to six decimal places), and a whole-number radius from 1 to 10,000 metres; or clear all three.",
   "location-required": "Configure a venue location before enabling verification, and disable verification before removing it.",
@@ -99,17 +85,6 @@ function ConflictPolicySelect({ name, label, blocked, blockLabel }: {
   );
 }
 
-function StatusSelect({ active, label }: { active: boolean; label: string }) {
-  return (
-    <label className="text-sm">{label}
-      <select name="active" defaultValue={active ? "true" : "false"} className={fieldClass}>
-        <option value="true">Active</option>
-        <option value="false">Inactive</option>
-      </select>
-    </label>
-  );
-}
-
 export default async function OrganisationPage({
   searchParams,
 }: { searchParams: Promise<{ error?: string; saved?: string; venue?: string; business?: string }> }) {
@@ -130,13 +105,9 @@ export default async function OrganisationPage({
 
   const canManageGeofence = workspace.membership.role === "owner";
   const [
-    departments, roles, geofenceHistory, locationPolicyHistory, conflictHistory, rosterModeHistory,
+    geofenceHistory, locationPolicyHistory, conflictHistory, rosterModeHistory,
     rosterWeekSettings, rosterWeekHistory,
   ] = await Promise.all([
-    workspace.supabase.from("departments").select("id, name, active")
-      .eq("venue_id", venueId).order("name"),
-    workspace.supabase.from("job_roles").select("id, name, active, department_id, restrict_auto_assignment, restrict_manual_assignment")
-      .eq("venue_id", venueId).order("name"),
     canManageGeofence
       ? workspace.supabase.from("venue_geofence_events")
         .select("id, actor_id, actor_type, old_values, new_values, created_at")
@@ -173,8 +144,8 @@ export default async function OrganisationPage({
         .order("revision", { ascending: false }).limit(10)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  const loadError = venues.error || departments.error || roles.error;
-  if (loadError) console.error("Could not load departments and roles.", { code: loadError.code, message: loadError.message });
+  const loadError = venues.error;
+  if (loadError) console.error("Could not load venue settings.", { code: loadError.code, message: loadError.message });
   if (geofenceHistory.error) {
     console.error("Could not load venue geofence history.", {
       code: geofenceHistory.error.code, message: geofenceHistory.error.message,
@@ -207,24 +178,22 @@ export default async function OrganisationPage({
         ?? "The server returned invalid planning settings or history.",
     });
   }
-  const departmentRows: Department[] = departments.data ?? [];
-  const roleRows: JobRole[] = roles.data ?? [];
   const geofenceEvents: GeofenceEvent[] = geofenceHistory.data ?? [];
   const locationPolicyEvents: ClockLocationPolicyEvent[] = locationPolicyHistory.data ?? [];
   const conflictEvents: ConflictPolicyEvent[] = conflictHistory.data ?? [];
-  const canManageDepartments = departmentManagerRoles.includes(workspace.membership.role);
 
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={selectedVenue?.name ?? workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
-      <h1 className="text-3xl font-semibold">Departments and roles</h1>
+      <h1 className="text-3xl font-semibold">Venue settings</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
-        Front of House and Back of House are created with every venue. Add custom departments and job roles,
-        or mark them inactive to stop new staff and shifts using them. Deactivating never deletes anything:
-        existing shifts and staff keep their original department and role. Automatic and manual
-        qualification restrictions are configured separately. Restricting manual assignment also
-        restricts automatic selection for that role.
+        Configure the selected venue&apos;s planning, publication, conflict and clock-location settings.
+        These settings can be changed by the business owner.
       </p>
+      <Link href={`/settings/departments?${new URLSearchParams({ business: workspace.business.id, venue: venueId })}`}
+        className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Open departments and roles
+      </Link>
 
       {(venues.data?.length ?? 0) > 1 && (
         <form action="/settings/organisation" className="mt-5 flex items-end gap-3">
@@ -259,7 +228,7 @@ export default async function OrganisationPage({
       )}
 
       {loadError ? (
-        <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load departments. Try again.</p>
+        <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">We could not load venue settings. Try again.</p>
       ) : (
         <>
           {canManageGeofence && selectedVenue && (
@@ -512,98 +481,9 @@ export default async function OrganisationPage({
               {geofenceEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
             </section>
           )}
-          {canManageDepartments && (
-            <section aria-label="Add department" className="mt-6 rounded-xl border border-line bg-white p-5">
-              <h2 className="font-semibold">Add department</h2>
-              <form action={saveDepartmentAction} className="mt-4 grid gap-4 sm:grid-cols-[1fr_auto]">
-                <input type="hidden" name="venue_id" value={venueId} />
-                <input type="hidden" name="active" value="true" />
-                <label className="text-sm">Department name
-                  <input name="name" required maxLength={80} className={fieldClass} />
-                </label>
-                <button type="submit" className="self-end rounded-lg bg-ocean px-4 py-3 font-semibold text-white">Add department</button>
-              </form>
-            </section>
-          )}
-
-          <div className="mt-6 space-y-4">
-            {departmentRows.map((department) => (
-              <section key={department.id} aria-label={`Department ${department.name}`}
-                className="rounded-xl border border-line bg-white p-5">
-                <h2 className="font-semibold">
-                  {department.name}
-                  {!department.active && <>{" "}<span className="ml-2 rounded bg-amber-50 px-2 py-0.5 text-xs text-amber-800">Inactive</span></>}
-                </h2>
-                {canManageDepartments && (
-                  <form action={saveDepartmentAction} className="mt-4 grid gap-4 sm:grid-cols-3">
-                    <input type="hidden" name="venue_id" value={venueId} />
-                    <input type="hidden" name="department_id" value={department.id} />
-                    <label className="text-sm">Department name
-                      <input name="name" required maxLength={80} defaultValue={department.name} className={fieldClass} />
-                    </label>
-                    <StatusSelect active={department.active} label="Department status" />
-                    <button type="submit" className="self-end rounded-lg border border-line px-4 py-3 font-semibold">Save department</button>
-                  </form>
-                )}
-
-                <h3 className="mt-5 text-sm font-semibold text-muted">Job roles</h3>
-                <ul className="mt-2 space-y-3">
-                  {roleRows.filter((role) => role.department_id === department.id).map((role) => (
-                    <li key={role.id} aria-label={`Job role ${role.name}`}>
-                      <form action={saveJobRoleAction} className="grid gap-3 sm:grid-cols-3">
-                        <input type="hidden" name="venue_id" value={venueId} />
-                        <input type="hidden" name="department_id" value={department.id} />
-                        <input type="hidden" name="job_role_id" value={role.id} />
-                        <label className="text-sm">Role name
-                          <input name="name" required maxLength={80} defaultValue={role.name} className={fieldClass} />
-                        </label>
-                        <StatusSelect active={role.active} label="Role status" />
-                        <button type="submit" className="self-end rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save role</button>
-                      </form>
-                      <form action={setJobRoleAutoRestrictionAction} className="mt-3 flex flex-wrap items-end gap-3">
-                        <input type="hidden" name="venue_id" value={venueId} />
-                        <input type="hidden" name="job_role_id" value={role.id} />
-                        <label className="text-sm">Automatic assignment
-                          <select name="restricted" defaultValue={String(role.restrict_auto_assignment)} className={fieldClass}>
-                            <option value="false">
-                              {role.restrict_manual_assignment ? "Follow manual restriction (qualified only)" : "Any linked worker"}
-                            </option>
-                            <option value="true">Qualified workers only</option>
-                          </select>
-                        </label>
-                        <button type="submit" className="rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save restriction</button>
-                      </form>
-                      <form action={setJobRoleManualRestrictionAction} className="mt-3 flex flex-wrap items-end gap-3">
-                        <input type="hidden" name="venue_id" value={venueId} />
-                        <input type="hidden" name="job_role_id" value={role.id} />
-                        <label className="text-sm">Manual assignment
-                          <select name="restricted" defaultValue={String(role.restrict_manual_assignment)} className={fieldClass}>
-                            <option value="false">Any linked worker</option>
-                            <option value="true">Qualified workers only</option>
-                          </select>
-                        </label>
-                        <button type="submit" className="rounded-lg border border-line px-4 py-3 text-sm font-semibold">Save manual restriction</button>
-                      </form>
-                    </li>
-                  ))}
-                </ul>
-                {department.active && (
-                  <form action={saveJobRoleAction} className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-                    <input type="hidden" name="venue_id" value={venueId} />
-                    <input type="hidden" name="department_id" value={department.id} />
-                    <input type="hidden" name="active" value="true" />
-                    <label className="text-sm">New role name
-                      <input name="name" required maxLength={80} className={fieldClass} />
-                    </label>
-                    <button type="submit" className="self-end rounded-lg bg-ocean px-4 py-3 text-sm font-semibold text-white">Add role</button>
-                  </form>
-                )}
-              </section>
-            ))}
-            {departmentRows.length === 0 && (
-              <p className="rounded-lg border border-line bg-white p-4 text-sm text-muted">No departments are available to you at this venue.</p>
-            )}
-          </div>
+          {!canManageGeofence && <p className="mt-6 text-sm text-muted">
+            Only the business owner can change these venue settings.
+          </p>}
         </>
       )}
     </AppShell>

@@ -73,6 +73,17 @@ test("People help describes the directory, focused editing and lifecycle control
   assert.match(people.markdown, /public showcase does not\s+send invitations/);
 });
 
+test("department help describes scoped details, restrictions and the protected showcase limitation", () => {
+  const people = helpTopics(source, "foh_manager").find((topic) => topic.id === "people");
+  assert.ok(people);
+  assert.ok(people.anchors.includes("departments-and-roles"));
+  for (const label of ["Show departments", "Edit department details", "Create role",
+    "Deactivate role", "Save automatic assignment", "Save manual assignment"]) {
+    assert.ok(people.markdown.includes(label), label);
+  }
+  assert.match(people.markdown, /protected\s+showcase retains its earlier department screen/);
+});
+
 test("help links retain business scope and allow only visible real guide anchors", () => {
   const owner = helpTopics(source, "owner", true);
   const employee = helpTopics(source, "employee", true);
@@ -117,6 +128,7 @@ test("core contextual help destinations and documented screen/link labels stay w
   const screens = [
     ["src/app/setup/page.tsx", "Set up your workspace", "Help with workspace setup"],
     ["src/app/people/page.tsx", "Your people", "Help with managing people"],
+    ["src/app/settings/departments/page.tsx", "Departments and roles", "Department help"],
     ["src/components/onboarding-checklist.tsx", "Get your first roster ready", "Help with your first roster"],
     ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters"],
     ["src/app/my-schedule/page.tsx", "My schedule", "Help with your schedule"],

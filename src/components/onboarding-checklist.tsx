@@ -9,7 +9,7 @@ export function OnboardingChecklist({ progress, venueId, businessId }: {
   const steps = [
     { title: "Business", done: progress.business_ready, help: "Your business is created during setup." },
     { title: "Venue", done: progress.venue_ready, help: "Review your venue and departments.",
-      href: "/settings/organisation", link: "Open departments" },
+      href: `/settings/departments?${new URLSearchParams({ business: businessId, venue: venueId })}`, link: "Open departments" },
     { title: "Staff", done: progress.staff_ready, help: "Add an active team member before assigning shifts.",
       href: `/people?venue=${encodeURIComponent(venueId)}`, link: "Add staff" },
     { title: "Shift", done: progress.shift_ready, help: "Create a draft shift on the weekly roster.",

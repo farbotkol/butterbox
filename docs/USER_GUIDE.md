@@ -219,18 +219,16 @@ roster/attendance email, SMS, push or WhatsApp channels are live.
    The current app has no **Add venue** page/button: additional venue
    provisioning is a backend/operator workflow, not an instruction to create a
    second business or to modify a database yourself.
-4. Owners configure location in **Departments** (`/settings/organisation`),
-   under **Venue location and geofence**: set **Latitude**, **Longitude**
+4. Owners open **Departments**, then **Venue settings**
+   (`/settings/organisation`). Under **Venue location and geofence**, set **Latitude**, **Longitude**
    and **Radius in metres**, then **Save venue location**. Choose **Clock
    location verification** and **Save clock location setting** separately.
    Coordinates must be valid; radius is a whole number from 1 to 10,000 metres.
    Clear all location fields together only after disabling verification.
-5. In **Departments and roles**, authorized owner/admin/general-manager
-   scopes can **Add department** or **Save department**. Eligible managers can
-   **Add role**/**Save role** in their permitted department. Inactive departments
-   must be reactivated before adding/reactivating roles. Role-level
-   **Automatic assignment** and **Manual assignment** restrictions are separate;
-   **Save restriction** is not a replacement for **Save manual restriction**.
+5. In **Departments and roles**, owners, administrators and general managers
+   can manage department details within their permitted venue. Eligible managers
+   can manage roles and restrictions only within permitted departments. See
+   [Departments and roles](#departments-and-roles) for the read-first workflow.
 
 If permissions or membership change while a form is open, reload and review
 the current scope. Do not treat a hidden button as the security boundary.
@@ -244,6 +242,54 @@ the current scope. Do not treat a hidden button as the security boundary.
 - Staff maintain regular availability and can submit date-specific exceptions and leave requests. Managers can review the relevant requests.
 - Use the searchable team directory within your permitted business/venue/department scope.
 - Employment rule metadata retains effective-dated employment basis and award/contract references. **This alone does not calculate or certify award-compliant pay.**
+
+#### Departments and roles
+
+These instructions describe the updated development application. The protected
+showcase retains its earlier department screen until the owner authorizes an
+update.
+
+1. Open **Departments** (`/settings/departments`). Choose **Venue**, enter
+   **Search departments**, select **Status** and **Sort by**, then choose
+   **Show departments**. Results and role counts include only the records
+   available to your account. Change or clear the search and select **All
+   statuses** to broaden your results within that scope; use the page links if
+   there are more results. Choose **Department help** for this guidance.
+2. Select a department to view its name, status and job roles. Details are
+   read-only until an authorized owner, administrator or general manager chooses
+   **Edit department details**. Enter a name and **Save department**, or
+   **Cancel**; confirm **Discard changes** if prompted. **Back to departments**
+   retains the directory filters. Use **Add department**, enter its name and
+   **Create department** to create a department for the selected venue.
+3. Use **Deactivate department** or **Reactivate department**, review the
+   consequences, check the confirmation and save. Deactivation is not deletion:
+   existing staff and shift history remain, but the department cannot be used for
+   new staff or shifts. Reactivate it before adding or reactivating a role, or
+   saving changes to a role that is still active.
+4. In a department, review each role's status and effective automatic/manual
+   restriction summary. Choose **Add role**, enter its name and **Create role**.
+   Select a role to view its details and assignment restrictions. Choose
+   **Edit role details**, **Save role** or **Cancel** for its name. Existing
+   shifts retain their recorded role name. To change its status, use
+   **Deactivate role** or **Reactivate role** and confirm the consequences.
+   Existing shifts and qualifications are retained; inactive roles are
+   unavailable for new shifts and qualifications.
+5. On the selected role, **Edit automatic assignment** and **Edit manual
+   assignment** control separate settings. Use **Save automatic assignment**
+   or **Save manual assignment** for the setting being edited. Restricting manual
+   assignment to qualified workers also restricts automatic selection, even if
+   the automatic setting otherwise allows any linked worker. Qualified workers
+   have that role assigned in their employee profile; automatic selection still
+   checks availability, conflicts and other roster rules. Existing assignments are
+   not changed.
+6. If a name is already in use, access changes or another manager saves a
+   conflicting edit, the change is not saved and a message is shown. Review the
+   current details and re-enter your change if appropriate. After an interrupted
+   connection, reload and check the record before retrying.
+
+Owners can open **Venue settings** from the directory for planning, publication,
+conflict and clock-location settings; department editors do not contain those
+venue-wide controls.
 
 #### Maintain profiles, qualifications and invitations
 
@@ -914,7 +960,7 @@ Source checkpoints for maintainers:
 | --- | --- |
 | Account and session | [Login](../src/app/login/page.tsx), [registration](../src/app/signup/page.tsx), [reset request](../src/app/forgot-password/page.tsx), [reset completion](../src/app/reset-password/page.tsx), [setup](../src/app/setup/page.tsx) |
 | Business and access | [Chooser](../src/app/choose-business/page.tsx), [workspace context](../src/lib/workspace.ts), [permissions](../src/app/settings/permissions/page.tsx), [navigation](../src/components/main-navigation.tsx) |
-| Organisation and people | [Departments](../src/app/settings/organisation/page.tsx), [people](../src/app/people/page.tsx), [employment](../src/app/people/[employeeId]/employment/page.tsx), [availability](../src/app/availability/page.tsx) |
+| Organisation and people | [Departments](../src/app/settings/departments/page.tsx), [venue settings](../src/app/settings/organisation/page.tsx), [people](../src/app/people/page.tsx), [employment](../src/app/people/[employeeId]/employment/page.tsx), [availability](../src/app/availability/page.tsx) |
 | Roster and exchanges | [Roster](../src/app/roster/page.tsx), [editor](../src/components/shift-editor.tsx), [quick changes](../src/components/roster-quick-changes.tsx), [copy](../src/components/copy-roster-form.tsx), [review](../src/components/roster-review-panel.tsx), [schedule](../src/app/my-schedule/page.tsx), [swaps](../src/app/shift-swaps/page.tsx) |
 | Attendance | [Clock/review](../src/app/attendance/page.tsx), [offline fallback](../src/components/offline-attendance.tsx), [offline review](../src/components/offline-claim-review.tsx), [work time](../src/app/work-time/page.tsx), [alerts](../src/app/attendance/alerts/page.tsx), [kiosk](../src/app/attendance/kiosks/page.tsx) |
 | Payroll, notices and reporting | [Timesheets](../src/app/timesheets/page.tsx), [mapping](../src/app/settings/payroll/page.tsx), [notifications](../src/app/notifications/page.tsx), [audit](../src/app/settings/audit/page.tsx), [hours](../src/app/reports/hours/page.tsx) |

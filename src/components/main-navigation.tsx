@@ -23,7 +23,7 @@ const team: NavigationItem[] = [
   { href: "/work-time", label: "Work time", icon: Hourglass },
   { href: "/reports/exceptions", label: "Exceptions report", icon: ChartColumn },
   { href: "/people", label: "People", icon: UsersRound },
-  { href: "/settings/organisation", label: "Departments", icon: Building2 },
+  { href: "/settings/departments", label: "Departments", icon: Building2 },
 ];
 
 const managerRoles = ["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"];
@@ -66,7 +66,8 @@ export function MainNavigation({ role, businessId }: { role: string; businessId?
   const toggle = useRef<HTMLButtonElement>(null);
   const panelId = useId();
   const groups = navigationGroups(role);
-  const isActive = (href: string) => (href === "/" ? pathname === href : pathname.startsWith(href));
+  const isActive = (href: string) => (href === "/" ? pathname === href :
+    pathname.startsWith(href) || (href === "/settings/departments" && pathname === "/settings/organisation"));
   const current = groups.flatMap((group) => group.items).find((item) => isActive(item.href));
 
   return (
