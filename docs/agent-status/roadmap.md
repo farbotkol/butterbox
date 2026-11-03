@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 00:49 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 00:58 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
 - **Phase:** Coding.
-- **Activity:** Implementing the scoped department directory and selected read-first detail while retaining the existing venue settings.
+- **Activity:** Implemented the initial scoped department directory, selected department and role detail, focused editors and separately linked venue settings; preparing browser, permission and concurrency validation.
 - **Plan:** Keep `/settings/organisation` available for venue settings; add a Departments & Roles workspace with selected department/role editors, reuse the existing server rules and add checked concurrency/lifecycle wrappers. Verify restrictions, history, authorization and five viewport sizes in the disposable environment; update guide/help and evidence without deploying to either showcase.
-- **Progress since previous report:** Captured actual pre-change organisation screenshots at 375, 390, 768, 1024 and 1440 px in the disposable app. The existing department/role creation, duplicate validation, deactivation and shift-history scenario passed before changes. No UXFIX-002 product code has yet been changed.
-- **Tests and results:** UXFIX-002 baseline browser **1/1** and isolated split production build passed. Previous People story: focused pgTAP **333/333**, competing-write integration **1/1**, final browser workflows **7/7**, public-mode **1/1**, recovery **1/1**, People/help units **15/15**, ESLint and TypeScript passed. Both protected showcase login endpoints returned **200** at 00:45 AEDT.
-- **Failing tests:** No unresolved baseline failure. UXFIX-002 post-change validation is pending.
+- **Progress since previous report:** Added the initial read-first directory/detail/role routes, focused edit and status-confirmation forms, filter/context validation, and server-checked mutations that delegate to the existing authoritative rules. Applied the new migration only to positively identified disposable project `butterbox-report-002-55b9` (API/DB ports 58421/58422). The protected showcases were not changed.
+- **Tests and results:** UXFIX-002 baseline browser **1/1** and isolated split production build passed before changes. New checked-mutation pgTAP **34/34**, directory units **3/3**, changed-file ESLint and TypeScript passed after changes. Browser workflows, actual competing writes, updated guide/help and post-change five-width screenshots are pending. Previous People checks remain recorded in the implementation progress.
+- **Failing tests:** None in the checks run so far; the new UI has not yet been browser-tested.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
 - **Documentation:** BB-UXFIX-001 updated; BB-UXFIX-002 user guidance and criterion evidence pending implementation.
-- **Next concrete action:** Implement the department directory, selected detail and checked mutations; preserve existing venue settings and update their navigation links.
+- **Next concrete action:** Adapt and run the existing department/role lifecycle and restriction browser scenarios, add stale/concurrent and access-scope checks, then verify the five viewport sizes and update user documentation.
 - **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
-- **Push outcome:** UXFIX-001 and story-start checkpoint `ea10bcbe414569b6f507715f0e7c9c71062025f8` were pushed and their remote SHAs verified. The earlier HTTP 400 succeeded on retry over HTTP/1.1. This documentation checkpoint is pending push.
+- **Push outcome:** UXFIX-001 and baseline checkpoint `fd895eb712f768f7f371ec67cd53335dd2fae196` were pushed and their remote SHAs verified. The earlier HTTP 400 succeeded on retry over HTTP/1.1. This documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
 
 ## Public synthetic showcase — completed operator request
 
