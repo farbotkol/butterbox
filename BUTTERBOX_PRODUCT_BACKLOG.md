@@ -202,7 +202,7 @@ As a Butterbox employee, team manager or business administrator, **I want the na
 
 **Code / integration touchpoints:** Audit existing app shell/navigation components, route mapping, permission-aware menu configuration and existing responsive layout; reuse role checks. The reference screenshot was provided in the owner conversation and is not currently stored in this Git branch.
 
-**Dependencies:** BB-FOUND-004 (permissions); BB-ORG-004 (business/venue context); existing app shell and route structure. **Status:** In Progress (planning). **Priority:** P1. **Exclusions:** Implementing unbuilt feature modules, changing payroll/time/roster business logic, rewriting backend authorisation or redeploying showcases.
+**Dependencies:** BB-FOUND-004 (permissions); BB-ORG-004 (business/venue context); existing app shell and route structure. **Status:** In Progress (testing in isolated development). **Priority:** P1. **Exclusions:** Implementing unbuilt feature modules, changing payroll/time/roster business logic, rewriting backend authorisation or redeploying showcases.
 
 
 ### UXFIX Wave 1 — shared Definition of Done
