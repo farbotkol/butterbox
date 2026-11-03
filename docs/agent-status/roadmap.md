@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-UXFIX-004 — Payroll Employee Mapping
+
+- **Last report:** 2026-11-04 02:02 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
+- **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
+- **Phase:** Planning.
+- **Activity:** Inspecting existing payroll mapping authorization, actions and database contracts before capturing the isolated pre-change baseline.
+- **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
+- **Progress since previous report:** BB-UXFIX-003 was committed and pushed after its complete verification. The first HTTPS pushes disconnected; a per-command HTTP/1.1/non-chunked retry succeeded and the remote SHA matched. The complete BB-UXFIX-004 story and its ready foundation were reviewed.
+- **Tests and results:** No BB-UXFIX-004 tests have run yet. BB-UXFIX-003 finished with **141/141** targeted database assertions, concurrency **1/1**, units **20/20**, **13** distinct targeted browser scenarios, TypeScript, lint and isolated production build passing.
+- **Failing tests:** None known for the new story; its baseline is pending.
+- **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
+- **Documentation:** Pending implementation; the existing User Guide and contextual Help will be updated to match tested behavior.
+- **Next concrete action:** Inspect the existing mapping action and database policies, then run pre-change payroll mapping/export checks and capture synthetic browser screenshots.
+- **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
+- **Push outcome:** BB-UXFIX-003 feature commit `4857bb9f797f07e53d234b9e6178729635d08238` was pushed and its remote SHA verified. This planning checkpoint is pending push.
+
 ## BB-UXFIX-003 — Business Permissions
 
 - **Last report:** 2026-11-04 01:59 AEDT (UTC+1100), observed on the operator's clock.
@@ -16,7 +34,7 @@
 - **Documentation:** Updated — User Guide, contextual Help, criterion-level evidence and 25 synthetic screenshots.
 - **Next concrete action:** Inspect, commit and push the verified feature, then begin BB-UXFIX-004 in the isolated environment.
 - **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
-- **Push outcome:** Documentation checkpoint `55faea5adcf0071857a4aff49b20b001bc9729e9` was pushed and its remote SHA verified. The verified feature commit and push are pending.
+- **Push outcome:** The first HTTPS pushes disconnected; a per-command HTTP/1.1/non-chunked retry succeeded and the remote SHA matched feature commit `4857bb9f797f07e53d234b9e6178729635d08238`.
 
 ## BB-UXFIX-002 — Departments and Roles
 

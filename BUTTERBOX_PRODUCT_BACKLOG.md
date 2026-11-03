@@ -162,7 +162,7 @@ As an authorised payroll/operations administrator, **I want to select a payroll 
 
 **Code / integration touchpoints:** \`src/app/settings/payroll/page.tsx\`, existing \`savePayrollMappingAction\`, provider destination and employee mapping query/helpers, mapping revision/audit constraints. Coordinate with existing generic payroll CSV separation, but do not modify its calculation or submission pipeline.
 
-**Dependencies:** BB-PAY-001 (generic payroll data/export foundation); BB-PEOPLE-001. **Status:** Backlog. **Priority:** P1, owner-prioritised Wave 1, proposed fourth in sequence. **Exclusions:** Provider API integration, Xero/Dayforce adapter work, payslip/payment execution, award interpretation and employment-law certification.
+**Dependencies:** BB-PAY-001 (generic payroll data/export foundation); BB-PEOPLE-001. **Status:** In Progress. **Priority:** P1, owner-prioritised Wave 1, fourth in sequence. **Exclusions:** Provider API integration, Xero/Dayforce adapter work, payslip/payment execution, award interpretation and employment-law certification.
 
 ### BB-UXFIX-005 — Hospitality workflow-based application navigation [P1]
 

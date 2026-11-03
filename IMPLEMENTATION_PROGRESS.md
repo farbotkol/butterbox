@@ -2,7 +2,9 @@
 
 ## Execution summary
 
-- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001, BB-UXFIX-002 and BB-UXFIX-003 Done; BB-UXFIX-004 Backlog (P1).** People, Departments & Roles and Business Permissions now use scoped directory → selected detail → contextual Edit/Save/Cancel workflows. Venue settings and existing qualification rules remain available. The protected showcases have not received these changes and must not be changed or redeployed without owner approval.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001, BB-UXFIX-002 and BB-UXFIX-003 Done; BB-UXFIX-004 In Progress (P1).** People, Departments & Roles and Business Permissions now use scoped directory → selected detail → contextual Edit/Save/Cancel workflows. Payroll mapping is in planning. Venue settings and existing qualification rules remain available. The protected showcases have not received these changes and must not be changed or redeployed without owner approval.
+
+- **BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor, 2026-11-04 02:02 AEDT: In Progress (Planning).** The complete acceptance criteria and existing payroll page have been reviewed. Plan: capture the current isolated browser baseline; reuse the directory/detail/edit pattern with destination, venue, employee and safe filter context; preserve the existing revision, uniqueness, authorization and audit rules; explicitly confirm removal; verify role/tenant isolation, concurrency, generic-export regressions, five-width accessibility and screenshots. No implementation or story-specific tests have run yet. **Documentation: pending implementation.** Next: inspect the authoritative mapping action/RPCs and capture the pre-change baseline without touching either showcase.
 
 - **BB-UXFIX-003 — Business Permissions directory and focused access editing, 2026-11-04 01:59 AEDT: Done.** Implemented and verified against the disposable `butterbox-report-002-55b9` database and a separate application snapshot. The protected local showcase login returned HTTP **200** at 01:56 AEDT; neither protected showcase was reset, reseeded, redeployed or reconfigured.
 
