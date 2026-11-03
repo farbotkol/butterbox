@@ -152,8 +152,8 @@ test("guided showcase owner reviews provisioned setup, people, roster and approv
   for (const department of ["FOH", "BOH"]) {
     await expect(page.getByRole("region", { name: `Department ${department}`, exact: true })).toBeVisible();
   }
-  await navigate(page, "People", "Employee profiles");
-  await expect(page.getByRole("region", { name: /^Employee Fictional / })).toHaveCount(14);
+  await navigate(page, "People", "Your people");
+  await expect(page.getByRole("list", { name: "People directory", exact: true }).getByRole("listitem")).toHaveCount(14);
   await navigate(page, "Rostering", "Weekly roster");
   await seededWeek(page, state.plan.currentWeek);
   await expect(page.getByRole("heading", { name: "Publication history", exact: true })).toBeVisible();
@@ -182,10 +182,11 @@ test("guided showcase owner reviews provisioned setup, people, roster and approv
 for (const [role, department, start] of [["foh_manager", "FOH", 0], ["boh_manager", "BOH", 7]]) {
   test(`guided showcase ${role} sees only their department and cannot finalise or export payroll`, async ({ page }) => {
     await signIn(page, role);
-    await navigate(page, "People", "Employee profiles");
-    await expect(page.getByRole("region", { name: /^Employee Fictional / })).toHaveCount(7);
+    await navigate(page, "People", "Your people");
+    const people = page.getByRole("list", { name: "People directory", exact: true });
+    await expect(people.getByRole("listitem")).toHaveCount(7);
     for (const person of state.plan.staff.slice(start, start + 7)) {
-      await expect(page.getByRole("region", { name: `Employee ${person.name}`, exact: true })).toBeVisible();
+      await expect(people.getByRole("link", { name: `View profile for ${person.name}`, exact: true })).toBeVisible();
     }
     await navigate(page, "Rostering", "Weekly roster");
     await seededWeek(page, state.plan.currentWeek);

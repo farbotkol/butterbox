@@ -2496,9 +2496,9 @@ async function verifyLivePermissionChange(page, browser, initialRole, role) {
         await expect(directory).toBeVisible();
         await expect(directory.getByRole("combobox", { name: "Venue", exact: true }).locator("option")).toHaveCount(1);
         const expectedWorker = role === "general_manager" ? "Other venue worker" : role === "boh_manager" ? "BOH directory worker" : "FOH directory worker";
-        await expect(targetPage.getByRole("region", { name: `Employee ${expectedWorker}`, exact: true })).toBeVisible();
+        await expect(targetPage.getByRole("link", { name: `View profile for ${expectedWorker}` })).toBeVisible();
         for (const worker of ["FOH directory worker", "BOH directory worker", "Other venue worker"].filter((name) => name !== expectedWorker)) {
-          await expect(targetPage.getByRole("region", { name: `Employee ${worker}`, exact: true })).toHaveCount(0);
+          await expect(targetPage.getByRole("link", { name: `View profile for ${worker}` })).toHaveCount(0);
         }
         await navigateDuringSessionChange(targetPage, `/people?venue=${venueIds[role === "general_manager" ? 0 : 1]}`);
         await expect(targetPage).toHaveURL(/\/people\?error=filter/);
@@ -2541,13 +2541,17 @@ test("employee profiles and filtered team directory", async ({ page }) => {
   await withPermissionFixtures("employee", async ({ suffix, password, businessId, venueIds, departmentIds }) => {
     await signIn(page, `owner-${suffix}@example.test`, password);
     await page.getByRole("link", { name: "People", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Your people", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Add person", exact: true }).click();
     const newEmployee = page.getByRole("region", { name: "New employee", exact: true });
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Profile worker");
     await newEmployee.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("profile@example.test");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
-    await newEmployee.getByRole("button", { name: "Add employee", exact: true }).click();
-    await expect(page.getByRole("region", { name: "Employee Profile worker", exact: true })).toBeVisible();
+    await newEmployee.getByRole("button", { name: "Add employee", exact: true })
+      .evaluate((button) => { button.click(); button.click(); });
+    await expect(page.getByRole("heading", { name: "Profile worker", exact: true })).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Person added." })).toBeVisible();
     const employee = await admin.from("employees").select("id")
       .eq("business_id", businessId).eq("name", "Profile worker").single();
     expect(employee.error).toBeNull();
@@ -2556,13 +2560,29 @@ test("employee profiles and filtered team directory", async ({ page }) => {
       employee_id: employee.data.id, role_title: "Server",
       starts_at: "2031-06-02T09:00:00Z", ends_at: "2031-06-02T10:00:00Z",
     })).error).toBeNull();
-    const profile = page.getByRole("region", { name: "Employee Profile worker", exact: true });
-    await profile.getByRole("textbox", { name: "Name", exact: true }).fill("Archived worker");
-    await profile.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("updated@example.test");
-    await profile.getByRole("combobox", { name: "Employment type", exact: true }).selectOption("part_time");
-    await profile.getByRole("combobox", { name: "Status", exact: true }).selectOption("false");
-    await profile.getByRole("button", { name: "Save employee" }).click();
-    await expect(page.getByRole("region", { name: "Employee Archived worker", exact: true })).toBeVisible();
+    const overview = page.getByRole("region", { name: "Overview", exact: true });
+    await expect(overview.getByRole("textbox", { name: "Name", exact: true })).toHaveCount(0);
+    await overview.getByRole("button", { name: "Edit overview" }).click();
+    await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Discarded change");
+    await overview.getByRole("button", { name: "Cancel", exact: true }).click();
+    await overview.getByRole("button", { name: "Discard changes" }).click();
+    await expect(overview.getByRole("button", { name: "Edit overview" })).toBeFocused();
+    expect((await admin.from("employees").select("name").eq("id", employee.data.id).single()).data.name)
+      .toBe("Profile worker");
+    await overview.getByRole("button", { name: "Edit overview" }).click();
+    await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Archived worker");
+    await overview.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("updated@example.test");
+    await overview.getByRole("combobox", { name: "Employment type", exact: true }).selectOption("part_time");
+    await overview.getByRole("button", { name: "Save employee" }).click();
+    await expect(page.getByRole("heading", { name: "Archived worker", exact: true })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("updated@example.test", { exact: true })).toBeVisible();
+    const employment = page.getByRole("region", { name: "Employment", exact: true });
+    await employment.getByRole("button", { name: "Archive person" }).click();
+    const archive = page.getByRole("form", { name: "Archive Archived worker" });
+    await archive.getByLabel("I confirm this status change.").check();
+    await archive.getByRole("button", { name: "Confirm archive" }).click();
+    await expect(page.getByText("Person archived. Existing history is preserved.", { exact: true })).toBeVisible();
     const savedEmployee = await admin.from("employees").select("name, email, employment_type, active")
       .eq("id", employee.data.id).single();
     expect(savedEmployee.error).toBeNull();
@@ -2572,29 +2592,541 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     const history = await admin.from("shifts").select("id").eq("employee_id", employee.data.id);
     expect(history.error).toBeNull();
     expect(history.data).toHaveLength(1);
+    await page.getByRole("link", { name: "Back to people" }).click();
     const filters = page.getByRole("form", { name: "Directory filters" });
     await filters.getByRole("searchbox", { name: "Search team" }).fill("archived");
-    await filters.getByRole("combobox", { name: "Role", exact: true }).selectOption("Server");
+    await filters.getByRole("textbox", { name: "Role (exact title or qualification)" }).fill("Server");
     await filters.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
     await filters.getByRole("combobox", { name: "Status", exact: true }).selectOption("archived");
     await filters.getByRole("button", { name: "Filter team" }).click();
-    await expect(page.getByRole("region", { name: /^Employee / })).toHaveCount(1);
-    await expect(page.getByRole("region", { name: "Employee Archived worker", exact: true })).toBeVisible();
+    await expect(page.getByRole("list", { name: "People directory" }).getByRole("listitem")).toHaveCount(1);
+    await page.getByRole("link", { name: "View profile for Archived worker" }).click();
+    await expect(page.getByRole("heading", { name: "Archived worker", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Back to people" }).click();
+    await expect(filters.getByRole("searchbox", { name: "Search team" })).toHaveValue("archived");
+    await expect(filters.getByRole("combobox", { name: "Status", exact: true })).toHaveValue("archived");
     await filters.getByRole("combobox", { name: "Status", exact: true }).selectOption("active");
     await Promise.all([
       page.waitForURL(/status=active/),
       filters.getByRole("button", { name: "Filter team" }).click(),
     ]);
-    await expect(page.getByText("No employees match these filters.", { exact: true })).toBeVisible();
+    await expect(page.getByText("No people match these filters.", { exact: true })).toBeVisible();
     await filters.getByRole("searchbox", { name: "Search team" }).fill("");
-    await filters.getByRole("combobox", { name: "Role", exact: true }).selectOption("");
+    await filters.getByRole("textbox", { name: "Role (exact title or qualification)" }).fill("");
     await filters.getByRole("combobox", { name: "Department", exact: true }).selectOption("");
     await filters.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueIds[1]);
     await filters.getByRole("button", { name: "Filter team" }).click();
-    await expect(page.getByRole("region", { name: "Employee Other venue worker", exact: true })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Employee Archived worker", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "View profile for Other venue worker" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View profile for Archived worker" })).toHaveCount(0);
     await page.goto(`/roster?department=${departmentIds[0]}`);
     await expect(page.locator('select[name="employee_id"] option').filter({ hasText: "Archived worker" })).toHaveCount(0);
+    await page.goto(`/people/${employee.data.id}?business=${businessId}&venue=${venueIds[0]}`);
+    await employment.getByRole("button", { name: "Reactivate person" }).click();
+    const reactivate = page.getByRole("form", { name: "Reactivate Archived worker" });
+    await reactivate.getByLabel("I confirm this status change.").check();
+    await reactivate.getByRole("button", { name: "Confirm reactivation" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Person reactivated." })).toBeVisible();
+    expect((await admin.from("employees").select("active").eq("id", employee.data.id).single()).data.active).toBe(true);
+    expect((await admin.from("shifts").select("id").eq("employee_id", employee.data.id)).data).toHaveLength(1);
+  });
+});
+
+test("People directory and profiles preserve scoped access, concurrency and five viewport layouts", async ({ page, browser }) => {
+  test.setTimeout(300_000);
+  await withPermissionFixtures("foh_manager", async ({ suffix, password, userIds, businessId, venueIds, departmentIds, scopes }) => {
+    const employees = await admin.from("employees").select("id, name")
+      .eq("business_id", businessId).in("name", ["FOH directory worker", "BOH directory worker"]);
+    expect(employees.error).toBeNull();
+    const foh = employees.data.find((item) => item.name === "FOH directory worker");
+    const boh = employees.data.find((item) => item.name === "BOH directory worker");
+    expect(foh).toBeTruthy();
+    expect(boh).toBeTruthy();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: boh.id, department_id: departmentIds[0],
+    })).error).toBeNull();
+    const longEmployeeId = randomUUID();
+    const longName = "Long".repeat(25);
+    const longEmail = `${"long".repeat(16)}@${"domain".repeat(10)}.example.test`;
+    expect((await admin.from("employees").insert({
+      id: longEmployeeId, business_id: businessId, venue_id: venueIds[0], department_id: departmentIds[0],
+      name: longName, email: longEmail, role_title: "Server",
+    })).error).toBeNull();
+    const directory = `/people?business=${businessId}&venue=${venueIds[0]}`;
+    const profile = `/people/${foh.id}?business=${businessId}&venue=${venueIds[0]}`;
+    const screenshots = process.env.BUTTERBOX_TEST_SCREENSHOT_DIR;
+    await signIn(page, `owner-${suffix}@example.test`, password);
+
+    async function checkLayout(label) {
+      const layout = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const overflow = [...document.querySelectorAll("body *")].filter((element) => {
+          const box = element.getBoundingClientRect();
+          return box.right > width + 1 || (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1);
+        }).slice(0, 20).map((element) => ({
+          tag: element.tagName, className: element.getAttribute("class"),
+          width: element.clientWidth, scrollWidth: element.scrollWidth,
+        }));
+        return { width, scrollWidth: document.documentElement.scrollWidth, overflow };
+      });
+      expect(layout.scrollWidth, `${label}: horizontal page overflow ${JSON.stringify(layout.overflow)}`)
+        .toBeLessThanOrEqual(layout.width);
+      const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
+      const serious = results.violations.filter((item) => ["serious", "critical"].includes(item.impact))
+        .map((item) => `${item.id}: ${item.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+      expect(serious, `${label}: serious or critical accessibility violations`).toEqual([]);
+    }
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(directory);
+      await expect(page.getByRole("heading", { name: "Your people" })).toBeVisible();
+      await expect(page.getByText("3 visible active people in this venue · 0 visible invitations awaiting action"))
+        .toBeVisible();
+      await checkLayout(`${width} directory`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-directory-${width}.png`, fullPage: true });
+
+      const filters = page.getByRole("form", { name: "Directory filters" });
+      await filters.getByRole("searchbox", { name: "Search team" }).fill("no-such-person");
+      await filters.getByRole("searchbox", { name: "Search team" }).press("Enter");
+      await expect(page.getByText("No people match these filters.", { exact: true })).toBeVisible();
+      await expect(page.getByText("3 visible active people in this venue · 0 visible invitations awaiting action"))
+        .toBeVisible();
+      await checkLayout(`${width} filtered empty`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-empty-${width}.png`, fullPage: true });
+
+      await page.goto(`/people/${longEmployeeId}?business=${businessId}&venue=${venueIds[0]}`);
+      await expect(page.getByRole("heading", { name: longName, exact: true })).toBeVisible();
+      await expect(page.getByText(longEmail, { exact: true })).toBeVisible();
+      await checkLayout(`${width} long profile`);
+
+      await page.goto(profile);
+      await expect(page.getByRole("heading", { name: "FOH directory worker", exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "FOH directory worker", exact: true }).locator(".."))
+        .toContainText("Primary role: Not set or unavailable · Casual · Not invited");
+      const overview = page.getByRole("region", { name: "Overview" });
+      await expect(overview.getByRole("textbox", { name: "Name", exact: true })).toHaveCount(0);
+      await checkLayout(`${width} profile`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-profile-${width}.png`, fullPage: true });
+
+      await overview.getByRole("button", { name: "Edit overview" }).click();
+      await checkLayout(`${width} edit`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-edit-${width}.png`, fullPage: true });
+      await overview.getByRole("textbox", { name: "Name", exact: true }).fill("");
+      await overview.locator("form").evaluate((form) => { form.noValidate = true; });
+      await overview.getByRole("button", { name: "Save employee" }).click();
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("Could not save the employee");
+      await checkLayout(`${width} validation error`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-validation-${width}.png`, fullPage: true });
+      await overview.getByRole("button", { name: "Edit overview" }).click();
+      await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Unsaved mobile change");
+      await overview.getByRole("button", { name: "Cancel", exact: true }).click();
+      await expect(overview.getByRole("group", { name: "Discard unsaved changes" })).toBeVisible();
+      await checkLayout(`${width} discard confirmation`);
+      await overview.getByRole("button", { name: "Discard changes" }).click();
+      await expect(overview.getByRole("button", { name: "Edit overview" })).toBeFocused();
+
+      const employment = page.getByRole("region", { name: "Employment", exact: true });
+      await employment.getByRole("button", { name: "Archive person" }).click();
+      const archive = page.getByRole("form", { name: "Archive FOH directory worker" });
+      await expect(archive.getByLabel("I confirm this status change.")).not.toBeChecked();
+      await checkLayout(`${width} archive confirmation`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-confirmation-${width}.png`, fullPage: true });
+      await employment.getByRole("button", { name: "Cancel", exact: true }).click();
+    }
+
+    await page.goto(directory);
+    const keyboardSearch = page.getByRole("searchbox", { name: "Search team" });
+    await keyboardSearch.focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("combobox", { name: "Venue", exact: true })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(keyboardSearch).toBeFocused();
+    await keyboardSearch.fill("FOH directory");
+    await page.keyboard.press("Enter");
+    const profileLink = page.getByRole("link", { name: "View profile for FOH directory worker" });
+    await profileLink.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "FOH directory worker", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Roles & departments", exact: true }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL(/#roles$/);
+    const keyboardOverview = page.getByRole("region", { name: "Overview" });
+    await keyboardOverview.getByRole("button", { name: "Edit overview" }).focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Tab");
+    await expect(keyboardOverview.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("Keyboard saved profile");
+    for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab");
+    await expect(keyboardOverview.getByRole("button", { name: "Save employee" })).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("heading", { name: "Keyboard saved profile" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Keyboard saved profile" })).toBeVisible();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(directory);
+    expect(await page.evaluate(() => matchMedia("(prefers-reduced-motion: reduce)").matches)).toBe(true);
+    await checkLayout("reduced motion directory");
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+
+    const secondContext = await browser.newContext({ baseURL: appUrl });
+    const secondPage = await secondContext.newPage();
+    const managerContext = await browser.newContext({ baseURL: appUrl });
+    const managerPage = await managerContext.newPage();
+    try {
+      await signIn(secondPage, `owner-${suffix}@example.test`, password);
+      await page.goto(profile);
+      await secondPage.goto(profile);
+      const firstEditor = page.getByRole("region", { name: "Overview" });
+      const secondEditor = secondPage.getByRole("region", { name: "Overview" });
+      await firstEditor.getByRole("button", { name: "Edit overview" }).click();
+      await secondEditor.getByRole("button", { name: "Edit overview" }).click();
+      await firstEditor.getByRole("textbox", { name: "Name", exact: true }).fill("First saved profile");
+      await secondEditor.getByRole("textbox", { name: "Name", exact: true }).fill("Stale profile");
+      await firstEditor.getByRole("button", { name: "Save employee" }).click();
+      await expect(page.getByRole("heading", { name: "First saved profile" })).toBeVisible();
+      await secondEditor.getByRole("button", { name: "Save employee" }).click();
+      await expect(secondPage.getByRole("main").getByRole("alert"))
+        .toContainText("This profile changed while you were editing");
+      const persisted = await admin.from("employees").select("name").eq("id", foh.id).single();
+      expect(persisted.error).toBeNull();
+      expect(persisted.data.name).toBe("First saved profile");
+
+      await signIn(managerPage, `member-${suffix}@example.test`, password);
+      await managerPage.goto(directory);
+      await expect(managerPage.getByRole("link", { name: "View profile for BOH directory worker" })).toBeVisible();
+      await managerPage.getByRole("link", { name: "View profile for BOH directory worker" }).click();
+      await expect(managerPage.getByText("private-1@example.test", { exact: true })).toHaveCount(0);
+      await expect(managerPage.getByRole("region", { name: "Account & invitations" })).toHaveCount(0);
+      await managerPage.goto(`/people/${boh.id}?business=${businessId}&venue=${venueIds[1]}`);
+      await expect(managerPage.getByText("private-1@example.test", { exact: true })).toHaveCount(0);
+
+      await managerPage.goto(profile);
+      const managerEditor = managerPage.getByRole("region", { name: "Overview" });
+      await managerEditor.getByRole("button", { name: "Edit overview" }).click();
+      await managerEditor.getByRole("textbox", { name: "Name", exact: true }).fill("Tampered update");
+      await managerEditor.locator('select[name="department_id"]').evaluate((select, id) => {
+        const option = document.createElement("option");
+        option.value = id;
+        select.append(option);
+        select.value = id;
+      }, departmentIds[1]);
+      await managerEditor.getByRole("button", { name: "Save employee" }).click();
+      await expect(managerPage.getByRole("main").getByRole("alert")).toContainText("cannot manage");
+      expect((await admin.from("employees").select("name").eq("id", foh.id).single()).data.name)
+        .toBe("First saved profile");
+
+      for (const role of ["boh_manager", "general_manager", "employee", "admin", "owner"]) {
+        const scope = role === "admin" ? { role, venue_id: null, department_id: null } : scopes[role];
+        expect((await admin.from("business_memberships").update(scope)
+          .eq("business_id", businessId).eq("user_id", userIds[1])).error).toBeNull();
+        await managerPage.goto(profile);
+        if (role === "owner" || role === "admin") {
+          await expect(managerPage.getByRole("heading", { name: "First saved profile" })).toBeVisible();
+          await expect(managerPage.getByRole("button", { name: "Edit overview" })).toBeVisible();
+          if (role === "admin") {
+            await expect(managerPage.getByRole("button", { name: "Edit account link" })).toHaveCount(0);
+            await expect(managerPage.getByRole("button", { name: "Manage shared profiles" })).toHaveCount(0);
+          }
+        } else {
+          await expect(managerPage.getByRole("heading", { name: "First saved profile" })).toHaveCount(0);
+        }
+        if (role === "boh_manager") {
+          await managerPage.goto(`/people/${boh.id}?business=${businessId}&venue=${venueIds[0]}`);
+          await expect(managerPage.getByRole("heading", { name: "BOH directory worker" })).toBeVisible();
+          await expect(managerPage.getByRole("button", { name: "Edit overview" })).toBeVisible();
+        }
+        if (role === "general_manager") {
+          await managerPage.goto(`/people?business=${businessId}&venue=${venueIds[1]}`);
+          await managerPage.getByRole("link", { name: "View profile for Other venue worker" }).click();
+          await expect(managerPage.getByRole("heading", { name: "Other venue worker" })).toBeVisible();
+          await expect(managerPage.getByRole("button", { name: "Edit overview" })).toBeVisible();
+        }
+      }
+    } finally {
+      await secondContext.close();
+      await managerContext.close();
+    }
+
+    const [outsideBusiness, outsideVenue, outsideDepartment, outsideEmployee] =
+      Array.from({ length: 4 }, () => randomUUID());
+    expect((await admin.from("businesses").insert({ id: outsideBusiness, name: "Outside private People" })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: outsideVenue, business_id: outsideBusiness, name: "Outside venue",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "Outside department",
+    })).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: outsideEmployee, business_id: outsideBusiness, venue_id: outsideVenue, department_id: outsideDepartment,
+      name: "Outside private employee", email: "outside-private@example.test", role_title: "Server",
+    })).error).toBeNull();
+    for (const path of [
+      `/people/${outsideEmployee}?business=${businessId}&venue=${venueIds[0]}`,
+      `/people/not-a-valid-employee?business=${businessId}&venue=${venueIds[0]}`,
+    ]) {
+      const response = await page.goto(path);
+      expect([200, 404]).toContain(response.status());
+      await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+      await expect(page.locator('meta[name="robots"][content="noindex"]').first()).toHaveCount(1);
+      await expect(page.getByText("Outside private employee", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("outside-private@example.test", { exact: true })).toHaveCount(0);
+    }
+    await page.goto(`${directory}&q=Outside%20private`);
+    await expect(page.getByText("No people match these filters.", { exact: true })).toBeVisible();
+    await page.goto(`${directory}&department=${outsideDepartment}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("filters are invalid or unavailable");
+    await expect(page.getByText("Outside private employee", { exact: true })).toHaveCount(0);
+    await assertBusinessFixturesPreserved(admin, outsideBusiness);
+
+    const emptyVenue = randomUUID();
+    const emptyDepartment = randomUUID();
+    expect((await admin.from("venues").insert({
+      id: emptyVenue, business_id: businessId, name: "Empty venue",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: emptyDepartment, business_id: businessId, venue_id: emptyVenue, name: "Empty department",
+    })).error).toBeNull();
+    await page.goto(`/people?business=${businessId}&venue=${emptyVenue}`);
+    await expect(page.getByText("No people are in this venue yet.", { exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Add person" })).toBeVisible();
+    await checkLayout("empty venue");
+    await page.goto(`${directory}&q=NoSuchPerson&page=10`);
+    await expect(page.getByText("This page is no longer available.")).toBeVisible();
+    await expect(page.getByRole("link", { name: "Return to the first page" })).toBeVisible();
+
+    const bulk = Array.from({ length: 1001 }, (_, index) => ({
+      id: randomUUID(), business_id: businessId, venue_id: venueIds[0], department_id: departmentIds[0],
+      name: `Directory bulk ${String(index).padStart(4, "0")}`, role_title: "Server",
+    }));
+    try {
+      for (let offset = 0; offset < bulk.length; offset += 200) {
+        expect((await admin.from("employees").insert(bulk.slice(offset, offset + 200))).error).toBeNull();
+      }
+      await page.goto(`${directory}&q=Directory%20bulk`);
+      await expect(page.getByRole("status").filter({ hasText: "1001 people match" })).toBeVisible();
+      await expect(page.getByRole("list", { name: "People directory" }).getByRole("listitem")).toHaveCount(25);
+      await page.getByRole("link", { name: "Next page" }).click();
+      await expect(page).toHaveURL(/page=2/);
+      await page.goto(`${directory}&q=Directory%20bulk&page=41`);
+      await expect(page.getByRole("list", { name: "People directory" }).getByRole("listitem")).toHaveCount(1);
+      await expect(page.getByRole("link", { name: "View profile for Directory bulk 1000" })).toBeVisible();
+    } finally {
+      for (let offset = 0; offset < bulk.length; offset += 200) {
+        expect((await admin.from("employees").delete().in("id", bulk.slice(offset, offset + 200).map((item) => item.id))).error)
+          .toBeNull();
+      }
+    }
+  });
+});
+
+test.describe("People public demonstration mode", () => {
+  test.use({ serviceWorkers: "block" });
+
+  test("profile and direct invitation actions stay unavailable", async ({ page, context }) => {
+    test.skip(process.env.BUTTERBOX_TEST_PUBLIC_MODE !== "yes", "Requires an isolated public-mode test app.");
+    expect(new URL(apiUrl).port).not.toBe("57421");
+    expect(new URL(appUrl).port).not.toBe("3137");
+    const manifestPath = process.env.BUTTERBOX_TEST_PUBLIC_MODE_MANIFEST;
+    expect(manifestPath).toBeTruthy();
+    await context.route("http://127.0.0.1:57421/**", (route) => route.abort());
+
+    await withPermissionFixtures("foh_manager", async ({
+      suffix, password, userIds, businessId, venueIds, scopes,
+    }) => {
+      const employee = await admin.from("employees").select("id")
+        .eq("business_id", businessId).eq("name", "FOH directory worker").single();
+      expect(employee.error).toBeNull();
+      await signIn(page, `owner-${suffix}@example.test`, password);
+      const directory = `/people?business=${businessId}&venue=${venueIds[0]}`;
+      await page.goto(directory);
+      await expect(page.getByRole("list", { name: "People directory" }).getByRole("listitem")).toHaveCount(2);
+      await page.goto(`/people/${employee.data.id}?business=${businessId}&venue=${venueIds[0]}`);
+      await expect(page.getByRole("complementary", { name: "Synthetic showcase notice" })).toBeVisible();
+      await expect(page.getByText("Email invitations are unavailable in the public demo.")).toBeVisible();
+      await expect(page.getByRole("button", { name: "Manage invitation" })).toHaveCount(0);
+
+      const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+      for (const name of ["createStaffInvitationAction", "resendStaffInvitationAction"]) {
+        const actions = Object.entries(manifest.node).filter(([, action]) => action.exportedName === name);
+        expect(actions).toHaveLength(1);
+        const response = await page.request.post("/", {
+          headers: { origin: appUrl },
+          multipart: { [`$ACTION_ID_${actions[0][0]}`]: "" },
+          maxRedirects: 0,
+        });
+        expect(response.status()).toBe(303);
+        expect(response.headers().location).toBe("/people?error=invite-disabled");
+      }
+
+      await page.getByRole("button", { name: "Sign out", exact: true }).click();
+      await signIn(page, `member-${suffix}@example.test`, password);
+      for (const [role, visible, hidden] of [
+        ["foh_manager", "FOH directory worker", "BOH directory worker"],
+        ["boh_manager", "BOH directory worker", "FOH directory worker"],
+      ]) {
+        expect((await admin.from("business_memberships").update(scopes[role])
+          .eq("business_id", businessId).eq("user_id", userIds[1])).error).toBeNull();
+        await page.goto(directory);
+        const people = page.getByRole("list", { name: "People directory" });
+        await expect(people.getByRole("listitem")).toHaveCount(1);
+        await expect(people.getByRole("link", { name: `View profile for ${visible}`, exact: true })).toBeVisible();
+        await expect(people.getByRole("link", { name: `View profile for ${hidden}`, exact: true })).toHaveCount(0);
+      }
+    });
+  });
+});
+
+test("People loading and failed saves are announced and recover without writing", async ({ page }) => {
+  test.setTimeout(180_000);
+  await withPermissionFixtures("employee", async ({ suffix, password, businessId, venueIds }) => {
+    const employee = await admin.from("employees").select("id").eq("business_id", businessId)
+      .eq("name", "FOH directory worker").single();
+    expect(employee.error).toBeNull();
+    await signIn(page, `owner-${suffix}@example.test`, password);
+
+    let releaseNavigation;
+    const navigationHeld = new Promise((resolve) => { releaseNavigation = resolve; });
+    await page.route("**/people**", async (route) => {
+      const headers = route.request().headers();
+      if (headers.rsc === "1" && !headers["next-router-prefetch"]) await navigationHeld;
+      await route.continue();
+    });
+    try {
+      await page.getByRole("navigation", { name: "Main navigation" })
+        .getByRole("link", { name: "People", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Loading…" })).toBeVisible();
+      releaseNavigation();
+      await expect(page.getByRole("heading", { name: "Your people" })).toBeVisible();
+    } finally {
+      releaseNavigation();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+
+    await page.goto(`/people/${employee.data.id}?business=${businessId}&venue=${venueIds[0]}`);
+    const overview = page.getByRole("region", { name: "Overview" });
+    await overview.getByRole("button", { name: "Edit overview" }).click();
+    await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Unsent profile");
+    await page.route("**/people/**", async (route) => {
+      if (route.request().method() === "POST" && route.request().headers()["next-action"]) {
+        await route.fulfill({ status: 500, contentType: "text/plain", body: "Simulated outage" });
+      } else {
+        await route.continue();
+      }
+    });
+    await overview.getByRole("button", { name: "Save employee" }).click();
+    const failure = page.getByRole("alert").filter({ hasText: "Something went wrong" });
+    await expect(failure).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Something went wrong" })).toBeFocused();
+    expect((await admin.from("employees").select("name").eq("id", employee.data.id).single()).data.name)
+      .toBe("FOH directory worker");
+    await page.unroute("**/people/**");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByRole("heading", { name: "FOH directory worker" })).toBeVisible();
+    await overview.getByRole("button", { name: "Edit overview" }).click();
+    await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Recovered profile");
+    await overview.getByRole("button", { name: "Save employee" }).click();
+    await expect(page.getByRole("heading", { name: "Recovered profile" })).toBeVisible();
+    await page.reload();
+    await expect(page.getByRole("heading", { name: "Recovered profile" })).toBeVisible();
+  });
+});
+
+test("People section editors reject stale department, qualification and account saves", async ({ page }) => {
+  test.setTimeout(180_000);
+  await withPermissionFixtures("foh_manager", async ({ suffix, password, userIds, businessId, venueIds, departmentIds }) => {
+    const employee = await admin.from("employees").select("id").eq("business_id", businessId)
+      .eq("name", "FOH directory worker").single();
+    expect(employee.error).toBeNull();
+    const [barista, runner] = [randomUUID(), randomUUID()];
+    expect((await admin.from("job_roles").insert([
+      { id: barista, business_id: businessId, venue_id: venueIds[0], department_id: departmentIds[0], name: "Barista" },
+      { id: runner, business_id: businessId, venue_id: venueIds[0], department_id: departmentIds[0], name: "Runner" },
+    ])).error).toBeNull();
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    const second = await page.context().newPage();
+    const url = `/people/${employee.data.id}?business=${businessId}&venue=${venueIds[0]}`;
+    try {
+      await page.goto(url);
+      await second.goto(url);
+      await page.getByRole("button", { name: "Edit departments" }).click();
+      await second.getByRole("button", { name: "Edit departments" }).click();
+      let firstDepartments = page.getByRole("form", { name: "Departments for FOH directory worker" });
+      await firstDepartments.getByRole("checkbox", { name: "Back of House" }).check();
+      const rolesSection = page.getByRole("region", { name: "Roles & departments" });
+      await rolesSection.getByRole("button", { name: "Cancel", exact: true }).click();
+      await rolesSection.getByRole("button", { name: "Discard changes" }).click();
+      const beforeSave = await admin.from("employee_departments").select("department_id")
+        .eq("employee_id", employee.data.id);
+      expect(beforeSave.error).toBeNull();
+      expect(beforeSave.data.map((item) => item.department_id)).toEqual([departmentIds[0]]);
+      await page.getByRole("button", { name: "Edit departments" }).click();
+      firstDepartments = page.getByRole("form", { name: "Departments for FOH directory worker" });
+      await firstDepartments.getByRole("checkbox", { name: "Back of House" }).check();
+      const { holdLock } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+      const gate = await holdLock(
+        `select id from public.employees where id = '${employee.data.id}'::uuid for update`, employee.data.id,
+      );
+      let pendingSave;
+      try {
+        pendingSave = firstDepartments.getByRole("button", { name: "Save departments" }).click({ noWaitAfter: true });
+        await expect(firstDepartments.getByRole("button", { name: "Saving..." })).toBeDisabled();
+      } finally {
+        await gate.release(false);
+        await pendingSave;
+      }
+      await expect(page.getByRole("main").getByRole("status")).toHaveText("Department membership saved.");
+      await second.getByRole("form", { name: "Departments for FOH directory worker" })
+        .getByRole("button", { name: "Save departments" }).click();
+      await expect(second.getByRole("main").getByRole("alert")).toContainText("This section changed while you were editing");
+      const departments = await admin.from("employee_departments").select("department_id").eq("employee_id", employee.data.id);
+      expect(departments.error).toBeNull();
+      expect(departments.data.map((item) => item.department_id).sort()).toEqual([departmentIds[0], departmentIds[1]].sort());
+
+      await page.goto(url);
+      await second.goto(url);
+      await page.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
+      await second.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
+      const firstRoles = page.getByRole("form", { name: "Eligible roles for FOH directory worker in Front of House" });
+      const secondRoles = second.getByRole("form", { name: "Eligible roles for FOH directory worker in Front of House" });
+      await firstRoles.getByRole("checkbox", { name: "Barista" }).check();
+      await secondRoles.getByRole("checkbox", { name: "Runner" }).check();
+      await firstRoles.getByRole("button", { name: "Save eligible roles" }).click();
+      await expect(page.getByRole("main").getByRole("status")).toHaveText("Eligible roles saved.");
+      await secondRoles.getByRole("button", { name: "Save eligible roles" }).click();
+      await expect(second.getByRole("main").getByRole("alert")).toContainText("This section changed while you were editing");
+      const qualification = await admin.from("employee_job_roles").select("job_role_id").eq("employee_id", employee.data.id);
+      expect(qualification.error).toBeNull();
+      expect(qualification.data).toEqual([{ job_role_id: barista }]);
+      await page.getByRole("button", { name: "Edit primary role" }).click();
+      const primary = page.getByRole("form", { name: "Primary role for FOH directory worker" });
+      await primary.getByRole("combobox", { name: "Primary qualified role" }).selectOption(barista);
+      await primary.getByRole("button", { name: "Set primary role" }).click();
+      await expect(page.getByRole("main").getByRole("status").filter({ hasText: "Primary role saved." })).toBeVisible();
+      await page.getByRole("link", { name: "Back to people" }).click();
+      const filters = page.getByRole("form", { name: "Directory filters" });
+      await filters.getByRole("combobox", { name: "Sort by" }).selectOption("role");
+      await filters.getByRole("button", { name: "Filter team" }).click();
+      await expect(page.getByRole("list", { name: "People directory" }).getByRole("listitem").first())
+        .toContainText("FOH directory worker");
+
+      await page.goto(url);
+      await second.goto(url);
+      await page.getByRole("button", { name: "Edit account link" }).click();
+      await second.getByRole("button", { name: "Edit account link" }).click();
+      const firstAccount = page.getByRole("form", { name: "Account for FOH directory worker" });
+      await firstAccount.getByRole("combobox", { name: "Linked business member" }).selectOption(userIds[1]);
+      await firstAccount.getByRole("button", { name: "Save account link" }).click();
+      await expect(page.getByRole("main").getByRole("status")).toHaveText("Account link saved.");
+      await second.getByRole("form", { name: "Account for FOH directory worker" })
+        .getByRole("button", { name: "Save account link" }).click();
+      await expect(second.getByRole("main").getByRole("alert")).toContainText("This profile changed while you were editing");
+      const account = await admin.from("employees").select("auth_user_id").eq("id", employee.data.id).single();
+      expect(account.error).toBeNull();
+      expect(account.data.auth_user_id).toBe(userIds[1]);
+    } finally {
+      await second.close();
+    }
   });
 });
 
@@ -2618,9 +3150,9 @@ test("employment metadata keeps dated history, unknown classifications and scope
       await page.setViewportSize({ width: 375, height: 812 });
       await signIn(page, `owner-${suffix}@example.test`, password);
       await page.goto(peopleUrl);
-      const profile = page.getByRole("region", { name: "Employee FOH directory worker", exact: true });
-      await expect(profile.getByRole("region", { name: "Employment metadata for FOH directory worker" }))
-        .toContainText("classification is unknown");
+      await page.getByRole("link", { name: "View profile for FOH directory worker" }).click();
+      const profile = page.getByRole("region", { name: "Employment", exact: true });
+      await expect(profile).toContainText("classification is unknown");
       await profile.getByRole("link", { name: "Review employment metadata" }).click();
       await expect(page.getByRole("heading", { name: "Employment metadata for FOH directory worker" })).toBeVisible();
       const current = page.getByRole("region", { name: "Current employment metadata" });
@@ -2682,7 +3214,9 @@ test("employment metadata keeps dated history, unknown classifications and scope
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
       await page.goto(peopleUrl);
-      const updatedProfile = page.getByRole("region", { name: "Employee FOH directory worker", exact: true });
+      await page.getByRole("link", { name: "View profile for FOH directory worker" }).click();
+      const updatedProfile = page.getByRole("region", { name: "Overview", exact: true });
+      await updatedProfile.getByRole("button", { name: "Edit overview" }).click();
       await expect(updatedProfile.getByRole("combobox", { name: "Employment type", exact: true })).toHaveValue("full_time");
       await updatedProfile.getByRole("combobox", { name: "Employment type", exact: true }).selectOption("part_time");
       await Promise.all([
@@ -3748,6 +4282,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
         await expect(page.getByRole("button", { name: "Save draft shift" })).toHaveCount(0);
 
         await page.goto("/people");
+        await page.getByRole("link", { name: "Add person", exact: true }).click();
         const newEmployee = page.getByRole("region", { name: "New employee", exact: true });
         await expect(newEmployee.locator(`select[name="department_id"] option[value="${eventsId}"]`)).toHaveCount(0);
 
@@ -3801,6 +4336,8 @@ test("departmental managers keep separate rosters for shared staff with an owner
 
         await signIn(page, `owner-${suffix}@example.test`, password);
         await page.goto("/people");
+        await page.getByRole("link", { name: "View profile for Shared worker" }).click();
+        await page.getByRole("button", { name: "Edit departments" }).click();
         const membership = page.getByRole("form", { name: "Departments for Shared worker" });
         await expect(membership.getByRole("checkbox", { name: "Front of House (primary)" })).toBeChecked();
         await expect(membership.getByRole("checkbox", { name: "Front of House (primary)" })).toBeDisabled();
@@ -3810,7 +4347,7 @@ test("departmental managers keep separate rosters for shared staff with an owner
         const links = await admin.from("employee_departments").select("department_id").eq("business_id", businessId);
         expect(links.error).toBeNull();
         expect(links.data.map((link) => link.department_id).sort()).toEqual([fohId, bohId].sort());
-        await expect(page.getByRole("region", { name: "Employee Shared worker" }))
+        await expect(page.getByRole("region", { name: "Roles & departments" }))
           .toContainText(/Departments: (Back of House, Front of House|Front of House, Back of House)/);
 
         const managerPage = async (name) => {
@@ -3830,8 +4367,9 @@ test("departmental managers keep separate rosters for shared staff with an owner
         await boh.getByRole("button", { name: "Save draft shift" }).click();
         await expect(boh.getByRole("status")).toHaveText("Shift saved to the draft roster.");
         await boh.goto("/people");
-        const sharedForBoh = boh.getByRole("region", { name: "Employee Shared worker" });
-        await expect(sharedForBoh).toContainText("managed by this worker's primary department");
+        await boh.getByRole("link", { name: "View profile for Shared worker" }).click();
+        const sharedForBoh = boh.getByRole("region", { name: "Overview" });
+        await expect(sharedForBoh).toContainText("managed by this person's primary department");
         await expect(sharedForBoh.getByRole("button", { name: "Save employee" })).toHaveCount(0);
         await expect(boh.getByRole("form", { name: "Departments for Shared worker" })).toHaveCount(0);
 
@@ -3920,15 +4458,18 @@ test("qualified roles and primary role control restricted automatic assignment",
     expect(none.data).toHaveLength(0);
 
     await page.goto("/people");
+    await page.getByRole("link", { name: "View profile for B Qualified" }).click();
+    await page.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
     const eligible = page.getByRole("form", { name: "Eligible roles for B Qualified in Front of House" });
     await eligible.getByRole("checkbox", { name: "Barista" }).check();
     await eligible.getByRole("checkbox", { name: "Server" }).check();
     await eligible.getByRole("button", { name: "Save eligible roles" }).click();
     await expect(page.getByRole("status")).toHaveText("Eligible roles saved.");
+    await page.getByRole("button", { name: "Edit primary role" }).click();
     const primary = page.getByRole("form", { name: "Primary role for B Qualified" });
     await primary.getByRole("combobox", { name: "Primary qualified role" }).selectOption(baristaId);
     await primary.getByRole("button", { name: "Set primary role" }).click();
-    await expect(page.getByRole("status")).toHaveText("Primary role saved.");
+    await expect(page.getByRole("status").filter({ hasText: "Primary role saved." })).toBeVisible();
     const storedRoles = await admin.from("employee_job_roles").select("job_role_id, is_primary").eq("employee_id", qualifiedId);
     expect(storedRoles.error).toBeNull();
     expect(storedRoles.data).toEqual(expect.arrayContaining([
@@ -3940,11 +4481,12 @@ test("qualified roles and primary role control restricted automatic assignment",
     expect(profile.error).toBeNull();
     expect(profile.data.role_title).toBe("Barista");
 
+    await page.getByRole("link", { name: "Back to people" }).click();
     const filters = page.getByRole("form", { name: "Directory filters" });
-    await filters.getByRole("combobox", { name: "Role", exact: true }).selectOption("Server");
+    await filters.getByRole("textbox", { name: "Role (exact title or qualification)" }).fill("Server");
     await filters.getByRole("button", { name: "Filter team" }).click();
-    await expect(page.getByRole("region", { name: "Employee B Qualified" })).toBeVisible();
-    await expect(page.getByRole("region", { name: "Employee A Unqualified" })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "View profile for B Qualified" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "View profile for A Unqualified" })).toHaveCount(0);
 
     await page.goto(`/roster?department=${departmentId}`);
     await page.locator('input[name="role_title"]').fill("barista");
@@ -3979,24 +4521,19 @@ test("qualified roles and primary role control restricted automatic assignment",
     expect(concurrentShifts.data).toHaveLength(1);
     expect(concurrentShifts.data[0].employee_id).toBe(qualifiedId);
 
-    await page.goto("/people");
+    await page.goto(`/people/${qualifiedId}?business=${businessId}&venue=${venueId}`);
+    await page.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
     await eligible.getByRole("checkbox", { name: "Barista" }).uncheck();
     await eligible.getByRole("button", { name: "Save eligible roles" }).click();
     await expect(page.locator('p[role="alert"]')).toContainText("Choose another primary role");
+    await page.getByRole("button", { name: "Edit primary role" }).click();
     await primary.getByRole("combobox", { name: "Primary qualified role" }).selectOption(serverId);
-    await Promise.all([
-      page.waitForResponse((response) => response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/people"),
-      primary.getByRole("button", { name: "Set primary role" }).click(),
-    ]);
-    await expect(page.getByRole("status")).toHaveText("Primary role saved.");
+    await primary.getByRole("button", { name: "Set primary role" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Primary role saved." })).toBeVisible();
+    await page.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
     await eligible.getByRole("checkbox", { name: "Barista" }).uncheck();
-    await Promise.all([
-      page.waitForResponse((response) => response.request().method() === "POST" &&
-        new URL(response.url()).pathname === "/people"),
-      eligible.getByRole("button", { name: "Save eligible roles" }).click(),
-    ]);
-    await expect(page.getByRole("status")).toHaveText("Eligible roles saved.");
+    await eligible.getByRole("button", { name: "Save eligible roles" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Eligible roles saved." })).toBeVisible();
     const remaining = await admin.from("employee_job_roles").select("job_role_id, is_primary").eq("employee_id", qualifiedId);
     expect(remaining.error).toBeNull();
     expect(remaining.data).toEqual([{ job_role_id: serverId, is_primary: true }]);
@@ -4106,6 +4643,8 @@ test("manual role restrictions protect open shifts without changing automatic-on
     expect(unchanged.data.employee_id).toBeNull();
 
     await page.goto("/people");
+    await page.getByRole("link", { name: "View profile for B Qualified" }).click();
+    await page.getByRole("button", { name: "Edit qualified roles in Front of House" }).click();
     const eligible = page.getByRole("form", { name: "Eligible roles for B Qualified in Front of House" });
     await eligible.getByRole("checkbox", { name: "Barista" }).check();
     await eligible.getByRole("button", { name: "Save eligible roles" }).click();
@@ -4252,6 +4791,8 @@ test("employees save recurring availability and the roster displays overnight ga
 
     await signIn(page, `availability-owner-${suffix}@example.test`, password);
     await page.goto("/people");
+    await page.getByRole("link", { name: "View profile for Available worker" }).click();
+    await page.getByRole("button", { name: "Edit account link" }).click();
     const account = page.getByRole("form", { name: "Account for Available worker" });
     await expect(account.getByRole("option", { name: `availability-boh-${suffix}@example.test` })).toHaveCount(0);
     await account.getByRole("combobox", { name: "Linked business member" }).selectOption(userIds[1]);
@@ -4323,6 +4864,8 @@ test("employees save recurring availability and the roster displays overnight ga
     await expect(page.getByLabel("Unavailable Available worker 2032-03-15")).toHaveText("Unavailable all day");
 
     await page.goto("/people");
+    await page.getByRole("link", { name: "View profile for Available worker" }).click();
+    await page.getByRole("button", { name: "Edit account link" }).click();
     await account.getByRole("combobox", { name: "Linked business member" }).selectOption("");
     await account.getByRole("button", { name: "Save account link" }).click();
     await expect(page.getByRole("status")).toHaveText("Account link saved.");
@@ -4425,7 +4968,8 @@ test("employees save work preferences visible to eligible managers with change h
   }) => {
     await signIn(page, `exceptions-owner-${suffix}@example.test`, password);
     await page.goto(`/people?venue=${venueId}`);
-    const managerView = page.getByRole("region", { name: "Work preferences for Exception worker" });
+    await page.getByRole("link", { name: "View profile for Exception worker" }).click();
+    const managerView = page.getByRole("region", { name: "Work preferences" });
     await expect(managerView).toContainText("No preferences submitted.");
 
     await signIn(workerPage, `exceptions-worker-${suffix}@example.test`, password);
@@ -4951,6 +5495,7 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await expect(managerPage.getByRole("region", { name: "Department Front of House" })).toBeVisible();
     await expect(managerPage.getByRole("region", { name: "Department Back of House" })).toHaveCount(0);
     await managerPage.goto("/people");
+    await managerPage.getByRole("link", { name: "Add person", exact: true }).click();
     await expect(managerPage.getByRole("region", { name: "New employee" })
       .getByRole("combobox", { name: "Department" }).locator("option"))
       .toHaveText(["Front of House"]);
@@ -5883,20 +6428,23 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     await page.setViewportSize({ width: 375, height: 812 });
     await signIn(page, `shared-owner-${suffix}@example.test`, password);
     await page.goto(`/people?venue=${firstVenue}`);
+    await page.getByRole("link", { name: "View profile for Alex Shared" }).click();
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     const section = page.getByRole("region", { name: "Shared staff across venues" });
     const form = section.getByRole("form", { name: "Link shared staff" });
     await expect(section).toContainText("do not link accounts or grant access");
     await expect(form.locator(`option[value="${outsideEmployee}"]`)).toHaveCount(0);
-    await form.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await expect(form).toContainText("Profile in Harbour: Alex Shared");
     await form.getByLabel("Profile at another venue").selectOption(secondEmployee);
     await form.evaluate((element) => { element.noValidate = true; });
     await form.getByRole("button", { name: "Link profiles" }).click();
     await expect(page.locator('p[role="alert"]')).toContainText("Confirm the shared-profile change");
-    await form.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     await form.getByLabel("Profile at another venue").selectOption(secondEmployee);
     await form.getByLabel("I have confirmed that these profiles belong to the same person.").check();
     await form.getByRole("button", { name: "Link profiles" }).click();
     await expect(page.locator('p[role="status"]')).toHaveText("Shared-worker profiles linked.");
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     await expect(section).toContainText(`Alex Shared — Riverside — ${secondEmployee}`);
     expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
     const linkedAccount = await admin.from("employees").select("auth_user_id").eq("id", secondEmployee).single();
@@ -5914,7 +6462,9 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
       p_business_id: businessId, p_venue_id: firstVenue,
     })).error?.message).toBe("Permission denied");
     await managerPage.goto(`/people?venue=${firstVenue}`);
+    await managerPage.getByRole("link", { name: "View profile for Alex Shared" }).click();
     await expect(managerPage.getByRole("region", { name: "Shared staff across venues" })).toHaveCount(0);
+    await expect(managerPage.getByRole("button", { name: "Manage shared profiles" })).toHaveCount(0);
     await managerPage.goto(roster);
     const create = managerPage.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Automatic shared-worker check");
@@ -5942,6 +6492,8 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     expect(blocked.data.is_published).toBe(false);
 
     await page.goto(`/people?venue=${firstVenue}`);
+    await page.getByRole("link", { name: "View profile for Alex Shared" }).click();
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     const unlink = page.getByRole("form", { name: `Unlink Alex Shared ${firstEmployee}` });
     await unlink.getByLabel("Remove this profile from all its linked venues.").check();
     await unlink.getByRole("button", { name: "Unlink profile" }).click();
@@ -7115,8 +7667,10 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
     });
     expect(secondOpen.error).toBeNull();
     await page.goto(`/people?venue=${firstVenue}`);
+    await page.getByRole("link", { name: "View profile for Alex Clock" }).click();
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     let linkForm = page.getByRole("form", { name: "Link shared staff" });
-    await linkForm.getByLabel("Profile in Harbour").selectOption(firstEmployee);
+    await expect(linkForm).toContainText("Profile in Harbour: Alex Clock");
     await linkForm.getByLabel("Profile at another venue").selectOption(secondEmployee);
     await linkForm.getByLabel("I have confirmed that these profiles belong to the same person.").check();
     await linkForm.getByRole("button", { name: "Link profiles" }).click();
@@ -7125,8 +7679,8 @@ test("employees clock in and out with scoped immutable cross-venue events", asyn
       p_business_id: businessId, p_session_id: secondOpen.data[0].session_id, p_request_id: randomUUID(),
     });
     expect(secondClose.error).toBeNull();
+    await page.getByRole("button", { name: "Manage shared profiles" }).click();
     linkForm = page.getByRole("form", { name: "Link shared staff" });
-    await linkForm.getByLabel("Profile in Harbour").selectOption(firstEmployee);
     await linkForm.getByLabel("Profile at another venue").selectOption(secondEmployee);
     await linkForm.getByLabel("I have confirmed that these profiles belong to the same person.").check();
     await linkForm.getByRole("button", { name: "Link profiles" }).click();
@@ -8849,12 +9403,13 @@ test("owner onboarding follows real staff, draft and publication progress withou
 
     await checklist.getByRole("link", { name: "Add staff" }).click();
     await expect(page).toHaveURL(/\/people/);
+    await page.getByRole("link", { name: "Add person", exact: true }).click();
     const newEmployee = page.getByRole("region", { name: "New employee" });
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("First team member");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
     await newEmployee.getByRole("button", { name: "Add employee" }).click();
-    await expect(page.getByRole("region", { name: "Employee First team member" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "First team member", exact: true })).toBeVisible();
     const employee = await admin.from("employees").select("id")
       .eq("business_id", businessId).eq("name", "First team member").single();
     expect(employee.error).toBeNull();
@@ -9036,6 +9591,8 @@ test("staff invitations deliver separate-browser email and join only the intende
 
     await signIn(page, managerEmail, password);
     await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("link", { name: "View profile for Taylor Invitee" }).click();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     const form = page.getByRole("form", { name: "Invite Taylor Invitee" });
     await expect(form.getByLabel("Invitation email")).toHaveValue(recipientEmail);
     await form.getByRole("button", { name: "Send invitation" }).click();
@@ -9725,6 +10282,8 @@ test("published roster updates reach uninvited staff once after they accept an i
     await expect(page).toHaveURL(new RegExp(
       `/people\\?venue=${venueId}&department=${departmentId}&business=${businessId}$`,
     ));
+    await page.getByRole("link", { name: "View profile for Uninvited worker" }).click();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     const form = page.getByRole("form", { name: "Invite Uninvited worker" });
     await expect(form.getByLabel("Invitation email")).toHaveValue(recipientEmail);
     await form.getByRole("button", { name: "Send invitation" }).click();
@@ -9800,6 +10359,8 @@ test("existing members of another business accept a scoped invitation and switch
 
     await signIn(page, managerEmail, password);
     await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("link", { name: "View profile for Casey Crossover" }).click();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     const form = page.getByRole("form", { name: "Invite Casey Crossover" });
     await expect(form.getByLabel("Invitation email")).toHaveValue(ownerEmail);
     await form.getByRole("button", { name: "Send invitation" }).click();
@@ -9844,7 +10405,7 @@ test("existing members of another business accept a scoped invitation and switch
     await expect(page).toHaveURL(new RegExp(`/\\?business=${ownBusiness}$`));
     await expect(shell.getByText("Own cross cafe", { exact: true })).toBeVisible();
     await page.goto(`/people?business=${ownBusiness}`);
-    await expect(page.getByRole("heading", { name: "Employee profiles" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Your people" })).toBeVisible();
     await expect(page.locator("main")).toContainText("Own venue");
     await expect(page.locator("main")).not.toContainText("Inviting venue");
     await expect(page.getByText("Casey Crossover")).toHaveCount(0);
@@ -9905,6 +10466,8 @@ test("staff invitations reject revocation and expiry and require consent before 
 
     async function send(name, employeeId) {
       await page.goto(`/people?venue=${venueId}`);
+      await page.getByRole("link", { name: `View profile for ${name}` }).click();
+      await page.getByRole("button", { name: "Manage invitation" }).click();
       const form = page.getByRole("form", { name: `Invite ${name}` });
       await form.getByRole("button", { name: "Send invitation" }).click();
       await expect(page.getByRole("status")).toContainText("Invitation email requested");
@@ -9917,6 +10480,8 @@ test("staff invitations reject revocation and expiry and require consent before 
     const resendId = await send("Resend", resendEmployee);
     await new Promise((resolve) => setTimeout(resolve, 1200));
     await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("link", { name: "View profile for Resend" }).click();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     await page.getByRole("form", { name: "Resend invitation for Resend" })
       .getByRole("button", { name: "Resend email" }).click();
     await expect(page.getByRole("status")).toContainText("Invitation email requested");
@@ -9932,6 +10497,8 @@ test("staff invitations reject revocation and expiry and require consent before 
 
     const revokedId = await send("Revoked", revokedEmployee);
     await page.goto(`/people?venue=${venueId}`);
+    await page.getByRole("link", { name: "View profile for Revoked" }).click();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     await page.getByRole("form", { name: "Revoke invitation for Revoked" })
       .getByRole("button", { name: "Revoke invitation" }).click();
     await expect(page.getByRole("status")).toContainText("Invitation revoked");
@@ -9945,6 +10512,7 @@ test("staff invitations reject revocation and expiry and require consent before 
     const expiredId = await send("Expired", expiredEmployee);
     await sql(`update public.staff_invitations set created_at = clock_timestamp() - interval '8 days', expires_at = clock_timestamp() - interval '1 minute' where id = '${expiredId}'::uuid`);
     await page.reload();
+    await page.getByRole("button", { name: "Manage invitation" }).click();
     await expect(page.getByRole("region", { name: "Invitation for Expired" })).toContainText("Expired invitation");
     await expect(page.getByRole("form", { name: "Invite Expired" })).toBeVisible();
     const expiredContext = await browser.newContext({ baseURL: appUrl });
@@ -10069,12 +10637,13 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
     await expect(page).toHaveURL(new RegExp(`/people\\?business=${businessId}$`));
     await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
     await expect(page.getByText("Second private business", { exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Add person", exact: true }).click();
     let newEmployee = page.getByRole("region", { name: "New employee", exact: true });
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("First tab staff");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
     await newEmployee.getByRole("button", { name: "Add employee" }).click();
-    await expect(page.locator("main").getByRole("status")).toBeVisible();
+    await expect(page.locator("main").getByRole("status").filter({ hasText: "Person added." })).toBeVisible();
     await expect(shell.getByText("First private business", { exact: true })).toBeVisible();
     const placed = await admin.from("employees").select("business_id").eq("name", "First tab staff")
       .in("business_id", [businessId, otherBusiness, outsideBusiness]);
@@ -10098,6 +10667,7 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
 
     await secondTab.getByRole("link", { name: "People" }).click();
     await expect(secondTab).toHaveURL(new RegExp(`/people\\?business=${otherBusiness}$`));
+    await secondTab.getByRole("link", { name: "Add person", exact: true }).click();
     newEmployee = secondTab.getByRole("region", { name: "New employee", exact: true });
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Revoked tab staff");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");

@@ -44,6 +44,12 @@ export function serializePeopleFilters(filters: PeopleFilters): string {
   return params.toString();
 }
 
+export function parseProfileRevision(value: unknown): number | null {
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)$/.test(value)) return null;
+  const revision = Number(value);
+  return Number.isSafeInteger(revision) ? revision : null;
+}
+
 export function parsePeopleFilterContext(value: unknown): PeopleFilters | null {
   if (typeof value !== "string" || value.length > 1024) return null;
   const params = new URLSearchParams(value);

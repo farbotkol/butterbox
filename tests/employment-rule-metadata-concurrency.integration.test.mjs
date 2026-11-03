@@ -10,9 +10,9 @@ const url = process.env.BUTTERBOX_TEST_SUPABASE_URL;
 const anonKey = process.env.BUTTERBOX_TEST_SUPABASE_ANON_KEY;
 const serviceKey = process.env.BUTTERBOX_TEST_SUPABASE_SERVICE_KEY;
 
-test("employment metadata serializes competing edits and enforces live tenant scope", {
+test("employment metadata and People sections serialize competing edits and enforce live tenant scope", {
   skip: container ? false : "requires an explicitly configured disposable database container",
-  timeout: 120_000,
+  timeout: 180_000,
 }, async () => {
   assert.ok(url && anonKey && serviceKey);
   const { sql, waitForLock, holdLock } = await disposableDatabase(container, url);
@@ -95,6 +95,45 @@ test("employment metadata serializes competing edits and enforces live tenant sc
     assert.ifError(hiddenDirectory.error);
     assert.equal(hiddenDirectory.count, 0);
     assert.deepEqual(hiddenDirectory.data, []);
+
+    const creationRequest = randomUUID();
+    const creation = {
+      p_business_id: businessId, p_department_id: fohId, p_name: "Concurrent new worker",
+      p_email: "creation@example.test", p_role_title: "Server", p_employment_type: "casual",
+      p_active: true, p_request_id: creationRequest,
+    };
+    const creationGate = await holdLock(
+      `select pg_advisory_xact_lock(hashtextextended('employee-creation:${businessId}:${users.owner}:${creationRequest}', 0))`,
+    );
+    let competingCreations;
+    try {
+      competingCreations = Promise.all([0, 1].map(() =>
+        clients.owner.rpc("create_employee_profile_idempotent", creation)));
+      await waitForWaiters("create_employee_profile_idempotent", 2);
+      await creationGate.release(false);
+      const results = await competingCreations;
+      results.forEach((result) => assert.ifError(result.error));
+      assert.equal(results[0].data, results[1].data, "concurrent retries return one employee");
+      const created = await admin.from("employees").select("id")
+        .eq("business_id", businessId).eq("name", creation.p_name);
+      assert.ifError(created.error);
+      assert.deepEqual(created.data.map((employee) => employee.id), [results[0].data]);
+    } finally {
+      await creationGate.release(false);
+      await Promise.allSettled([competingCreations].filter(Boolean));
+    }
+    const reusedCreation = await clients.owner.rpc("create_employee_profile_idempotent", {
+      ...creation, p_name: "Different worker",
+    });
+    assert.equal(reusedCreation.error?.message, "Request identifier already used");
+    for (const role of ["boh", "worker", "outsider"]) {
+      const deniedCreation = await clients[role].rpc("create_employee_profile_idempotent", {
+        ...creation, p_request_id: randomUUID(),
+      });
+      assert.equal(deniedCreation.error?.message, "Permission denied");
+    }
+    const fohCreation = { ...creation, p_name: "Manager-created worker", p_request_id: randomUUID() };
+    assert.ifError((await clients.foh.rpc("create_employee_profile_idempotent", fohCreation)).error);
 
     const inputs = [
       request("full_time", 0, randomUUID()),
@@ -214,6 +253,132 @@ test("employment metadata serializes competing edits and enforces live tenant sc
     assert.ifError(savedProfile.error);
     assert.equal(savedProfile.data.name, `Concurrent profile ${competingResults.findIndex((result) => !result.error)}`);
     assert.equal(savedProfile.data.profile_revision, profile.data.profile_revision + 1);
+
+    const [extraDepartment, roleOne, roleTwo, secondVenue, thirdVenue,
+      secondDepartment, thirdDepartment, secondEmployee, thirdEmployee] =
+      Array.from({ length: 9 }, () => randomUUID());
+    assert.ifError((await admin.from("venues").insert([
+      { id: secondVenue, business_id: businessId, name: "Second" },
+      { id: thirdVenue, business_id: businessId, name: "Third" },
+    ])).error);
+    assert.ifError((await admin.from("departments").insert([
+      { id: extraDepartment, business_id: businessId, venue_id: venueId, name: "Extra" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "Second" },
+      { id: thirdDepartment, business_id: businessId, venue_id: thirdVenue, name: "Third" },
+    ])).error);
+    assert.ifError((await admin.from("job_roles").insert([
+      { id: roleOne, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Barista" },
+      { id: roleTwo, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Runner" },
+    ])).error);
+    assert.ifError((await admin.from("employees").insert([
+      { id: secondEmployee, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment,
+        name: "Second worker", role_title: "Server" },
+      { id: thirdEmployee, business_id: businessId, venue_id: thirdVenue, department_id: thirdDepartment,
+        name: "Third worker", role_title: "Server" },
+    ])).error);
+
+    async function compete(functionName, lockStatement, requests, staleMessage) {
+      const gate = await holdLock(lockStatement);
+      let pending;
+      try {
+        pending = Promise.all(requests.map(({ client, args }) => client.rpc(functionName, args)));
+        await waitForWaiters(functionName, 2);
+        await gate.release(false);
+        const results = await pending;
+        assert.equal(results.filter((result) => !result.error).length, 1, `${functionName}: one edit wins`);
+        assert.equal(results.find((result) => result.error)?.error.message, staleMessage);
+        return results.findIndex((result) => !result.error);
+      } finally {
+        await gate.release(false);
+        await Promise.allSettled([pending].filter(Boolean));
+      }
+    }
+
+    const employeeLock = `select id from public.employees where id = '${employeeId}'::uuid for update`;
+    const departmentChoices = [bohId, extraDepartment];
+    const departmentWinner = await compete("set_employee_departments_checked", employeeLock,
+      departmentChoices.map((choice) => ({
+        client: clients.owner,
+        args: { p_business_id: businessId, p_employee_id: employeeId,
+          p_department_ids: [fohId, choice], p_expected_department_ids: [fohId] },
+      })), "Employee departments changed; refresh before saving");
+    const departments = await admin.from("employee_departments").select("department_id").eq("employee_id", employeeId);
+    assert.ifError(departments.error);
+    assert.deepEqual(departments.data.map((item) => item.department_id).sort(),
+      [fohId, departmentChoices[departmentWinner]].sort());
+
+    const roleChoices = [roleOne, roleTwo];
+    const roleWinner = await compete("set_employee_eligible_roles_checked", employeeLock,
+      roleChoices.map((choice, index) => ({
+        client: index ? clients.foh : clients.owner,
+        args: { p_business_id: businessId, p_employee_id: employeeId, p_department_id: fohId,
+          p_job_role_ids: [choice], p_expected_job_role_ids: [] },
+      })), "Employee roles changed; refresh before saving");
+    const rolesAfterRace = await admin.from("employee_job_roles").select("job_role_id").eq("employee_id", employeeId);
+    assert.ifError(rolesAfterRace.error);
+    assert.deepEqual(rolesAfterRace.data.map((item) => item.job_role_id), [roleChoices[roleWinner]]);
+    assert.ifError((await clients.owner.rpc("set_employee_eligible_roles", {
+      p_business_id: businessId, p_employee_id: employeeId, p_department_id: fohId, p_job_role_ids: roleChoices,
+    })).error);
+
+    const accountWinner = await compete("set_employee_auth_user_checked", employeeLock,
+      [users.owner, null].map((userId) => ({
+        client: clients.owner,
+        args: { p_business_id: businessId, p_employee_id: employeeId, p_user_id: userId,
+          p_expected_profile_revision: savedProfile.data.profile_revision },
+      })), "Employee profile changed; refresh before saving");
+    const accountAfterRace = await admin.from("employees").select("auth_user_id, profile_revision")
+      .eq("id", employeeId).single();
+    assert.ifError(accountAfterRace.error);
+    assert.equal(accountAfterRace.data.auth_user_id, [users.owner, null][accountWinner]);
+
+    const primaryWinner = await compete("set_employee_primary_role_checked", employeeLock,
+      roleChoices.map((choice, index) => ({
+        client: index ? clients.foh : clients.owner,
+        args: { p_business_id: businessId, p_employee_id: employeeId, p_job_role_id: choice,
+          p_expected_profile_revision: accountAfterRace.data.profile_revision },
+      })), "Employee profile changed; refresh before saving");
+    const primary = await admin.from("employee_job_roles").select("job_role_id")
+      .eq("employee_id", employeeId).eq("is_primary", true).single();
+    assert.ifError(primary.error);
+    assert.equal(primary.data.job_role_id, roleChoices[primaryWinner]);
+
+    const otherChoices = [secondEmployee, thirdEmployee];
+    const sharedLock = `select pg_advisory_xact_lock(hashtextextended('shared-worker-links:' || '${businessId}'::text, 0))`;
+    const sharedWinner = await compete("link_shared_worker_profiles_checked", sharedLock,
+      otherChoices.map((choice) => ({
+        client: clients.owner,
+        args: { p_business_id: businessId, p_venue_id: venueId, p_employee_id: employeeId,
+          p_other_employee_id: choice, p_expected_linked_ids: [] },
+      })), "Shared-worker links changed; refresh before saving");
+    const shared = await clients.owner.rpc("list_shared_worker_profiles", {
+      p_business_id: businessId, p_venue_id: venueId,
+    }).eq("employee_id", employeeId);
+    assert.ifError(shared.error);
+    assert.deepEqual(shared.data.map((item) => item.linked_employee_id), [otherChoices[sharedWinner]]);
+
+    const sectionMembershipGate = await holdLock(
+      `update public.business_memberships set role = 'employee' where business_id = '${businessId}'::uuid and user_id = '${users.foh}'::uuid returning id`,
+    );
+    let revokedSectionWrite;
+    try {
+      revokedSectionWrite = Promise.resolve(clients.foh.rpc("set_employee_eligible_roles_checked", {
+        p_business_id: businessId, p_employee_id: employeeId, p_department_id: fohId,
+        p_job_role_ids: roleChoices, p_expected_job_role_ids: roleChoices,
+      }));
+      await waitForLock("set_employee_eligible_roles_checked");
+      await sectionMembershipGate.release(true);
+      assert.equal((await revokedSectionWrite).error?.message, "Permission denied",
+        "section access is rechecked after a concurrent role change");
+      assert.equal((await clients.foh.rpc("create_employee_profile_idempotent", fohCreation)).error?.message,
+        "Permission denied", "a creation retry cannot bypass a revoked membership");
+    } finally {
+      await sectionMembershipGate.release(false);
+      await Promise.allSettled([revokedSectionWrite].filter(Boolean));
+    }
+    assert.ifError((await admin.from("business_memberships").update({
+      role: "foh_manager", venue_id: venueId, department_id: fohId,
+    }).eq("business_id", businessId).eq("user_id", users.foh)).error);
 
     const membershipGate = await holdLock(
       `update public.business_memberships set role = 'employee' where business_id = '${businessId}'::uuid and user_id = '${users.foh}'::uuid returning id`,

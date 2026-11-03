@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-04 00:44 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 00:46 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
+- **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, Done; feature commit pending).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
-- **Phase:** Testing and debugging.
-- **Activity:** Running final isolated People and preserved-workflow regressions and refreshing the five-width synthetic screenshots.
+- **Phase:** Complete; preparing the verified feature commit.
+- **Activity:** Recording criterion-by-criterion evidence and reviewing the feature diff before committing and pushing it.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** A separate loopback-only public-mode app and the disposable database passed owner/FOH/BOH directory scope and direct disabled-invitation checks. Adapted the future showcase suites to the directory/profile UI without running them against or deploying to the protected older previews. Clarified that the active-person count is permission-scoped. The final serialized workflow run has reached browser execution; its result is not yet known. No UX changes have been deployed to either showcase.
-- **Tests and results:** Focused People and related pgTAP **333/333**; competing creation/profile/employment/section writes and revoked permission **1/1**; public-mode browser **1/1**; People/help unit tests **15/15**; changed-file ESLint and TypeScript passed. A single-pass isolated public-mode webpack build passed. Previously, the five-width scenario, loading/recovery, double-submit/lifecycle, stale-section, qualified-role and four corrected regression scenarios passed in separate runs. Both protected showcase login endpoints returned **200** during this checkpoint.
-- **Failing tests:** Two sandboxed Turbopack builds and one subsequent mixed-cache Turbopack build failed before tests because a loader worker exited. The public-mode check passed with a single-pass webpack build. After removing only the disposable snapshot's generated build directory, the standard split-build rerun reached browser execution; the overall result is pending.
-- **Blockers requiring intervention:** None identified. Final workflow results, refreshed screenshot verification and acceptance evidence remain pending; keep both running showcases and their synthetic database untouched.
-- **Documentation:** User Guide updated and contextual Help reads it; guide/link unit checks passed. Criterion-by-criterion evidence and the final documentation review remain in progress.
-- **Next concrete action:** Finish the serialized People regression run, verify the refreshed screenshots, record actual acceptance evidence, then commit the feature.
+- **Progress since previous report:** The final isolated production-build run passed all seven serialized People and preserved-workflow scenarios. All 35 actual synthetic before/after screenshots were refreshed and verified pixel-identical to their lossless WebP copies. Acceptance criteria and deferred risks are recorded in implementation progress. No UX changes have been deployed to either showcase.
+- **Tests and results:** Focused People and related pgTAP **333/333**; competing creation/profile/employment/section writes and revoked permission **1/1**; final People workflow browsers **7/7**; public-mode browser **1/1**; loading/recovery browser **1/1**; People/help unit tests **15/15**; changed-file ESLint, TypeScript and isolated split production build passed. Qualified-role and four corrected adjacent browser regressions also passed in separate runs. Both protected showcase login endpoints returned **200** at 00:45 AEDT.
+- **Failing tests:** No unresolved targeted failure. Two sandboxed Turbopack attempts and one subsequent mixed-cache attempt failed before tests; a single-pass public-mode webpack build passed, and the final normal split build and seven browser scenarios passed after clearing only the disposable snapshot build output.
+- **Blockers requiring intervention:** None for BB-UXFIX-001. Consolidated owner UX review and any deployment to the existing showcases remain separate; full-repository and physical-device regression were not run.
+- **Documentation:** Updated — User Guide, contextual Help, acceptance evidence and 35 real synthetic review screenshots.
+- **Next concrete action:** Review the staged feature and evidence for secrets, commit and push it, verify the remote SHA, then start BB-UXFIX-002.
 - **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
-- **Push outcome:** Documentation checkpoint `e010c3596a49bef42edfaf5e70baece9782a2871` was pushed and its remote SHA verified. This new documentation-only checkpoint is pending push.
+- **Push outcome:** Documentation checkpoint `9bb0009584828c125e7cddae418763535a2222a3` was pushed and its remote SHA verified. The verified feature commit is pending.
 
 ## Public synthetic showcase — completed operator request
 

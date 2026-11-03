@@ -92,9 +92,11 @@ test("owner signs in over HTTPS and reviews synthetic people, rosters, reports a
   expect(session.length).toBeGreaterThan(0);
   expect(session.every((cookie) => cookie.secure && cookie.httpOnly && cookie.sameSite === "Lax")).toBe(true);
   await page.goto(`/people?business=${state.plan.businessId}&venue=${state.plan.venueId}`);
-  await expect(page.getByRole("region", { name: /^Employee Fictional / })).toHaveCount(14);
-  await expect(page.getByText("Email invitations are unavailable in the public demo.").first()).toBeVisible();
-  await expect(page.getByRole("button", { name: "Send invitation", exact: true })).toHaveCount(0);
+  const people = page.getByRole("list", { name: "People directory", exact: true });
+  await expect(people.getByRole("listitem")).toHaveCount(14);
+  await people.getByRole("link", { name: `View profile for ${state.plan.staff[0].name}`, exact: true }).click();
+  await expect(page.getByText("Email invitations are unavailable in the public demo.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Manage invitation", exact: true })).toHaveCount(0);
   await page.goto(`/roster?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.currentWeek}`);
   await expect(page.getByRole("heading", { name: "Weekly roster", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Publication history", exact: true })).toBeVisible();
@@ -122,12 +124,13 @@ for (const [role, start] of [["foh_manager", 0], ["boh_manager", 7]]) {
   test(`public ${role} is limited to their department and cannot download payroll`, async ({ page }) => {
     await signIn(page, role);
     await page.goto(`/people?business=${state.plan.businessId}&venue=${state.plan.venueId}`);
-    await expect(page.getByRole("region", { name: /^Employee Fictional / })).toHaveCount(7);
+    const people = page.getByRole("list", { name: "People directory", exact: true });
+    await expect(people.getByRole("listitem")).toHaveCount(7);
     for (const person of state.plan.staff.slice(start, start + 7)) {
-      await expect(page.getByRole("region", { name: `Employee ${person.name}`, exact: true })).toBeVisible();
+      await expect(people.getByRole("link", { name: `View profile for ${person.name}`, exact: true })).toBeVisible();
     }
     for (const person of state.plan.staff.slice(start === 0 ? 7 : 0, start === 0 ? 14 : 7)) {
-      await expect(page.getByRole("region", { name: `Employee ${person.name}`, exact: true })).toHaveCount(0);
+      await expect(people.getByRole("link", { name: `View profile for ${person.name}`, exact: true })).toHaveCount(0);
     }
     await page.goto(`/roster?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.currentWeek}`);
     await expect(page.getByRole("heading", { name: "Weekly roster", exact: true })).toBeVisible();

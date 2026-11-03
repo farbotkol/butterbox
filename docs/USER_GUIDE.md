@@ -250,33 +250,51 @@ the current scope. Do not treat a hidden button as the security boundary.
 The optional public showcase preview does not send staff invitations. Its review
 accounts are provisioned by the operator.
 
-1. Open **People** (`/people`, heading **Employee profiles**). Use **Search
-   team**, **Venue**, **Department**, **Role** and **Status**, then **Filter
-   team**. **Archived** records are historical, not deleted.
-2. Under **Add employee**, supply the profile and primary department, then
-   **Add employee**. On an existing profile choose **Save employee**.
-   Set **Status** to **Archived** rather than deleting historical records;
-   select an active status and save to reactivate. Managers of additional
-   departments may see the profile without being able to edit its home details.
-3. Use **Save departments** for additional eligible departments, **Save
-   eligible roles** for qualifications and **Set primary role** for the
-   **Primary qualified role**. Choose a replacement primary role before removing
-   its qualification/department. Changing the profile job title manually can
-   clear a different primary qualified role. Inactive roles are unavailable for
-   new work; qualification alone does not override availability/conflicts.
-4. Under **Staff invitation**, enter **Invitation email** and **Send
-   invitation** for an active, unlinked employee in an active department.
-   The recipient verifies the email and chooses their own password; an existing
-   Butterbox account joins this business with employee access, not inherited
-   permissions from another business. Invitations expire after seven days.
-   Use **Resend email** or **Revoke invitation** as appropriate; issue a new
-   invitation after expiry. Only the intended authenticated recipient may accept.
-5. **Save account link** links an existing eligible business member to the
-   profile for self-service. This is distinct from an invitation. Authorized
-   cross-venue managers may **Link profiles**/**Unlink profile** under **Shared
-   staff across venues** after checking the identity confirmations. Linking
-   affects cross-venue conflict/attendance identity checks, not permission scope.
-6. Choose **Review employment metadata** on a profile. Supply **Effective date**,
+1. Open **People** (`/people`, heading **Your people**). Use **Search team**,
+   **Venue**, **Department**, **Role (exact title or qualification)**,
+   **Status** and **Sort by**, then **Filter team**. **Clear filters** resets
+   the filters; use the page links for more results. Counts and records reflect
+   your permitted scope, not the entire business. Choose **View profile** for a
+   person; **Back to people** retains the directory context. Open
+   **Help with managing people** for this guidance in the application.
+2. Choose **Add person**, complete the initial profile and primary department,
+   then **Add employee**. The new profile opens with a confirmation. Existing
+   profiles open read-only: choose **Edit overview**, make changes and **Save
+   employee**, or **Cancel** and confirm **Discard changes** if prompted.
+   Wait while a save is pending. If a connection is interrupted, reload and
+   check the directory or profile before starting a new request.
+   Reload and review the current details if another person changed the profile
+   or section while you were editing. Managers of additional departments may
+   see a profile without being able to edit its home details.
+3. In **Employment**, choose **Archive person** or **Reactivate person**,
+   review the consequences and confirm the status change. Archiving is not
+   deletion: historical shifts, attendance events, timesheet decisions and audit
+   records remain, and archived staff are excluded from new assignments by
+   default.
+4. In **Roles & departments**, use **Edit departments** and **Save
+   departments** for additional eligible departments, the relevant **Edit
+   qualified roles** and **Save eligible roles**, or **Edit primary role** and
+   **Set primary role**. Choose a replacement primary role before removing its
+   qualification/department. Changing the profile job title manually can clear
+   a different primary qualified role. Inactive roles are unavailable for new
+   work; qualification alone does not override availability or conflicts.
+5. In **Account & invitations**, choose **Manage invitation**. For an active,
+   unlinked employee in an active department, enter **Invitation email** and
+   **Send invitation**. The recipient verifies the email and chooses their own
+   password; an existing Butterbox account joins this business with employee
+   access, not inherited permissions from another business. Invitations expire
+   after seven days. Use **Resend email** or **Revoke invitation** as
+   appropriate; issue a new invitation after expiry. Only the intended
+   authenticated recipient may accept. Delivery requires a configured email
+   service, and a failed request is reported; the public showcase does not
+   send invitations.
+6. An owner can choose **Edit account link** and **Save account link** to link
+   an eligible existing business member for self-service; this is distinct from
+   an invitation. An owner can choose **Manage shared profiles** and **Link
+   profiles**/**Unlink profile** after checking the identity confirmations.
+   Linking affects cross-venue conflict/attendance identity checks, not
+   permission scope.
+7. Choose **Review employment metadata** on a profile. Supply **Effective date**,
    **Employment basis** and optional classification/award/contract references.
    Review dated history before saving a new record: future dates do not apply
    yet, and a later same-date record supersedes rather than deletes the earlier

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  parsePeopleFilterContext, parsePeopleFilters, peopleHref, serializePeopleFilters,
+  parsePeopleFilterContext, parsePeopleFilters, parseProfileRevision, peopleHref, serializePeopleFilters,
 } from "../src/lib/people-directory.ts";
 
 const department = "d7100000-0000-4000-8000-000000000001";
@@ -31,6 +31,14 @@ test("filter context rejects duplicate, unknown and oversized parameters", () =>
   assert.equal(parsePeopleFilterContext("return=https%3A%2F%2Fexample.test"), null);
   assert.equal(parsePeopleFilterContext("q=" + "a".repeat(1025)), null);
   assert.equal(parsePeopleFilterContext(null), null);
+});
+
+test("profile revisions reject ambiguous and unsafe values", () => {
+  assert.equal(parseProfileRevision("0"), 0);
+  assert.equal(parseProfileRevision("123"), 123);
+  for (const value of ["", "-1", "01", "1.5", "9007199254740992", null, 2]) {
+    assert.equal(parseProfileRevision(value), null);
+  }
 });
 
 test("directory and profile URLs preserve only normalized, encoded filter context", () => {

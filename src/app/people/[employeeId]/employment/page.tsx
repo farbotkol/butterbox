@@ -9,10 +9,14 @@ import {
 } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import { readAllPages } from "@/lib/paginated-rows";
+import { parsePeopleFilters, peopleHref as scopedPeopleHref, serializePeopleFilters } from "@/lib/people-directory";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getVenueDate, getWorkspace } from "@/lib/workspace";
 
-type Search = { business?: string; venue?: string; error?: string; saved?: string };
+type Search = {
+  business?: string; venue?: string; error?: string; saved?: string;
+  q?: string; department?: string; role?: string; status?: string; sort?: string; page?: string;
+};
 
 const errorMessages: Record<string, string> = {
   permission: "You cannot manage employment details for this worker.",
@@ -49,6 +53,12 @@ export default async function EmploymentMetadataPage({
     redirect("/people?error=permission");
   }
   const peopleHref = withBusiness(`/people?venue=${encodeURIComponent(workspace.venue.id)}`, workspace.business.id);
+  const filters = parsePeopleFilters(search);
+  if (!filters) {
+    console.error("Invalid employment profile return context.");
+    redirect(`${peopleHref}&error=filter`);
+  }
+  const profileHref = scopedPeopleHref(workspace.business.id, workspace.venue.id, filters, employeeId);
   if (!["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"]
     .includes(workspace.membership.role)) redirect(`${peopleHref}&error=permission`);
 
@@ -91,7 +101,7 @@ export default async function EmploymentMetadataPage({
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id}
       businessCount={workspace.businesses.length} venueName={workspace.venue.name}
       email={workspace.user.email ?? ""} role={workspace.membership.role}>
-      <Link href={peopleHref} className="text-sm font-semibold text-ocean underline">Back to people</Link>
+      <Link href={profileHref} className="text-sm font-semibold text-ocean underline">Back to profile</Link>
       <h1 className="mt-4 break-words text-3xl font-semibold">Employment metadata{employee.data ? ` for ${employee.data.name}` : ""}</h1>
       <p className="mt-3 text-sm leading-6 text-muted">
         These are tenant-supplied references, not verified award interpretation, payroll calculations or compliance advice.
@@ -135,6 +145,8 @@ export default async function EmploymentMetadataPage({
             <input type="hidden" name="business_id" value={workspace.business.id} />
             <input type="hidden" name="venue_id" value={workspace.venue.id} />
             <input type="hidden" name="employee_id" value={employeeId} />
+            <input type="hidden" name="people_origin" value="profile" />
+            <input type="hidden" name="people_filters" value={serializePeopleFilters(filters)} />
             <input type="hidden" name="revision" value={snapshot.revision} />
             <input type="hidden" name="request_id" value={randomUUID()} />
             <label className="text-sm">Effective date

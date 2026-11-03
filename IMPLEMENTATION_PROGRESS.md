@@ -2,9 +2,34 @@
 
 ## Execution summary
 
-- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 In Progress; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. Start with People, preserving existing actions, tenant/role scope and dated employment rules. Before screenshots are captured; after screenshots, all five required post-change viewport checks and complete isolated role/security acceptance remain pending. The existing showcases must not be changed or redeployed.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 Done; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** People now uses a directory → selected detail → contextual Edit/Save/Cancel pattern. The next story is Departments & Roles. The existing showcases have not received these changes and must not be changed or redeployed without owner approval.
 
 - **BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, Backlog, not started).** Owner-approved four-group menu architecture: My Work, Team Management, Venue Management and Business. Story added to master backlog and index; implementation, screenshots, permission regression and accessibility checks remain pending. This is separate from the first four Wave 1 directory/detail/edit stories; no product code or showcase changed.
+
+- **BB-UXFIX-001 — People Directory and Employee Profile, 2026-11-04 00:46 AEDT: Done.** The scoped, paginated directory and employee-specific profile preserve the existing employee, employment, qualification, department, invitation, account and shared-worker rules. Profile and section writes check the displayed revision or snapshot; employee creation has a scoped idempotency key and rejects changed retries. These changes were tested only against the verified disposable `butterbox-report-002-55b9` project and a separate application snapshot. Both protected showcase login endpoints returned HTTP **200** at 00:45 AEDT; neither showcase was reset, reseeded, redeployed or reconfigured.
+
+  | Criterion | Implementation and actual verification | Result |
+  | --- | --- | --- |
+  | UX1-01 Directory and counts | `/people` uses a scoped directory RPC, 25-row pagination and labelled visible-venue active/invitation counts. The production-browser directory scenario checked counts before and after filtering, plus 1,001-record pagination. | Pass |
+  | UX1-02 Search, filters and sorting | Validated search, venue, department, exact role, status and sort parameters retain safe URL context. The directory browser and filter unit tests passed, including invalid, duplicate, wildcard, filtered-empty and unavailable-page cases. | Pass |
+  | UX1-03 Readable scoped rows | Compact rows show authorized identity, primary department/qualification, employment and invitation state without employee edit forms. The seven-scenario browser run and scoped directory pgTAP passed. | Pass |
+  | UX1-04 Mobile directory | Actual 375, 390, 768, 1024 and 1440 px production-browser captures passed page-overflow and serious/critical axe checks, including long unbroken synthetic names and email addresses. | Pass |
+  | UX1-05 Profile routes | Employee-specific profiles retain directory context; invalid, cross-business and unavailable-venue IDs show safe states without exposing private data. Owner/admin/manager/employee and two-business/two-venue browser checks passed. | Pass |
+  | UX1-06 Read-first overview | Profile headers and permitted contact, department, role and employment details are displayed as readable values. The five-width profile and refresh checks passed. | Pass |
+  | UX1-07 Focused sections | Overview, Employment, Roles & departments, Account & invitations, work preferences and owner-only shared profiles retain their existing actions and specialist employment page. Separate employment, preferences, shared-worker, qualified-role and invitation browser scenarios passed. | Pass |
+  | UX1-08 Edit, save and cancel | Contextual editors require explicit Edit, Save or Cancel; dirty changes are confirmed before discard, pending submissions are guarded, and stale saves produce feedback. Browser persistence, cancel, keyboard, stale-section and real competing-write integration checks passed. | Pass |
+  | UX1-09 Create person | Add person opens a focused form and returns to the created profile. The lifecycle browser and real concurrent creation checks passed, including rapid duplicate submission, mismatched request reuse and permission revocation. | Pass |
+  | UX1-10 Lifecycle and permissions | Confirmed archive/reactivation retains shift, original attendance, timesheet-decision and audit history. Focused pgTAP and owner/admin/GM/FOH/BOH/employee browser tests passed; forged and cross-scope updates were denied. An isolated public-mode browser also confirmed disabled invitation UI and direct actions. | Pass |
+  | UX1-11 Visual language and accessibility | Actual synthetic before/after screenshots show the existing Butterbox shell and Coastal Wave styling. Keyboard search, profile navigation, forms, focus restoration and reduced motion passed; all five widths had no serious/critical axe findings or page overflow. Owner visual review remains separate from this engineering acceptance. | Pass |
+  | UX1-12 Failure and scale | Loading, empty, filtered-empty, invalid, stale and failed-save/recovery states were exercised. Directory pagination and scoped counts were tested with 1,001 synthetic records. | Pass |
+  | UX1-DOC Documentation | [User Guide](docs/USER_GUIDE.md) and its in-app contextual Help describe actual permissions, actions, failures and public invitation limits; focused guide/help tests passed. | Pass — **Documentation: updated** |
+  | UX1-SAFE Showcase protection | Test app, public-mode container and disposable database were separate; the temporary container was removed. Local and public preview login checks returned **200** and no UXFIX deployment was performed. | Pass |
+
+  **Tests selected and why:** The eight People, role, department, employment, preference and invitation pgTAP files passed **333/333** authorization, lifecycle and regression assertions; the real competing-write/revoked-permission integration passed **1/1**. A serialized split-production-build run passed **7/7** browser scenarios: creation/lifecycle, five-width directory/profile and role scope, stale sections, employment history, preferences, shared workers and local Mailpit invitations. The separate public-mode restriction/scope and loading/failed-save recovery browsers each passed **1/1**; qualified-role and four corrected adjacent browser regressions also passed in separate runs. People/help unit tests passed **15/15**, and changed-file ESLint, TypeScript and the final isolated Turbopack production build passed. An initial strict-sandbox Turbopack build and a subsequent mixed-build-cache attempt failed before tests; a single-pass sandboxed webpack public-mode build passed, and the normal build passed after clearing only the disposable snapshot's generated build directory.
+
+  **Actual visual review evidence:** [375 px before](docs/evidence/BB-UXFIX-001/before-375.webp) → [directory](docs/evidence/BB-UXFIX-001/after-directory-375.webp) / [profile](docs/evidence/BB-UXFIX-001/after-profile-375.webp); [1440 px before](docs/evidence/BB-UXFIX-001/before-1440.webp) → [directory](docs/evidence/BB-UXFIX-001/after-directory-1440.webp) / [profile](docs/evidence/BB-UXFIX-001/after-profile-1440.webp). The [complete 35-image set](docs/evidence/BB-UXFIX-001/) also contains filtered-empty, edit, validation and confirmation states at all five widths. Every lossless WebP was verified pixel-identical and dimension-identical to its actual synthetic PNG capture; the repeated long synthetic name is an intentional overflow fixture.
+
+  **Deferred and remaining risk:** The complete repository regression, physical-device review and consolidated owner UX review were not run. Future local/public showcase browser specifications were adapted to this UI, but were not run against the protected older deployments, which intentionally still serve the previous UI. The public-mode test used an isolated synthetic backend and did not verify a future live gateway deployment; external invitation delivery was not exercised. A production rollout, payroll/award compliance and owner visual approval are not implied. **Next:** begin BB-UXFIX-002 only after this verified story is committed and pushed.
 
 - **BB-UXFIX-001 technical checkpoint, 2026-11-03 23:42 AEDT:** Captured
   actual pre-change People screenshots at 375, 390, 768, 1024 and 1440 px in
@@ -26,8 +51,8 @@
   when the user-facing workflow is implemented and verified.
 
 - Total stories: **132** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **59**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **67**.
+  In Progress: **0**. Blocked: **6**. Not started (Backlog): **59**.
 - **Owner-requested public synthetic preview, 2026-11-03:** The existing
   showcase database remains isolated and shared with its local review app.
   A separately built app snapshot (`dfaf495` baseline plus the public-preview

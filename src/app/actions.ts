@@ -15,11 +15,12 @@ import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
-import { employmentMetadataFailure, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
+import { employmentMetadataFailure, isEmploymentBasis, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import {
   isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
 } from "@/lib/payroll-mapping";
+import { parsePeopleFilterContext, parseProfileRevision, peopleHref } from "@/lib/people-directory";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
 import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
@@ -66,6 +67,11 @@ function uuidList(formData: FormData, key: string, maxCount: number) {
   return result;
 }
 
+function formProfileRevision(formData: FormData) {
+  const revisions = formData.getAll("profile_revision");
+  return revisions.length === 1 ? parseProfileRevision(revisions[0]) : null;
+}
+
 function businessContext(formData: FormData) {
   const values = formData.getAll("business_id");
   return { businessId: values.length > 1 ? "invalid" : values[0] };
@@ -75,6 +81,28 @@ function contextVenue(formData: FormData) {
   const values = formData.getAll("venue_id");
   if (values.length === 0 || (values.length === 1 && values[0] === "")) return undefined;
   return values.length === 1 && typeof values[0] === "string" ? values[0] : "invalid";
+}
+
+function peopleDestination(formData: FormData, businessId: string, venueId: string, createdId?: string) {
+  const origins = formData.getAll("people_origin");
+  if (origins.length === 0) return `/people?venue=${encodeURIComponent(venueId)}`;
+  const contexts = formData.getAll("people_filters");
+  const filters = contexts.length === 1 ? parsePeopleFilterContext(contexts[0]) : null;
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const employeeId = createdId ?? (employeeIds?.length === 1 ? employeeIds[0] : undefined);
+  if (origins.length !== 1 || !["profile", "new"].includes(String(origins[0])) || !filters ||
+    (origins[0] === "profile" && (!employeeId || !isPayrollUuid(employeeId))) ||
+    (createdId !== undefined && !isPayrollUuid(createdId))) {
+    console.error("Invalid People return context.");
+    redirect(withBusiness(`/people?venue=${encodeURIComponent(venueId)}&error=filter`, businessId));
+  }
+  return peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+}
+
+function revalidatePeople(formData: FormData) {
+  revalidatePath("/people");
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  if (employeeIds?.length === 1) revalidatePath(`/people/${employeeIds[0]}`);
 }
 
 function collapsedRosterQuery(formData: FormData) {
@@ -239,10 +267,10 @@ export async function createStaffInvitationAction(formData: FormData) {
     console.error("Invalid invitation scope.");
     redirect("/people?error=invite");
   }
-  const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
   const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
+  const destination = peopleDestination(formData, workspace.business.id, workspace.venue.id);
   const rawEmail = formData.get("email");
   const email = typeof rawEmail === "string" ? rawEmail.trim().toLowerCase() : "";
   if (!email || email.length > 254) redirect(`${destination}&error=invite-email`);
@@ -258,7 +286,7 @@ export async function createStaffInvitationAction(formData: FormData) {
     redirect(`${destination}&error=${reason}`);
   }
   const sent = await sendInvitationEmail(email, data);
-  revalidatePath("/people");
+  revalidatePeople(formData);
   redirect(`${destination}&${sent ? "saved=invite-sent" : "error=invite-send"}`);
 }
 
@@ -269,16 +297,22 @@ async function findManageableInvitation(formData: FormData) {
     console.error("Invalid invitation selection.");
     redirect("/people?error=invite");
   }
-  const destination = `/people?venue=${encodeURIComponent(venueIds[0])}`;
   const workspace = await getWorkspace(venueIds[0], businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
+  const destination = peopleDestination(formData, workspace.business.id, workspace.venue.id);
   const { data, error } = await workspace.supabase.rpc("list_pending_staff_invitations", {
     p_business_id: workspace.business.id, p_venue_id: venueIds[0],
   }).eq("id", invitationIds[0]).maybeSingle();
   const invitation = parsePendingStaffInvitation(data);
   if (error || !invitation) {
     console.error("Could not load the selected invitation.", { code: error?.code, message: error?.message });
+    redirect(`${destination}&error=invite`);
+  }
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  if (formData.get("people_origin") === "profile" &&
+    (employeeIds?.length !== 1 || employeeIds[0] !== invitation.employee_id)) {
+    console.error("Invitation does not match the selected profile.");
     redirect(`${destination}&error=invite`);
   }
   return { workspace, invitation, destination };
@@ -304,7 +338,7 @@ export async function revokeStaffInvitationAction(formData: FormData) {
     console.error("Could not revoke an invitation.", { code: error.code, message: error.message });
     redirect(`${destination}&error=invite`);
   }
-  revalidatePath("/people");
+  revalidatePeople(formData);
   redirect(`${destination}&saved=invite-revoked`);
 }
 
@@ -358,33 +392,65 @@ export async function saveEmployeeAction(formData: FormData) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36);
-  const destination = `/people?venue=${encodeURIComponent(venueId || workspace.venue.id)}`;
+  const destination = peopleDestination(formData, workspace.business.id, venueId || workspace.venue.id);
 
-  const active = formData.get("active");
+  const active = singleFormString(formData, "active");
   const revisions = formData.getAll("employment_revision");
   const employmentRevision = revisions.length === 1 ? payrollMappingRevision(revisions[0]) : null;
-  if ((active !== "true" && active !== "false") || employmentRevision === null) {
-    console.error("Invalid employee status or employment revision submitted.");
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  const requestIds = uuidList(formData, "request_id", 1);
+  const name = singleFormString(formData, "name");
+  const email = singleFormString(formData, "email");
+  const roleTitle = singleFormString(formData, "role_title");
+  const employmentType = singleFormString(formData, "employment_type");
+  const profileRevisions = formData.getAll("profile_revision");
+  const profileRevision = profileRevisions.length === 1 ? parseProfileRevision(profileRevisions[0]) : null;
+  const confirmation = formData.getAll("confirmed");
+  if ((active !== "true" && active !== "false") || employmentRevision === null || !employeeIds || !requestIds ||
+    departmentIds?.length !== 1 || name === null || !name.trim() || name.trim().length > 100 ||
+    email === null || email.trim().length > 254 || roleTitle === null || !roleTitle.trim() ||
+    roleTitle.trim().length > 80 || !isEmploymentBasis(employmentType) ||
+    (employeeIds.length === 1 && profileRevision === null) ||
+    (employeeIds.length === 0 && profileRevisions.length !== 0) ||
+    (employeeIds.length === 0 && (employmentRevision !== 0 || confirmation.length !== 0)) ||
+    (employeeIds.length === 0 && requestIds.length !== 1) ||
+    (employeeIds.length === 1 && requestIds.length !== 0) ||
+    confirmation.length > 1 || (confirmation.length === 1 && confirmation[0] !== "yes")) {
+    console.error("Invalid employee status, profile or employment revision submitted.");
     redirect(`${destination}&error=save`);
   }
-  const { error } = await workspace.supabase.rpc("save_employee_profile_checked", {
+  const profile = {
     p_business_id: workspace.business.id,
-    p_department_id: text(formData, "department_id", 36),
-    p_employee_id: text(formData, "employee_id", 36) || null,
-    p_name: text(formData, "name", 100),
-    p_email: text(formData, "email", 254),
-    p_role_title: text(formData, "role_title", 80),
-    p_employment_type: text(formData, "employment_type", 16),
+    p_department_id: departmentIds[0],
+    p_name: name.trim(),
+    p_email: email.trim(),
+    p_role_title: roleTitle.trim(),
+    p_employment_type: employmentType,
     p_active: active === "true",
-    p_expected_employment_revision: employmentRevision,
-  });
-  if (error) {
-    console.error("Employee profile save failed.", { code: error.code, message: error.message });
-    const code = error.message === "Employment metadata changed; refresh before saving" ? "employment-stale"
-      : error.message === "Permission denied" ? "permission" : "save";
+  };
+  const { data, error } = employeeIds.length === 0
+    ? await workspace.supabase.rpc("create_employee_profile_idempotent", {
+      ...profile, p_request_id: requestIds[0],
+    })
+    : await workspace.supabase.rpc("save_employee_profile_checked_v2", {
+      ...profile, p_employee_id: employeeIds[0], p_expected_employment_revision: employmentRevision,
+      p_expected_profile_revision: profileRevision, p_lifecycle_confirmed: confirmation[0] === "yes",
+    });
+  if (error || !isPayrollUuid(data)) {
+    console.error("Employee profile save failed.", { code: error?.code, message: error?.message });
+    const code = error?.message === "Employment metadata changed; refresh before saving" ? "employment-stale"
+      : error?.message === "Employee profile changed; refresh before saving" ? "profile-stale"
+      : error?.message === "Confirm the employee status change" ? "lifecycle-confirm"
+      : error?.message === "Permission denied" ? "permission" : "save";
     redirect(`${destination}&error=${code}`);
   }
-  redirect(`${destination}&saved=1`);
+  revalidatePath("/people");
+  revalidatePath(`/people/${data}`);
+  const result = peopleDestination(formData, workspace.business.id, venueId || workspace.venue.id, data);
+  const saved = confirmation[0] === "yes" ? (active === "true" ? "reactivated" : "archived")
+    : employeeIds.length === 0 ? "created" : "1";
+  redirect(`${result}&saved=${saved}`);
 }
 
 export async function saveEmployeeEmploymentMetadataAction(formData: FormData) {
@@ -414,10 +480,15 @@ export async function saveEmployeeEmploymentMetadataAction(formData: FormData) {
     redirect(withBusiness(`/people?venue=${encodeURIComponent(workspace.venue.id)}&error=employment-invalid`,
       workspace.business.id));
   }
-  const destination = withBusiness(
-    `/people/${encodeURIComponent(input.employeeId)}/employment?venue=${encodeURIComponent(workspace.venue.id)}`,
-    workspace.business.id,
-  );
+  const profileDestination = formData.has("people_origin")
+    ? peopleDestination(formData, workspace.business.id, workspace.venue.id) : null;
+  const [profilePath, profileQuery] = profileDestination?.split("?", 2) ?? [];
+  const destination = profilePath && profileQuery
+    ? `${profilePath}/employment?${profileQuery}`
+    : withBusiness(
+      `/people/${encodeURIComponent(input.employeeId)}/employment?venue=${encodeURIComponent(workspace.venue.id)}`,
+      workspace.business.id,
+    );
   if (!["owner", "admin", "general_manager", "foh_manager", "boh_manager", "department_manager"]
     .includes(workspace.membership.role)) {
     console.error("Employment metadata management denied.");
@@ -437,6 +508,7 @@ export async function saveEmployeeEmploymentMetadataAction(formData: FormData) {
     redirect(`${destination}&error=${employmentMetadataFailure(error?.message)}`);
   }
   revalidatePath("/people");
+  revalidatePath(`/people/${input.employeeId}`);
   revalidatePath(`/people/${input.employeeId}/employment`);
   redirect(`${destination}&saved=metadata`);
 }
@@ -740,25 +812,30 @@ export async function setEmployeeDepartmentsAction(formData: FormData) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/people?venue=${encodeURIComponent(venueId)}`;
+  const destination = peopleDestination(formData, workspace.business.id, venueId);
   const departmentIds = uuidList(formData, "department_ids", 200);
-  if (!departmentIds) {
+  const expectedIds = uuidList(formData, "expected_department_ids", 200);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  if (!departmentIds || !expectedIds || !employeeIds || employeeIds.length !== 1) {
     console.error("Invalid employee department list submitted.");
     redirect(`${destination}&error=save`);
   }
 
-  const { error } = await workspace.supabase.rpc("set_employee_departments", {
+  const { error } = await workspace.supabase.rpc("set_employee_departments_checked", {
     p_business_id: workspace.business.id,
-    p_employee_id: text(formData, "employee_id", 36),
+    p_employee_id: employeeIds[0],
     p_department_ids: departmentIds,
+    p_expected_department_ids: expectedIds,
   });
   if (error) {
     console.error("Department membership save failed.", { code: error.code, message: error.message });
     const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Employee departments changed; refresh before saving" ? "section-stale"
       : error.message === "Choose another primary role before removing its department" ? "primary-department"
       : error.message === "Department is inactive" ? "inactive" : "save";
     redirect(`${destination}&error=${code}`);
   }
+  revalidatePeople(formData);
   redirect(`${destination}&saved=departments`);
 }
 
@@ -767,24 +844,31 @@ export async function setEmployeeEligibleRolesAction(formData: FormData) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/people?venue=${encodeURIComponent(venueId)}`;
+  const destination = peopleDestination(formData, workspace.business.id, venueId);
   const roleIds = uuidList(formData, "job_role_ids", 200);
-  if (!roleIds) {
+  const expectedIds = uuidList(formData, "expected_job_role_ids", 200);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const departmentIds = uuidList(formData, "department_id", 1);
+  if (!roleIds || !expectedIds || !employeeIds || employeeIds.length !== 1 ||
+    !departmentIds || departmentIds.length !== 1) {
     console.error("Invalid employee role list submitted.");
     redirect(`${destination}&error=roles`);
   }
-  const { error } = await workspace.supabase.rpc("set_employee_eligible_roles", {
+  const { error } = await workspace.supabase.rpc("set_employee_eligible_roles_checked", {
     p_business_id: workspace.business.id,
-    p_employee_id: text(formData, "employee_id", 36),
-    p_department_id: text(formData, "department_id", 36),
+    p_employee_id: employeeIds[0],
+    p_department_id: departmentIds[0],
     p_job_role_ids: roleIds,
+    p_expected_job_role_ids: expectedIds,
   });
   if (error) {
     console.error("Eligible roles save failed.", { code: error.code, message: error.message });
     const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Employee roles changed; refresh before saving" ? "section-stale"
       : error.message === "Choose another primary role before removing it" ? "primary" : "roles";
     redirect(`${destination}&error=${code}`);
   }
+  revalidatePeople(formData);
   redirect(`${destination}&saved=roles`);
 }
 
@@ -793,16 +877,27 @@ export async function setEmployeePrimaryRoleAction(formData: FormData) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/people?venue=${encodeURIComponent(venueId)}`;
-  const { error } = await workspace.supabase.rpc("set_employee_primary_role", {
+  const destination = peopleDestination(formData, workspace.business.id, venueId);
+  const employeeIds = uuidList(formData, "employee_id", 1);
+  const roleIds = uuidList(formData, "job_role_id", 1);
+  const revision = formProfileRevision(formData);
+  if (!employeeIds || employeeIds.length !== 1 || !roleIds || roleIds.length !== 1 || revision === null) {
+    console.error("Invalid primary-role change submitted.");
+    redirect(`${destination}&error=roles`);
+  }
+  const { error } = await workspace.supabase.rpc("set_employee_primary_role_checked", {
     p_business_id: workspace.business.id,
-    p_employee_id: text(formData, "employee_id", 36),
-    p_job_role_id: text(formData, "job_role_id", 36),
+    p_employee_id: employeeIds[0],
+    p_job_role_id: roleIds[0],
+    p_expected_profile_revision: revision,
   });
   if (error) {
     console.error("Primary role save failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "roles"}`);
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Employee profile changed; refresh before saving" ? "profile-stale" : "roles";
+    redirect(`${destination}&error=${code}`);
   }
+  revalidatePeople(formData);
   redirect(`${destination}&saved=primary`);
 }
 
@@ -811,27 +906,32 @@ export async function setEmployeeAuthUserAction(formData: FormData) {
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "ready") redirect("/");
   const venueId = text(formData, "venue_id", 36) || workspace.venue.id;
-  const destination = `/people?venue=${encodeURIComponent(venueId)}`;
+  const destination = peopleDestination(formData, workspace.business.id, venueId);
   const employeeIds = uuidList(formData, "employee_id", 1);
   const userValues = formData.getAll("user_id");
   const userId = userValues[0];
   const userIds = userValues.length === 1 && userId === ""
     ? [] : uuidList(formData, "user_id", 1);
+  const revision = formProfileRevision(formData);
   if (!employeeIds || employeeIds.length !== 1 || !userIds ||
-    (userId !== "" && userIds.length !== 1)) {
+    (userId !== "" && userIds.length !== 1) || revision === null) {
     console.error("Invalid employee account link submitted.");
     redirect(`${destination}&error=account`);
   }
 
-  const { error } = await workspace.supabase.rpc("set_employee_auth_user", {
+  const { error } = await workspace.supabase.rpc("set_employee_auth_user_checked", {
     p_business_id: workspace.business.id,
     p_employee_id: employeeIds[0],
     p_user_id: userIds[0] ?? null,
+    p_expected_profile_revision: revision,
   });
   if (error) {
     console.error("Employee account link failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "account"}`);
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Employee profile changed; refresh before saving" ? "profile-stale" : "account";
+    redirect(`${destination}&error=${code}`);
   }
+  revalidatePeople(formData);
   redirect(`${destination}&saved=account`);
 }
 
@@ -848,55 +948,63 @@ async function sharedWorkerActionContext(formData: FormData) {
     console.error("Could not load the shared-worker workspace.", { message: workspace.message });
     redirect("/people?error=filter");
   }
-  const destination = `/people?venue=${encodeURIComponent(workspace.venue.id)}`;
+  const destination = peopleDestination(formData, workspace.business.id, workspace.venue.id);
   if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
   const employeeIds = uuidList(formData, "employee_id", 1);
+  const expectedIds = uuidList(formData, "expected_linked_ids", 1000);
   const confirmation = formData.getAll("confirmed");
-  if (!employeeIds || employeeIds.length !== 1 ||
+  if (!employeeIds || employeeIds.length !== 1 || !expectedIds ||
     confirmation.length !== 1 || confirmation[0] !== "yes") {
     console.error("Invalid or unconfirmed shared-worker change.");
     redirect(`${destination}&error=shared-confirm`);
   }
-  return { workspace, destination, employeeId: employeeIds[0] };
+  return { workspace, destination, employeeId: employeeIds[0], expectedIds };
 }
 
 export async function linkSharedWorkerAction(formData: FormData) {
-  const { workspace, destination, employeeId } = await sharedWorkerActionContext(formData);
+  const { workspace, destination, employeeId, expectedIds } = await sharedWorkerActionContext(formData);
   const otherIds = uuidList(formData, "other_employee_id", 1);
   if (!otherIds || otherIds.length !== 1) {
     console.error("Invalid shared-worker profile submitted.");
     redirect(`${destination}&error=shared`);
   }
-  const { error } = await workspace.supabase.rpc("link_shared_worker_profiles", {
+  const { error } = await workspace.supabase.rpc("link_shared_worker_profiles_checked", {
     p_business_id: workspace.business.id,
     p_venue_id: workspace.venue.id,
     p_employee_id: employeeId,
     p_other_employee_id: otherIds[0],
+    p_expected_linked_ids: expectedIds,
   });
   if (error) {
     console.error("Shared-worker link failed.", { code: error.code, message: error.message });
     const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Shared-worker links changed; refresh before saving" ? "section-stale"
       : error.message === "A profile from this venue is already linked" ? "shared-venue"
         : error.message === "Profiles belong to different shared workers" ? "shared-groups"
           : error.message === "Cannot link profiles while more than one has an open clock session" ? "shared-clock" : "shared";
     redirect(`${destination}&error=${code}`);
   }
   revalidatePath("/roster");
+  revalidatePeople(formData);
   redirect(`${destination}&saved=shared-link`);
 }
 
 export async function unlinkSharedWorkerAction(formData: FormData) {
-  const { workspace, destination, employeeId } = await sharedWorkerActionContext(formData);
-  const { error } = await workspace.supabase.rpc("unlink_shared_worker_profile", {
+  const { workspace, destination, employeeId, expectedIds } = await sharedWorkerActionContext(formData);
+  const { error } = await workspace.supabase.rpc("unlink_shared_worker_profile_checked", {
     p_business_id: workspace.business.id,
     p_venue_id: workspace.venue.id,
     p_employee_id: employeeId,
+    p_expected_linked_ids: expectedIds,
   });
   if (error) {
     console.error("Shared-worker unlink failed.", { code: error.code, message: error.message });
-    redirect(`${destination}&error=${error.message === "Permission denied" ? "permission" : "shared"}`);
+    const code = error.message === "Permission denied" ? "permission"
+      : error.message === "Shared-worker links changed; refresh before saving" ? "section-stale" : "shared";
+    redirect(`${destination}&error=${code}`);
   }
   revalidatePath("/roster");
+  revalidatePeople(formData);
   redirect(`${destination}&saved=shared-unlink`);
 }
 

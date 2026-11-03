@@ -62,6 +62,17 @@ test("manager roster help includes the actual display filter and optional shortc
   assert.ok(searchHelp(topics, "roster shortcuts").some((topic) => topic.id === "rosters"));
 });
 
+test("People help describes the directory, focused editing and lifecycle controls", () => {
+  const people = helpTopics(source, "foh_manager").find((topic) => topic.id === "people");
+  assert.ok(people);
+  for (const label of ["Your people", "View profile", "Add person", "Edit overview",
+    "Discard changes", "Archive person", "Reactivate person", "Manage invitation"]) {
+    assert.ok(people.markdown.includes(label), label);
+  }
+  assert.match(people.markdown, /An owner can choose \*\*Edit account link\*\*/);
+  assert.match(people.markdown, /public showcase does not\s+send invitations/);
+});
+
 test("help links retain business scope and allow only visible real guide anchors", () => {
   const owner = helpTopics(source, "owner", true);
   const employee = helpTopics(source, "employee", true);
@@ -105,6 +116,7 @@ test("canonical guide Markdown file references and heading anchors resolve", () 
 test("core contextual help destinations and documented screen/link labels stay wired", () => {
   const screens = [
     ["src/app/setup/page.tsx", "Set up your workspace", "Help with workspace setup"],
+    ["src/app/people/page.tsx", "Your people", "Help with managing people"],
     ["src/components/onboarding-checklist.tsx", "Get your first roster ready", "Help with your first roster"],
     ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters"],
     ["src/app/my-schedule/page.tsx", "My schedule", "Help with your schedule"],
