@@ -1,5 +1,26 @@
 # Roadmap Agent — Activity Status
 
+## Local showcase setup checkpoint
+
+- **Last report:** 2026-11-03 11:52 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current work:** User-directed BB-DEMO-001 operator setup and test-owner option; the completed story is not being reopened.
+- **Criteria:** A separately verified internal-only showcase, 12–15 fictional FOH/BOH staff and realistic sample workflows, no production data, real messaging or live payroll, and guarded reset; the designated login must be test-only and scoped to the isolated project.
+- **Phase:** Testing and provisioning.
+- **Activity:** Starting the new, separately identified showcase backend after verifying its private configuration, owned internal network and loopback-only VM proxy.
+- **Progress since previous report:** Added a restricted opt-in test-owner identity and stricter exact reset inventory; prepared a private workdir and a separate application snapshot. The existing local workspace was not seeded or reset.
+- **Tests and results:** 18/18 focused showcase unit tests passed; the initial changed-code ESLint and TypeScript checks passed before the final network-helper change. Actual backend, fixture, reset and browser verification remain pending.
+- **Failing tests:** None observed. The final lint rerun is pending.
+- **Blockers/risks:** Backend readiness and available VM resources are not yet verified. The brand, hosted-review and production gates below remain unchanged.
+- **Documentation:** Draft operator and user-guide updates added; verify against the resulting workflow.
+- **Next concrete action:** Verify the isolated backend, seed and inspect fictional records, then test the requested owner login and scoped review journeys.
+- **Latest development commit:** `20742da5d9f6b5baf2096607e79330e330022cc9`; branch head at observation was status-only `7fb47049b82f6d21a923dec67d52afd7faa284dc`.
+- **Push outcome:** The previously observed remote branch head matched `7fb47049b82f6d21a923dec67d52afd7faa284dc`; this checkpoint has not yet been pushed.
+
+The prior Roadmap planning and brand blocker remain below; their current execution state is not verified by this local checkpoint.
+
+---
+
 - **Last report:** 2026-11-03 00:32 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent; Core Roadmap on `copilot/finish-roadmap-for-app`
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
