@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.6 — reviewed 2026-11-04 (Core Roadmap; People, Departments and Business Permissions workflows; other sections retain their earlier review dates).
+**Guide version:** 1.7 — reviewed 2026-11-04 (Core Roadmap; People, Departments, Business Permissions and Payroll Mapping workflows; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -669,15 +669,38 @@ The usual attendance screen remains available when scanning is not possible.
    confirm the external handling and **Record manual reconciliation**.
    Previously exported sessions are not emitted again. This records your
    acknowledgement; Butterbox does not send an adjustment.
-4. Owners/admins use **Manage payroll employee mapping** in the payroll-period
-   section, or **Payroll** in the **Business** group of **Main navigation**, to
-   open `/settings/payroll`. Use **Add mapping destination**, select
-   the destination and **Show mappings**. Enter each **Payroll employee ID** and
-   **Reason for mapping change**, then **Save payroll ID**. A blank ID removes
-   the mapping and blocks provider-ready records for that employee. Refresh
-   after duplicate/stale/conflicting-ID errors; never guess an employee ID.
-5. Mapping setup is not OAuth or a connected provider. The generic CSV contains
-   no external payroll IDs; saving a destination does not alter that fact.
+4. Only owners/admins can manage mappings. Use **Manage payroll employee
+   mapping** in the payroll-period section, or **Payroll** in the **Business**
+   group of **Main navigation**, to open `/settings/payroll`. Select a
+   **Payroll destination** and **Show mappings**. If needed, use **Add mapping
+   destination** and enter its provider, name and account ID, never credentials.
+   Destinations belong to the business; the employee list is scoped to the
+   selected venue.
+5. Review the mapped/missing counts. Search by name, Butterbox ID or payroll ID,
+   filter **Mapping status**, or choose **Sort by**, then **Apply filters**.
+   Select **View** for the intended employee to review their read-only details
+   and destination. **Back to mappings** retains the directory filters.
+6. Select **Edit mapping**, verify the destination and account, and enter the
+   exact, case-sensitive **Payroll employee ID** and **Reason for mapping
+   change**. Confirm the destination and select **Save payroll ID**. Refresh to
+   check the saved value; an audit record is retained. To abandon a draft,
+   select **Cancel** and, when prompted, **Discard changes**.
+7. To unmap an employee, edit the mapping, clear the payroll ID, provide a
+   reason, confirm both the destination and removal, and select **Confirm and
+   remove mapping**. Removal blocks provider-ready records for that employee;
+   historical audit and reconciliation information is retained.
+8. A duplicate ID cannot be assigned to two employees at the same destination.
+   On a duplicate, stale revision, permission or failed-save message, review
+   the refreshed employee and destination before retrying; never guess an ID.
+   If a save could not be confirmed, check the current mapping before trying
+   again.
+9. Mapping setup is not OAuth or a connected provider. Provider adapters remain
+   unavailable until separately verified. The generic CSV contains no external
+   payroll IDs; saving a destination does not alter that fact.
+
+The directory/detail workflow above is verified in isolated development. The
+protected showcase retains its earlier mapping screen until the owner
+authorizes an update.
 
 **Important:** Butterbox's generic payroll records and CSV workflow do not mean Xero, MYOB, Employment Hero or QuickBooks integrations are live. Xero integration is intentionally deferred. Award Central's gross-pay interpretation is not yet independently approved for production calculations.
 
@@ -965,6 +988,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.4 | 2026-11-03 | `0f8c847` (showcase test-owner login); `6d5c4e7` (BRAND-002/003/005) | Isolated showcase owner access and Coastal Wave sign-in branding |
 | 1.5 | 2026-11-03 | BB-DEMO-003 showcase polish | Mobile **Menu**, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels; targeted desktop/mobile browser audit |
 | 1.6 | 2026-11-04 | BB-UXFIX-001/002/003 | Isolated People, Departments and owner-only Business Permissions directory/detail workflows; protected showcases retain earlier screens |
+| 1.7 | 2026-11-04 | BB-UXFIX-004 | Isolated Payroll Mapping destination, directory, focused edit and confirmed removal workflow; protected showcases retain earlier screens |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

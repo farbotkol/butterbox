@@ -19,6 +19,10 @@ import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { employmentMetadataFailure, isEmploymentBasis, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import {
+  DEFAULT_PAYROLL_FILTERS, parsePayrollDirectoryContext, payrollDirectoryHref,
+  payrollEmployeeHref, payrollNewDestinationHref,
+} from "@/lib/payroll-directory";
+import {
   isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
 } from "@/lib/payroll-mapping";
 import { parsePeopleFilterContext, parseProfileRevision, peopleHref } from "@/lib/people-directory";
@@ -2038,19 +2042,27 @@ export async function savePayrollMappingAction(formData: FormData) {
     console.error("Could not load payroll mapping workspace.", { message: workspace.message });
     redirect("/settings/payroll?error=venue");
   }
-  const query = new URLSearchParams({ venue: workspace.venue.id, connection: connections[0] });
-  const destination = `/settings/payroll?${query}`;
   if (!["owner", "admin"].includes(workspace.membership.role)) {
     console.error("Payroll mapping management denied.");
-    redirect(`${destination}&error=permission`);
+    redirect(withBusiness("/?error=permission", workspace.business.id));
   }
-  const one = (key: string) => {
-    const values = formData.getAll(key);
-    return values.length === 1 ? values[0] : null;
-  };
+  const businessId = workspace.business.id;
+  const venueId = workspace.venue.id;
+  const connectionId = connections[0].toLowerCase();
+  const one = (key: string) => singleFormString(formData, key);
+  const filters = parsePayrollDirectoryContext(one("directory_filters"));
+  if (!filters) {
+    console.error("Invalid payroll directory return context.");
+    redirect(`${payrollDirectoryHref(businessId, venueId, undefined, DEFAULT_PAYROLL_FILTERS)}&error=filter`);
+  }
   const operation = one("operation");
-  let result;
   if (operation === "connection") {
+    const previous = uuidList(formData, "return_connection_id", 1);
+    if (!previous) {
+      console.error("Invalid payroll destination return context.");
+      redirect(`${payrollDirectoryHref(businessId, venueId, undefined, DEFAULT_PAYROLL_FILTERS)}&error=filter`);
+    }
+    const destination = payrollNewDestinationHref(businessId, venueId, previous[0]?.toLowerCase(), filters);
     const provider = one("provider");
     const accountId = payrollMappingText(one("account_id"), 255);
     const name = payrollMappingText(one("name"), 100);
@@ -2058,27 +2070,45 @@ export async function savePayrollMappingAction(formData: FormData) {
       console.error("Invalid payroll mapping connection.");
       redirect(`${destination}&error=invalid`);
     }
-    result = await workspace.supabase.rpc("create_payroll_mapping_connection", {
-      p_business_id: workspace.business.id, p_connection_id: connections[0],
+    const result = await workspace.supabase.rpc("create_payroll_mapping_connection", {
+      p_business_id: businessId, p_connection_id: connectionId,
       p_provider: provider, p_account_id: accountId, p_name: name,
     });
-  } else {
-    const employees = uuidList(formData, "employee_id", 1);
-    const revision = payrollMappingRevision(one("revision"));
-    const reason = payrollMappingText(one("reason"), 500);
-    const external = one("external_employee_id");
-    const externalId = typeof external === "string" && external.trim() === "" ? null
-      : payrollMappingText(external, 255);
-    if (operation !== "mapping" || employees?.length !== 1 || revision === null || !reason ||
-      typeof external !== "string" || (external.trim() !== "" && externalId === null)) {
-      console.error("Invalid payroll employee mapping.");
-      redirect(`${destination}&error=invalid`);
+    if (result.error || !isPayrollUuid(result.data)) {
+      console.error("Payroll destination save failed.", {
+        code: result.error?.code, message: result.error?.message ?? "Invalid destination receipt.",
+      });
+      redirect(`${destination}&error=${payrollMappingFailure(result.error?.message)}`);
     }
-    result = await workspace.supabase.rpc("set_payroll_employee_mapping", {
-      p_business_id: workspace.business.id, p_connection_id: connections[0], p_employee_id: employees[0],
-      p_expected_revision: revision, p_external_employee_id: externalId, p_reason: reason, p_request_id: requests[0],
-    });
+    revalidatePath("/settings/payroll");
+    redirect(`${payrollDirectoryHref(businessId, venueId, result.data, { ...filters, page: 1 })}&saved=connection`);
   }
+  const employees = uuidList(formData, "employee_id", 1);
+  const employeeId = employees?.length === 1 ? employees[0].toLowerCase() : undefined;
+  const destination = employeeId
+    ? payrollEmployeeHref(businessId, venueId, connectionId, filters, employeeId)
+    : payrollDirectoryHref(businessId, venueId, connectionId, filters);
+  const revision = payrollMappingRevision(one("revision"));
+  const reason = payrollMappingText(one("reason"), 500);
+  const external = one("external_employee_id");
+  const externalId = typeof external === "string" && external.trim() === "" ? null
+    : payrollMappingText(external, 255);
+  if (operation !== "mapping" || !employeeId || revision === null || !reason ||
+    typeof external !== "string" || (external.trim() !== "" && externalId === null)) {
+    console.error("Invalid payroll employee mapping.");
+    redirect(`${destination}&error=invalid`);
+  }
+  const destinationConfirmed = one("confirm_destination") === "yes";
+  const removalConfirmed = one("confirm_removal") === "yes";
+  if (!destinationConfirmed || (externalId === null && !removalConfirmed)) {
+    console.error("Payroll mapping submitted without required confirmation.");
+    redirect(`${destination}&error=confirm`);
+  }
+  const result = await workspace.supabase.rpc("set_payroll_employee_mapping_scoped", {
+    p_business_id: businessId, p_venue_id: venueId, p_connection_id: connectionId, p_employee_id: employeeId,
+    p_expected_revision: revision, p_external_employee_id: externalId, p_reason: reason, p_request_id: requests[0],
+    p_destination_confirmed: destinationConfirmed, p_removal_confirmed: removalConfirmed,
+  });
   if (result.error || !isPayrollUuid(result.data)) {
     console.error("Payroll mapping save failed.", {
       code: result.error?.code, message: result.error?.message ?? "Invalid mapping receipt.",
@@ -2086,9 +2116,9 @@ export async function savePayrollMappingAction(formData: FormData) {
     redirect(`${destination}&error=${payrollMappingFailure(result.error?.message)}`);
   }
   revalidatePath("/settings/payroll");
+  revalidatePath(`/settings/payroll/${employeeId}`);
   revalidatePath("/timesheets");
-  if (operation === "connection") query.set("connection", result.data);
-  redirect(`/settings/payroll?${query}&saved=${operation}`);
+  redirect(`${destination}&saved=${externalId === null ? "removed" : "mapping"}`);
 }
 
 export async function startAttendanceBreakAction(formData: FormData) {

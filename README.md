@@ -702,13 +702,25 @@ award compliance.
 
 Owners and admins can open **Manage payroll employee mapping** from the
 **Payroll period** panel. Register a mapping destination using the provider's
-account/organisation ID and a display label, then enter each employee's exact,
-case-sensitive payroll ID. Destinations belong to the business; the employee
-list is scoped to the selected venue. A worker can have different IDs in
-different destinations, but an ID cannot identify two workers in the same
-destination. Identical employee names are not matched or copied automatically.
-Leave an ID blank to remove it. Each save requires a reason, checks the reviewed
-revision and appends an attributed audit event; retries do not duplicate events.
+account/organisation ID and a display label, then select the destination and
+find the employee in the searchable, filterable mapping directory. Open their
+read-only detail and select **Edit mapping** to enter the exact, case-sensitive
+payroll ID. Destinations belong to the business; the employee list is scoped to
+the selected venue. A worker can have different IDs in different destinations,
+but an ID cannot identify two workers in the same destination. Identical
+employee names are not matched or copied automatically. Each save requires a
+reason and destination confirmation, checks the reviewed revision and appends
+an attributed audit event; retries do not duplicate events. Clearing an ID also
+requires explicit removal confirmation and blocks provider-ready records while
+retaining history.
+
+The `20261104070000` migration intentionally removes authenticated direct
+execution of the former `set_payroll_employee_mapping` RPC. Callers must use
+`set_payroll_employee_mapping_scoped` with the selected venue and explicit
+destination/removal confirmations; the original mutation remains internal to
+that checked entry point. Coordinate application and database updates so an old
+application is not left calling the revoked RPC. This is a compatibility
+change, not approval to deploy either protected showcase.
 
 The `list_provider_payroll_records` RPC is the provider-adapter input boundary:
 it checks current finalisation, venue authority, exceptions, destination tenant
@@ -728,8 +740,9 @@ versioned record retains the employee and venue IDs, venue-local work date,
 corrected clock-event IDs and timestamps, individual paid and unpaid breaks,
 worked and paid time, and the approving decision and revision. Timestamps and
 decimal seconds retain microsecond precision; displayed durations are rounded.
-Provider employee mappings and pay codes remain unassigned until explicitly
-configured by future payroll work. The preview is not an export, provider
+Provider employee mappings and pay codes remain unassigned in the original
+records; the separate mapping setup only adds employee IDs to eligible
+detached provider-ready records. The preview is not an export, provider
 integration or award calculation, and outstanding exceptions still need
 resolution before any export.
 

@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 06:35 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 06:37 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
+- **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, Done in isolated development).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Testing.
-- **Activity:** Verifying synthetic screenshots and preparing criterion-level evidence after the final five-width run passed.
+- **Phase:** Complete.
+- **Activity:** Preparing the verified feature, criterion evidence and screenshots for commit and push.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** The final responsive run passed **5/5** at 375, 390, 768, 1024 and 1440 px, including keyboard, overflow, selected-label fit and WCAG-tagged axe checks. Thirty actual synthetic before/after PNGs were captured for conversion and verification.
+- **Progress since previous report:** Thirty actual synthetic before/after captures were converted to dimension- and pixel-identical lossless WebP. Final TypeScript, changed-file lint and syntax checks passed. The protected local showcase login returned HTTP **200** at 06:36 AEDT.
 - **Tests and results:** Pre-change mapping/CSV browser baseline **2/2**, post-migration mapping/CSV **2/2**, expanded browser **3/5** followed by failed-case rerun **2/2**, final five-width checks **5/5**, database **218/218**, integration **2/2** plus bypass rerun **1/1**, relevant units/Help **42/42**, TypeScript, changed-file ESLint and isolated production build passed.
-- **Failing tests:** None remain in the final five-width run or completed targeted reruns. Screenshot conversion and the final pre-commit verification remain pending.
+- **Failing tests:** None remain in the completed selected checks. Earlier selector clipping and a later tablet timeout were followed by a passing final five-width run.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
-- **Documentation:** Updated in the working tree; final behavior and Help checks remain subject to browser verification.
-- **Next concrete action:** Convert and verify all screenshots, rerun final type/lint checks, record criterion evidence and inspect the feature diff.
+- **Documentation:** Updated — User Guide, contextual Help, RPC rollout guidance, criterion evidence and 30 synthetic screenshots.
+- **Next concrete action:** Inspect, commit and push the verified story, then assess the next ready work.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Testing checkpoint `6941f330f98d0dc282c015f5fa2886aeb2ebe2ee` was pushed and its remote SHA verified. This testing checkpoint is pending push.
+- **Push outcome:** Testing checkpoint `959db8c95bcec5193285932d3cb8396abac29b1d` was pushed and its remote SHA verified. The verified feature commit is pending.
 
 ## BB-UXFIX-003 — Business Permissions
 

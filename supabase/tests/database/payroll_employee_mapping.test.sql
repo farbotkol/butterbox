@@ -53,9 +53,10 @@ create function pg_temp.mapping(
   p_employee uuid, p_external text, p_revision integer default 0,
   p_request uuid default gen_random_uuid(), p_connection uuid default 'f7600000-0000-4000-8000-000000000001'
 ) returns uuid language sql as $$
-  select public.set_payroll_employee_mapping(
-    'b7600000-0000-4000-8000-000000000001', p_connection, p_employee,
-    p_revision, p_external, 'Verified against payroll account', p_request
+  select public.set_payroll_employee_mapping_scoped(
+    'b7600000-0000-4000-8000-000000000001', 'c7600000-0000-4000-8000-000000000001',
+    p_connection, p_employee, p_revision, p_external, 'Verified against payroll account', p_request,
+    true, p_external is null
   );
 $$;
 create function pg_temp.provider_records(p_connection uuid default 'f7600000-0000-4000-8000-000000000001')

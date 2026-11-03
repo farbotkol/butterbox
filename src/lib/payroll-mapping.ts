@@ -77,6 +77,8 @@ export function payrollMappingFailure(message: string | undefined): string {
     case "Payroll employee ID is already mapped to another employee": return "duplicate";
     case "Payroll mapping changed; refresh before saving":
     case "Payroll mapping is already in that state": return "stale";
+    case "Confirm payroll destination":
+    case "Confirm mapping removal": return "confirm";
     case "Payroll connection already exists with different details": return "connection-exists";
     case "Invalid payroll connection":
     case "Invalid payroll employee mapping": return "invalid";

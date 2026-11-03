@@ -41,5 +41,7 @@ test("mapping failures distinguish duplicate IDs, stale edits, scope and unconfi
   assert.equal(payrollMappingFailure("Payroll employee ID is already mapped to another employee"), "duplicate");
   assert.equal(payrollMappingFailure("Payroll mapping changed; refresh before saving"), "stale");
   assert.equal(payrollMappingFailure("Permission denied"), "permission");
+  assert.equal(payrollMappingFailure("Confirm payroll destination"), "confirm");
+  assert.equal(payrollMappingFailure("Confirm mapping removal"), "confirm");
   assert.equal(payrollMappingFailure(undefined), "save");
 });

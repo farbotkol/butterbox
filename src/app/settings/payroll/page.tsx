@@ -1,168 +1,192 @@
-import { randomUUID } from "node:crypto";
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { savePayrollMappingAction } from "@/app/actions";
-import { AppShell } from "@/components/app-shell";
 import { helpHref } from "@/lib/help";
-import { isPayrollUuid } from "@/lib/generic-payroll-exports";
-import { readAllPages } from "@/lib/paginated-rows";
 import {
-  parsePayrollConnections, parsePayrollEmployeeMappings, payrollProviders,
-  type PayrollEmployeeMapping, type PayrollMappingConnection,
-} from "@/lib/payroll-mapping";
-import { isSupabaseConfigured } from "@/lib/supabase/server";
-import { getWorkspace } from "@/lib/workspace";
-import { withBusiness } from "@/lib/business-selection";
+  DEFAULT_PAYROLL_FILTERS, filterAndSortPayrollMappings, parsePayrollDirectoryFilters,
+  payrollDirectoryHref, payrollEmployeeHref, payrollNewDestinationHref, PAYROLL_DIRECTORY_PAGE_SIZE,
+  serializePayrollDirectoryFilters,
+} from "@/lib/payroll-directory";
+import { payrollProviders, type PayrollEmployeeMapping } from "@/lib/payroll-mapping";
+import { PayrollFeedback } from "./payroll-feedback";
+import { payrollFieldClass } from "./payroll-field";
+import { PayrollHistoryReset } from "./payroll-history";
+import { PayrollShell, PayrollUnavailable } from "./payroll-shell";
+import {
+  loadPayrollConnections, loadPayrollMappings, requirePayrollWorkspace, selectPayrollConnection,
+  type PayrollSearch,
+} from "./payroll-workspace";
 
-const errors: Record<string, string> = {
-  invalid: "Choose valid IDs and enter a reason. Account and employee IDs must be 255 characters or fewer.",
-  permission: "Only an owner or admin can manage payroll mappings for this business.",
-  venue: "The selected venue is unavailable. Check your access and try again.",
-  duplicate: "This payroll employee ID is already assigned to another employee in this connection.",
-  stale: "The mapping changed or already has that value. Review the refreshed entry before saving.",
-  "connection-exists": "This payroll account already has a destination with different details. Select the existing destination.",
-  retry: "The request was already used. Review the refreshed mapping before saving.",
-  save: "We couldn't confirm the mapping change. Refresh and check it before retrying.",
-};
-const fieldClass = "mt-1 block w-full min-w-0 rounded-lg border border-line bg-white p-2 text-sm";
+function employeeLabel(mapping: PayrollEmployeeMapping) {
+  return mapping.employee_name || "(Unnamed employee)";
+}
 
-export default async function PayrollMappingPage({ searchParams }: {
-  searchParams: Promise<{ business?: string; venue?: string; connection?: string; error?: string; saved?: string }>;
-}) {
-  if (!isSupabaseConfigured()) redirect("/login?error=setup");
-  const params = await searchParams;
-  const workspace = await getWorkspace(params.venue, { businessId: params.business, page: true });
-  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
-  if (workspace.status === "needs_setup") redirect("/setup");
-  if (workspace.status === "error") {
-    console.error("Could not load payroll mappings.", { message: workspace.message });
-    return <main className="m-5"><h1 className="text-xl font-semibold">Payroll mappings unavailable</h1>
-      <p role="alert">Check your venue access and try again.</p></main>;
-  }
-  if (!["owner", "admin"].includes(workspace.membership.role)) redirect(withBusiness("/?error=permission", workspace.business.id));
-  const connectionsResult = await readAllPages<PayrollMappingConnection>((from, to) =>
-    workspace.supabase.rpc("list_payroll_mapping_connections", {
-      p_business_id: workspace.business.id,
-    }, { count: "exact" }).order("name").order("id").range(from, to), (row) => row.id);
-  const connections = parsePayrollConnections(connectionsResult.data);
-  const connection = params.connection === undefined ? connections?.[0]
-    : isPayrollUuid(params.connection)
-      ? connections?.find((item) => item.id.toLowerCase() === params.connection?.toLowerCase()) : undefined;
-  const mappingResult = connection ? await readAllPages<PayrollEmployeeMapping>((from, to) =>
-    workspace.supabase.rpc("list_payroll_employee_mappings", {
-      p_business_id: workspace.business.id, p_connection_id: connection.id, p_venue_id: workspace.venue.id,
-    }, { count: "exact" }).order("employee_name").order("employee_id").range(from, to), (row) => row.employee_id)
-    : { data: [], error: null };
-  const mappings = parsePayrollEmployeeMappings(mappingResult.data);
-  const loadError = connectionsResult.error || mappingResult.error || !connections || !mappings;
-  if (loadError) console.error("Could not load payroll mapping data.", {
-    code: connectionsResult.error?.code ?? mappingResult.error?.code,
-    message: connectionsResult.error?.message ?? mappingResult.error?.message ?? "Invalid payroll mapping data.",
-  });
-  const hidden = (operation: "connection" | "mapping", connectionId: string) => <>
-    <input type="hidden" name="venue_id" value={workspace.venue.id} />
-    <input type="hidden" name="connection_id" value={connectionId} />
-    <input type="hidden" name="request_id" value={randomUUID()} />
-    <input type="hidden" name="operation" value={operation} />
-  </>;
+export default async function PayrollMappingPage({ searchParams }: { searchParams: Promise<PayrollSearch> }) {
+  const search = await searchParams;
+  const workspace = await requirePayrollWorkspace(search);
+  if (!workspace) return <PayrollUnavailable />;
+  const connections = await loadPayrollConnections(workspace);
+  const connection = selectPayrollConnection(connections, search.connection);
+  const mappings = connection ? await loadPayrollMappings(workspace, connection) : [];
+  const filters = parsePayrollDirectoryFilters(search);
+  const selectedFilters = filters ?? DEFAULT_PAYROLL_FILTERS;
+  const filtered = filters ? filterAndSortPayrollMappings(mappings, filters) : [];
+  const pages = Math.max(1, Math.ceil(filtered.length / PAYROLL_DIRECTORY_PAGE_SIZE));
+  const currentFilters = { ...selectedFilters, page: Math.min(selectedFilters.page, pages) };
+  const visible = filtered.slice(
+    (currentFilters.page - 1) * PAYROLL_DIRECTORY_PAGE_SIZE,
+    currentFilters.page * PAYROLL_DIRECTORY_PAGE_SIZE,
+  );
+  const mappedCount = mappings.filter((mapping) => mapping.external_employee_id !== null).length;
+  const { id: businessId } = workspace.business;
+  const { id: venueId } = workspace.venue;
+  const connectionId = connection?.id;
 
-  return <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueName={workspace.venue.name}
-    email={workspace.user.email ?? ""} role={workspace.membership.role}>
+  return <PayrollShell workspace={workspace}>
+    <PayrollHistoryReset connectionId={connectionId} filters={currentFilters} />
     <h1 className="text-3xl font-semibold">Payroll employee mapping</h1>
     <p className="mt-3 text-sm text-muted">
-      Enter the exact employee IDs from your payroll account; names are display-only and never matched automatically.
-      Destinations are business-wide; employees below belong to {workspace.venue.name}.
+      Enter exact payroll employee IDs; names are display-only and are never matched automatically.
+      Destinations are business-wide; employees shown belong to {workspace.venue.name}.
       This is mapping setup only, not an authenticated provider connection. No payroll is sent.
       Xero and other adapters remain unavailable until separately verified.
     </p>
-    <Link href={helpHref("payroll", workspace.business.id)}
-      className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
-      Help with payroll preparation
-    </Link>
-    <Link href={`/timesheets?venue=${workspace.venue.id}`} className="mt-3 inline-block font-semibold text-ocean">
-      Return to timesheets
-    </Link>
-    {params.error && <p role="alert" className="mt-4 rounded-lg bg-red-50 p-4 text-red-800">
-      {Object.hasOwn(errors, params.error) ? errors[params.error] : errors.save}
-    </p>}
-    {params.saved && ["connection", "mapping"].includes(params.saved) &&
-      <p role="status" className="mt-4 rounded-lg bg-soft-sea p-4 text-ocean">
-        {params.saved === "connection" ? "Payroll mapping destination created. No provider has been connected."
-          : "Payroll employee mapping saved with an audit record."}
-      </p>}
-    {loadError ? <p role="alert" className="mt-4">We couldn&apos;t load payroll mappings. Refresh before making changes.</p>
-      : <>
-        <form action="/settings/payroll" className="mt-5 rounded-xl border border-line bg-white p-4">
-          <input type="hidden" name="venue" value={workspace.venue.id} />
-          <label htmlFor="payroll-connection">Payroll destination</label>
-          <select id="payroll-connection" name="connection" defaultValue={connection?.id ?? ""} className={fieldClass}>
+    <div className="mt-2 flex flex-wrap gap-x-4">
+      <Link href={helpHref("payroll", businessId)}
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Help with payroll preparation
+      </Link>
+      <Link href={`/timesheets?venue=${encodeURIComponent(venueId)}&business=${encodeURIComponent(businessId)}`}
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Return to timesheets
+      </Link>
+    </div>
+    <PayrollFeedback error={search.error} saved={search.saved} />
+    <section aria-label="Payroll destinations" className="mt-5 rounded-xl border border-line bg-white p-4">
+      <form id="payroll-destination-form" action="/settings/payroll" className="flex flex-wrap items-end gap-3">
+        <input type="hidden" name="business" value={businessId} />
+        <input type="hidden" name="venue" value={venueId} />
+        {selectedFilters.q && <input type="hidden" name="q" value={selectedFilters.q} />}
+        {selectedFilters.status !== "all" && <input type="hidden" name="status" value={selectedFilters.status} />}
+        {selectedFilters.sort !== "name" && <input type="hidden" name="sort" value={selectedFilters.sort} />}
+        <label className="min-w-0 basis-full text-sm font-medium lg:flex-1">Payroll destination
+          <select key={connectionId ?? "none"} name="connection" defaultValue={connectionId ?? ""} className={payrollFieldClass}
+            disabled={connections.length === 0}>
             <option value="" disabled>Choose a destination</option>
-            {connections?.map((item) => <option key={item.id} value={item.id}>
+            {connections.map((item) => <option key={item.id} value={item.id}>
               {item.name} ({payrollProviders[item.provider]})
             </option>)}
           </select>
-          <button type="submit" className="mt-3 min-h-11 rounded-lg border border-line px-4 font-semibold">
-            Show mappings
+        </label>
+        <button type="submit" disabled={connections.length === 0}
+          className="min-h-11 rounded-lg border border-line px-4 font-semibold disabled:opacity-50">
+          Show mappings
+        </button>
+        <Link href={payrollNewDestinationHref(businessId, venueId, connectionId, currentFilters)}
+          className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
+          Add mapping destination
+        </Link>
+      </form>
+    </section>
+    {search.connection !== undefined && !connection && <p role="alert" className="mt-3">
+      The selected payroll destination is unavailable. Choose a destination from this business.
+    </p>}
+    {connections.length === 0 && <p className="mt-4 rounded-lg border border-line bg-white p-4">
+      No payroll destinations have been added. Add a mapping destination to begin; this does not connect a provider.
+    </p>}
+    {connection && <section aria-label="Employee payroll IDs" className="mt-5">
+      <h2 className="break-words text-lg font-semibold">{connection.name}</h2>
+      <p className="mt-1 break-words text-sm text-muted [overflow-wrap:anywhere]">
+        {payrollProviders[connection.provider]} · Account ID: {connection.account_id}. IDs are case-sensitive.
+        One ID cannot identify two employees in the same destination.
+      </p>
+      <p className="mt-2 text-sm text-muted">
+        Mapped: {mappedCount} · Missing: {mappings.length - mappedCount}
+      </p>
+      <form id="payroll-filter-form" key={`${connection.id}:${serializePayrollDirectoryFilters(currentFilters)}`}
+        action="/settings/payroll" aria-label="Payroll mapping filters"
+        className="mt-4 grid gap-3 rounded-xl border border-line bg-white p-4 sm:grid-cols-2 xl:grid-cols-4">
+        <input type="hidden" name="business" value={businessId} />
+        <input type="hidden" name="venue" value={venueId} />
+        <input type="hidden" name="connection" value={connection.id} />
+        <label className="min-w-0 text-sm font-medium">Search employees
+          <input type="search" name="q" maxLength={100} defaultValue={selectedFilters.q}
+            placeholder="Name, Butterbox ID or payroll ID" className={payrollFieldClass} />
+        </label>
+        <label className="text-sm font-medium">Mapping status
+          <select name="status" defaultValue={selectedFilters.status} className={payrollFieldClass}>
+            <option value="all">All mappings</option>
+            <option value="mapped">Mapped</option>
+            <option value="missing">Missing</option>
+          </select>
+        </label>
+        <label className="text-sm font-medium">Sort by
+          <select name="sort" defaultValue={selectedFilters.sort} className={payrollFieldClass}>
+            <option value="name">Employee name</option>
+            <option value="status">Mapping status</option>
+            <option value="payroll-id">Payroll employee ID</option>
+          </select>
+        </label>
+        <div className="flex flex-wrap items-end gap-3">
+          <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 font-semibold text-white">
+            Apply filters
           </button>
-        </form>
-        {params.connection !== undefined && !connection && <p role="alert" className="mt-3">
-          The selected payroll destination is unavailable. Choose a destination from this business.
-        </p>}
-        {connection && <section aria-label="Employee payroll IDs" className="mt-5">
-          <h2 className="text-lg font-semibold">{connection.name}</h2>
-          <p className="mt-2 break-all text-sm text-muted">Account ID: {connection.account_id}. IDs are case-sensitive.
-            An employee has one ID per destination; the same ID cannot identify two employees in that destination.
-            Leave the ID blank to remove a mapping. Removal blocks provider-ready records for that employee.
-          </p>
-          {mappings?.length === 0 && <p className="mt-3">No employee profiles in this venue.</p>}
-          <ul className="mt-4 space-y-3">
-            {mappings?.map((mapping) => <li key={mapping.employee_id} id={`payroll-employee-${mapping.employee_id}`}
-              className="rounded-xl border border-line bg-white p-4">
-              <h3 className="break-words font-semibold">{mapping.employee_name}</h3>
-              <p className="mt-1 break-all text-xs text-muted">Butterbox employee ID: {mapping.employee_id}</p>
-              <p className="mt-1 text-sm">{mapping.external_employee_id === null ? "Missing payroll mapping" : "Explicit payroll ID saved"}</p>
-              <form action={savePayrollMappingAction} aria-label={`Payroll ID for ${mapping.employee_name}`}
-                className="mt-3 grid gap-3 sm:grid-cols-2">
-                {hidden("mapping", connection.id)}
-                <input type="hidden" name="employee_id" value={mapping.employee_id} />
-                <input type="hidden" name="revision" value={mapping.revision} />
-                <label className="min-w-0 text-sm">Payroll employee ID
-                  <input name="external_employee_id" maxLength={255} defaultValue={mapping.external_employee_id ?? ""}
-                    className={fieldClass} autoComplete="off" />
-                </label>
-                <label className="min-w-0 text-sm">Reason for mapping change
-                  <input name="reason" required maxLength={500} className={fieldClass} />
-                </label>
-                <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-                  Save payroll ID
-                </button>
-              </form>
-            </li>)}
-          </ul>
-        </section>}
-        <section aria-label="Add payroll destination" className="mt-6 rounded-xl border border-line bg-white p-4">
-          <h2 className="text-lg font-semibold">Add mapping destination</h2>
-          <p className="mt-2 text-sm text-muted">Use the provider&apos;s account or organisation ID, not credentials.
-            This does not authorise access or enable an integration.</p>
-          <form action={savePayrollMappingAction} className="mt-4 grid gap-3 sm:grid-cols-2">
-            {hidden("connection", randomUUID())}
-            <div className="text-sm">
-              <label htmlFor="payroll-provider">Provider</label>
-              <select id="payroll-provider" name="provider" className={fieldClass}>
-                {Object.entries(payrollProviders).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
-              </select>
-            </div>
-            <label className="min-w-0 text-sm">Destination name
-              <input name="name" required maxLength={100} className={fieldClass} />
-            </label>
-            <label className="min-w-0 text-sm">Payroll account ID
-              <input name="account_id" required maxLength={255} autoComplete="off" className={fieldClass} />
-            </label>
-            <button type="submit" className="min-h-11 rounded-lg bg-ocean px-4 py-2 font-semibold text-white">
-              Add mapping destination
-            </button>
-          </form>
-        </section>
-      </>}
-  </AppShell>;
+          <Link href={payrollDirectoryHref(businessId, venueId, connection.id, DEFAULT_PAYROLL_FILTERS)}
+            className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+            Reset filters
+          </Link>
+        </div>
+      </form>
+      {!filters && <p role="alert" className="mt-3">The directory filters are unavailable. Reset them and try again.</p>}
+      <div className="mt-5 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="text-lg font-semibold">Employees</h3>
+        <p aria-live="polite" className="text-sm text-muted">
+          {filtered.length} {filtered.length === 1 ? "employee" : "employees"}
+          {filtered.length !== mappings.length ? ` of ${mappings.length}` : ""}
+        </p>
+      </div>
+      {visible.length === 0 ? <p className="mt-3 rounded-xl border border-line bg-white p-5 text-sm text-muted">
+        {mappings.length === 0 ? "No employee profiles in this venue." : "No employees match these filters. Try resetting them."}
+      </p> : <div className="mt-3 overflow-hidden rounded-xl border border-line bg-white">
+        <table className="hidden w-full table-fixed text-left text-sm lg:table">
+          <thead className="bg-soft-sea text-brand-charcoal"><tr>
+            <th scope="col" className="p-3">Employee</th>
+            <th scope="col" className="p-3">Butterbox ID</th>
+            <th scope="col" className="p-3">Payroll employee ID</th>
+            <th scope="col" className="p-3">Status</th>
+            <th scope="col" className="p-3">Action</th>
+          </tr></thead>
+          <tbody>{visible.map((mapping) => <tr key={mapping.employee_id} className="border-t border-line align-top">
+            <td className="break-words p-3 font-semibold">{employeeLabel(mapping)}</td>
+            <td className="break-all p-3">{mapping.employee_id}</td>
+            <td className="break-all p-3">{mapping.external_employee_id ?? "—"}</td>
+            <td className="p-3">{mapping.external_employee_id === null ? "Missing" : "Mapped"}</td>
+            <td className="p-3">
+              <Link href={payrollEmployeeHref(businessId, venueId, connection.id, currentFilters, mapping.employee_id)}
+                aria-label={`View mapping for ${employeeLabel(mapping)} (${mapping.employee_id})`}
+                className="inline-flex min-h-11 items-center font-semibold text-ocean underline">View</Link>
+            </td>
+          </tr>)}</tbody>
+        </table>
+        <ul className="divide-y divide-line lg:hidden">{visible.map((mapping) => <li key={mapping.employee_id} className="p-4">
+          <h4 className="break-words font-semibold">{employeeLabel(mapping)}</h4>
+          <p className="mt-1 break-all text-xs text-muted">Butterbox ID: {mapping.employee_id}</p>
+          <p className="mt-2 break-all text-sm">Payroll employee ID: {mapping.external_employee_id ?? "Not mapped"}</p>
+          <p className="mt-1 text-sm">{mapping.external_employee_id === null ? "Missing" : "Mapped"}</p>
+          <Link href={payrollEmployeeHref(businessId, venueId, connection.id, currentFilters, mapping.employee_id)}
+            aria-label={`View mapping for ${employeeLabel(mapping)} (${mapping.employee_id})`}
+            className="mt-2 inline-flex min-h-11 items-center font-semibold text-ocean underline">View mapping</Link>
+        </li>)}</ul>
+      </div>}
+      {pages > 1 && <nav aria-label="Payroll mapping pages" className="mt-4 flex flex-wrap items-center gap-4 text-sm">
+        {currentFilters.page > 1 && <Link className="inline-flex min-h-11 items-center font-semibold text-ocean underline"
+          href={payrollDirectoryHref(businessId, venueId, connection.id, { ...currentFilters, page: currentFilters.page - 1 })}>
+          Previous
+        </Link>}
+        <span>Page {currentFilters.page} of {pages}</span>
+        {currentFilters.page < pages && <Link className="inline-flex min-h-11 items-center font-semibold text-ocean underline"
+          href={payrollDirectoryHref(businessId, venueId, connection.id, { ...currentFilters, page: currentFilters.page + 1 })}>
+          Next
+        </Link>}
+      </nav>}
+    </section>}
+  </PayrollShell>;
 }

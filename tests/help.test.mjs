@@ -24,6 +24,18 @@ test("help derives supported task content from the maintained guide for every kn
   assert.throws(() => helpTopics(source.replace("### Audit history", "### Removed audit history"), "owner"), /exactly one/);
 });
 
+test("payroll help describes the focused mapping workflow and its permissions", () => {
+  for (const role of ["owner", "admin", "general_manager"]) {
+    const payroll = helpTopics(source, role).find((topic) => topic.id === "payroll");
+    assert.ok(payroll, role);
+    const markdown = payroll.markdown.replace(/\s+/g, " ").toLowerCase();
+    for (const phrase of [
+      "Only owners/admins can manage mappings", "Edit mapping", "Confirm and remove mapping",
+      "provider adapters remain", "protected showcase retains",
+    ]) assert.ok(markdown.includes(phrase.toLowerCase()), `${role}: ${phrase}`);
+  }
+});
+
 test("help visibility is derived from effective roles, not a requested topic or search", () => {
   const employee = helpTopics(source, "employee");
   const manager = helpTopics(source, "foh_manager");
@@ -147,6 +159,8 @@ test("core contextual help destinations and documented screen/link labels stay w
     ["src/app/attendance/page.tsx", "Clock in / out", "Help with clocking and corrections"],
     ["src/app/timesheets/page.tsx", "Weekly timesheet review", "Help with timesheet review", "Help with payroll CSV"],
     ["src/app/settings/payroll/page.tsx", "Payroll employee mapping", "Help with payroll preparation"],
+    ["src/app/settings/payroll/[employeeId]/page.tsx", "Help with payroll preparation"],
+    ["src/app/settings/payroll/new/page.tsx", "Help with payroll preparation"],
     ["src/app/announcements/page.tsx", "Announcements", "Help with announcements"],
   ];
   const topics = [...helpTopics(source, "owner"), ...helpTopics(source, "new_owner")];

@@ -11533,42 +11533,100 @@ test("owners explicitly map same-name employees to payroll destinations without 
     })))).error).toBeNull();
 
     await signIn(page, `mapping-owner-${suffix}@example.test`, password);
+    const owner = createClient(apiUrl, anonKey, options);
+    expect((await owner.auth.signInWithPassword({ email: `mapping-owner-${suffix}@example.test`, password })).error).toBeNull();
     await page.goto(`/timesheets?venue=${venueId}&week=2024-01-08`);
     await page.getByRole("link", { name: "Manage payroll employee mapping" }).click();
     await expect(page.getByRole("heading", { name: "Payroll employee mapping", exact: true })).toBeVisible();
+    await expect(page.getByText("No payroll destinations have been added.", { exact: false })).toBeVisible();
+    await Promise.all([
+      page.waitForURL(/\/settings\/payroll\/new\?/),
+      page.getByRole("link", { name: "Add mapping destination" }).click(),
+    ]);
+    await expect(page.getByRole("heading", { name: "Add mapping destination" })).toBeVisible();
     const add = page.getByRole("region", { name: "Add payroll destination" });
-    await add.getByLabel("Provider", { exact: true }).selectOption("xero");
+    await add.getByRole("combobox", { name: "Provider", exact: true }).selectOption("xero");
     await add.getByLabel("Destination name").fill("Test Xero account");
     await add.getByLabel("Payroll account ID").fill("explicit-account-id");
     await add.getByRole("button", { name: "Add mapping destination" }).click();
     await expect(page.locator("main").getByRole("status"))
       .toContainText("Payroll mapping destination created. No provider has been connected.");
-    const first = page.locator(`#payroll-employee-${firstEmployee}`);
-    const second = page.locator(`#payroll-employee-${secondEmployee}`);
-    await expect(first).toContainText("Missing payroll mapping");
-    await expect(second).toContainText("Missing payroll mapping");
-    await first.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
-    await first.getByLabel("Reason for mapping change").fill("Copied exact employee ID from payroll account");
-    await first.getByRole("button", { name: "Save payroll ID" }).click();
-    await expect(first.locator('input[name="revision"]')).toHaveValue("1");
-    await expect(first.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-001");
-    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("");
-    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-001");
-    await second.getByLabel("Reason for mapping change").fill("Attempt duplicate ID");
-    await second.getByRole("button", { name: "Save payroll ID" }).click();
-    await expect(page.locator("main").getByRole("alert")).toContainText("already assigned to another employee");
-    await second.getByLabel("Payroll employee ID", { exact: true }).fill("Staff-002");
-    await second.getByLabel("Reason for mapping change").fill("Distinct ID despite same name");
-    await second.getByRole("button", { name: "Save payroll ID" }).click();
-    await expect(second.locator('input[name="revision"]')).toHaveValue("1");
-    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await expect(page.getByText("Mapped: 0 · Missing: 2")).toBeVisible();
+    const filters = page.getByRole("form", { name: "Payroll mapping filters" });
+    await filters.getByRole("searchbox", { name: "Search employees" }).fill("Same Name");
+    await filters.getByRole("combobox", { name: "Mapping status" }).selectOption("missing");
+    await filters.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page).toHaveURL(/status=missing/);
+    async function openMapping(employeeId) {
+      await page.getByRole("link", { name: `View mapping for Same Name (${employeeId})` }).click();
+      await expect(page.getByRole("heading", { name: "Employee payroll mapping" })).toBeVisible();
+    }
+    async function editMapping(externalId, reason) {
+      await page.getByRole("button", { name: "Edit mapping" }).click();
+      await expect(page.getByRole("heading", { name: "Edit mapping" })).toBeFocused();
+      await page.getByLabel("Payroll employee ID", { exact: true }).fill(externalId);
+      await page.getByLabel("Reason for mapping change").fill(reason);
+    }
+    async function mappingRows() {
+      const connection = new URL(page.url()).searchParams.get("connection");
+      const result = await owner.rpc("list_payroll_employee_mappings", {
+        p_business_id: businessId, p_connection_id: connection, p_venue_id: venueId,
+      });
+      expect(result.error).toBeNull();
+      return result.data;
+    }
+    await openMapping(firstEmployee);
+    await expect(page.getByLabel("Payroll employee ID", { exact: true })).toHaveCount(0);
+    await editMapping("Temporary", "Discard this draft");
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Discard changes" }).click();
+    expect((await mappingRows()).find((row) => row.employee_id === firstEmployee).revision).toBe(0);
+    await editMapping("Staff-001", "Copied exact employee ID from payroll account");
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    expect((await mappingRows()).find((row) => row.employee_id === firstEmployee).revision).toBe(0);
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.locator("main").getByRole("status")).toContainText("Payroll employee mapping saved");
     await page.reload();
-    await first.getByLabel("Payroll employee ID", { exact: true }).fill("");
-    await first.getByLabel("Reason for mapping change").fill("Remove incorrect assignment");
-    await first.getByRole("button", { name: "Save payroll ID" }).click();
-    await expect(first.locator('input[name="revision"]')).toHaveValue("2");
-    await expect(first).toContainText("Missing payroll mapping");
-    await expect(second.getByLabel("Payroll employee ID", { exact: true })).toHaveValue("Staff-002");
+    await expect(page.getByText("Staff-001", { exact: true })).toBeVisible();
+    expect((await mappingRows()).find((row) => row.employee_id === firstEmployee)).toMatchObject({
+      external_employee_id: "Staff-001", revision: 1,
+    });
+    const audit = await owner.from("sensitive_action_audit").select("new_values")
+      .eq("business_id", businessId).eq("source_table", "payroll_employee_mapping_events");
+    expect(audit.error).toBeNull();
+    expect(audit.data.some((row) => row.new_values.employee_id === firstEmployee &&
+      row.new_values.external_employee_id === "Staff-001")).toBe(true);
+    await page.getByRole("link", { name: "Back to mappings" }).click();
+    await expect(filters.getByRole("combobox", { name: "Mapping status" })).toHaveValue("missing");
+    await openMapping(secondEmployee);
+    await editMapping("Staff-001", "Attempt duplicate ID");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.locator("main").getByRole("alert")).toContainText("already assigned to another employee");
+    await editMapping("Staff-002", "Distinct ID despite same name");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.locator("main").getByRole("status")).toContainText("Payroll employee mapping saved");
+    await page.getByRole("link", { name: "Back to mappings" }).click();
+    await expect(page.getByText("No employees match these filters. Try resetting them.")).toBeVisible();
+    await page.getByRole("link", { name: "Reset filters" }).click();
+    await openMapping(firstEmployee);
+    await editMapping("", "Remove incorrect assignment");
+    await expect(page.getByText("Removing this mapping blocks provider-ready records", { exact: false })).toBeVisible();
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Confirm and remove mapping" }).click();
+    expect((await mappingRows()).find((row) => row.employee_id === firstEmployee).revision).toBe(1);
+    await page.getByLabel("I confirm removal of this employee's payroll mapping.").check();
+    await page.getByRole("button", { name: "Confirm and remove mapping" }).click();
+    await expect(page.locator("main").getByRole("status")).toContainText("Payroll employee mapping removed");
+    expect((await mappingRows()).find((row) => row.employee_id === firstEmployee)).toMatchObject({
+      external_employee_id: null, revision: 2,
+    });
+    expect((await mappingRows()).find((row) => row.employee_id === secondEmployee)).toMatchObject({
+      external_employee_id: "Staff-002", revision: 1,
+    });
+    await page.getByRole("link", { name: "Back to mappings" }).click();
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
@@ -11594,6 +11652,432 @@ test("owners explicitly map same-name employees to payroll destinations without 
     for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
   }
 });
+
+async function withPayrollDirectoryFixtures(run) {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideBusiness, venueId, secondVenue, emptyVenue, outsideVenue, departmentId, secondDepartment, outsideDepartment,
+    firstEmployee, secondEmployee, otherVenueEmployee, outsideEmployee, connectionId, otherConnection, outsideConnection] =
+    Array.from({ length: 16 }, () => randomUUID());
+  const users = [];
+  const email = (role) => `payroll-ux-${role}-${suffix}@example.test`;
+  try {
+    for (const role of ["owner", "admin", "gm", "foh", "employee", "outside"]) {
+      const created = await admin.auth.admin.createUser({ email: email(role), password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Payroll UX cafe" },
+      { id: outsideBusiness, name: "Outside payroll UX cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "Australia/Sydney" },
+      { id: secondVenue, business_id: businessId, name: "Second venue", timezone: "Australia/Sydney" },
+      { id: emptyVenue, business_id: businessId, name: "Empty venue", timezone: "Australia/Sydney" },
+      { id: outsideVenue, business_id: outsideBusiness, name: "Outside venue", timezone: "Australia/Sydney" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH" },
+      { id: secondDepartment, business_id: businessId, venue_id: secondVenue, name: "FOH" },
+      { id: outsideDepartment, business_id: outsideBusiness, venue_id: outsideVenue, name: "FOH" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "admin" },
+      { business_id: businessId, user_id: users[2], role: "general_manager", venue_id: venueId },
+      { business_id: businessId, user_id: users[3], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[4], role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: outsideBusiness, user_id: users[5], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: firstEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "Alex Taylor", role_title: "Server" },
+      { id: secondEmployee, business_id: businessId, venue_id: venueId, department_id: departmentId, name: "Blake Morgan", role_title: "Server" },
+      { id: otherVenueEmployee, business_id: businessId, venue_id: secondVenue, department_id: secondDepartment, name: "Other venue worker", role_title: "Server" },
+      { id: outsideEmployee, business_id: outsideBusiness, venue_id: outsideVenue, department_id: outsideDepartment, name: "Outside worker", role_title: "Server" },
+    ])).error).toBeNull();
+
+    const owner = createClient(apiUrl, anonKey, options);
+    const outside = createClient(apiUrl, anonKey, options);
+    expect((await owner.auth.signInWithPassword({ email: email("owner"), password })).error).toBeNull();
+    expect((await outside.auth.signInWithPassword({ email: email("outside"), password })).error).toBeNull();
+    for (const [client, business, connection, provider, account, name] of [
+      [owner, businessId, connectionId, "xero", "harbour-account", "Harbour payroll"],
+      [owner, businessId, otherConnection, "myob", "backup-account", "Backup payroll"],
+      [outside, outsideBusiness, outsideConnection, "xero", "outside-private-account", "Outside private payroll"],
+    ]) {
+      expect((await client.rpc("create_payroll_mapping_connection", {
+        p_business_id: business, p_connection_id: connection, p_provider: provider,
+        p_account_id: account, p_name: name,
+      })).error).toBeNull();
+    }
+    for (const [client, business, venue, connection, employee, external] of [
+      [owner, businessId, venueId, connectionId, firstEmployee, "Harbour-001"],
+      [owner, businessId, secondVenue, connectionId, otherVenueEmployee, "OTHER-VENUE-PRIVATE"],
+      [outside, outsideBusiness, outsideVenue, outsideConnection, outsideEmployee, "OUTSIDE-PRIVATE"],
+    ]) {
+      expect((await client.rpc("set_payroll_employee_mapping_scoped", {
+        p_business_id: business, p_venue_id: venue, p_connection_id: connection, p_employee_id: employee, p_expected_revision: 0,
+        p_external_employee_id: external, p_reason: "Synthetic fixture", p_request_id: randomUUID(),
+        p_destination_confirmed: true, p_removal_confirmed: false,
+      })).error).toBeNull();
+    }
+    await run({ suffix, password, email, users, businessId, outsideBusiness, venueId, secondVenue, emptyVenue,
+      outsideVenue, firstEmployee, secondEmployee, otherVenueEmployee, outsideEmployee,
+      connectionId, otherConnection, outsideConnection, owner });
+  } finally {
+    for (const id of [businessId, outsideBusiness]) await assertBusinessFixturesPreserved(admin, id);
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+}
+
+test("payroll UX: destination switching, empty states and return filters", async ({ page }) => {
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId, emptyVenue,
+    firstEmployee, connectionId, otherConnection }) => {
+    await signIn(page, email("owner"), password);
+    await page.goto(`/settings/payroll?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    await expect(page.getByText("Xero and other adapters remain unavailable", { exact: false })).toBeVisible();
+    await expect(page.getByText("Mapped: 1 · Missing: 1")).toBeVisible();
+    const filters = page.getByRole("form", { name: "Payroll mapping filters" });
+    await filters.getByRole("searchbox", { name: "Search employees" }).fill("Alex");
+    await filters.getByRole("combobox", { name: "Mapping status" }).selectOption("mapped");
+    await filters.getByRole("combobox", { name: "Sort by" }).selectOption("payroll-id");
+    await filters.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByRole("link", { name: `View mapping for Alex Taylor (${firstEmployee})` })).toBeVisible();
+    const destinations = page.getByRole("region", { name: "Payroll destinations" });
+    await destinations.getByRole("combobox", { name: "Payroll destination" }).selectOption(otherConnection);
+    await destinations.getByRole("button", { name: "Show mappings" }).click();
+    await expect(page.getByRole("heading", { name: "Backup payroll" })).toBeVisible();
+    await expect(filters.getByRole("searchbox", { name: "Search employees" })).toHaveValue("Alex");
+    await expect(filters.getByRole("combobox", { name: "Mapping status" })).toHaveValue("mapped");
+    await expect(filters.getByRole("combobox", { name: "Sort by" })).toHaveValue("payroll-id");
+    await expect(page.getByText("No employees match these filters. Try resetting them.")).toBeVisible();
+    await page.goBack();
+    await expect.poll(() => new URL(page.url()).searchParams.get("connection")).toBe(connectionId);
+    await expect(destinations.getByRole("combobox", { name: "Payroll destination" })).toHaveValue(connectionId);
+    await expect(page.getByText("Harbour-001", { exact: true })).toBeVisible();
+    await page.goForward();
+    await expect(destinations.getByRole("combobox", { name: "Payroll destination" })).toHaveValue(otherConnection);
+    await page.getByRole("link", { name: "Add mapping destination" }).click();
+    await expect(page.getByText("it does not authorise access, connect a provider or send payroll", { exact: false })).toBeVisible();
+    await page.getByRole("link", { name: "Back to mappings" }).click();
+    await expect(filters.getByRole("searchbox", { name: "Search employees" })).toHaveValue("Alex");
+    await page.goto(`/settings/payroll?business=${businessId}&venue=${emptyVenue}&connection=${connectionId}`);
+    await expect(page.getByText("No employee profiles in this venue.")).toBeVisible();
+    await expect(page.getByText("No employees match these filters. Try resetting them.")).toHaveCount(0);
+  });
+});
+
+test("payroll UX: admin access, forged scopes and unauthorized roles", async ({ page, browser }) => {
+  test.setTimeout(120_000);
+  await withPayrollDirectoryFixtures(async ({ email, password, users, businessId, venueId, secondVenue, firstEmployee, secondEmployee,
+    otherVenueEmployee, outsideEmployee, connectionId, outsideConnection, owner }) => {
+    await signIn(page, email("admin"), password);
+    const directory = `/settings/payroll?business=${businessId}&venue=${venueId}&connection=${connectionId}`;
+    await page.goto(directory);
+    await expect(page.getByText("Harbour-001", { exact: true })).toBeVisible();
+    await expect(page.getByText("OTHER-VENUE-PRIVATE", { exact: true })).toHaveCount(0);
+    await expect(page.getByText("OUTSIDE-PRIVATE", { exact: true })).toHaveCount(0);
+    for (const search of ["OTHER-VENUE-PRIVATE", "OUTSIDE-PRIVATE"]) {
+      await page.goto(`${directory}&q=${search}`);
+      await expect(page.getByText("No employees match these filters. Try resetting them.")).toBeVisible();
+      await expect(page.getByText("Other venue worker", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("Outside worker", { exact: true })).toHaveCount(0);
+    }
+    for (const id of [otherVenueEmployee, outsideEmployee]) {
+      const response = await page.goto(`/settings/payroll/${id}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+      expect([200, 404]).toContain(response.status());
+      await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+      await expect(page.locator('meta[name="robots"][content="noindex"]').first()).toHaveAttribute("content", "noindex");
+      await expect(page.getByText("OTHER-VENUE-PRIVATE", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("OUTSIDE-PRIVATE", { exact: true })).toHaveCount(0);
+    }
+    await page.goto(`/settings/payroll?business=${businessId}&venue=${venueId}&connection=${outsideConnection}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("selected payroll destination is unavailable");
+    await expect(page.getByText("outside-private-account", { exact: false })).toHaveCount(0);
+    await page.goto(`/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Forged-ID");
+    await page.getByLabel("Reason for mapping change").fill("Forged other venue");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.locator('input[name="employee_id"]').evaluate((input, value) => { input.value = value; }, otherVenueEmployee);
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+    const unchanged = await owner.rpc("list_payroll_employee_mappings", {
+      p_business_id: businessId, p_connection_id: connectionId, p_venue_id: secondVenue,
+    });
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data.find((row) => row.employee_id === otherVenueEmployee)).toMatchObject({
+      external_employee_id: "OTHER-VENUE-PRIVATE", revision: 1,
+    });
+    await page.goto(`/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Forged-connection");
+    await page.getByLabel("Reason for mapping change").fill("Forged outside destination");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.locator('input[name="connection_id"]').evaluate((input, value) => { input.value = value; }, outsideConnection);
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+    await page.goto(`/settings/payroll/${secondEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Admin-002");
+    await page.getByLabel("Reason for mapping change").fill("Admin verified employee");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText("mapping saved");
+    await page.reload();
+    await expect(page.getByText("Admin-002", { exact: true })).toBeVisible();
+    const audit = await owner.from("sensitive_action_audit").select("actor_id, new_values")
+      .eq("business_id", businessId).eq("source_table", "payroll_employee_mapping_events");
+    expect(audit.error).toBeNull();
+    expect(audit.data.some((row) => row.actor_id === users[1] && row.new_values.employee_id === secondEmployee &&
+      row.new_values.external_employee_id === "Admin-002")).toBe(true);
+    for (const role of ["gm", "foh", "employee", "outside"]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      try {
+        const restricted = await context.newPage();
+        await signIn(restricted, email(role), password);
+        await restricted.goto(directory);
+        if (role === "outside") {
+          await expect(restricted.getByRole("heading", { name: "Payroll mappings unavailable" })).toBeVisible();
+        } else {
+          await expect(restricted).toHaveURL(/error=permission/);
+        }
+        await expect(restricted.getByText("Harbour-001", { exact: true })).toHaveCount(0);
+        await restricted.goto(`/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+        if (role === "outside") {
+          await expect(restricted.getByRole("heading", { name: "Payroll mappings unavailable" })).toBeVisible();
+        } else {
+          await expect(restricted).toHaveURL(/error=permission/);
+        }
+        await expect(restricted.getByText("harbour-account", { exact: false })).toHaveCount(0);
+      } finally {
+        await context.close();
+      }
+    }
+    await page.goto(`/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Unauthorized-change");
+    await page.getByLabel("Reason for mapping change").fill("Role changed before submission");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    const sessionPage = await page.context().newPage();
+    try {
+      await sessionPage.goto("/");
+      await sessionPage.getByRole("button", { name: "Sign out" }).click();
+      await signIn(sessionPage, email("foh"), password);
+      await page.getByRole("button", { name: "Save payroll ID" }).click();
+      await expect(page).toHaveURL(/error=permission/);
+      await expect(page.getByText("Harbour-001", { exact: true })).toHaveCount(0);
+    } finally {
+      await sessionPage.close();
+    }
+    const after = await owner.rpc("list_payroll_employee_mappings", {
+      p_business_id: businessId, p_connection_id: connectionId, p_venue_id: venueId,
+    });
+    expect(after.error).toBeNull();
+    expect(after.data.find((row) => row.employee_id === firstEmployee)).toMatchObject({
+      external_employee_id: "Harbour-001", revision: 1,
+    });
+  });
+});
+
+test("payroll UX: stale and malformed updates fail and recover", async ({ page }) => {
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId, firstEmployee, connectionId, owner }) => {
+    await signIn(page, email("owner"), password);
+    const detail = `/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`;
+    await page.goto(detail);
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Stale-draft");
+    await page.getByLabel("Reason for mapping change").fill("Attempt stale edit");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    expect((await owner.rpc("set_payroll_employee_mapping_scoped", {
+      p_business_id: businessId, p_venue_id: venueId, p_connection_id: connectionId, p_employee_id: firstEmployee,
+      p_expected_revision: 1, p_external_employee_id: "Concurrent-002", p_reason: "Concurrent edit",
+      p_request_id: randomUUID(), p_destination_confirmed: true, p_removal_confirmed: false,
+    })).error).toBeNull();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("mapping changed");
+    await expect(page.getByText("Concurrent-002", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Malformed-draft");
+    await page.getByLabel("Reason for mapping change").fill("Invalid revision");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.locator('input[name="revision"]').evaluate((input) => { input.value = "not-a-revision"; });
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("Choose valid IDs and enter a reason");
+    await expect(page.getByText("Concurrent-002", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit mapping" }).click();
+    await page.getByLabel("Payroll employee ID", { exact: true }).fill("Recovered-003");
+    await page.getByLabel("Reason for mapping change").fill("After reviewing current value");
+    await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText("mapping saved");
+    await page.reload();
+    await expect(page.getByText("Recovered-003", { exact: true })).toBeVisible();
+  });
+});
+
+test("payroll UX: stable filtered pagination returns to the selected page", async ({ page }) => {
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId, connectionId }) => {
+    const department = await admin.from("departments").select("id")
+      .eq("business_id", businessId).eq("venue_id", venueId).single();
+    expect(department.error).toBeNull();
+    const workers = Array.from({ length: 26 }, (_, index) => ({
+      id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: department.data.id,
+      name: `Directory Worker ${String(index).padStart(2, "0")}`, role_title: "Server",
+    }));
+    expect((await admin.from("employees").insert(workers)).error).toBeNull();
+    await signIn(page, email("owner"), password);
+    await page.goto(`/settings/payroll?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    const filters = page.getByRole("form", { name: "Payroll mapping filters" });
+    await filters.getByRole("searchbox", { name: "Search employees" }).fill("Directory Worker");
+    await filters.getByRole("combobox", { name: "Mapping status" }).selectOption("missing");
+    await filters.getByRole("button", { name: "Apply filters" }).click();
+    await expect(page.getByText("26 employees of 28", { exact: true })).toBeVisible();
+    await expect(page.getByText("Page 1 of 2", { exact: true })).toBeVisible();
+    await page.getByRole("navigation", { name: "Payroll mapping pages" }).getByRole("link", { name: "Next" }).click();
+    await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: `View mapping for Directory Worker 25 (${workers[25].id})` }).click();
+    await expect(page.getByRole("heading", { name: "Employee payroll mapping" })).toBeVisible();
+    await page.getByRole("link", { name: "Back to mappings" }).click();
+    await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+    await expect(filters.getByRole("searchbox", { name: "Search employees" })).toHaveValue("Directory Worker");
+    await expect(filters.getByRole("combobox", { name: "Mapping status" })).toHaveValue("missing");
+  });
+});
+
+test("payroll UX: loading and failed saves are announced and recoverable", async ({ page }) => {
+  await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId, firstEmployee, connectionId, owner }) => {
+    await signIn(page, email("owner"), password);
+    let releaseNavigation;
+    const navigationHeld = new Promise((resolve) => { releaseNavigation = resolve; });
+    await page.route("**/settings/payroll**", async (route) => {
+      const headers = route.request().headers();
+      if (headers.rsc === "1" && !headers["next-router-prefetch"]) await navigationHeld;
+      await route.continue();
+    });
+    try {
+      await page.goto(`/timesheets?business=${businessId}&venue=${venueId}`);
+      await page.getByRole("navigation", { name: "Main navigation" })
+        .getByRole("link", { name: "Payroll", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Loading…" })).toBeVisible();
+      releaseNavigation();
+      await expect(page.getByRole("heading", { name: "Payroll employee mapping" })).toBeVisible();
+    } finally {
+      releaseNavigation();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+    await page.goto(`/settings/payroll/${firstEmployee}?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+    async function prepareChange() {
+      await page.getByRole("button", { name: "Edit mapping" }).click();
+      await page.getByLabel("Payroll employee ID", { exact: true }).fill("Retry-002");
+      await page.getByLabel("Reason for mapping change").fill("After temporary outage");
+      await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
+    }
+    await prepareChange();
+    let releaseSave;
+    const saveHeld = new Promise((resolve) => { releaseSave = resolve; });
+    await page.route("**/settings/payroll/**", async (route) => {
+      if (route.request().method() === "POST" && route.request().headers()["next-action"]) {
+        await saveHeld;
+        await route.fulfill({ status: 500, contentType: "text/plain", body: "Simulated outage" });
+      } else {
+        await route.continue();
+      }
+    });
+    try {
+      await page.getByRole("button", { name: "Save payroll ID" }).click();
+      await expect(page.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    } finally {
+      releaseSave();
+    }
+    await expect(page.getByRole("heading", { name: "Payroll mappings unavailable" })).toBeFocused();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("check the current mapping before trying again");
+    const unchanged = await owner.rpc("list_payroll_employee_mappings", {
+      p_business_id: businessId, p_connection_id: connectionId, p_venue_id: venueId,
+    });
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data.find((row) => row.employee_id === firstEmployee)).toMatchObject({
+      external_employee_id: "Harbour-001", revision: 1,
+    });
+    await page.unroute("**/settings/payroll/**");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByText("Harbour-001", { exact: true })).toBeVisible();
+    await prepareChange();
+    await page.getByRole("button", { name: "Save payroll ID" }).click();
+    await expect(page.getByRole("main").getByRole("status")).toContainText("mapping saved");
+    await page.reload();
+    await expect(page.getByText("Retry-002", { exact: true })).toBeVisible();
+  });
+});
+
+for (const width of [375, 390, 768, 1024, 1440]) {
+  test(`payroll UX: responsive keyboard and accessibility at ${width}px`, async ({ page }) => {
+    test.setTimeout(180_000);
+    await withPayrollDirectoryFixtures(async ({ email, password, businessId, venueId, firstEmployee, connectionId }) => {
+      await signIn(page, email("owner"), password);
+      const screenshots = process.env.BUTTERBOX_UXFIX_004_SCREENSHOTS;
+      const wcagTags = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa", "best-practice"];
+      async function checkLayout(label) {
+        const layout = await page.evaluate(() => ({
+          width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth,
+        }));
+        expect(layout.scrollWidth, `${label}: horizontal page overflow`).toBeLessThanOrEqual(layout.width);
+        const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
+        const violations = results.violations
+          .map((item) => `${item.impact} ${item.id}: ${item.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+        expect(violations, `${label}: accessibility violations`).toEqual([]);
+      }
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/settings/payroll?business=${businessId}&venue=${venueId}&connection=${connectionId}`);
+      await expect(page.getByRole("heading", { name: "Payroll employee mapping" })).toBeVisible();
+      await checkLayout(`${width} directory`);
+      const destinationFits = await page.getByRole("combobox", { name: "Payroll destination" }).evaluate((select) => {
+        const style = getComputedStyle(select);
+        const canvas = document.createElement("canvas");
+        const context = canvas.getContext("2d");
+        if (!context) throw new Error("Could not measure the selected destination label.");
+        context.font = style.font;
+        const label = select.selectedOptions[0].textContent;
+        return context.measureText(label).width + parseFloat(style.paddingLeft) + parseFloat(style.paddingRight) + 24
+          <= select.clientWidth;
+      });
+      expect(destinationFits, `${width}: selected destination label is clipped`).toBe(true);
+      const directory = page.getByRole("region", { name: "Employee payroll IDs" });
+      if (width < 1024) await expect(directory.getByRole("list")).toBeVisible();
+      else await expect(directory.getByRole("table")).toBeVisible();
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-directory-${width}.png`, fullPage: true });
+      const link = page.getByRole("link", { name: `View mapping for Alex Taylor (${firstEmployee})` });
+      await link.focus();
+      await expect(link).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(link).not.toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(link).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { name: "Employee payroll mapping" })).toBeVisible();
+      await checkLayout(`${width} detail`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-detail-${width}.png`, fullPage: true });
+      const edit = page.getByRole("button", { name: "Edit mapping" });
+      await edit.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { name: "Edit mapping", exact: true })).toBeFocused();
+      await checkLayout(`${width} edit`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-edit-${width}.png`, fullPage: true });
+      await page.getByLabel("Payroll employee ID", { exact: true }).fill("");
+      await checkLayout(`${width} removal`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-removal-${width}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.getByRole("button", { name: "Discard changes" }).click();
+      await expect(edit).toBeFocused();
+      await page.getByRole("link", { name: "Back to mappings" }).click();
+      await page.getByRole("link", { name: "Add mapping destination" }).click();
+      await expect(page.getByRole("heading", { name: "Add mapping destination" })).toBeVisible();
+      await checkLayout(`${width} add destination`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-add-${width}.png`, fullPage: true });
+    });
+  });
+}
 
 test("generic payroll CSV downloads approved hours and reconciles amended exports", async ({ page, browser }) => {
   test.setTimeout(120_000);

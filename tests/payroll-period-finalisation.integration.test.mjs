@@ -276,10 +276,11 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     });
     assert.equal((await mappedRecords(clients.owner)).error?.message, "Missing payroll employee mappings");
     const setMapping = (externalId, revision, request = randomUUID()) =>
-      clients.owner.rpc("set_payroll_employee_mapping", {
-        p_business_id: businessId, p_connection_id: connectionId, p_employee_id: employeeId,
+      clients.owner.rpc("set_payroll_employee_mapping_scoped", {
+        p_business_id: businessId, p_venue_id: venueId, p_connection_id: connectionId, p_employee_id: employeeId,
         p_expected_revision: revision, p_external_employee_id: externalId,
         p_reason: "Explicit payroll ID verified in test account", p_request_id: request,
+        p_destination_confirmed: true, p_removal_confirmed: externalId === null,
       });
     const competingMappings = await Promise.all(Array.from({ length: 8 }, (_, index) =>
       setMapping(`exact-worker-${index}`, 0)));
@@ -308,9 +309,9 @@ test("payroll period finalisation enforces HTTP scope and serializes with attend
     }
     assert.equal((await canonical(clients.owner, finalisationId)).data[0].record.worker.providerMapping, null,
       "provider mapping is detached from the immutable source snapshot");
-    const mappingGate = await holdLock(asOwner(`select public.set_payroll_employee_mapping(` +
-      `'${businessId}'::uuid, '${connectionId}'::uuid, '${employeeId}'::uuid, 2, null, ` +
-      `'Remove mapping before a provider read', '${randomUUID()}'::uuid)`));
+    const mappingGate = await holdLock(asOwner(`select public.set_payroll_employee_mapping_scoped(` +
+      `'${businessId}'::uuid, '${venueId}'::uuid, '${connectionId}'::uuid, '${employeeId}'::uuid, 2, null, ` +
+      `'Remove mapping before a provider read', '${randomUUID()}'::uuid, true, true)`));
     let pendingMappedRecords;
     try {
       pendingMappedRecords = Promise.resolve(mappedRecords(clients.owner));
