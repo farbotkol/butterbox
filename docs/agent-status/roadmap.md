@@ -2,20 +2,20 @@
 
 ## Local showcase setup checkpoint
 
-- **Last report:** 2026-11-03 12:13 AEDT (UTC+1100), observed on the local operator's clock.
+- **Last report:** 2026-11-03 12:15 AEDT (UTC+1100), observed on the local operator's clock.
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current work:** User-directed BB-DEMO-001 operator setup and test-owner option; the completed story is not being reopened.
 - **Criteria:** A separately verified internal-only showcase, 12–15 fictional FOH/BOH staff and realistic sample workflows, no production data, real messaging or live payroll, and guarded reset; the designated login must be test-only and scoped to the isolated project.
-- **Phase:** Testing.
-- **Activity:** Finishing evidence and the delivery checkpoint for the verified local showcase and separate-cookie fix.
-- **Progress since previous report:** Rebuilt the showcase, verified both apps on loopback, passed cross-port session isolation and restored the updated user guide into the running snapshot. The ordinary workspace's aggregate data and disabled demo seed remain unchanged.
-- **Tests and results:** 35/35 focused Node tests, 3/3 live integration runs, 7/7 production Chromium scenarios, a reciprocal ordinary-app session check, guarded isolated reset/reseed, production build, changed-code ESLint, TypeScript and diff checks passed. The previously reproduced old-build cookie collision passed after the fix.
+- **Phase:** Complete.
+- **Activity:** Delivering the running isolated local showcase and its private owner-login handoff.
+- **Progress since previous report:** Committed and pushed the verified source, tests and documentation; confirmed the private login matches the requested showcase owner. Both app login pages returned HTTP 200 on loopback, the running guide matches source, and the final six-service isolation check passed.
+- **Tests and results:** 35/35 focused Node tests, 3/3 live integration runs, 7/7 production Chromium scenarios, a reciprocal ordinary-app session check, guarded isolated reset/reseed, production build, changed-code ESLint, TypeScript and diff checks passed. The old-build cookie collision passed after the fix. Final read-only ordinary-project counts remained 1 account, 1 business, 1 venue, 2 departments, 0 employees and 2 shifts; demo seeding remained disabled.
 - **Failing tests:** None known for this local setup.
 - **Blockers/risks:** The operator must confirm the designated alias is test-only. Hosted access, production/release regression, award compliance and final brand gates are not established by this setup. A concurrent branding commit arrived after the historical blocker below; its current approval status was not verified here.
 - **Documentation:** README and user guide updated for test-owner isolation, separate passwords, reset and operator responsibilities; acceptance evidence recorded in implementation progress.
-- **Next concrete action:** Commit the verified source, tests and documentation; push without force and verify the remote SHA.
-- **Latest development commit:** `677a33e681d56ab460749398d5801274b3bce072` (concurrent branding assets, fast-forwarded without changing this setup); the showcase changes are not yet committed.
-- **Push outcome:** Previous status checkpoint `82a3b90d6e43bea4bbcb53fb98e2628e4123ba06` was pushed and verified; this checkpoint has not yet been pushed.
+- **Next concrete action:** The operator can sign into the showcase with the separate generated owner password. When Roadmap work resumes, reassess current branding evidence and select the next ready story; BB-REPORT-002 remains In Progress.
+- **Latest development commit:** `0f8c847aaa089baaed754a3cd059cb1644afa13c` (isolated showcase test-owner login and session separation).
+- **Push outcome:** Development commit `0f8c847aaa089baaed754a3cd059cb1644afa13c` was pushed and its remote SHA verified; this status checkpoint is pending.
 
 The prior Roadmap planning and brand blocker remain below; their current execution state is not verified by this local checkpoint.
 
