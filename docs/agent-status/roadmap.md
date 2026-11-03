@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-REPORT-002 resumed checkpoint
+
+- **Last report:** 2026-11-03 16:54 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** Active at this checkpoint only; no background scheduling claim.
+- **Current story:** BB-REPORT-002 — Overtime and exceptions report, already In Progress (Showcase P1).
+- **Acceptance criteria:** Summarise overlaps, excessive hours and missing clock events; provide source drill-down; do not infer award breaches without verified rules.
+- **Phase:** Planning.
+- **Activity:** Resuming the paused story by inspecting existing reporting, authorization, attendance and roster primitives.
+- **Progress since previous report:** BB-BRAND-004's supplied imagery review library, provenance, catalogue and visual selection summary were committed as `06aca95`. BRAND-004 remains Blocked on native resolution, rights and owner approval; DEMO-004 remains Blocked on owner review. The running showcase was not disrupted.
+- **Tests and results:** BRAND-004 image checks **4/4**, isolated browser checks **4/4**, catalogue **202/202**, documentation links **24/24**, changed-file ESLint and TypeScript passed. No REPORT-002 implementation or tests have run yet.
+- **Failing tests:** None known. The first imagery push received HTTP 400; retrying over HTTP/1.1 succeeded and the remote SHA matched.
+- **Blockers requiring intervention:** No REPORT-002 blocker established yet. Its operational hours threshold must not be presented as an award rule; safe database verification requires a separately identified disposable project.
+- **Documentation:** BRAND-004 brand documentation updated; the application User Guide was not applicable to its undeployed review assets. REPORT-002 guidance is pending implementation.
+- **Next concrete action:** Trace the existing report and scoped data-access patterns, then implement and test the smallest safe end-to-end slice without changing the showcase.
+- **Latest development commit:** `06aca95d2620116dd0a06cda99c5bcdd6695ade3` (BB-BRAND-004 review library).
+- **Push outcome:** `06aca95` pushed and remote SHA verified; this checkpoint is pending.
+- **Backlog:** 127 total; 63 Done, 1 In Progress, 8 Blocked, 55 Backlog.
+
 ## BB-BRAND-004 supplied imagery checkpoint
 
 - **Last report:** 2026-11-03 16:49 AEDT (UTC+1100), observed on the local operator's clock.
