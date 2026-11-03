@@ -1,10 +1,11 @@
 # Roadmap Agent — Activity Status
 
-- **Last report:** 2026-11-02 23:24 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-03 00:32 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent; Core Roadmap on `copilot/finish-roadmap-for-app`
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
-- **Current story:** BB-REPORT-002 — Overtime and exceptions report (In Progress)
-- **Phase:** Planning
+- **Owner-directed brand work (BB-BRAND-002–005): Blocked — missing source.** At 2026-11-03 00:32 UTC, the owner asked to implement the approved Coastal Wave identity from `branding/originals/butterbox-coastal-wave-approved-reference.png`. That file and `branding/originals/` do **not** exist in the working tree, any fetched remote branch or Git history (`git log --all -- 'branding/originals/*'` returned none). The image was not inspected, no logo was vectorized and existing draft SVGs were not substituted. `ASSET_INDEX.csv` was not changed because it must not record an unverified binary as present. BB-DEMO-003/004 depend on BRAND-002 and remain blocked. **Needed:** commit or upload the PNG at that path. Next: verify, hash and inspect it, then run BRAND-002→005.
+- **Current story (paused for owner priority):** BB-REPORT-002 — Overtime and exceptions report (In Progress)
+- **Phase:** Blocked (brand); REPORT-002 Planning
 - **Criteria:** Summarize overlaps, excessive hours and missing clock events; drill down to sources; do not infer award breaches without verified rules.
 - **Activity:** Inspect existing scoped reporting, overlap, attendance and shared-worker primitives before implementation.
 - **Progress since previous report:** Selected ready Showcase P1 REPORT-002. The user was unavailable for threshold questions and requested a pragmatic choice: use a user-entered non-statutory threshold without a fixed default, with scheduled and approved-worked hours separate. No legal/payroll assumption is approved.
