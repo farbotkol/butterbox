@@ -11,7 +11,16 @@ const poppins = Poppins({
   variable: "--font-poppins",
 });
 
+function siteUrl() {
+  try {
+    return process.env.NEXT_PUBLIC_SITE_URL ? new URL(process.env.NEXT_PUBLIC_SITE_URL) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: "Butterbox Systems — less admin, more good days",
   description: "Simple, people-first scheduling for hospitality teams.",
   applicationName: "Butterbox Systems",
@@ -19,7 +28,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#123f4a",
+  themeColor: "#18282B",
   width: "device-width",
   initialScale: 1,
 };

@@ -155,6 +155,12 @@ Award Central and production/legal acceptance are not implied.
   password of at least ten characters, then complete email verification.
   **Sign in** (`/login`) uses **Email address** and **Password**. Invalid
   credentials deliberately do not identify whether an account exists.
+- The sign-in, registration and app navigation show the Butterbox Coastal Wave
+  logo. The sign-in pages also show decorative coastal artwork, which screen
+  readers skip; on phones the artwork sits as a short band above the form.
+  Browsers and home-screen shortcuts use the matching Butterbox icon. The look
+  follows an owner-approved design direction, and the final logo artwork is
+  still awaiting owner review.
 - Use **Forgot password?**, then **Send reset link** (`/forgot-password`).
   Follow the account-service email and choose **Update password** on
   `/reset-password`. An expired/invalid link requires a new reset request;
@@ -872,6 +878,8 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-REPORT-001 | Hours and labour — owners — definitions, filtering, reconciliation and illustrative costs |
 | BB-SAAS-004 | For employees — Mobile and keyboard use; engineering performance work has no separate user operation |
 | BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
+| BB-BRAND-002/003 | Accounts and business access — logo and icon appearance; [brand guidelines](../branding/BRAND_GUIDELINES.md) (draft, final owner visual review pending) |
+| BB-BRAND-005 | Accounts and business access — sign-in artwork; no workflow change |
 | BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
 **Document ownership:** Main Roadmap feature agent maintains user-facing guidance with each completed feature. Update this guide and any relevant help UI when workflows change; indicate unavailable or blocked capabilities explicitly.

@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="169 25 430 430" width="430" height="430" role="img" aria-labelledby="title desc">
-  <title id="title">Butterbox coastal B mark</title>
-  <desc id="desc">Coastal wave-shaped B mark in dark ocean and sea-glass blue.</desc>
-  <rect x="169" y="25" width="430" height="430" fill="#FAF9F6"/>
-  <g id="wave-b">
-    <path fill="#123F4A" d="M210 54 H413 C506 54 559 95 559 173 C559 226 543 262 502 292 C467 317 431 313 408 293 L386 265 C372 250 377 231 389 218 C401 204 416 196 430 183 C461 154 449 119 420 119 C388 117 359 135 333 156 L194 252 V70 C194 61 201 54 210 54 Z"/>
-    <path fill="#83B9BC" d="M194 282 C223 257 238 251 262 240 C233 262 216 273 222 284 C230 301 239 289 260 274 C292 250 313 244 329 252 C355 262 370 293 387 312 C414 342 445 348 472 335 C490 326 506 306 520 288 C529 277 538 278 544 282 C563 281 573 303 574 330 V380 C574 407 557 422 537 422 H214 C200 422 194 410 194 396 Z"/>
-  </g>
-</svg>

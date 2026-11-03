@@ -5,7 +5,7 @@
   --ocean: #123f4a;
   --sea-glass: #83b9bc;
   --sand: #f1e7d5;
-  --sun: #f4bc59;
+  --sun: #f0b150;
   --cloud: #faf9f6;
   --ink: #173a40;
   --muted: #53696d;
@@ -16,6 +16,12 @@
   --warning: #8a5700;
   --danger: #a93636;
   --info: #2e6872;
+  /* Coastal Wave logo palette — see branding/BRAND_GUIDELINES.md */
+  --brand-gold: #f0b150;
+  --brand-teal: #619a92;
+  --brand-cream: #f9f1e5;
+  --brand-charcoal: #18282b;
+  --brand-shell: #fbf6ee;
 }
 
 @theme inline {
@@ -31,6 +37,11 @@
   --color-line: var(--line);
   --color-soft-sea: var(--soft-sea);
   --color-soft-sand: var(--soft-sand);
+  --color-brand-gold: var(--brand-gold);
+  --color-brand-teal: var(--brand-teal);
+  --color-brand-cream: var(--brand-cream);
+  --color-brand-charcoal: var(--brand-charcoal);
+  --color-brand-shell: var(--brand-shell);
   --font-sans: var(--font-inter);
   --font-display: var(--font-poppins);
 }

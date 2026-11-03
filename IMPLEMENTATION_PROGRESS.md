@@ -3,8 +3,12 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **59**.
-  In Progress: **1**. Blocked: **6**. Not started (Backlog): **61**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **62**.
+  In Progress: **1**. Blocked: **7**. Not started (Backlog): **57**.
+- BB-BRAND-002/003/005 are **Done** and BB-BRAND-004 is **Blocked (partial)**. The work uses the
+  owner-selected Coastal Wave reference (design direction approved). The traced vector logo system, icons,
+  brand guide and sign-in artwork await the owner's final visual review. Production browsers passed
+  **3/3**, with lint, types and split build also passing. Homepage photography is missing.
 - BB-ROSTER-011 is **Done**: opt-in keyboard shortcuts, scoped display-only
   team-member search, guarded draft-deletion confirmation and existing quick
   undo. Focused Node **21/21**, applied pgTAP **190/190**, authenticated
@@ -61,8 +65,9 @@
   now documents the verified controls and limitations; all four criteria pass.
 - The requested **BRAND** epic and ten original-roadmap P2 planning stories cover an asset
   library, logo variants, guidelines, homepage and login imagery, marketing
-  visuals, Google Ads, social media, email and sales materials. BRAND-001
-  asset governance is Done; the other nine remain Backlog. The concept catalogue exists, but its referenced image binaries,
+  visuals, Google Ads, social media, email and sales materials. BRAND-001,
+  002, 003 and 005 are Done. BRAND-004 is Blocked on missing licensed photography. BRAND-006 to 010
+  remain Backlog. The concept catalogue exists, but its referenced image binaries,
   approved logos and approved campaigns are not asserted to exist.
 - BB-ATTEND-004 (rotating QR kiosk) is **Done**. As of 2026-11-02 17:54 UTC,
   all four criteria are verified. QR pgTAP passed **62/62** against the
@@ -709,7 +714,12 @@ settings/delivery still require their own implementation and verification.
 
 ## Current story
 
-**BB-REPORT-002 — Overtime and exceptions report: In Progress (Planning).**
+**BB-REPORT-002 — Overtime and exceptions report: In Progress (Planning), paused.**
+Paused on 2026-11-03 for the owner's explicit priority instruction (Coastal Wave brand identity, then Showcase
+P0 DEMO-003/004). The BRAND-002 blocker noted below was resolved when the owner supplied the reference
+image. No REPORT-002 code exists; the untracked
+`supabase/migrations/20261103220000_scoped_exceptions_report.sql` belongs to other work, is preserved
+and is not committed by the Roadmap Agent.
 BB-ROSTER-011 is verified below. Select a scoped, read-only report of
 overlapping shifts, hours and missing attendance events, with source drill-down
 and no award-breach inference. Use a user-entered operational weekly threshold
@@ -726,6 +736,53 @@ for "excessive hours"; the report must not manufacture one or imply wage
 calculation. First inspect existing permission, overlap, attendance, shared
 worker and reporting primitives; record any genuine implementation blocker.
 **Documentation: pending.** No REPORT-002 criterion has been verified.
+
+## Latest completed brand identity stories
+
+**BB-BRAND-002 — Create logo variants: Done. BB-BRAND-003 — Brand guidelines: Done.
+BB-BRAND-005 — Login artwork: Done. BB-BRAND-004 — Homepage imagery: Blocked (partial).**
+
+The owner selected the Coastal Wave concept and reprioritised Showcase P0 brand work. The supplied reference
+is `branding/originals/butterbox-approved-logo.png` (1254×1254 RGBA, SHA-256 `9b0880e3…3fe15`). The owner's
+message named it `butterbox-coastal-wave-approved-reference.png`, but the supplied file was untracked and
+differently named. It was inspected, confirmed to match the described concept and committed unchanged in
+`677a33e`.
+
+**Approval boundary.** The owner approved the design direction only. All vectors, icons, the guide and the
+artwork are recorded as `draft`, awaiting the owner's final visual review. Rights and trademark clearance are
+not performed.
+
+**Plan.** Trace the reference with potrace rather than embedding the raster. Generate every variant, the
+app copies and the TypeScript geometry from one script. Render the logo through a single `BrandLockup`
+component. Verify fidelity, small sizes, contrast, the catalogue and the real sign-in pages.
+
+| Criterion | Implementation evidence | Verification and actual result | Status |
+| --- | --- | --- | --- |
+| BRAND-002.1 — vector masters and variants | `branding/tools/trace_reference.py`, `logos/source/traced-geometry.json`, `scripts/build-brand-assets.mjs`; 11 SVG masters, transparent PNGs, favicon SVG/ICO/16–48, app 192/512, maskable 512, apple-touch 180, social 400/1024 | Re-rendered the vectors at reference coordinates. IoU: gold 0.9958, teal 0.9991, cream 0.9960, wordmark 0.9946 (905 of 269,189 solid pixels differ, all 1 px edges). Side-by-side visual check done. All SVGs parse; they contain only path, g, title and rect elements, with no image, script, gradient or filter | Pass |
+| BRAND-002.2 — approval and rights recorded | 88-row `ASSET_INDEX.csv`: reference `approved` (direction only), 75 derivatives `draft`, superseded `public/butterbox_logo.svg` and `public/icon.svg` `retired`; rights noted as not cleared | README integrity script: 88 records verified, hashes match, parents exist, missing rows absent | Pass (final visual approval pending with owner) |
+| BRAND-002.3 — clear space, sizes, backgrounds, misuse | `BRAND_GUIDELINES.md` §4 | Clear space ¼ icon height; minimum sizes horizontal 120 px, stacked 80 px, icon 16 px; 10 misuse rules | Pass |
+| BRAND-002.4 — legibility and formats | `logos/verification/` renders | Viewed icon at 16/32/64/128 px on white and charcoal (recognisable at 16, clear from 32) and the lockup at 96–240 px (legible from 120). SVG, PNG and ICO retained | Pass |
+| BRAND-003.1 — logo, colour, typography, licensing, voice, imagery | `branding/BRAND_GUIDELINES.md` v2.0 draft | Read against the owner brief; reconciled with the v1 PDF positioning and tagline | Pass |
+| BRAND-003.2 — examples, misuse, accessibility | Variant/background table, misuse list, contrast rules | Every listed file exists in the catalogue | Pass |
+| BRAND-003.3 — contrast, approval, version history | Contrast table computed with the WCAG 2.x formula; version history 1.0 → 2.0 draft | Charcoal on white 15.25:1, ocean on white 11.44:1, muted on white 5.82:1, charcoal on gold 8.07:1; teal on white 3.21:1 restricted to large text and graphics; gold on white 1.89:1 prohibited for text | Pass |
+| BRAND-003.4 — concept vs approved labelling | Status table at top of the guide and README | The direction is the only approved item; everything else is labelled draft | Pass |
+| BRAND-004.1 — approved rights-cleared imagery | — | Concept photography (5 PNGs) is missing and no public homepage route exists | **Blocked** |
+| BRAND-004.2 — responsive optimised formats | `branding/website/` artwork WebP/AVIF at desktop 1600 w and mobile 800 w, plus OG image 1200×630 | Files generated and catalogued; originals retained | Pass (artwork only) |
+| BRAND-004.3/4 — alt text, presentation | Decorative artwork is `aria-hidden`. The OG image is served at `/opengraph-image.png` (200) | No homepage exists to verify | Blocked |
+| BRAND-005.1 — artwork without changing auth | `auth-layout.tsx` uses an inline vector artwork panel; form, links and actions unchanged | Signup, setup, cross-tab logout and recovery browser test passed | Pass (owner visual review pending) |
+| BRAND-005.2 — mobile, desktop, low bandwidth | Inline SVG, no image request; 110 px mobile / 150 px sm / clamp(200–380 px) desktop | Screenshots at 1280×800 and 375×812 for `/login` and `/signup`: scrollWidth equals clientWidth, artwork clear of text | Pass |
+| BRAND-005.3 — contrast, keyboard, alt treatment | Artwork `aria-hidden`; logo `role="img"` with `aria-label="Butterbox"`; ocean/ink text on `#FBF6EE` ≥ 10.6:1 | WCAG axe, keyboard and screen-reader browser test passed | Pass |
+| BRAND-005.4 — source recorded, real screen tested | `brand-auth-artwork` catalogue row | Production split build served on 127.0.0.1:3117. `/favicon.ico`, `/icon.svg`, `/apple-icon.png`, `/opengraph-image.png`, the manifest and the `/brand/*` assets all returned 200; head icon tags present | Pass |
+
+**Tests selected and why:** this is a UI and brand change touching the auth layout, the shared lockup used by
+every authenticated page, and metadata routes. On the isolated `butterbox-acceptance` project I ran a
+serialized low-memory split production build plus 3 Chromium scenarios: verified signup/setup/logout/recovery,
+core pages WCAG/keyboard/screen-reader, and loading/failure/missing-page states. **3/3 passed.** Changed-file
+ESLint and `tsc --noEmit` passed. Not run: a full browser regression and installed-PWA checks on real devices.
+The direction-only approval means the owner must still review the final appearance.
+
+Documentation: updated — `branding/BRAND_GUIDELINES.md`, `branding/README.md`, `branding/ASSET_INDEX.csv` and
+the User Guide sign-in appearance note.
 
 ## Latest completed roster productivity story
 
@@ -2898,8 +2955,9 @@ but has not yet run remotely.
   demo infrastructure, safe outbound controls, a production historical-data
   assessment and clean conversion are actually verified; do not alter live
   records or bypass the fail-closed safeguard.
-- **BB-DEMO-001/002** are Done. Remaining Showcase P0 brand/UI/reset milestone
-  work depends on final owner-approved identity; do not invent that approval.
+- **BB-DEMO-001/002** are Done. The owner approved the Coastal Wave direction, and BRAND-002, 003 and 005 are
+  Done with final visual review pending. Next Showcase P0 work is DEMO-003 (UI and mobile polish against
+  `branding/BRAND_GUIDELINES.md`), then DEMO-004. BRAND-004 needs licensed photography.
   Select ready P1 operational work; inspect roster-change safeguards required
   before scenario-driven staffing changes. ATTEND-006, REPORT-001, BRAND-001
   and DOC-001/002/003 are Done; do not rebuild them.

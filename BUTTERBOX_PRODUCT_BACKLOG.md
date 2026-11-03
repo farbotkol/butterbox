@@ -1443,8 +1443,11 @@ The canonical help content is maintained in `docs/USER_GUIDE.md` and any task-sp
 
 Plan a consistent and accessible Butterbox identity across the product,
 website and marketing materials. Operational product functionality remains
-the higher priority. `branding/README.md` catalogs proposed concepts, but the
-referenced image binaries are not present and no logo, styling or campaign is
+the higher priority. `branding/README.md` catalogs the assets. The owner approved
+the Coastal Wave logo **design direction**
+(`branding/originals/butterbox-approved-logo.png`). The traced logo system and
+`branding/BRAND_GUIDELINES.md` are drafts awaiting the owner's final visual
+review. The concept photography binaries are still missing, and no campaign is
 represented as approved. Each deliverable requires appropriate asset-rights
 checks and owner review; these stories do not authorize publishing, ad spend
 or production deployment.

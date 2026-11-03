@@ -7,8 +7,13 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Less admin, more good days for hospitality teams.",
     start_url: "/",
     display: "standalone",
-    background_color: "#FAF9F6",
-    theme_color: "#123F4A",
-    icons: [{ src: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
+    background_color: "#FFFFFF",
+    theme_color: "#18282B",
+    icons: [
+      { src: "/brand/icons/butterbox-app-icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      { src: "/brand/icons/butterbox-app-icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      { src: "/brand/icons/butterbox-app-icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      { src: "/brand/butterbox-icon.svg", sizes: "any", type: "image/svg+xml", purpose: "any" },
+    ],
   };
 }

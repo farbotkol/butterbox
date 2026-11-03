@@ -1,16 +1,85 @@
 # Butterbox — Branding and website imagery
 
-**Status:** Governed inventory; final identity and rights approval remain pending.
+**Status:** Coastal Wave identity. The owner approved the **design direction**. The traced vector logo system,
+icons, artwork and [brand guidelines](BRAND_GUIDELINES.md) are **drafts awaiting the owner's final visual
+review**. Rights and trademark clearance remain pending.
 **Branch:** `copilot/finish-roadmap-for-app`
+
+## Approved reference (source of truth)
+
+| Item | Value |
+| --- | --- |
+| File | [`originals/butterbox-approved-logo.png`](originals/butterbox-approved-logo.png), retained unchanged |
+| Image | 1254 × 1254 RGBA PNG, transparent background |
+| SHA-256 | `9b0880e39d39f2ae21f0125de9e0b22656b7f58385d878c4fd23b3015153fe15` |
+| Approval | Product owner selected the Coastal Wave concept as the official **design direction** |
+| Not approved yet | Final production vectors, exact colour values and the guide details below |
+
+**Name discrepancy:** the owner's message named the file
+`branding/originals/butterbox-coastal-wave-approved-reference.png` and described it as committed. The file
+actually supplied was untracked and named `butterbox-approved-logo.png`. After visual inspection confirmed it
+matches the described concept (gold upper B, teal lower B, cream diagonal wave, charcoal "Butterbox"
+wordmark), it was committed unchanged under its supplied name in `677a33e` rather than renamed.
+
+## Folder structure
+
+| Folder | Contents |
+| --- | --- |
+| `originals/` | Owner-supplied reference (never modified) |
+| `tools/` | `trace_reference.py`: reproducible potrace vectorisation of the reference |
+| `logos/source/` | `traced-geometry.json`: vector master path data in reference-pixel coordinates |
+| `logos/svg/` | 11 SVG masters: stacked and horizontal in light, dark, mono-dark and mono-white, plus the icon in colour, mono-dark and mono-white |
+| `logos/png/` | Transparent PNG derivatives (stacked 1200 w, horizontal 1600 w and 480 w, icon 1024 w) |
+| `logos/verification/` | Small-size rendering evidence (icon 16/32/64/128 px, horizontal lockup 96–240 px) |
+| `icons/` | Favicon SVG/ICO/PNG 16–48, app icon 192/512, maskable 512, apple-touch 180, social profile 400/1024 |
+| `auth/` | Coastal sun, hill and wave vector artwork used on sign-in and the dashboard |
+| `website/` | Artwork WebP/AVIF (desktop 1600 w, mobile 800 w) and Open Graph image 1200 × 630 |
+
+Production copies live in `public/brand/` (served logos, PWA icons and the prepared email logo) and in
+`src/app/` (`favicon.ico`, `icon.svg`, `apple-icon.png` and `opengraph-image.png` use the Next.js file
+conventions). The app renders the logo only through `src/components/brand-lockup.tsx`, which uses the
+generated `src/components/brand/logo-geometry.ts`. Do not paste logo paths elsewhere.
+
+## How the vectors were made
+
+The vectors are not an embedded raster. Each pixel of the reference is supersampled ×4 (Lanczos) and
+classified to the nearest of the four sampled logo colours. Each colour layer is then traced with
+**potrace 1.16** into absolute cubic Bézier paths. The colour icon stacks a teal silhouette, then cream, then
+gold, so no anti-alias seams appear. Monochrome variants knock the cream wave out to transparency.
+
+Regenerate everything (requires `potrace`, Python with Pillow/NumPy and the repository's `sharp`):
+
+```sh
+python3 branding/tools/trace_reference.py   # reference → logos/source/traced-geometry.json
+node scripts/build-brand-assets.mjs          # geometry → all SVG/PNG/ICO/WebP/AVIF, public/, src/app, TS data
+```
+
+Then update the SHA-256 values in `ASSET_INDEX.csv` and rerun the integrity check below.
+
+### Fidelity and rendering evidence (2026-11)
+
+- **Fidelity:** the traced vector was re-rendered at reference coordinates and compared per colour by
+  intersection over union. Results: gold 0.9958, teal 0.9991, cream 0.9960 and charcoal wordmark 0.9946. Only
+  905 of 269,189 solid pixels differ, all on 1 px anti-aliased edges. A side-by-side visual comparison
+  showed no visible difference.
+- **Small sizes:** the icon is recognisable at 16 px and clear from 32 px. The horizontal wordmark is legible
+  from about 120 px wide, which is the documented minimum (see `logos/verification/`).
+- **SVG integrity:** all SVGs parse as XML and use only `path`, `g`, `title` and (for app-icon backgrounds) `rect` elements with solid fills. They contain no
+  `<image>`, script, external reference, gradient or filter.
+- **Contrast:** see the table in [BRAND_GUIDELINES.md](BRAND_GUIDELINES.md#accessible-contrast).
 
 ## Inventory and approval boundary
 
-[ASSET_INDEX.csv](ASSET_INDEX.csv) is the authoritative path-by-path catalogue.
-Paths are relative to the repository root. The inventory was verified on
-2026-11-02 against development checkpoint `efd9c77`: **15 records, 10 present,
-5 missing, no owner-approved assets recorded**. Version identifies the last
-source-changing commit, not a marketing release. SHA-256 binds each present
-entry to the inspected bytes. A new source change requires a catalogue update.
+[ASSET_INDEX.csv](ASSET_INDEX.csv) is the authoritative path-by-path catalogue. Paths are relative to the
+repository root. The current catalogue has **88 records**:
+
+- 1 approved: the reference, for design direction only.
+- 75 draft: the Coastal Wave derivatives and app copies, awaiting the owner's final visual review.
+- 10 unreviewed: 5 missing concept photos and 5 scaffold SVGs.
+- 2 retired: `public/butterbox_logo.svg` and `public/icon.svg`, the superseded pre-Coastal Wave drafts.
+
+Version identifies the source-changing commit (`git-677a33e`) or `brand-v2-draft` for app integration files.
+SHA-256 binds each present entry to the inspected bytes. Any source change requires a catalogue update.
 
 Each entry records intended use, source/derivative relationship, custody,
 provenance, rights/permission status, reviewer and approval evidence.
@@ -19,14 +88,6 @@ copyright ownership, redistribution permission or final owner approval.**
 The product owner is the library custodian, not an asserted rights holder.
 Unknown provenance or rights are explicitly unverified rather than silently
 assumed licensed.
-
-The app's current inline `BrandLockup` and the public SVGs are different mark
-implementations. They are inventoried as existing drafts, not silently unified
-or replaced here. The manifest references `public/icon.svg`; the shared
-component appears in authenticated and authentication layouts. The standalone
-public logo and five scaffold SVGs had no direct reference in inspected
-`src/` TypeScript/TSX. Absence of such a reference is not proof of no external
-use; do not delete them without checking dependants.
 
 The typography entry inventories configuration, not font binary ownership or
 an archived font distribution. Dependency-provided icons/fonts and generated
@@ -46,9 +107,9 @@ No source binary, generation log, rights grant or approval is present.
 | concept-attendance / `coastal_attendance_app_showcase.png` | Illustrative attendance/mobile marketing image | Missing / unreviewed |
 | concept-confidence / `coastal_cafe_confidence.png` | Proposed benefits/lifestyle imagery | Missing / unreviewed |
 
-No WebP/AVIF derivative, editable logo master, campaign creative or approved
-marketing release is claimed. BB-BRAND-002 and later stories retain their
-separate production, owner-review and rights gates.
+These photos are still missing, so BB-BRAND-004 homepage **photography** is blocked. The WebP/AVIF files in
+`website/` are derivatives of the original vector coastal artwork, not photographs. No campaign creative or
+approved marketing release is claimed.
 
 ## Contributing and storing assets
 
@@ -56,11 +117,10 @@ separate production, owner-review and rights gates.
    never replace a missing reference with an unrelated image under its name.
    Use descriptive new names such as `butterbox_<purpose>_<variant>_v001.ext`.
    Preserve existing paths while dependants still use them.
-2. Keep future editable/high-resolution masters in `branding/sources/`,
-   optimized exports in `branding/derivatives/` and non-sensitive approval
-   references in `branding/evidence/`. These are **proposed storage locations**,
-   not a claim that those folders or files exist now. Publish only reviewed
-   web derivatives to `public/`; everything there is publicly retrievable.
+2. Keep owner-supplied originals in `branding/originals/`, editable masters and
+   generated variants in the folders described above, and generate production
+   copies with `scripts/build-brand-assets.mjs`. Publish only web derivatives to
+   `public/`; everything there is publicly retrievable.
 3. Add a catalogue row for every source and derivative. Include a parent ID,
    actual version, SHA-256, intended placement/size, creator or upstream
    provenance, license/permission reference, reviewer and status. Mark an
