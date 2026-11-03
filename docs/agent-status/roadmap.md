@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 02:48 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 03:44 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Debugging.
-- **Activity:** Investigating the first focused production-browser failure while completing the directory/detail and scoped mutation tests.
+- **Phase:** Testing.
+- **Activity:** Rerunning the expanded isolated production-browser suite after repairing its synthetic fixture.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** Implemented the first destination-scoped directory/detail/edit slice, separate Add destination flow and selected-venue/confirmation wrapper. Applied its migration only to the verified disposable project. Existing revision, unique-ID and audit mutation remains authoritative; the legacy direct RPC contract is unchanged. Captured five synthetic before screenshots.
-- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, existing mapping/export/canonical pgTAP **141/141**, baseline units **18/18**, new scoped-mapping pgTAP **17/17**, focused directory/mapping units **7/7**, TypeScript, changed-file ESLint and the first isolated production build passed. A deterministic concurrency test has been written but not run.
-- **Failing tests:** The first updated browser journey timed out locating the provider control immediately after navigation to Add destination; its error snapshot showed the expected form. The test now explicitly waits for the destination page and uses its accessible combobox; a rerun is required.
+- **Progress since previous report:** The focused mapping journey passed after the explicit navigation/accessible-control wait; deterministic competing edits, duplicate-ID race and queued revocation also passed. Added further isolated browser cases and keyed destination/filter controls for safe back/forward navigation. The expanded run initially failed because its synthetic employees lacked required department IDs; the fixture was corrected and the run is underway.
+- **Tests and results:** Pre-change isolated mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, existing mapping/export/canonical pgTAP **141/141**, new scoped-mapping pgTAP **17/17**, baseline units **18/18**, focused directory/mapping units **7/7**, concurrency integration **1/1**, TypeScript, changed-file ESLint and the isolated production build passed. Five actual synthetic before screenshots were captured.
+- **Failing tests:** The first expanded five-scenario browser run failed **5/5** during fixture setup with the database's required-department constraint; no journey ran. The corrected fixture is being rerun and remains unverified.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Pending implementation; the existing User Guide and contextual Help will be updated to match tested behavior.
-- **Next concrete action:** Rerun the affected browser journey, fix any underlying defect, then run deterministic concurrency and the remaining role, isolation, state and five-width checks.
+- **Next concrete action:** Finish the expanded browser run, correct any real failures, verify five-width screenshots and update the User Guide and contextual Help before final checks.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Baseline checkpoint `9dec3a49b81266381e04f2a89de65cebd3621ff1` was pushed and its remote SHA verified. This debugging checkpoint is pending push.
+- **Push outcome:** Debugging checkpoint `a0dd68a580b9966e4d66c0f4daa3eaa59507ec3d` was pushed and its remote SHA verified. This testing checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
