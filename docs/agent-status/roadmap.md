@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
-- **Last report:** 2026-11-04 08:15 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 08:20 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
 - **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
 - **Phase:** Debugging.
 - **Activity:** Investigating two failures while the full serialized browser regression continues against the disposable project and isolated app snapshot.
 - **Plan:** Map existing routes into the four ordered groups; keep Help as a separate utility, owner-only kiosk/venue settings owner-only, and retain employee access to readable Rostering and Announcements. Preserve server authorization and business/venue context, then verify roles, isolation, keyboard, accessibility and screenshots only in the disposable environment.
-- **Progress since previous report:** The browser run reached 52 completed scenarios at 08:15 AEDT. A department scenario failed because the new navigation and contextual link both say **Venue settings**; its test selector now targets the contextual link, pending rerun. The protected local showcase login returned HTTP **200** at 08:12 AEDT; neither protected showcase was changed.
-- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. Focused Help/navigation units passed **18/18** after the label correction. At 08:15 AEDT, **49 browser scenarios passed and three failed**; the run continues.
-- **Failing tests:** The quick-roster keyboard scenario did not select Duplicate after ArrowDown; its cause is under investigation. The verified-signup scenario received an authentication-service **504 context deadline exceeded**; the disposable authentication and mail containers were healthy when inspected. The department scenario encountered the ambiguous selector noted above. None of these failures has been rerun yet. The skipped integration requires the protected showcase workdir and was intentionally not run.
+- **Progress since previous report:** The browser run reached 64 completed scenarios at 08:19 AEDT. Added an unverified browser assertion for the corrected Help labels. The protected local showcase login returned HTTP **200** at 08:20 AEDT; neither protected showcase was changed.
+- **Tests and results:** Pre-change baseline **2/2**, final role/route/context **3/3**, five-width keyboard/axe **5/5**, isolated production build, TypeScript, changed-file ESLint and full pgTAP **2,964/2,964** across 65 files passed. The full Node/integration run had **292 passed, seven failed and one deliberately skipped** of 300; affected tests passed **30/30** after correcting the Help context assertion and using a physical macOS temp path. Focused Help/navigation units passed **18/18** after the label correction. At 08:19 AEDT, **60 browser scenarios passed and four failed**; the run continues.
+- **Failing tests:** The quick-roster keyboard scenario did not select Duplicate after ArrowDown; its cause is under investigation. Signup received an authentication-service **504 context deadline exceeded**; the disposable authentication and mail containers were healthy when inspected. A department test encountered an ambiguous selector after navigation gained a second **Venue settings** link; a scoped selector is pending rerun. An attendance-correction test did not find the expected success message after saving; its cause is under investigation. None of these failures has been rerun yet. The skipped integration requires the protected showcase workdir and was intentionally not run.
 - **Blockers requiring intervention:** None identified yet. Consolidated owner UX review and deployment to either protected showcase remain separate.
 - **Documentation:** Updated, including the attendance label correction; full browser Help verification remains pending.
 - **Next concrete action:** Allow the serialized browser run to finish, inspect failures, and rerun affected scenarios without overlapping the disposable project.
 - **Latest development commit:** `b1a9c5350da7d773fd90c49855433efd035354b6`.
-- **Push outcome:** Documentation and test checkpoint `a98e48b054332a2d03b74557e33048df578d73f9` was pushed and its remote SHA verified; this checkpoint is pending push.
+- **Push outcome:** Status checkpoint `92e79c8ff0ba70a57593f1be3bfc0e42b9c00562` was pushed and its remote SHA verified; this checkpoint is pending push.
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
