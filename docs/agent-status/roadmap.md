@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-03 23:51 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-03 23:57 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
-- **Phase:** Coding.
-- **Activity:** Wiring the new directory, employee detail route, focused editors and existing employee actions; browser acceptance has not started.
+- **Phase:** Testing and debugging.
+- **Activity:** Exercising the uncommitted directory and profile in a separate disposable application/database; adapting existing People-dependent browser journeys and investigating stale section edits.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** Committed and pushed the verified database/query foundation at `0616f06`. Implemented the first uncommitted draft of the compact directory, new-person and profile routes, section editors, status confirmation and safe return context. No UX changes have been deployed to either showcase.
-- **Tests and results:** Foundation pgTAP **212/212**, real competing-profile/employment HTTP concurrency **1/1**, existing People baseline browser **1/1**, and pre-change screenshots at all five widths passed/captured. The new draft passed changed-file ESLint, TypeScript and directory helper unit tests **5/5** before the latest contextual-help/employment-link edits. Both showcase login endpoints returned **200** at 23:50 AEDT.
-- **Failing tests:** An initial draft type check failed on an object type guard; the guard was corrected and the rerun passed. The new UX has not yet been built or tested in a browser. Earlier baseline screenshot and concurrency-helper failures are documented in implementation progress.
+- **Progress since previous report:** The isolated production build and basic new People journey passed; captured real after screenshots for directory, profile, edit and confirmation states at all five requested widths. Fixed a 1024px directory overflow. No UX changes have been deployed to either showcase.
+- **Tests and results:** Foundation pgTAP **212/212**, competing-profile/employment HTTP concurrency **1/1**, existing People baseline **1/1**, and adapted basic People journey **1/1** passed. The extended browser run passed the five-width overflow and serious/critical axe checks before failing later on an ambiguous test selector; that run has not yet passed overall. Before and after screenshots are retained in the session evidence folder. Both showcase login endpoints returned **200** at 23:50 AEDT.
+- **Failing tests:** The extended browser run first exposed 1024px overflow, fixed in the draft; subsequent runs reached stale and tampered-permission checks but failed because a test matched both the intended alert and Next.js's route announcer. The selectors have been scoped to main and require a complete rerun. Earlier baseline screenshot and concurrency-helper failures are documented in implementation progress.
 - **Blockers requiring intervention:** None identified. Keep the two running showcases and their shared synthetic database untouched.
 - **Documentation:** User Guide and contextual Help updates are required with the implemented behavior.
-- **Next concrete action:** Build the draft in the separate snapshot, adapt and extend the People browser tests, and fix any runtime, permission or accessibility regressions before recording acceptance.
+- **Next concrete action:** Complete the extended browser run, protect department/role/account/shared-worker section saves against stale submissions where necessary, and run the preserved People-dependent workflows before recording acceptance.
 - **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
-- **Push outcome:** Development checkpoint `0616f06` was pushed and its remote SHA verified; this documentation-only checkpoint is pending push.
+- **Push outcome:** Development checkpoint `0616f06` and the previous documentation checkpoint `9f8567a` were pushed and their remote SHAs verified; this documentation-only checkpoint is pending push.
 
 ## Public synthetic showcase — completed operator request
 
