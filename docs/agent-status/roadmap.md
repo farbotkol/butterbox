@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-04 00:11 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 00:12 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
 - **Phase:** Testing and debugging.
 - **Activity:** Rerunning the five failed People-dependent browser regressions alongside new stale-section, lifecycle and additional five-width edge cases in the disposable application/database.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** The wider serialized browser run completed **16/21** scenarios; adapted the five failing tests to the profile route and correct completion feedback. Added live membership locks to the checked section writes, expanded long-value/validation/cross-business checks, and started a focused rerun. No UX changes have been deployed to either showcase.
+- **Progress since previous report:** The wider serialized browser run completed **16/21** scenarios; adapted the five failing tests to the profile route and correct completion feedback. Added live membership locks to the checked section writes, expanded long-value/validation/cross-business checks, and started a focused rerun. A concurrent remote UXFIX-005 backlog update was fetched and merged without touching the People draft. No UX changes have been deployed to either showcase.
 - **Tests and results:** Foundation pgTAP **212/212**, expanded section pgTAP **25/25**, real competing-profile/employment/section writes and concurrent permission revocation **1/1**, People/help unit tests **15/15**, prior basic People and five-viewport browser scenarios **1/1 each**, TypeScript and an isolated split production build passed. The wider run passed **16/21**, including scoped managers, shared workers, preferences, invitations and attendance. Both showcase login endpoints returned **200** at 23:50 AEDT.
 - **Failing tests:** Five wider-run scenarios failed: two used outdated navigation/labels, one account-unlink journey timed out on the old directory form, one matched two status messages, and one checked the database before the create action finished. Their tests were corrected without removing assertions; the focused rerun is in progress and its outcome is not yet known. The first help-unit run missed the contextual link label; the guide was corrected and **15/15** passed.
 - **Blockers requiring intervention:** None identified. Keep the two running showcases and their shared synthetic database untouched.
 - **Documentation:** User Guide updated and contextual Help reads it; guide/link unit checks pass. Browser verification and acceptance evidence remain in progress.
 - **Next concrete action:** Collect the focused browser rerun, fix any remaining failures, then refresh changed-file lint, TypeScript, acceptance evidence and production build.
 - **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
-- **Push outcome:** Development checkpoint `0616f06` and the previous documentation checkpoint `cd26210` were pushed and their remote SHAs verified; this documentation-only checkpoint is pending push.
+- **Push outcome:** The push of documentation checkpoint `70b2d30` was rejected at 00:11 AEDT because the remote had advanced to `0caea5c`. Fetched and merged its three backlog-only commits in `cad14c7` without rewriting history or changing the uncommitted draft; the merged branch and this checkpoint still need a verified push.
 
 ## Public synthetic showcase — completed operator request
 
