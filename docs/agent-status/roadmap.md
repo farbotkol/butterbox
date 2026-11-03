@@ -39,7 +39,7 @@ The prior Roadmap planning and brand blocker remain below; their current executi
 
 ---
 
-- **Last report:** 2026-11-03 02:05 UTC, observed from the Codespace clock
+- **Last report:** 2026-11-03 01:51 UTC, observed from the Codespace clock
 - **Reporter:** Executing Roadmap Agent; Core Roadmap on `copilot/finish-roadmap-for-app`
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current story:** BB-DEMO-004 — Repeatable showcase acceptance and reset: **Blocked (prepared)**. Criteria: documented restricted access and role accounts; automated core-journey and tenant-isolation smoke tests; verified reset; repeatable synthetic data; logged gaps and failure states; no production secrets, live payroll or messaging; owner review evidence.
