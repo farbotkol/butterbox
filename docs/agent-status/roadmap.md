@@ -2,20 +2,20 @@
 
 ## Local showcase setup checkpoint
 
-- **Last report:** 2026-11-03 11:52 AEDT (UTC+1100), observed on the local operator's clock.
+- **Last report:** 2026-11-03 11:54 AEDT (UTC+1100), observed on the local operator's clock.
 - **Execution state:** Active at this checkpoint only; no background scheduling claim.
 - **Current work:** User-directed BB-DEMO-001 operator setup and test-owner option; the completed story is not being reopened.
 - **Criteria:** A separately verified internal-only showcase, 12–15 fictional FOH/BOH staff and realistic sample workflows, no production data, real messaging or live payroll, and guarded reset; the designated login must be test-only and scoped to the isolated project.
-- **Phase:** Testing and provisioning.
-- **Activity:** Starting the new, separately identified showcase backend after verifying its private configuration, owned internal network and loopback-only VM proxy.
-- **Progress since previous report:** Added a restricted opt-in test-owner identity and stricter exact reset inventory; prepared a private workdir and a separate application snapshot. The existing local workspace was not seeded or reset.
-- **Tests and results:** 18/18 focused showcase unit tests passed; the initial changed-code ESLint and TypeScript checks passed before the final network-helper change. Actual backend, fixture, reset and browser verification remain pending.
-- **Failing tests:** None observed. The final lint rerun is pending.
-- **Blockers/risks:** Backend readiness and available VM resources are not yet verified. The brand, hosted-review and production gates below remain unchanged.
+- **Phase:** Testing.
+- **Activity:** Exercising the explicitly confirmed reset of the verified disposable showcase before reseeding and launching the review app.
+- **Progress since previous report:** Six showcase services and the VM-local loopback proxy are running; the isolated fixture was seeded with 14 fictional staff, two departments and 14 approved sample timesheets. The requested test owner signed in during fixture creation. The existing local workspace was not seeded or reset and its login remains available.
+- **Tests and results:** 18/18 focused showcase unit tests and 1/1 live integration passed, including scoped roles, a separate tenant, disabled signup, zero generated mail and blocked outbound traffic. Changed-code ESLint, TypeScript and diff checks passed. The reset and production-browser checks remain pending.
+- **Failing tests:** None observed.
+- **Blockers/risks:** Reset/reseed and browser review remain unverified. The brand, hosted-review and production gates below remain unchanged.
 - **Documentation:** Draft operator and user-guide updates added; verify against the resulting workflow.
-- **Next concrete action:** Verify the isolated backend, seed and inspect fictional records, then test the requested owner login and scoped review journeys.
+- **Next concrete action:** Reseed after the isolated reset, repeat the integration check and test the owner and scoped review journeys in the separate app.
 - **Latest development commit:** `20742da5d9f6b5baf2096607e79330e330022cc9`; branch head at observation was status-only `7fb47049b82f6d21a923dec67d52afd7faa284dc`.
-- **Push outcome:** The previously observed remote branch head matched `7fb47049b82f6d21a923dec67d52afd7faa284dc`; this checkpoint has not yet been pushed.
+- **Push outcome:** Status-only checkpoint `1a8ceb68923c2ef872c3d199938ecc029391dfdc` was pushed and its remote SHA verified; this update has not yet been pushed.
 
 The prior Roadmap planning and brand blocker remain below; their current execution state is not verified by this local checkpoint.
 
