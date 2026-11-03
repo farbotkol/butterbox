@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-04 00:16 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 00:22 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
 - **Phase:** Testing and debugging.
-- **Activity:** Fixing duplicate creation on rapid submission and mobile overflow for long profile values, then adapting and rerunning affected browser cases in the disposable application/database.
+- **Activity:** Completing five-width People acceptance and verifying idempotent employee creation and scoped tenant constraints in the disposable application/database.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** The focused serialized browser rerun completed **4/8** scenarios. Four previously failing availability, onboarding, cross-business invitation and multi-business journeys now pass. It exposed real rapid-double-submit duplication and long-value mobile overflow; another failure was a status selector already corrected, and one qualified-role journey still uses its old directory form. The concurrent UXFIX-005 merge was pushed without disturbing the People draft. No UX changes have been deployed to either showcase.
-- **Tests and results:** Foundation pgTAP **212/212**, expanded section pgTAP **25/25**, real competing-profile/employment/section writes and concurrent permission revocation **1/1**, People/help unit tests **15/15**, earlier basic People and five-viewport browser scenarios **1/1 each**, TypeScript and isolated split production build passed. The previous wider run passed **16/21**. Both protected showcase login endpoints returned **200** at 00:16 AEDT.
-- **Failing tests:** In the latest focused run, the basic journey created two people after synchronous double submission; the long-profile layout overflowed at 375 px; the stale-section test matched an editing status as well as a success message; and the qualified-role test timed out after navigating to the old form location. The first two need product fixes; the stale selector is corrected and the qualified-role journey still needs adaptation. These results supersede the earlier positive baseline for the expanded cases.
+- **Progress since previous report:** Added a synchronous submission guard and server-side creation request idempotency, fixed the long-value grid overflow, and adapted the qualified-role journey. The latest serialized rerun passed **3/4** affected scenarios: double-submit/lifecycle, stale sections and qualified roles. All five widths reached the later access checks without overflow or serious/critical axe findings. Added positive BOH/GM, keyboard-only form and reduced-motion checks for the next run. No UX changes have been deployed to either showcase.
+- **Tests and results:** Foundation pgTAP **212/212**, expanded section/creation pgTAP **34/34** before a subsequent tenant-key refinement, real competing creation/profile/employment/section writes and revoked permission **1/1**, People/help unit tests **15/15**, changed-file ESLint, TypeScript and isolated split production build passed. Four other corrected browser regressions passed in the previous rerun. Both protected showcase login endpoints returned **200** at 00:16 AEDT.
+- **Failing tests:** The fourth browser scenario expected the framework's default “404” heading, but the application has a custom “Page not found” heading. Corrected the assertion while retaining the no-index and no-data-leak checks; the complete scenario must be rerun. A tenant-scoped foreign-key refinement also requires database test reruns.
 - **Blockers requiring intervention:** None identified. Keep the two running showcases and their shared synthetic database untouched.
 - **Documentation:** User Guide updated and contextual Help reads it; guide/link unit checks pass. Browser verification and acceptance evidence remain in progress.
-- **Next concrete action:** Prevent duplicate submissions, locate and fix long-value overflow, adapt the qualified-role test, then rerun the four affected journeys and refresh lint, types and acceptance evidence.
+- **Next concrete action:** Rerun the tenant-key pgTAP and concurrency checks, then rerun the expanded browser scenario including invalid IDs, positive manager scope, keyboard and reduced motion.
 - **Latest development commit:** `0616f060bb6fbca6cbf52ac5f98df8a644c5ffee`; the current UI draft is uncommitted.
-- **Push outcome:** After the earlier rejected checkpoint push, the concurrent backlog commits were merged without rewriting history; the remote branch was verified at `c8415106e9420c92985d2894e807a0daa62477d4` at 00:16 AEDT. This new documentation-only checkpoint is pending push.
+- **Push outcome:** Documentation checkpoint `6b612ab63d271c0811d300c77ff644c44a9cc1a8` was pushed and its remote SHA verified. This new documentation-only checkpoint is pending push.
 
 ## Public synthetic showcase — completed operator request
 
