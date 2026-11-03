@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## Roadmap recovery checkpoint after BB-REPORT-002
+
+- **Last report:** 2026-11-03 17:20 AEDT (UTC+1100), observed on the local operator's clock.
+- **Execution state:** This is a handoff checkpoint; it does not imply the agent remains active.
+- **Current story:** BB-REPORT-002 — Overtime and exceptions report (Done, Showcase P1); no new story has been started.
+- **Acceptance criteria:** Summarise overlaps, excessive hours and missing clock events; provide source drill-down; do not infer award breaches without verified rules. All three are Pass in implementation progress.
+- **Phase:** Complete.
+- **Activity:** Recording cleanup, remaining review gates and next-story readiness.
+- **Progress since previous report:** Stopped only the verified disposable report-test project, retaining its data volumes. Confirmed the ordinary database remains running and the showcase login on port 3137 returns HTTP 200. No showcase restart, reset or deployment occurred.
+- **Tests and results:** Final focused pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent concurrency **3/3**, production Chromium **1/1**, changed-file ESLint, TypeScript and split production build passed. Full regression was deferred.
+- **Failing tests:** None remain; the previously omitted disposable flag was supplied on the successful HTTP rerun.
+- **Blockers requiring intervention:** BRAND-004 needs suitable native-resolution masters, applicable rights verification and owner selection; DEMO-004 needs the owner's personal review. No validated employment-rule source was established for the next safeguards/change stories, and BRAND-006 requires specific asset rights and approval.
+- **Documentation:** Updated — User Guide, contextual help, backlog, per-criterion evidence and next-story recovery notes.
+- **Next concrete action:** Obtain the outstanding owner reviews; reassess Showcase P1 readiness without inventing employment restrictions. REPORT-003 is an independent P2 candidate if higher-priority work cannot safely proceed.
+- **Latest development commit:** `bed7416c0b091841692382ae2b9bf884d50c9195` (BB-REPORT-002).
+- **Push outcome:** Completion checkpoint `1ea93f600af69dee7838dd6400fd61cdb8334cb6` was pushed and its remote SHA verified; this handoff checkpoint is pending.
+- **Backlog:** 127 total; 64 Done, 0 In Progress, 8 Blocked, 55 Backlog.
+
 ## BB-REPORT-002 completion checkpoint
 
 - **Last report:** 2026-11-03 17:18 AEDT (UTC+1100), observed on the local operator's clock.

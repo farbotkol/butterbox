@@ -3110,6 +3110,14 @@ but has not yet run remotely.
   Keep **BB-ORG-006** Blocked until its full criteria and
   external-channel dependencies are verified. Preserve existing immutable
   periods and do not silently reinterpret history.
+- The remaining Showcase P1 candidates include **BB-SHIFTS-005**, **BB-RULES-002/004** and **BB-BRAND-006**.
+  The employment metadata currently records references rather than validated minimum-engagement, break or
+  change-notice rules; no applicable validated rule source has been established in this session. Do not treat
+  generic role qualifications or guessed thresholds as satisfying those criteria. BRAND-006 templates require
+  specific asset rights and owner approval. Reassess readiness and choose the highest-priority safe story;
+  **BB-REPORT-003** is an independent Showcase P2 candidate if the P1 work cannot safely proceed.
+- REPORT-002 test project `butterbox-report-002-55b9` was stopped after verifying its project label and DB port;
+  its volumes were retained. The ordinary database remained running and the showcase login returned HTTP 200.
 - Resume hosted **BB-FOUND-008** validation only after the owner identifies and authorises an
   isolated hosted staging project and securely provisions backup/restore
   access. Rehearse the DEC-005 recovery targets using the README procedure and
