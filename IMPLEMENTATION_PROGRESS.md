@@ -3,17 +3,16 @@
 ## Execution summary
 
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
-  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **64**.
-  In Progress: **0**. Blocked: **8**. Not started (Backlog): **55**.
+  BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **65**.
+  In Progress: **0**. Blocked: **7**. Not started (Backlog): **55**.
 - BB-REPORT-002 is **Done**: a manager-scoped read-only exceptions report highlights overlapping shifts,
   incomplete sessions and optional operational hours thresholds, without inferring award breaches. Focused
   pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent
   concurrency **3/3** and a production browser scenario **1/1** passed. User Guide and contextual help
   updated; the new report has not been deployed to the running showcase.
-- BB-DEMO-004 is **Blocked only on the owner's review**: the authorised operator acceptance run on
+- BB-DEMO-004 is **Done — owner accepted internal showcase delivery on 2026-11-03**: the authorised operator acceptance run on
   `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
-  **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). Only the owner can record
-  the review outcome.
+  **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). The owner confirmed the showcase accessible and working and explicitly accepted the delivery milestone. Consolidated UX/functional feedback is a separate subsequent review; no per-feature or production approval is implied.
 - BB-BRAND-004 remains **Blocked (partial)**: newly supplied AI-generated coastal café contact sheets have
   been inventoried, selected and prepared as responsive review drafts. The hero source is only 861 × 377,
   account-specific and third-party rights are unverified, and final owner approval is pending.
@@ -804,9 +803,9 @@ permissions, source links, definitions, date range and limitations. The migratio
 only in disposable project `butterbox-report-002-55b9` (loopback API/DB/mail ports 58421/58422/58424); they
 have not been applied to or deployed on the running showcase at port 3137.
 
-## BB-DEMO-004 — Acceptance evidence (Blocked: awaiting owner review)
+## BB-DEMO-004 — Acceptance evidence (Done: owner-accepted internal showcase delivery)
 
-**BB-DEMO-004 — Repeatable showcase acceptance and reset: Blocked only on the owner's review.** On
+**BB-DEMO-004 — Repeatable showcase acceptance and reset: Done (owner-accepted delivery milestone, 2026-11-03).** On
 2026-11-03 the owner authorised a controlled reset/reseed of the positively identified isolated synthetic
 showcase. The operator acceptance run below followed the README *Repeatable acceptance checklist* on
 development commit `dfaf495` from a private app snapshot (no ordinary `.env.local` bundled).
@@ -843,7 +842,9 @@ regression was run.
 
 | Date | Commit | Reset ID | Checklist steps 1–5 | Owner outcome |
 | --- | --- | --- | --- | --- |
-| 2026-11-03 | `dfaf495` | `51939669-dd64-4d1d-8cc8-9cbec86f863a` | All passed (operator run above) | **Pending owner review** |
+| 2026-11-03 | `dfaf495` | `51939669-dd64-4d1d-8cc8-9cbec86f863a` | All passed (operator run above) | **Owner accepted internal showcase delivery on 2026-11-03; confirmed accessible and working. Consolidated UX/functional review remains separate; not sign-off on all features or production.** |
+
+**Owner decision — 2026-11-03:** The owner formally accepts delivery of the functioning isolated Butterbox Showcase MVP and directs closure of BB-DEMO-004. The owner separately confirmed `http://127.0.0.1:3137` accessible and working; the operator's technical acceptance evidence is recorded above. A consolidated UX/functionality review is deferred and does not block delivery-story closure. This acceptance does not certify individual workflows, imagery, design quality, production readiness, public exposure or award/payroll compliance. This update is documentation-only and does not restart, reset, reseed or touch the running showcase.
 
 **Documentation: updated** (User Guide reviewer note with the latest run and new passwords; README checklist
 unchanged and followed as written).
