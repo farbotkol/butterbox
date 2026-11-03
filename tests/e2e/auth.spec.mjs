@@ -4911,7 +4911,7 @@ test("Department directory and role details preserve scope, stale edits and five
       await page.goto(`${directory}&status=invalid`);
       await expect(page.getByRole("main").getByRole("alert")).toContainText("filters");
       await page.getByRole("link", { name: "Reset filters" }).click();
-      await page.getByRole("link", { name: "Venue settings" }).click();
+      await page.getByRole("main").getByRole("link", { name: "Venue settings", exact: true }).click();
       await expect(page.getByRole("heading", { name: "Venue settings" })).toBeVisible();
       await expect(page.getByRole("region", { name: "Roster planning week settings" })).toBeVisible();
       await page.getByRole("link", { name: "Open departments and roles" }).click();
@@ -11904,6 +11904,14 @@ test("navigation UX: business-wide views retain venue context without narrowing 
     await page.getByRole("button", { name: "Search", exact: true }).click();
     await expect(page).toHaveURL((url) => url.searchParams.get("contextVenue") === secondVenue);
     await expect(venueLabel()).toBeVisible();
+    for (const [topic, title] of [
+      ["attendance", "Clocking and corrections"], ["alerts", "Attendance alerts"],
+      ["kiosk", "Setting up a QR kiosk"], ["employee", "Employee self-service"],
+    ]) {
+      await page.goto(`/help?business=${businessId}&contextVenue=${secondVenue}&topic=${topic}`);
+      await expect(page.getByRole("article", { name: title })).toContainText("Clock in / out");
+      await expect(venueLabel()).toBeVisible();
+    }
   });
 });
 
