@@ -2,21 +2,21 @@
 
 ## BB-REPORT-003 — Export Business Reports
 
-- **Last report:** 2026-11-04 09:11 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:30 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-REPORT-003 — Export business reports (P2, In Progress).
 - **Acceptance criteria:** CSV exports for rostering and attendance respect tenant permissions and the chosen period; sensitive fields are excluded unless explicitly allowed; each generated event is audited.
-- **Phase:** Planning.
-- **Activity:** Inspecting existing reporting, authorization, CSV and audit patterns before implementation.
+- **Phase:** Coding.
+- **Activity:** Building the scoped export database function and preparing the CSV download interface.
 - **Plan:** Add separate owner-only CSVs for an explicitly selected venue and week, minimise exported fields, neutralise spreadsheet formulas, record attributed immutable generation events and verify role/tenant isolation, boundaries, failures, audit and browser behavior in the disposable project.
-- **Progress since previous report:** BB-UXFIX-005 passed full Linux CI and was marked Done in isolated development. The related BB-REPORT-001 and BB-REPORT-002 reporting foundations are complete. Remaining Showcase P1 rule/scenario candidates lack established validated applicable rule sources, and marketing templates require rights and approval. No new report-export code has been written.
-- **Tests and results:** No BB-REPORT-003 tests have run yet. The preceding navigation story passed full Linux CI with **101** browser cases and one separately verified public-mode skip.
-- **Failing tests:** None observed for this story; verification has not started.
+- **Progress since previous report:** Applied the initial, uncommitted export migration only to verified disposable project `butterbox-report-002-55b9` (database port 58422). The initial SQL provides owner-only venue/week roster and attendance data, a field allowlist, transactional immutable export events and a 10,000-row limit. CSV serialization, interface, concurrent revocation and end-to-end verification remain unfinished.
+- **Tests and results:** Initial focused pgTAP **43/43 passed**, including role and tenant denials, Sydney daylight-saving week boundaries, allowlisted fields, audit attribution/immutability and 10,000/10,001-row limits. Subsequent implementation changes still require rerunning these checks.
+- **Failing tests:** None in the initial selected database test. Concurrent permission changes, CSV and browser tests have not run.
 - **Blockers requiring intervention:** None identified for the selected isolated reporting scope. The protected local and public showcases must not be reset, reconfigured or redeployed; owner UX review remains separate.
 - **Documentation:** Pending implementation and verification.
-- **Next concrete action:** Inspect the existing attendance/roster report data and audit interfaces, then implement the scoped database export and focused security tests.
+- **Next concrete action:** Finish precise attendance period metadata and concurrency protections; add a validated CSV download route and owner interface, then rerun the focused isolated tests.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa` (navigation test corrections; no BB-REPORT-003 development commit yet).
-- **Push outcome:** Navigation completion checkpoint `5968d863b383ade37aebe3aa83c87a3cad45e490` was pushed and its remote SHA verified; this story-start checkpoint is pending push.
+- **Push outcome:** Story-start checkpoint `868dbe7dda442f266a59b2bf069258d74d2a4e08` was pushed and its remote SHA verified; this coding-status checkpoint is pending push.
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 

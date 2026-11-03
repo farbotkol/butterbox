@@ -2,13 +2,13 @@
 
 ## Execution summary
 
-- **BB-REPORT-003 — Export business reports, 2026-11-04 09:11 AEDT: In Progress (Planning).** The completed hours/labour and exceptions reports provide existing reporting and tenant-scope patterns. The remaining Showcase P1 rule/scenario candidates lack established validated applicable rule sources, and the marketing-template candidate still needs rights and approval; this independent P2 reporting story is the next safe ready slice. Plan separate owner-only roster and attendance CSVs for a selected venue and week, explicit data minimisation and spreadsheet-formula protection, transactional attributed export audit, and isolated tenant/role, invalid-input, period-boundary, concurrency and browser verification. No migrations, application changes or new tests have been run for this story yet. **Documentation: pending.**
+- **BB-REPORT-003 — Export business reports, 2026-11-04 09:30 AEDT: In Progress (Coding).** The completed hours/labour and exceptions reports provide existing reporting and tenant-scope patterns. The remaining Showcase P1 rule/scenario candidates lack established validated applicable rule sources, and the marketing-template candidate still needs rights and approval; this independent P2 reporting story is the next safe ready slice. The initial uncommitted database migration was applied only to verified disposable project `butterbox-report-002-55b9`, and focused pgTAP passed **43/43** for owner/role and tenant checks, daylight-saving period boundaries, explicit output fields, audit and the 10,000-row limit. Further period metadata, concurrent revocation, CSV, interface, error and browser verification remain pending. No showcase was updated. **Documentation: pending.**
 
   | Criterion | Implementation evidence, test and actual result | Status |
   | --- | --- | --- |
-  | REPORT3-01 Tenant, permission and period | Scoped owner-only venue/week export and negative/tenant tests planned; not implemented or tested. | Pending |
-  | REPORT3-02 Sensitive fields | Explicit allowlist and CSV safety planned; not implemented or tested. | Pending |
-  | REPORT3-03 Audit | Attributed, immutable generation evidence and tests planned; not implemented or tested. | Pending |
+  | REPORT3-01 Tenant, permission and period | Initial owner-only venue/week database function and selected role, tenant and daylight-saving tests passed; interface and concurrent revocation remain unverified. | In Progress |
+  | REPORT3-02 Sensitive fields | Initial database output allowlists passed focused tests; CSV serialization and formula-safety verification remain pending. | In Progress |
+  | REPORT3-03 Audit | Initial transactional attributed event and immutable audit checks passed; end-to-end generation remains unverified. | In Progress |
   | REPORT3-DOC Documentation | User Guide and contextual Help updates planned after behavior is implemented and tested. | Pending |
 
 - **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 through BB-UXFIX-004 Done in isolated development (P1).** People, Departments & Roles, Business Permissions and Payroll Employee Mapping now use scoped directory → selected detail → contextual Edit/Save/Cancel workflows. Venue settings and existing qualification rules remain available. The protected showcases have not received these changes and must not be changed or redeployed without owner approval; consolidated owner UX review remains separate.
