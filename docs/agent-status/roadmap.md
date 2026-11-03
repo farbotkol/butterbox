@@ -2,21 +2,21 @@
 
 ## BB-REPORT-003 — Export Business Reports
 
-- **Last report:** 2026-11-04 09:40 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 09:50 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-REPORT-003 — Export business reports (P2, In Progress).
 - **Acceptance criteria:** CSV exports for rostering and attendance respect tenant permissions and the chosen period; sensitive fields are excluded unless explicitly allowed; each generated event is audited.
-- **Phase:** Coding.
-- **Activity:** Implemented the first CSV download interface and preparing isolated browser verification.
+- **Phase:** Testing.
+- **Activity:** Resolving a native date-input keyboard-test mismatch and adding exact timezone/boundary details to immutable export audit events before the next isolated rerun.
 - **Plan:** Add separate owner-only CSVs for an explicitly selected venue and week, minimise exported fields, neutralise spreadsheet formulas, record attributed immutable generation events and verify role/tenant isolation, boundaries, failures, audit and browser behavior in the disposable project.
-- **Progress since previous report:** The uncommitted database migration, CSV serializer, POST route, owner report form and audit category are implemented in isolated development. Exports include explicit UTC period metadata, spreadsheet-formula neutralization, a 10,000-row cap and an immutable generation event. The role and venue rows are locked during generation; neither protected showcase was changed.
-- **Tests and results:** Focused pgTAP **47/47 passed** on verified disposable project `butterbox-report-002-55b9`, including role/tenant denials, DST bounds, missing attendance events, field allowlists, audit and the row cap. Deterministic owner-revocation and timezone concurrency integration **1/1 passed**. CSV/request/payroll-helper/audit unit tests **20/20 passed**; TypeScript and selected ESLint passed before the latest integration-test addition.
-- **Failing tests:** None in the selected checks. Actual browser downloads, access-denial paths, mobile accessibility, production build and updated documentation remain unverified.
+- **Progress since previous report:** The isolated production build and existing hours-report browser scenario passed. The first new download scenario failed while creating a synthetic fixture because a bulk insert omitted explicit status values; the corrected rerun reached actual CSV downloads and failed at a keyboard assertion. A separate minimal Chromium reproduction showed that the native date input has multiple tab stops; the test now allows only those date segments before requiring the next button. Added a minimum supported export week for exact historical UTC formatting. Audit events now also capture timezone and exact period boundaries in the uncommitted migration; these latest changes have not yet been applied or tested.
+- **Tests and results:** Focused pgTAP **53/53 passed** on verified disposable project `butterbox-report-002-55b9` before the latest audit-field additions, including service-role denial and rollback on audit failure. Owner-revocation and timezone concurrency **1/1**, CSV/request/payroll-helper/audit/Help units **35/35**, TypeScript, selected ESLint and an isolated split production build passed. Existing hours-report browser scenario passed **1/1**.
+- **Failing tests:** The initial fixture failure was corrected, but its rerun failed at the native date-input tab assertion; the corrected keyboard test has not yet been rerun. Final audit metadata, all access-denial paths, five-width accessibility and attendance capacity near the row limit remain unverified.
 - **Blockers requiring intervention:** None identified for the selected isolated reporting scope. The protected local and public showcases must not be reset, reconfigured or redeployed; owner UX review remains separate.
-- **Documentation:** Pending implementation and verification.
-- **Next concrete action:** Add end-to-end owner downloads, denied roles and tenant checks, test the five required viewport sizes and accessibility in the isolated app, then document verified behavior.
+- **Documentation:** User Guide changes are drafted; final behavior and wording await verification.
+- **Next concrete action:** Apply and test the updated audit fields only in the identified disposable database, then rerun the corrected browser journey and verify access, concurrency, capacity and criterion-level evidence.
 - **Latest development commit:** `aa2922458cf9b768010b603111d7897a714a04aa` (navigation test corrections; no BB-REPORT-003 development commit yet).
-- **Push outcome:** Documentation-only coding checkpoint `eebf74a12f4b68f1f707bc1c6487cadcae583513` was pushed and its remote SHA verified; this milestone checkpoint is pending push.
+- **Push outcome:** Documentation-only milestone checkpoint `c173c8053dd14fb702c9533c3cd1e1ff98bc5d1a` was pushed and its remote SHA verified; this testing checkpoint is pending push.
 
 ## BB-UXFIX-005 — Hospitality Workflow Navigation
 
