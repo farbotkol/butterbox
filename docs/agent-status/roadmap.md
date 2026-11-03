@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-003 — Business Permissions
 
-- **Last report:** 2026-11-04 01:37 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:46 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-003 — Business Permissions directory and focused access editing (P1, In Progress).
 - **Acceptance criteria:** Searchable/filterable/sortable member directory; read-first detail and focused edit with before/after confirmation; preserved role scopes, last-owner concurrency protection, audit and tenant isolation; five-width accessible production-browser checks and actual before/after screenshots.
 - **Phase:** Testing.
-- **Activity:** Adding deterministic competing-write, permission-revocation and production-browser coverage for the selected-member workflow.
+- **Activity:** Rerunning production-browser owner, authorization, error-recovery and five-width accessibility scenarios after the first expanded run.
 - **Plan:** Reuse the directory/detail/edit pattern without broadening the existing owner-only membership administration. Add stale-write protection around the authoritative mutation, retain its last-owner locking and audit, and verify role/tenant isolation, accessibility, mobile layouts and documentation in the disposable environment.
-- **Progress since previous report:** Implemented the owner-only name-search directory, read-first member detail, focused role/scope editor and checked confirmation/snapshot wrapper. Both new migrations were applied only to the identified disposable project; neither showcase was changed. A pre-existing audit test's unscoped fixture assertion was scoped to its own business after it encountered older disposable audit rows.
-- **Tests and results:** Pre-change production-browser baseline **6/6** passed. Four targeted permission, tenant and audit pgTAP files passed **137/137** after the fixture fix; directory/pagination units passed **8/8**; changed-file ESLint and TypeScript passed. Runtime tests of the new UI and true concurrent writes remain outstanding.
-- **Failing tests:** The initial audit regression run hit unrelated existing fixture rows; the scoped assertion and complete targeted rerun passed. No current failures are known in completed checks.
+- **Progress since previous report:** Added deterministic competing edits, queued permission revocation and racing last-owner demotion tests; the existing five live role transitions now exercise selected-member editing. Added User Guide and contextual Help drafts. Neither protected showcase was changed.
+- **Tests and results:** Pre-change production-browser baseline **6/6** passed. Four targeted permission, tenant and audit pgTAP files passed **137/137**; deterministic concurrency integration passed **1/1**; directory, pagination and Help units passed **20/20**; changed-file ESLint passed. The isolated production build and five adapted live role transitions passed **5/5**. The expanded browser suite is being rerun.
+- **Failing tests:** The first expanded browser run failed five scenarios: several assertions ran before navigation completed or matched the Next.js route announcer; a streamed not-found response was HTTP 200; and axe reported a missing document title during one navigation. Assertions now wait for the actual page, scope alerts, and check the not-found UI/no disclosure; the accessibility result still requires a successful rerun. The earlier unscoped audit-fixture assertion was corrected and its full rerun passed.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
-- **Documentation:** Pending — User Guide, contextual Help and criterion-by-criterion evidence must reflect tested behavior before completion.
-- **Next concrete action:** Exercise competing writes and revocation, then adapt existing role-transition browser tests and verify the full five-width owner workflow.
+- **Documentation:** Updated in the working tree — User Guide and contextual Help; final browser verification and criterion-by-criterion evidence remain pending.
+- **Next concrete action:** Inspect the expanded browser rerun, fix any real defects, and finish five-width evidence and final validation before completing the story.
 - **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
-- **Push outcome:** Previous documentation checkpoint `f3fa6e6b06b4014c50a0d22317b801c2118b643d` was pushed and its remote SHA verified. This updated documentation-only checkpoint is pending push.
+- **Push outcome:** Previous documentation checkpoint `e76344c772f00ccd805646d5d32142f46063f232` was pushed and its remote SHA verified. This updated documentation-only checkpoint is pending push.
 
 ## BB-UXFIX-002 — Departments and Roles
 
