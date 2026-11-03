@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 05:35 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 06:01 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, In Progress).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
 - **Phase:** Testing.
-- **Activity:** Rerunning five-width visual checks and the mapping/CSV workflows after fixing a clipped mobile destination selector.
+- **Activity:** Preparing a fresh five-width rerun after refining the tablet destination selector and mobile Help-link layout.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
-- **Progress since previous report:** The previously timed-out authorization and loading/recovery browser scenarios passed **2/2**. Five-width keyboard, overflow and WCAG-tagged axe checks passed **5/5**. Manual screenshot inspection exposed a truncated mobile destination selector; the layout was widened, explanatory text wrapping improved and a measurable label-fit assertion added. The final visual/mapping/CSV rerun is underway.
-- **Tests and results:** Pre-change mapping/generic CSV browser baseline **2/2**, updated mapping journey **1/1**, expanded browser **3/5** followed by failed-case rerun **2/2**, initial five-width checks **5/5**, database **218/218**, integration **2/2** plus bypass rerun **1/1**, relevant units/Help **42/42**, TypeScript, changed-file ESLint and isolated production build passed.
-- **Failing tests:** None remain in the rerun authorization/loading cases. The newly adjusted mobile layout and label-fit assertion await the running rerun; screenshots are not final until it passes.
+- **Progress since previous report:** The post-migration mapping and generic CSV browser journeys passed **2/2**. The measurable selector check exposed clipping at 768 px; the tablet now uses full-width selection and readable list rows. Its next run passed the other four widths but timed out at 768 px. Adjusted the wrapped Help links and will rerun the final layouts.
+- **Tests and results:** Pre-change mapping/CSV browser baseline **2/2**, post-migration mapping/CSV **2/2**, expanded browser **3/5** followed by failed-case rerun **2/2**, initial five-width checks **5/5**, database **218/218**, integration **2/2** plus bypass rerun **1/1**, relevant units/Help **42/42**, TypeScript, changed-file ESLint and isolated production build passed.
+- **Failing tests:** The first label-fit rerun failed at 768 px; the layout was corrected. Its rerun timed out at that width while the other four passed. The final Help-link change and all final screenshots require verification.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Updated in the working tree; final behavior and Help checks remain subject to browser verification.
-- **Next concrete action:** Finish the visual/mapping/CSV rerun, verify lossless screenshots and final type/lint checks, then record criterion-level evidence.
+- **Next concrete action:** Rerun the final five-width scenarios, verify lossless screenshots and final type/lint checks, then record criterion-level evidence.
 - **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Debugging checkpoint `52f97eca9bf38ea1f9e1b420f9b3313ef8de9936` was pushed and its remote SHA verified. This testing checkpoint is pending push.
+- **Push outcome:** Testing checkpoint `88622d1cdfb6567e6e8d10a7873083adfde60cf9` was pushed and its remote SHA verified. This testing checkpoint is pending push.
 
 ## BB-UXFIX-003 — Business Permissions
 
