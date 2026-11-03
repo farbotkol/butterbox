@@ -7,7 +7,7 @@ import { setTimeout } from "node:timers/promises";
 import { Temporal } from "@js-temporal/polyfill";
 import { createClient } from "@supabase/supabase-js";
 import { genericPayrollCsv, validateGenericPayrollEntries } from "../src/lib/generic-payroll-exports.ts";
-import { project, readEnvironment, showcaseStatus, verify } from "./showcase-environment.mjs";
+import { normalizeTestOwnerEmail, project, readEnvironment, showcaseStatus, verify } from "./showcase-environment.mjs";
 
 const timezone = "Australia/Sydney";
 const options = { auth: { persistSession: false, autoRefreshToken: false } };
@@ -46,6 +46,41 @@ export function fixturePlan(namespace, now = new Date().toISOString()) {
       };
     }),
   };
+}
+
+export function assertKnownFixtureAccounts(users, accounts, namespace, testOwnerEmail) {
+  const ownerEmail = testOwnerEmail === undefined
+    ? `showcase-owner-${namespace}@example.test` : normalizeTestOwnerEmail(testOwnerEmail);
+  if (testOwnerEmail !== undefined && ownerEmail !== testOwnerEmail) {
+    throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
+  }
+  const plan = fixturePlan(namespace);
+  const expected = new Map([
+    [ownerEmail, "owner"],
+    ...plan.staff.map((person) => [person.email, person.role]),
+    [`showcase-outside-${namespace}@example.test`, "outside"],
+  ]);
+  if (!Array.isArray(users) || !Array.isArray(accounts) ||
+      users.length !== expected.size || accounts.length !== expected.size) {
+    throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
+  }
+  const recorded = new Map(accounts.map((account) => [account.email, account]));
+  if (recorded.size !== expected.size ||
+      new Set(accounts.map((account) => account.userId)).size !== expected.size ||
+      new Set(users.map((user) => user.id)).size !== expected.size) {
+    throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
+  }
+  for (const [email, role] of expected) {
+    const account = recorded.get(email);
+    if (!account || !uuid.test(account.userId) || account.role !== role) {
+      throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
+    }
+  }
+  for (const user of users) {
+    if (recorded.get(user.email)?.userId !== user.id) {
+      throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
+    }
+  }
 }
 
 function checked(result, operation) {
@@ -106,7 +141,7 @@ export async function withFixtureLock(workdir, operation) {
 
 async function seedUnlocked(workdir) {
   await verify(workdir);
-  const { manifest } = readEnvironment(workdir);
+  const { manifest, testOwnerEmail } = readEnvironment(workdir);
   const status = showcaseStatus(workdir);
   const admin = createClient(status.API_URL, status.SERVICE_ROLE_KEY, options);
   const stateFile = path.join(workdir, "fixture-state.json");
@@ -121,7 +156,7 @@ async function seedUnlocked(workdir) {
   };
   privateState(stateFile, state, "wx");
   for (const account of [
-    { role: "owner", name: "Fictional Owner", email: `showcase-owner-${manifest.id}@example.test` },
+    { role: "owner", name: "Fictional Owner", email: testOwnerEmail ?? `showcase-owner-${manifest.id}@example.test` },
     ...plan.staff,
     { role: "outside", name: "Fictional Isolation Owner", email: `showcase-outside-${manifest.id}@example.test` },
   ]) {
@@ -263,7 +298,7 @@ export async function reset(workdir, confirmation) {
 
 async function resetUnlocked(workdir) {
   await verify(workdir);
-  const { manifest, credentials } = readEnvironment(workdir);
+  const { manifest, credentials, testOwnerEmail } = readEnvironment(workdir);
   const filename = path.join(workdir, "fixture-state.json");
   const previous = fs.readFileSync(filename, "utf8");
   const state = JSON.parse(previous);
@@ -277,11 +312,7 @@ async function resetUnlocked(workdir) {
   const status = showcaseStatus(workdir);
   const admin = createClient(status.API_URL, status.SERVICE_ROLE_KEY, options);
   const users = checked(await admin.auth.admin.listUsers({ page: 1, perPage: 1000 }), "Inspect synthetic reset users");
-  if (users.users.length !== 16 || users.users.some((user) =>
-    !state.accounts.some((account) => account.userId === user.id && account.email === user.email) ||
-    !user.email?.endsWith(`-${manifest.id}@example.test`))) {
-    throw new Error("Unexpected Auth data: preserve the project; no reset permitted.");
-  }
+  assertKnownFixtureAccounts(users.users, state.accounts, manifest.id, testOwnerEmail);
   const businesses = checked(await admin.from("businesses").select("id,name"), "Inspect synthetic reset businesses");
   if (businesses.some((business) => ![state.plan.businessId, state.plan.outsideId].includes(business.id) ||
       !business.name.startsWith("SIMULATION ONLY - "))) {

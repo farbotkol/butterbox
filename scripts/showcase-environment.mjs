@@ -83,8 +83,16 @@ function assertPath(workdir) {
   }
 }
 
-export function prepare(workdir) {
+export function normalizeTestOwnerEmail(email) {
+  if (typeof email !== "string" || !/^test[a-z0-9_-]{1,60}@butterbox\.com$/i.test(email)) {
+    throw new Error("The showcase owner must be an internal test-only address beginning with test at butterbox.com.");
+  }
+  return email.toLowerCase();
+}
+
+export function prepare(workdir, testOwnerEmail) {
   assertPath(workdir);
+  const ownerEmail = testOwnerEmail === undefined ? undefined : normalizeTestOwnerEmail(testOwnerEmail);
   fs.mkdirSync(workdir, { mode: 0o700 });
   if (fs.realpathSync(workdir) !== workdir) throw new Error("Showcase path must not contain symlinks.");
   const supabase = path.join(workdir, "supabase");
@@ -106,6 +114,7 @@ export function prepare(workdir) {
     ["supabase/config.toml", config],
     ["supabase/signing-keys.json", signingKeys],
     ["credentials.json", JSON.stringify(credentials)],
+    ...(ownerEmail ? [["test-owner-account.json", JSON.stringify({ email: ownerEmail })]] : []),
   ]) {
     privateFile(path.join(workdir, name), value);
     files[name] = hash(value);
@@ -149,7 +158,22 @@ export function readEnvironment(workdir) {
       throw new Error("Showcase file integrity or private permissions changed; refusing access.");
     }
   }
-  return { manifest, credentials: JSON.parse(fs.readFileSync(path.join(workdir, "credentials.json"), "utf8")) };
+  const ownerFile = path.join(workdir, "test-owner-account.json");
+  const hasOwnerFile = Object.hasOwn(manifest.files, "test-owner-account.json");
+  if (fs.existsSync(ownerFile) !== hasOwnerFile) throw new Error("Showcase test-owner configuration is incomplete.");
+  let testOwnerEmail;
+  if (hasOwnerFile) {
+    const owner = JSON.parse(fs.readFileSync(ownerFile, "utf8"));
+    if (!owner || typeof owner !== "object" || Object.keys(owner).length !== 1 ||
+        normalizeTestOwnerEmail(owner.email) !== owner.email) {
+      throw new Error("Showcase test-owner configuration is invalid.");
+    }
+    testOwnerEmail = owner.email;
+  }
+  return {
+    manifest, testOwnerEmail,
+    credentials: JSON.parse(fs.readFileSync(path.join(workdir, "credentials.json"), "utf8")),
+  };
 }
 
 function command(executable, args, env = process.env, diagnosticDirectory) {
@@ -173,6 +197,16 @@ export function assertNetwork(actual, id) {
       actual.Labels?.["com.butterbox.showcase.id"] !== id) {
     throw new Error("Showcase network must be owned, internal-only and loopback-bound.");
   }
+}
+
+function ensureOwnedNetwork(manifest) {
+  const existing = command("docker", ["network", "ls", "--filter", `name=^${network}$`, "--format", "{{.Name}}"]).trim();
+  if (!existing) {
+    command("docker", ["network", "create", "--internal", "--driver", "bridge", "--opt",
+      "com.docker.network.bridge.host_binding_ipv4=127.0.0.1",
+      "--label", `com.butterbox.showcase.id=${manifest.id}`, network]);
+  }
+  assertNetwork(JSON.parse(command("docker", ["network", "inspect", network]))[0], manifest.id);
 }
 
 export function assertContainer(actual, workdir) {
@@ -261,14 +295,7 @@ export async function start(workdir) {
   const { manifest, credentials } = readEnvironment(workdir);
   const disk = fs.statfsSync(workdir);
   if (disk.bavail * disk.bsize < 10 * 1024 ** 3) throw new Error("Less than 10 GiB available; stop safely.");
-  const existing = command("docker", ["network", "ls", "--filter", `name=^${network}$`, "--format", "{{.Name}}"]).trim();
-  if (existing) {
-    assertNetwork(JSON.parse(command("docker", ["network", "inspect", network]))[0], manifest.id);
-  } else {
-    command("docker", ["network", "create", "--internal", "--driver", "bridge", "--opt",
-      "com.docker.network.bridge.host_binding_ipv4=127.0.0.1",
-      "--label", `com.butterbox.showcase.id=${manifest.id}`, network]);
-  }
+  ensureOwnedNetwork(manifest);
   const cli = process.env.BUTTERBOX_TEST_SUPABASE_CLI;
   if (!cli) throw new Error("Set BUTTERBOX_TEST_SUPABASE_CLI to the verified local CLI executable.");
   const containers = command("docker", ["ps", "-aq", "--filter", `label=com.supabase.cli.project=${project}`]).trim();
@@ -314,7 +341,7 @@ export async function stop(workdir) {
 
 export async function proxy(workdir) {
   const { manifest } = readEnvironment(workdir);
-  assertNetwork(JSON.parse(command("docker", ["network", "inspect", network]))[0], manifest.id);
+  ensureOwnedNetwork(manifest);
   const servers = [];
   try {
     for (const [service, hostPort, containerPort] of [
@@ -364,11 +391,13 @@ export async function proxy(workdir) {
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   try {
     const [action, workdir, ...extra] = process.argv.slice(2);
-    if (!workdir || extra.length || !["prepare", "start", "stop", "verify", "proxy"].includes(action)) {
-      throw new Error("Usage: node scripts/showcase-environment.mjs prepare|start|stop|verify|proxy /private/path/butterbox-showcase");
+    const testOwnerOption = action === "prepare" && extra.length === 2 && extra[0] === "--test-owner-email";
+    if (!workdir || !["prepare", "start", "stop", "verify", "proxy"].includes(action) ||
+        (extra.length && !testOwnerOption)) {
+      throw new Error("Usage: node scripts/showcase-environment.mjs prepare|start|stop|verify|proxy /private/path/butterbox-showcase [--test-owner-email EMAIL (prepare only)]");
     }
     if (action === "prepare") {
-      prepare(workdir);
+      prepare(workdir, testOwnerOption ? extra[1] : undefined);
       console.log("Prepared private synthetic showcase configuration; not seeded or ready for reviewers.");
     } else {
       console.log(JSON.stringify(await ({ start, stop, verify, proxy })[action](workdir)));

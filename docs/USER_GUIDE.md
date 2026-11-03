@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.3 — reviewed 2026-11-02 (Core Roadmap).
+**Guide version:** 1.4 — showcase access updated 2026-11-03; broader guide reviewed 2026-11-02 (Core Roadmap).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -28,6 +28,11 @@ contact details, attendance or payroll information. The local review app is
   Existing password login works; public signup is disabled. There are
   14 fictional FOH/BOH staff, including department managers, plus the owner
   and a separate outside-business control owner.
+- An operator may designate an internal test-only owner address during isolated
+  showcase preparation. Even if that address matches a login in another
+  workspace, the showcase account is separate and has its own generated
+  password. Its local browser session is separate from the ordinary workspace
+  session. This exception is not for real staff or customer contact details.
 - Confirm **SIMULATION ONLY** appears before reviewing. It identifies
   fictional data, not stronger permissions. Managers retain their assigned
   department scope; employees remain limited to their own supported workflows.
@@ -45,7 +50,8 @@ contact details, attendance or payroll information. The local review app is
   real workers or treat local captured mail as external delivery.
 - Sign out when finished. Ask the operator to stop the app before a reset;
   reset discards review database edits and replaces the fictional fixture.
-  It does not convert a demo into a real customer business.
+  Reseeding generates new account passwords; ask the operator for the updated
+  credentials. It does not convert a demo into a real customer business.
 
 This environment does not imply final branding approval, hosted reviewer
 access, production readiness or legal/payroll compliance.

@@ -106,6 +106,20 @@ export BUTTERBOX_TEST_SUPABASE_CLI=/absolute/path/to/supabase
 node scripts/showcase-environment.mjs prepare /private/operator/path/butterbox-showcase
 ```
 
+For an explicitly designated **internal test owner**, the operator may instead
+append `--test-owner-email "$BUTTERBOX_SHOWCASE_TEST_OWNER_EMAIL"` to the
+`prepare` command. The address must be at `@butterbox.com` with a local part
+consisting of `test` followed by 1–60 letters, digits, underscores or hyphens;
+do not use a real employee or customer address. This format check cannot prove
+an address is fictional: the operator must confirm it is an internal test
+alias. The address identifies a new, separate showcase-only Auth account with
+its own generated password, not the existing account or password in another
+workspace. The remaining review accounts retain their reserved fictional
+addresses. The designated address is private, integrity checked, and accepted
+by reset only as the exact owner. The showcase uses a separate authentication
+cookie so its login and sign-out do not replace an ordinary local workspace's
+session on the same host.
+
 Preparation creates mode-0700 directories, mode-0600 generated API/signing
 material and hashed migration snapshots. It refuses to overwrite an existing
 directory. Never commit or publish those files, private failure diagnostics or
@@ -115,7 +129,8 @@ The backend uses project `butterbox-showcase`, dedicated storage and an
 owned **internal-only Docker network**. This Docker configuration does not
 publish container ports; fixed-target host proxies provide local access without
 giving the service containers an external default route. Start the proxy in
-one terminal, then the backend in another:
+one terminal, then the backend in another. The proxy creates or verifies the
+owned internal network before listening:
 
 ```sh
 node scripts/showcase-environment.mjs proxy /private/operator/path/butterbox-showcase
@@ -125,6 +140,13 @@ node scripts/showcase-environment.mjs proxy /private/operator/path/butterbox-sho
 node scripts/showcase-environment.mjs start /private/operator/path/butterbox-showcase
 node scripts/showcase-environment.mjs verify /private/operator/path/butterbox-showcase
 ```
+
+On macOS with Colima, container bridge addresses are reachable from the Colima
+VM rather than the Mac host. Run the proxy command inside that VM with a Node
+runtime there, using the same mounted checkout and private workdir paths; run
+the backend and app commands on the host. Verify Colima forwards each proxy
+port to host **loopback only** before seeding. A VM without the same paths,
+ownership or loopback forwarding is not a verified showcase environment.
 
 Proxies listen only on `127.0.0.1`: API **57421**, database **57422**, Mailpit
 **57424**. They check target project/workdir, network, health and storage before
@@ -171,6 +193,8 @@ node scripts/test-auth.mjs /private/operator/path/butterbox-showcase --serve-sho
 Keep the CLI executable variable exported in that terminal. Do not reuse a
 production build across normal/showcase origins: public configuration is
 embedded at build time. This launcher rebuilds for the selected environment.
+If using a separate source snapshot, keep its dependencies inside that
+snapshot; Turbopack can reject a `node_modules` symlink outside its workspace.
 The app displays **SIMULATION ONLY**; every downloaded sample CSV row also
 contains **SIMULATION ONLY - NOT FOR PAYROLL**. The notice is not an
 authorization boundary; normal server permissions and RLS still apply.
@@ -187,8 +211,9 @@ Reset checks the exact project, private configuration, credentials, network,
 storage and known fictional Auth/business inventory first. It refuses unknown
 accounts/businesses. It archives the prior private inventory/CSV and records a
 hashed local reset receipt; it does not preserve database edits made during a
-review. Only enter fictional data. Seed never overwrites existing state or
-implicitly resets. Seed/reset share an exclusive operation lock; a partial
+review. Reseeding generates new account passwords; retrieve them from the new
+private inventory. Only enter fictional data. Seed never overwrites existing
+state or implicitly resets. Seed/reset share an exclusive operation lock; a partial
 inventory or interrupted lock requires private operator inspection, not
 automatic deletion or a bypass.
 

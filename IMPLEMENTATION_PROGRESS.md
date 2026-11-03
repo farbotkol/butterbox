@@ -924,6 +924,43 @@ operational features retain separate acceptance evidence. Remaining risks:
 hosted access/owner review, final identity approval and broader production gates.
 Disk guard held 29 GiB free; temporary app/browser processes stopped normally.
 
+## Local test-owner showcase extension — 2026-11-03
+
+User-directed setup of the existing BB-DEMO-001 showcase; the story's original
+Done status and previously recorded production/brand gates are not changed
+here. The operator supplied an internal test login for a **new, separate**
+local Auth identity. Its generated password and inventory stay in the private
+showcase workdir; the ordinary account, password and data were not copied or
+reset.
+
+| Criterion | Implementation and selected verification | Actual result | Status |
+| --- | --- | --- | --- |
+| DEMO-001-AC1: isolated environment | Private manifest/keys, fixed loopback ports, owned internal network and six project-scoped services; live `verify` and reciprocal local browser-session check | Signing/credential, health, foreign-token rejection and anonymous-read checks passed; both local apps remained available | Pass |
+| DEMO-001-AC2: fictional FOH/BOH staff | Existing namespace-scoped fixture and authenticated role queries | 14 employees, seven per department; FOH/BOH managers, employee and outside-tenant visibility passed | Pass |
+| DEMO-001-AC3: realistic simulated workflows | Existing roster, availability, immutable clock/correction and finalised sample export fixture; live integration and browser review | 30 shifts, 98 availability intervals, 56 attendance events, one correction and 14 approved/finalised sample rows verified | Pass |
+| DEMO-001-AC4: synthetic data | Reserved fictional staff/control addresses and optional integrity-checked, test-prefixed internal owner alias; no production import | 15 reserved fictional identities plus the explicitly designated test owner; no original password or customer records copied. Address syntax cannot establish real-world identity: the operator must confirm the alias is test-only | Pass for verified fixture scope |
+| DEMO-001-AC5: no real messaging/payroll | Internal-only network, disabled public signup, local Mailpit and simulation-marked generic CSV | Signup denied, zero generated mail and outbound route blocked; no live provider or wage calculation claimed | Pass |
+| DEMO-001-AC6: guarded repeatability | Exact owner/staff/control inventory, exclusive fixture lock and explicit isolated reset | Actual reset and reseed passed; unknown/duplicate identities and roles were refused by focused tests | Pass |
+| Local session isolation | Dedicated showcase auth cookie wired through proxy, server, invitation and offline clients; ordinary naming unchanged | Browser reproduced the old collision, then confirmed showcase sign-in/sign-out preserves an ordinary cookie; reciprocal ordinary-app navigation and offline reopening passed | Pass |
+
+Selected verification: **35/35** focused showcase/auth/offline Node tests,
+**3/3** live showcase integration runs (before and after reset and after browser
+review), **7/7** production Chromium scenarios, a reciprocal cross-port browser
+check, the isolated reset/reseed, production split build, changed-code ESLint,
+TypeScript and diff checks passed. The first snapshot build failed on an
+external dependency symlink and the first browser run lacked Chromium; both
+were fixed and rerun. The original workspace's aggregate account, venue,
+department, employee and shift counts were unchanged, and ordinary demo seeding
+remained disabled.
+
+Documentation: **updated** README operator setup, Colima/network guidance,
+test-owner restrictions, cookie isolation and regenerated passwords; updated
+User Guide showcase login and reset guidance. Full unrelated Node/pgTAP and
+browser suites, an authenticated ordinary-workspace browser regression, other
+browser engines and production/release testing were not run for this local
+setup. Use a disposable project for broader authentication regressions; no
+live payroll, hosted review, approved branding or award compliance is claimed.
+
 ## Latest completed showcase story
 
 **BB-DEMO-001 — Isolated synthetic showcase café: Done.**
@@ -935,7 +972,7 @@ results; the final criterion table is authoritative for completion.
 | DEMO-001-AC1: dedicated verified environment | `showcase-environment.mjs`; private independent keys, hashed migration/config snapshots, exact project/workdir, owned internal network/storage, loopback-only proxies; live own/foreign/anonymous JWT checks, six healthy services; environment unit tests and focused tenant/onboarding pgTAP | Identity/credential/network/storage checks passed; 74/74 pgTAP; isolated production app/health and loopback binding passed | Pass |
 | DEMO-001-AC2: 12–15 fictional FOH/BOH staff | Deterministic namespace-scoped planner, 14 employees (7 FOH / 7 BOH), role eligibility and 16 private scoped/control identities; unit and actual authenticated integration | Exact counts and FOH/BOH/employee/outside-tenant visibility passed | Pass |
 | DEMO-001-AC3: realistic workflow and approved sample | 98 availability intervals, 30 shifts including two open shifts, four publication receipts, 56 original clock/break events, attributable correction, 14 approved/finalised canonical records; existing RPCs and sample-only CSV; HTTP integration and production browser | Immutable original/correction provenance, complete CSV and 14 simulation notices passed; desktop/mobile axe and no horizontal page overflow passed | Pass |
-| DEMO-001-AC4: no real user/customer data | Fictional names, generated credentials, reserved `example.test` addresses, no production imports; private inventory, global app notice and every CSV row marked simulation | Fixture source/shape and actual users/records passed; login/report notice passed | Pass |
+| DEMO-001-AC4: no real user/customer data | Fictional names, generated credentials, reserved `example.test` addresses in the default fixture, no production imports; private inventory, global app notice and every CSV row marked simulation | Fixture source/shape and actual users/records passed; login/report notice passed | Pass |
 | DEMO-001-AC5: no real messages/payroll | Internal-only backend network; signup disabled; local Mailpit; no provider credentials/mappings/pay codes or provider submission; actual signup/mail/egress tests | `signup_disabled`, zero messages and active external-route denial passed; CSV clearly not for payroll | Pass |
 | DEMO-001-AC6: guarded repeatability and target safety | Exact verified project/config/credentials/network/storage plus known Auth/business inventory before explicit reset; shared exclusive lock; prior inventory/CSV archives and hashed receipt; exact-volume restart provenance | Repeated actual reset/reseed and volume-preserving restart passed; unknown/modified targets, accidental reset, stale lock/concurrency and foreign/replaced/extra volumes refused | Pass |
 

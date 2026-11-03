@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { Temporal } from "@js-temporal/polyfill";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { fixturePlan, reset, seed, withFixtureLock } from "../scripts/showcase-fixtures.mjs";
+import { assertKnownFixtureAccounts, fixturePlan, reset, seed, withFixtureLock } from "../scripts/showcase-fixtures.mjs";
 import { prepare, project } from "../scripts/showcase-environment.mjs";
 
 const namespace = "a0000000-0000-4000-8000-000000000001";
@@ -54,6 +55,29 @@ test("showcase identities are deterministic, collision-free and independent betw
 test("showcase fixture planning rejects invalid identities and timestamps", () => {
   for (const value of ["", "production", "../other", "not-a-uuid"]) assert.throws(() => fixturePlan(value), /namespace/);
   assert.throws(() => fixturePlan(namespace, "invalid"), RangeError);
+});
+
+test("reset inventory allows only the configured test owner and exact fictional accounts", () => {
+  const plan = fixturePlan(namespace);
+  const testOwner = "test-reviewer@butterbox.com";
+  const accounts = [
+    { email: `showcase-owner-${namespace}@example.test`, role: "owner", userId: randomUUID() },
+    ...plan.staff.map((person) => ({ email: person.email, role: person.role, userId: randomUUID() })),
+    { email: `showcase-outside-${namespace}@example.test`, role: "outside", userId: randomUUID() },
+  ];
+  const usersFor = (inventory) => inventory.map((account) => ({ id: account.userId, email: account.email }));
+  assert.doesNotThrow(() => assertKnownFixtureAccounts(usersFor(accounts), accounts, namespace));
+  const selected = accounts.map((account) => account.role === "owner" ? { ...account, email: testOwner } : account);
+  const users = usersFor(selected);
+  assert.doesNotThrow(() => assertKnownFixtureAccounts(users, selected, namespace, testOwner));
+  assert.throws(() => assertKnownFixtureAccounts(users, selected, namespace), /no reset permitted/);
+  assert.throws(() => assertKnownFixtureAccounts(users, selected, namespace, "test-other@butterbox.com"), /no reset permitted/);
+  assert.throws(() => assertKnownFixtureAccounts(users, selected, namespace, "customer@butterbox.com"), /test-only/);
+  assert.throws(() => assertKnownFixtureAccounts([...users.slice(1), users[1]], selected, namespace, testOwner), /no reset permitted/);
+  const unexpected = selected.map((account, index) => index === 1 ? { ...account, email: "test-staff@butterbox.com" } : account);
+  assert.throws(() => assertKnownFixtureAccounts(usersFor(unexpected), unexpected, namespace, testOwner), /no reset permitted/);
+  const changedRole = selected.map((account, index) => index === 1 ? { ...account, role: "owner" } : account);
+  assert.throws(() => assertKnownFixtureAccounts(users, changedRole, namespace, testOwner), /no reset permitted/);
 });
 
 test("showcase refuses accidental resets and unidentified fixture targets before database access", async () => {

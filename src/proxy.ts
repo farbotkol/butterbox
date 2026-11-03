@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { supabaseAuthCookieOptions } from "@/lib/showcase";
 
 export async function proxy(request: NextRequest) {
   if (["/api/health", "/api/ready", "/api/metrics"].includes(request.nextUrl.pathname)) {
@@ -12,6 +13,7 @@ export async function proxy(request: NextRequest) {
 
   let response = NextResponse.next({ request });
   const supabase = createServerClient(url, key, {
+    cookieOptions: supabaseAuthCookieOptions(),
     cookies: {
       getAll() {
         return request.cookies.getAll();

@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseAuthCookieOptions } from "@/lib/showcase";
 
 export function isSupabaseConfigured() {
   return Boolean(
@@ -19,6 +20,7 @@ export async function createClient() {
   const cookieStore = await cookies();
 
   return createServerClient(url, key, {
+    cookieOptions: supabaseAuthCookieOptions(),
     cookies: {
       getAll() {
         return cookieStore.getAll();

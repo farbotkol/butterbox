@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createChunks, stringToBase64URL } from "@supabase/ssr";
+import { SHOWCASE_AUTH_COOKIE_NAME } from "../src/lib/showcase.ts";
 import {
   browserSessionIdentity, listOfflineClaims, openOfflineContext, parseOfflineContext,
   saveOfflineClaim, sealOfflineContext,
@@ -90,6 +91,16 @@ test("session guard reads Supabase cookies without persisting credentials", () =
     scope.authCookieName), null);
   assert.equal(browserSessionIdentity(cookieText(chunks), "another-cookie"), null);
   assert.equal(browserSessionIdentity("unrelated=value", scope.authCookieName), null);
+});
+
+test("offline session verification accepts the isolated showcase cookie without reading the ordinary session", () => {
+  const identity = { actorId, sessionId };
+  const chunks = sessionCookie({ sub: actorId, session_id: sessionId }, "x".repeat(12_000))
+    .map((chunk) => ({ ...chunk, name: chunk.name.replace(scope.authCookieName, SHOWCASE_AUTH_COOKIE_NAME) }));
+  const showcaseScope = { ...scope, authCookieName: SHOWCASE_AUTH_COOKIE_NAME };
+  assert.deepEqual(parseOfflineContext(showcaseScope), showcaseScope);
+  assert.deepEqual(browserSessionIdentity(cookieText(chunks), SHOWCASE_AUTH_COOKIE_NAME), identity);
+  assert.equal(browserSessionIdentity(cookieText(chunks), scope.authCookieName), null);
 });
 
 test("offline queue reports invalid claims and unavailable storage", async () => {

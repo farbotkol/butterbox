@@ -6,6 +6,7 @@ import { expect, test } from "@playwright/test";
 import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
 import { readEnvironment, showcaseStatus, verify } from "../../scripts/showcase-environment.mjs";
+import { SHOWCASE_AUTH_COOKIE_NAME } from "../../src/lib/showcase.ts";
 
 const workdir = process.env.BUTTERBOX_SHOWCASE_WORKDIR;
 if (!workdir || process.env.BUTTERBOX_TEST_APP_URL !== "http://127.0.0.1:3137" ||
@@ -22,6 +23,7 @@ async function authenticate(context, role, account = state.accounts.find((item) 
   if (!account) throw new Error(`Missing synthetic ${role} review account.`);
   const cookies = [];
   const supabase = createServerClient(settings.API_URL, settings.ANON_KEY, {
+    cookieOptions: { name: SHOWCASE_AUTH_COOKIE_NAME },
     cookies: { getAll: () => [], setAll: (values) => cookies.push(...values) },
   });
   const result = await supabase.auth.signInWithPassword({ email: account.email, password: account.password });
@@ -58,6 +60,32 @@ async function seededWeek(page, week) {
   url.searchParams.set("week", week);
   await page.goto(`${url.pathname}${url.search}`);
 }
+
+test("showcase session preserves the ordinary local workspace cookie", async ({ page, context }) => {
+  const normalCookieName = "sb-127-auth-token";
+  const showcaseCookieName = SHOWCASE_AUTH_COOKIE_NAME;
+  const sentinel = `ordinary-session-${randomUUID()}`;
+  await context.addCookies([{ name: normalCookieName, value: sentinel, url: "http://127.0.0.1:3000" }]);
+  await page.goto("/login");
+  let cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  await signIn(page, "owner");
+  cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  expect(cookies.some((cookie) => cookie.name === showcaseCookieName ||
+    cookie.name.startsWith(`${showcaseCookieName}.`))).toBe(true);
+  const identity = await page.evaluate(async (name) => {
+    const { browserSessionIdentity } = await import("/offline-attendance-shared.mjs");
+    return browserSessionIdentity(document.cookie, name);
+  }, showcaseCookieName);
+  expect(identity?.actorId).toBe(state.accounts.find((account) => account.role === "owner").userId);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  expect(cookies.some((cookie) => cookie.name === showcaseCookieName ||
+    cookie.name.startsWith(`${showcaseCookieName}.`))).toBe(false);
+});
 
 test("isolated showcase labels login and mobile owner report and marks every downloaded sample row", async ({ page, context, browser }) => {
   const sessions = [];
@@ -190,6 +218,19 @@ test("guided mobile employee follows schedule, availability and original attenda
   await page.goto(`/timesheets?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.week}`);
   await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("error") === "permission");
   await expect(page.getByRole("heading", { name: "Weekly timesheet review", exact: true })).toHaveCount(0);
+});
+
+test("showcase employee can prepare offline reopening with the isolated session", async ({ page }) => {
+  await signIn(page, "employee");
+  await navigate(page, "Clock in / out", "Clock in / out");
+  const section = page.getByRole("region", { name: "Offline attendance fallback" });
+  await section.getByText("Prepare this tab for offline reopening").click();
+  await section.getByLabel("Offline passphrase", { exact: true }).fill("fictional offline demo phrase");
+  await section.getByLabel("Confirm offline passphrase").fill("fictional offline demo phrase");
+  await section.getByRole("button", { name: "Prepare offline reopening" }).click();
+  await expect(section.getByRole("status")).toContainText("Offline reopening is prepared");
+  await section.getByRole("button", { name: "Remove offline preparation" }).click();
+  await expect(section.getByRole("status")).toContainText("Offline reopening was removed");
 });
 
 for (const role of ["owner", "foh_manager", "employee"]) {

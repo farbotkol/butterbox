@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { createPublicKey } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import {
-  assertContainer, assertNetwork, assertOwnedVolumes, config, network, ports, prepare, project, readEnvironment,
+  assertContainer, assertNetwork, assertOwnedVolumes, config, network, normalizeTestOwnerEmail, ports, prepare, project, readEnvironment,
 } from "../scripts/showcase-environment.mjs";
 import { testSupabaseStatus } from "../scripts/test-supabase-status.mjs";
 
@@ -36,6 +37,48 @@ test("showcase preparation creates private independent keys and copies migration
   assert.notEqual(first.manifest.files["supabase/signing-keys.json"], second.manifest.files["supabase/signing-keys.json"]);
   assert.throws(() => prepare(workdir), /EEXIST/);
   assert.deepEqual(readEnvironment(workdir).manifest, first.manifest);
+});
+
+test("showcase test-owner selection is explicit, restricted, private and integrity checked", (t) => {
+  for (const email of ["owner@butterbox.com", "test@example.test", "test-user@other.com",
+    "test@butterbox.com", "test.person@butterbox.com", " test-user@butterbox.com", "test-user@butterbox.com\n",
+    `test${"x".repeat(61)}@butterbox.com`]) {
+    const target = fixture(t);
+    assert.throws(() => prepare(target, email), /internal test-only address/);
+    assert.equal(fs.existsSync(target), false);
+  }
+  assert.equal(normalizeTestOwnerEmail(`TEST${"x".repeat(60)}@BUTTERBOX.COM`),
+    `test${"x".repeat(60)}@butterbox.com`);
+  const workdir = fixture(t);
+  const { manifest, testOwnerEmail } = prepare(workdir, "Test-Reviewer@Butterbox.Com");
+  assert.equal(testOwnerEmail, "test-reviewer@butterbox.com");
+  const filename = path.join(workdir, "test-owner-account.json");
+  assert.equal(fs.statSync(filename).mode & 0o777, 0o600);
+  assert.ok(manifest.files["test-owner-account.json"]);
+  assert.equal(readEnvironment(workdir).testOwnerEmail, testOwnerEmail);
+  fs.appendFileSync(filename, "\n");
+  assert.throws(() => readEnvironment(workdir), /integrity/);
+  const missingManifestEntry = fixture(t);
+  const prepared = prepare(missingManifestEntry, testOwnerEmail);
+  delete prepared.manifest.files["test-owner-account.json"];
+  fs.writeFileSync(path.join(missingManifestEntry, "manifest.json"), JSON.stringify(prepared.manifest));
+  assert.throws(() => readEnvironment(missingManifestEntry), /configuration is incomplete/);
+});
+
+test("showcase CLI accepts the test-owner option only during preparation", (t) => {
+  const workdir = fixture(t);
+  const email = "test-reviewer@butterbox.com";
+  const prepared = spawnSync(process.execPath, [
+    "scripts/showcase-environment.mjs", "prepare", workdir, "--test-owner-email", email,
+  ], { encoding: "utf8" });
+  assert.equal(prepared.status, 0);
+  assert.ok(!prepared.stdout.includes(email));
+  assert.equal(readEnvironment(workdir).testOwnerEmail, email);
+  const rejected = spawnSync(process.execPath, [
+    "scripts/showcase-environment.mjs", "verify", workdir, "--test-owner-email", email,
+  ], { encoding: "utf8" });
+  assert.equal(rejected.status, 1);
+  assert.match(rejected.stderr, /Usage:/);
 });
 
 test("showcase refuses existing, relative, repository, wrong-name and symlink targets", (t) => {

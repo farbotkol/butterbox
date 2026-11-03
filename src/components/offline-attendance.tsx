@@ -10,6 +10,7 @@ import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, type OfflineAttendanceClaim, type OfflineEventType,
 } from "@/lib/offline-attendance";
 import { listOfflineClaims, removeOfflineClaim, saveOfflineClaim } from "@/lib/offline-attendance-queue";
+import { supabaseAuthCookieName, supabaseAuthCookieOptions } from "@/lib/showcase";
 import { OfflineReopenSetup } from "@/components/offline-reopen-setup";
 
 export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, options }: {
@@ -35,7 +36,7 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
 
   const readSession = useCallback(() => {
     try {
-      const cookieName = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+      const cookieName = supabaseAuthCookieName(url);
       return browserSessionIdentity(document.cookie, cookieName);
     } catch (caught) {
       if (!(caught instanceof DOMException)) throw caught;
@@ -79,7 +80,9 @@ export function OfflineAttendance({ url, anonKey, actorId, businessId, venueId, 
       if (!claims.length || !navigator.onLine) return;
       setSyncing(true);
       setError("");
-      if (!client.current) client.current = createBrowserClient(url, anonKey);
+      if (!client.current) client.current = createBrowserClient(url, anonKey, {
+        cookieOptions: supabaseAuthCookieOptions(),
+      });
       const { data: { user }, error: authError } = await client.current.auth.getUser();
       if (!hasCurrentSession()) {
         invalidateSession();

@@ -7,6 +7,7 @@ import {
 } from "../../public/offline-attendance-shared.mjs";
 import { parseClockOptions, type ClockOption } from "@/lib/attendance";
 import { readAllPages } from "@/lib/paginated-rows";
+import { supabaseAuthCookieName, supabaseAuthCookieOptions } from "@/lib/showcase";
 
 async function waitForOfflineController(registration: ServiceWorkerRegistration) {
   const active = registration.active;
@@ -75,7 +76,7 @@ export function OfflineReopenSetup({ url, anonKey, actorId, businessId, venueId 
       if (passphrase.length < 12 || passphrase.length > 128 || passphrase !== confirmation) {
         throw new Error("Enter matching offline passphrases of 12 to 128 characters.");
       }
-      const client = createBrowserClient(url, anonKey);
+      const client = createBrowserClient(url, anonKey, { cookieOptions: supabaseAuthCookieOptions() });
       const { data: { user }, error: authError } = await client.auth.getUser();
       if (authError || !user || user.id !== actorId) {
         throw new Error("The account session changed. Sign in again before preparing offline attendance.");
@@ -111,7 +112,7 @@ export function OfflineReopenSetup({ url, anonKey, actorId, businessId, venueId 
       if (verified.error || verified.data.user?.id !== actorId || generation.current !== expectedGeneration) {
         throw new Error("The account session changed. Sign in again before preparing offline attendance.");
       }
-      const authCookieName = `sb-${new URL(url).hostname.split(".")[0]}-auth-token`;
+      const authCookieName = supabaseAuthCookieName(url);
       const identity = browserSessionIdentity(document.cookie, authCookieName);
       if (!identity || identity.actorId !== actorId) {
         throw new Error("This browser cannot verify the current session for offline reopening.");

@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { isEndedSession } from "@/lib/auth-errors";
 import { parseInvitationPreview } from "@/lib/invitations";
 import { announceSessionChange } from "@/lib/session-notifications";
+import { supabaseAuthCookieOptions } from "@/lib/showcase";
 
 type Phase = "idle" | "checking" | "confirm" | "applying" | "check-error" | "apply-error" | "link-error";
 type Tokens = { access_token: string; refresh_token: string };
@@ -22,6 +23,7 @@ export function InvitationSession({ url, anonKey, invitationId }: {
   function authClient() {
     if (!client.current) {
       client.current = createBrowserClient(url, anonKey, {
+        cookieOptions: supabaseAuthCookieOptions(),
         isSingleton: false, auth: { detectSessionInUrl: false, autoRefreshToken: false },
       });
     }
