@@ -235,9 +235,10 @@ Do not:
 `concept-confidence`, `concept-board`) are still missing. A different set of AI-generated, photographic-style
 coastal café illustrations was supplied on 2026-11-03. The
 [selection summary](website/CAFE_IMAGERY_SELECTION.md) and `website/cafe-concepts/` contain low-resolution
-review drafts, **not real photographs or product screenshots**. Their applicable account terms, third-party
-rights and final owner approval are unverified; do not publish them as cleared marketing assets. Product
-surfaces continue to use the vector artwork below.
+review drafts, **not real photographs or product screenshots**. The owner approved the proposed visual
+selection on 2026-11-03; applicable account terms, third-party rights and publication clearance remain
+unverified. Do not publish them as cleared marketing assets. Product surfaces continue to use the vector
+artwork below.
 
 ### Illustration
 

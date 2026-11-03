@@ -1,12 +1,21 @@
 # Roadmap Agent — Activity Status
 
+## Owner approval of BB-BRAND-004 visual selection — 2026-11-03
+
+- **Owner decision:** The owner approved the proposed coastal café imagery selection: “im happy with the propsed images” (message received 2026-11-03 at 18:07 AEDT).
+- **Scope:** This records selection approval for the proposed desktop/mobile hero, team and alternative, café operations, terrace and service images. It does not attest usage rights, approve publication or establish native resolution.
+- **Remaining P0:** BB-BRAND-004 remains Blocked on the supplied 861 × 377 hero falling short of the 3200 × 1800 brief and on unverified applicable generation-account, input and third-party rights.
+- **Documentation:** Selection summary, brand README/guidelines, asset catalogue, backlog and implementation evidence updated. No public homepage was deployed.
+- **Safety:** No application, database, showcase service or data was changed for this approval record.
+- **Backlog:** 127 total, 65 Done, 0 In Progress, 7 Blocked, 55 Backlog. BB-DEMO-004 internal delivery remains Done; this image decision is not production or rights approval.
+
 ## Owner acceptance of BB-DEMO-004 — 2026-11-03
 
 - **Owner decision:** BB-DEMO-004 is **Done** — owner accepted delivery of the internal, functioning isolated Butterbox Showcase MVP, superseding earlier pending-review milestone notes.
 - **Basis:** Prior isolated operator acceptance: six-container verification, synthetic reset/reseed, integration 1/1, Chromium 15/15, successful owner login. Owner additionally confirmed `http://127.0.0.1:3137` accessible and working.
 - **Boundary:** This is showcase **delivery** acceptance, not owner approval of each feature, screen, UX, artwork, external exposure, compliance or production readiness. Consolidated functional/UX feedback will be supplied separately.
 - **Safety:** GitHub documentation-only update; no local service, database, data reset or redeployment touched.
-- **Remaining P0:** BB-BRAND-004 Blocked on native hero resolution, rights and owner imagery selection/approval.
+- **Remaining P0:** BB-BRAND-004 Blocked on native hero resolution and rights clearance; owner visual selection is now recorded.
 - **Backlog:** 127 total, 65 Done, 0 In Progress, 7 Blocked, 55 Backlog. Showcase P0 56/57 Done (98.2%) and 1 Blocked.
 - **Next action:** Main Agent should refresh `copilot/finish-roadmap-for-app` and select the next unblocked roadmap task, without disturbing the live showcase. This repository update does not start the Codespace agent.
 

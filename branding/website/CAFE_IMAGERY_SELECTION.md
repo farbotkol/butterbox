@@ -1,8 +1,10 @@
-# Coastal café imagery — owner review
+# Coastal café imagery — owner-approved selection
 
-**Status: draft, for internal review only.** These are AI-generated illustrations in a photographic style,
-not photographs of a real café or staff, and not screenshots of Butterbox. The owner has approved the Coastal
-Wave direction, not these individual images. Rights and final visual approval are pending.
+**Status: owner-selected for internal review; not publication-ready.** These are AI-generated illustrations
+in a photographic style, not photographs of a real café or staff, and not screenshots of Butterbox. On
+2026-11-03 the owner approved the proposed visual selection below. This approval does not verify usage rights,
+source ownership, native resolution, or approval for public marketing. The Coastal Wave identity remains the
+design direction.
 
 Open the [responsive review preview](cafe-concepts/preview.html) to see the selections together at desktop and
 mobile widths. It is a standalone review page, **not** the live application or a deployed homepage.
@@ -51,12 +53,18 @@ in an actual placement, use `alt=""` only when the image is genuinely decorative
   The [Sharing and Publication Policy](https://openai.com/policies/sharing-publication-policy/) calls for
   review and clear disclosure of AI-generated content. These public documents do **not** establish which terms
   applied to this generation account or clear third-party, trademark, location or other rights.
-- Before marketing publication, the owner must verify the applicable account terms and source/input rights,
-  complete any appropriate third-party review, and approve the specific files and intended placements. Do not
-  imply these synthetic people or fictional locations are real.
+- The owner approved the proposed visual selections below on 2026-11-03 at 18:07 AEDT. This is selection
+  approval only; it does not verify the applicable generation-account terms or source/input rights, complete
+  any third-party review, or approve publication or specific live placements. Do not imply these synthetic
+  people or fictional locations are real.
 - Obtain or create a properly rights-reviewed, individually generated or licensed **native 3200 × 1800 or
   larger hero**, and appropriately sized supporting masters, before declaring the photographic-style library
   production-ready. Never describe an upscaled file as a native high-resolution master.
 
-**Owner decision:** Select or reject the proposed images above; final approval is not yet recorded. BB-BRAND-004
-remains **Blocked** on these publication, resolution and owner-review gates.
+**Owner decision — 2026-11-03, 18:07 AEDT:** “im happy with the propsed images”. The proposed hero desktop
+and phone crops, team and team alternative, café operations, terrace, and service selections above are
+approved as the visual selection for the internal imagery library.
+
+**Remaining gates:** BB-BRAND-004 remains **Blocked (partial)**. The supplied source hero is below the brief's
+native 3200 × 1800 requirement, and the generation-account terms, input/third-party rights, and publication
+clearance remain unverified. This approval does not approve public marketing or deployment.

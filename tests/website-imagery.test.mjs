@@ -92,6 +92,6 @@ test("the asset catalogue records source and review fingerprints without claimin
     assert.equal(rows.length, 1, file);
     assert.ok(rows[0].includes(sha256(await readFile(path.join(root, file)))), file);
     assert.match(rows[0], /rights.*unverified/i, file);
-    assert.match(rows[0], /owner visual approval pending/i, file);
+    assert.match(rows[0], /owner visual (?:selection approval|approval pending)/i, file);
   }
 });

@@ -14,8 +14,9 @@
   `dfaf495` passed every checklist step (verify, recovery dump, confirmed reset, reseed, integration
   **1/1**, showcase production browsers **15/15**, live restart and owner sign-in). The owner confirmed the showcase accessible and working and explicitly accepted the delivery milestone. Consolidated UX/functional feedback is a separate subsequent review; no per-feature or production approval is implied.
 - BB-BRAND-004 remains **Blocked (partial)**: newly supplied AI-generated coastal café contact sheets have
-  been inventoried, selected and prepared as responsive review drafts. The hero source is only 861 × 377,
-  account-specific and third-party rights are unverified, and final owner approval is pending.
+  been inventoried and prepared as responsive review drafts. The owner approved the proposed visual selection
+  on 2026-11-03 at 18:07 AEDT. The hero source is only 861 × 377, and generation-account, input/third-party
+  rights and publication clearance remain unverified.
 - BB-DEMO-003 is **Done**: grouped desktop navigation that scrolls instead of hiding links, an
   accessible mobile **Menu**, an owner/admin **Payroll** link, a brand tagline header and explicit
   **Concept · not yet available** dashboard labels. Production browsers **5/5** passed, including a new
@@ -25,7 +26,7 @@
   owner-selected Coastal Wave reference (design direction approved). The traced vector logo system, icons,
   brand guide and sign-in artwork await the owner's final visual review. Production browsers passed
   **3/3**, with lint, types and split build also passing. The newer photographic-style café imagery is
-  AI-generated and remains an unapproved, low-resolution draft.
+  AI-generated and remains an owner-selected, low-resolution draft with rights clearance outstanding.
 - BB-ROSTER-011 is **Done**: opt-in keyboard shortcuts, scoped display-only
   team-member search, guarded draft-deletion confirmation and existing quick
   undo. Focused Node **21/21**, applied pgTAP **190/190**, authenticated
@@ -729,7 +730,7 @@ settings/delivery still require their own implementation and verification.
   unverified. No live records were altered and legal or payroll compliance
   is not claimed.
 
-## BB-BRAND-004 — Supplied café imagery review (2026-11-03)
+## BB-BRAND-004 — Supplied café imagery review and owner selection (2026-11-03)
 
 The owner supplied two AI-generated contact sheets and 15 separated scene cuts in commit `324e072`. The
 supplier's README reports OpenAI ChatGPT image generation on 2026-11-03 and describes the images as fictional
@@ -745,7 +746,7 @@ manifest and the 202-row asset catalogue record actual sizes, hashes, intended u
 
 | Criterion | Implementation evidence | Test and actual result | Status |
 | --- | --- | --- | --- |
-| BRAND-004.1 — approved, rights-cleared imagery and truthful labelling | Supplied README; selection summary; visible AI disclosure and descriptive alt text in the preview; public OpenAI terms and sharing policy linked with their limits | Public terms reviewed 2026-11-03, but generating-account terms, input/third-party rights and owner approval of specific assets are unverified. These are not photos or actual UI screenshots. | **Blocked** |
+| BRAND-004.1 — approved, rights-cleared imagery and truthful labelling | Owner approved the proposed hero, team, operations and supporting visual selection on 2026-11-03 at 18:07 AEDT; selection summary; visible AI disclosure and descriptive alt text in the preview; public OpenAI terms and sharing policy linked with their limits | Owner visual selection is recorded. Public terms reviewed 2026-11-03, but generating-account terms, input/third-party rights and publication clearance remain unverified. These are not photos or actual UI screenshots. | **Blocked — rights clearance** |
 | BRAND-004.2 — responsive formats, suitable sizes and retained originals | Preserved sheets at 1536 × 1024 and 1672 × 941; supplied hero JPEG 861 × 377; clean hero region 859 × 377. Review outputs range up to 848 × 371 for the wide hero and 296 × 370 for the phone crop. | Image checks confirm 49 decodable files, correct dimensions, hashes, no enlargement and no EXIF/IPTC/XMP/ICC; originals unchanged. The hero does not meet the brief's native 3200 × 1800 master, and the drafts can look soft on large or high-density screens. | **Blocked for production** |
 | BRAND-004.3 — meaningful or empty alt text as appropriate | Manifest and preview: descriptive alt text identifies each informative scene as AI-generated. The existing vector library uses empty alt for decorative images. | Browser checks confirmed all six preview images have descriptive AI-labelled alt text. | Pass for draft |
 | BRAND-004.4 — mobile/desktop presentation and loading | Standalone preview uses responsive `<picture>` sources, intrinsic dimensions, an eager hero, lazy supporting images and JPEG fallbacks; text is placed beside/above the image. | Chromium checks at 320, 390 and 1440 px: correct portrait/wide AVIF selection, no overflow or failed requests, no measured hero size shift, zero axe WCAG 2.1 AA violations; mobile/desktop JPEG fallbacks decoded. Screenshots visually reviewed. No real homepage deployment was tested. | Pass for draft; deployed placement remains unverified |
@@ -758,8 +759,8 @@ outputs used mean absolute channel error ≤ 4.20/255 versus their uncompressed 
 all 49 files total 1,069,112 bytes, with no individual file above 68,784 bytes. Regeneration produced
 identical manifest and preview hashes on the installed Sharp/libvips version.
 
-**Deferred:** publication review, actual deployed-page loading, higher-resolution masters, the account-specific
-rights and owner selection; full application regression and production build were not run because no app
+**Deferred:** publication review, actual deployed-page loading, higher-resolution masters and account-specific
+rights; full application regression and production build were not run because no app
 route, server boundary or application workflow changed. The isolated showcase on port 3137 was not stopped,
 reset or rebuilt.
 **Documentation: updated** — brand guide, catalogue, provenance and visual selection summary. User Guide:
@@ -911,7 +912,7 @@ component. Verify fidelity, small sizes, contrast, the catalogue and the real si
 | BRAND-003.2 — examples, misuse, accessibility | Variant/background table, misuse list, contrast rules | Every listed file exists in the catalogue | Pass |
 | BRAND-003.3 — contrast, approval, version history | Contrast table computed with the WCAG 2.x formula; version history 1.0 → 2.0 draft | Charcoal on white 15.25:1, ocean on white 11.44:1, muted on white 5.82:1, charcoal on gold 8.07:1; teal on white 3.21:1 restricted to large text and graphics; gold on white 1.89:1 prohibited for text | Pass |
 | BRAND-003.4 — concept vs approved labelling | Status table at top of the guide and README | The direction is the only approved item; everything else is labelled draft | Pass |
-| BRAND-004.1 — approved rights-cleared imagery | New supplied AI concepts and owner-review summary; see the current evidence above | Account-specific/third-party rights and owner approval remain unverified; imagery is labelled as illustration | **Blocked** |
+| BRAND-004.1 — approved rights-cleared imagery | Owner visual selection is recorded in the current evidence above; AI disclosure and alt text are present | Owner approved the proposed images on 2026-11-03; account-specific/third-party rights and publication clearance remain unverified. Imagery is labelled as illustration. | **Blocked — rights clearance** |
 | BRAND-004.2 — responsive optimised formats | Existing vector sets and 49 new café review outputs; source contact sheets retained | Drafts pass integrity and no-enlargement checks, but the supplied hero is below the brief's 3200 × 1800 native master size | **Blocked for production** |
 | BRAND-004.3 — alt text | Decorative vector images use empty alt; informative café concepts have AI-labelled descriptive alt | Verified in the review preview | Pass for draft |
 | BRAND-004.4 — mobile/desktop presentation and loading | Standalone café and vector preview harnesses | Café preview: 4/4 isolated browser tests passed at 320/390/1440 px including axe and JPEG fallback; actual deployment not tested | Pass for draft |
