@@ -103,7 +103,8 @@ select extensions.ok((select bool_and(not new_values ? 'audit_test_private') fro
   where source_table = 'employees' and new_values is not null), 'future unapproved columns are not copied');
 delete from public.employees where business_id = 'b8800000-0000-4000-8000-000000000001';
 select extensions.ok((select old_values ->> 'name' = 'Projected worker' and new_values is null
-  from public.sensitive_action_audit where source_table = 'employees' and operation = 'DELETE'),
+  from public.sensitive_action_audit where business_id = 'b8800000-0000-4000-8000-000000000001'
+    and source_table = 'employees' and operation = 'DELETE'),
   'source deletion keeps its old values in audit');
 delete from public.business_memberships where user_id = 'a8800000-0000-4000-8000-000000000001';
 select set_config('request.jwt.claim.sub', 'a8800000-0000-4000-8000-000000000001', true);

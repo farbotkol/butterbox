@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.5 — reviewed 2026-11-03 (Core Roadmap; navigation, sign-in branding and showcase access sections; other sections last reviewed 2026-11-02).
+**Guide version:** 1.6 — reviewed 2026-11-04 (Core Roadmap; People, Departments and Business Permissions workflows; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -208,24 +208,51 @@ roster/attendance email, SMS, push or WhatsApp channels are live.
 
 ### Delegate access and select a venue
 
-1. As an owner, open **Permissions** (`/settings/permissions`). For an existing
-   business member choose **Role**, **Venue** and **Department**, then **Save
-   permissions**. Review the saved scope before giving that person work.
-2. Owner membership administration is distinct from an employee profile,
+The permissions steps below describe the updated development application. The
+protected showcase retains its earlier permissions screen until the owner
+authorizes an update.
+
+1. As an owner, open **Permissions** (`/settings/permissions`). On **Business permissions**,
+   the directory shows each existing member's identity, business role and venue/department
+   scope. Search by name or email; filter by **Business role**, **Venue** or
+   **Department**, and choose **Sort by**. **Apply filters** shows the matching
+   count; **Reset filters** returns to the complete business directory. Use
+   **Help with permissions** to reopen this guidance.
+2. Select **View access** (or **View** in the desktop table) for one member.
+   The access summary is read-only. Choose **Edit permissions**, select the
+   supported **Business role** and its required scope, and choose **Review
+   change**. Compare **Current access** with **New access**, check the
+   confirmation and select **Confirm and save permissions**. Refresh to check
+   the persisted result. **Back to members** retains the directory filters.
+   **Cancel** writes nothing; confirm **Discard changes** if you edited a field.
+3. Owners have business-wide scope. General managers need a venue, while FOH
+   managers, BOH managers and employees need a venue and a department within
+   that venue. Existing legacy administrator or department-manager roles are
+   shown as legacy and are not changed unless an owner deliberately chooses
+   and saves a supported role. The business must retain at least one owner.
+   If access changed while you were editing, review the refreshed current access
+   before trying again. Only owners can inspect and manage this directory;
+   administrator and manager access elsewhere does not grant this ability.
+   Saved membership changes appear in the existing **Sensitive action audit**.
+   If you change your own owner role, the dashboard confirms the save and you
+   may no longer be able to open Permissions. If the page is unavailable, use
+   **Try again**; after an uncertain save, inspect the current access before
+   submitting another change.
+4. Owner membership administration is distinct from an employee profile,
    account link and role qualification. Department managers manage permitted
    departments; an extra employee qualification does not grant management rights.
-3. Use each screen's **Venue** selector and its submit button to switch between
+5. Use each screen's **Venue** selector and its submit button to switch between
    already provisioned venues. Venue selection never changes business membership.
    The current app has no **Add venue** page/button: additional venue
    provisioning is a backend/operator workflow, not an instruction to create a
    second business or to modify a database yourself.
-4. Owners open **Departments**, then **Venue settings**
+6. Owners open **Departments**, then **Venue settings**
    (`/settings/organisation`). Under **Venue location and geofence**, set **Latitude**, **Longitude**
    and **Radius in metres**, then **Save venue location**. Choose **Clock
    location verification** and **Save clock location setting** separately.
    Coordinates must be valid; radius is a whole number from 1 to 10,000 metres.
    Clear all location fields together only after disabling verification.
-5. In **Departments and roles**, owners, administrators and general managers
+7. In **Departments and roles**, owners, administrators and general managers
    can manage department details within their permitted venue. Eligible managers
    can manage roles and restrictions only within permitted departments. See
    [Departments and roles](#departments-and-roles) for the read-first workflow.
@@ -937,6 +964,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.3 | 2026-11-02 | BB-ROSTER-011 roster productivity | Scoped roster search, opt-in Chromium shortcuts, draft-deletion confirmation and mobile accessibility |
 | 1.4 | 2026-11-03 | `0f8c847` (showcase test-owner login); `6d5c4e7` (BRAND-002/003/005) | Isolated showcase owner access and Coastal Wave sign-in branding |
 | 1.5 | 2026-11-03 | BB-DEMO-003 showcase polish | Mobile **Menu**, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels; targeted desktop/mobile browser audit |
+| 1.6 | 2026-11-04 | BB-UXFIX-001/002/003 | Isolated People, Departments and owner-only Business Permissions directory/detail workflows; protected showcases retain earlier screens |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

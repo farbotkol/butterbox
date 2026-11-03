@@ -129,7 +129,7 @@ As a business owner or authorised administrator, **I want a clear access directo
 
 **Code / integration touchpoints:** \`src/app/settings/permissions/page.tsx\`, existing \`assignMemberRoleAction\`, business-member membership and role/venue/department authorization. Reuse security rules; do not add general-purpose new roles or membership invitations in this story.
 
-**Dependencies:** BB-ORG-004; BB-ORG-005 if multi-venue scenarios are exercised; BB-PEOPLE-001 for identity context. **Status:** In Progress. **Priority:** P1, owner-prioritised Wave 1, third in sequence. **Exclusions:** New permissions framework, role hierarchy changes, public signup or auth-system redesign.
+**Dependencies:** BB-ORG-004; BB-ORG-005 if multi-venue scenarios are exercised; BB-PEOPLE-001 for identity context. **Status:** Done in the isolated development application; owner UX review and showcase deployment remain separate. **Priority:** P1, owner-prioritised Wave 1, third in sequence. **Exclusions:** New permissions framework, role hierarchy changes, public signup or auth-system redesign.
 
 ### BB-UXFIX-004 — Payroll Employee Mapping directory and contextual mapping editor [P1]
 

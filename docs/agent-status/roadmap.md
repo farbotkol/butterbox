@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-003 — Business Permissions
 
-- **Last report:** 2026-11-04 01:56 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:59 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-UXFIX-003 — Business Permissions directory and focused access editing (P1, In Progress).
+- **Current story:** BB-UXFIX-003 — Business Permissions directory and focused access editing (P1, Done in isolated development).
 - **Acceptance criteria:** Searchable/filterable/sortable member directory; read-first detail and focused edit with before/after confirmation; preserved role scopes, last-owner concurrency protection, audit and tenant isolation; five-width accessible production-browser checks and actual before/after screenshots.
-- **Phase:** Testing.
-- **Activity:** Finishing final TypeScript, lint and focused unit checks, followed by updated keyboard and pending-save browser assertions.
+- **Phase:** Complete.
+- **Activity:** Recording verified criterion-level evidence and preparing the feature commit and push.
 - **Plan:** Reuse the directory/detail/edit pattern without broadening the existing owner-only membership administration. Add stale-write protection around the authoritative mutation, retain its last-owner locking and audit, and verify role/tenant isolation, accessibility, mobile layouts and documentation in the disposable environment.
-- **Progress since previous report:** The final isolated production build and all 12 selected browser scenarios passed, including all configured WCAG-tagged axe checks at five widths. UUID casing and invalid filter/feedback values were hardened. Added explicit Tab/Shift+Tab and pending-save assertions for a focused rerun. The protected local showcase login returned HTTP 200 at this checkpoint; neither showcase was changed.
-- **Tests and results:** Pre-change browser baseline **6/6**; four permission, tenant and audit pgTAP files **141/141**; deterministic concurrency integration **1/1**; directory, pagination and Help units **20/20**; changed-file ESLint; isolated production build; final selected production-browser suite **12/12** — all passed. A final TypeScript/lint/unit pass and two updated browser scenarios remain pending.
+- **Progress since previous report:** Final TypeScript, lint and units passed; updated pending-save and five-width Tab/Shift+Tab checks passed **2/2**, and the distinct empty-member state passed **1/1** using only synthetic disposable fixtures. Twenty-five actual before/after captures were converted to pixel-identical lossless WebP. The protected local showcase login returned HTTP 200 at 01:56 AEDT; neither showcase was changed.
+- **Tests and results:** Pre-change browser baseline **6/6**; four permission, tenant and audit pgTAP files **141/141**; deterministic concurrency integration **1/1**; directory, pagination and Help units **20/20**; final TypeScript and changed-file ESLint; isolated production build; **13 distinct** targeted production-browser scenarios across runs — all passed. Five-width keyboard, overflow and all configured WCAG-tagged axe checks passed.
 - **Failing tests:** None remain in completed selected checks. Earlier navigation/route-announcer assertions and a fixture-scoped audit assertion were corrected and rerun successfully. The cross-business streaming not-found UI and non-disclosure are verified; Next.js may return HTTP 200 after streaming starts.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
-- **Documentation:** Updated in the working tree — User Guide and contextual Help; final browser verification and criterion-by-criterion evidence remain pending.
-- **Next concrete action:** Complete the pending focused reruns, preserve the synthetic screenshots and record criterion-level evidence before the feature commit.
+- **Documentation:** Updated — User Guide, contextual Help, criterion-level evidence and 25 synthetic screenshots.
+- **Next concrete action:** Inspect, commit and push the verified feature, then begin BB-UXFIX-004 in the isolated environment.
 - **Latest development commit:** `0f08ad4087fcbff37a044d1294bd533ec3dcd5a7`.
-- **Push outcome:** Previous documentation checkpoint `0b8bd9caa40eb85191628b500619a8c84de45d22` was pushed and its remote SHA verified. This updated documentation-only checkpoint is pending push.
+- **Push outcome:** Documentation checkpoint `55faea5adcf0071857a4aff49b20b001bc9729e9` was pushed and its remote SHA verified. The verified feature commit and push are pending.
 
 ## BB-UXFIX-002 — Departments and Roles
 

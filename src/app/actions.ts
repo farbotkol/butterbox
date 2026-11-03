@@ -22,6 +22,7 @@ import {
   isPayrollProvider, payrollMappingFailure, payrollMappingRevision, payrollMappingText,
 } from "@/lib/payroll-mapping";
 import { parsePeopleFilterContext, parseProfileRevision, peopleHref } from "@/lib/people-directory";
+import { parsePermissionsFilterContext, permissionsHref } from "@/lib/permissions-directory";
 import { isInvitationId, parsePendingStaffInvitation } from "@/lib/invitations";
 import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
@@ -439,22 +440,72 @@ export async function acceptStaffInvitationAction(formData: FormData) {
 export async function assignMemberRoleAction(formData: FormData) {
   const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
-  if (workspace.status !== "ready") redirect("/");
+  if (workspace.status !== "ready") redirect("/?error=workspace");
   if (workspace.membership.role !== "owner") redirect(withBusiness("/?error=permission", workspace.business.id));
 
-  const { error } = await workspace.supabase.rpc("assign_business_member_role", {
+  const businessId = workspace.business.id;
+  const userIds = uuidList(formData, "user_id", 1);
+  const context = singleFormString(formData, "directory_filters");
+  const filters = parsePermissionsFilterContext(context);
+  const origin = singleFormString(formData, "permissions_origin");
+  if (origin !== "detail" || !filters || userIds?.length !== 1) {
+    console.error("Invalid permission return context.");
+    redirect(withBusiness("/settings/permissions?error=filter", businessId));
+  }
+  const userId = userIds[0].toLowerCase();
+  const destination = permissionsHref(businessId, filters, userId);
+  const role = singleFormString(formData, "role");
+  const expectedRole = singleFormString(formData, "expected_role");
+  const venue = singleFormString(formData, "venue_id");
+  const department = singleFormString(formData, "department_id");
+  const expectedVenue = singleFormString(formData, "expected_venue_id");
+  const expectedDepartment = singleFormString(formData, "expected_department_id");
+  const parseOptionalUuid = (value: string | null) =>
+    value === "" ? null : value === null ? undefined : parseBusinessId(value) ?? undefined;
+  const venueId = parseOptionalUuid(venue);
+  const departmentId = parseOptionalUuid(department);
+  const expectedVenueId = parseOptionalUuid(expectedVenue);
+  const expectedDepartmentId = parseOptionalUuid(expectedDepartment);
+  if (!role || !["owner", "general_manager", "foh_manager", "boh_manager", "employee"].includes(role) ||
+    !expectedRole || !/^[a-z][a-z0-9_]{0,31}$/.test(expectedRole) ||
+    venueId === undefined || departmentId === undefined || expectedVenueId === undefined || expectedDepartmentId === undefined) {
+    console.error("Invalid permission role, scope or snapshot submitted.");
+    redirect(`${destination}&error=scope`);
+  }
+  if (singleFormString(formData, "confirmed") !== "yes") {
+    console.error("Permission change submitted without confirmation.");
+    redirect(`${destination}&error=confirm`);
+  }
+
+  const { error } = await workspace.supabase.rpc("assign_business_member_role_checked", {
     p_business_id: workspace.business.id,
-    p_user_id: text(formData, "user_id", 36),
-    p_role: text(formData, "role", 32),
-    p_venue_id: text(formData, "venue_id", 36) || null,
-    p_department_id: text(formData, "department_id", 36) || null,
+    p_user_id: userId,
+    p_role: role,
+    p_venue_id: venueId,
+    p_department_id: departmentId,
+    p_expected_role: expectedRole,
+    p_expected_venue_id: expectedVenueId,
+    p_expected_department_id: expectedDepartmentId,
+    p_confirmed: true,
   });
   if (error) {
     console.error("Role assignment failed.", { code: error.code, message: error.message });
-    const code = error.message === "A business must retain an owner" ? "last-owner" : "scope";
-    redirect(withBusiness(`/settings/permissions?error=${code}`, workspace.business.id));
+    if (error.message === "Permission denied") redirect(withBusiness("/?error=permission", businessId));
+    const code = error.message === "A business must retain an owner" ? "last-owner"
+      : error.message === "Permissions changed; refresh before saving" ? "stale"
+        : error.message === "Membership not found" ? "missing"
+          : error.message === "Confirm permission change" ? "confirm"
+            : error.message.startsWith("Invalid ") || error.message.includes("scope") ? "scope" : "save";
+    if (code === "missing") redirect(withBusiness(`/settings/permissions?error=${code}`, businessId));
+    redirect(`${destination}&error=${code}`);
   }
-  redirect(withBusiness("/settings/permissions?saved=1", workspace.business.id));
+  revalidatePath("/settings/permissions");
+  revalidatePath(`/settings/permissions/${userId}`);
+  revalidatePath("/");
+  if (userId === workspace.user.id && role !== "owner") {
+    redirect(withBusiness("/?saved=permissions-self-change", businessId));
+  }
+  redirect(`${destination}&saved=1`);
 }
 
 export async function saveEmployeeAction(formData: FormData) {

@@ -84,6 +84,17 @@ test("department help describes scoped details, restrictions and the protected s
   assert.match(people.markdown, /protected\s+showcase retains its earlier department screen/);
 });
 
+test("owner permissions help describes focused changes and the protected showcase limitation", () => {
+  const permissions = helpTopics(source, "owner").find((topic) => topic.id === "permissions");
+  assert.ok(permissions);
+  for (const label of ["View access", "Edit permissions", "Review change",
+    "Current access", "New access", "Confirm and save permissions", "Discard changes"]) {
+    assert.ok(permissions.markdown.replace(/\s+/g, " ").includes(label), label);
+  }
+  assert.match(permissions.markdown, /Only owners can inspect and manage this directory/);
+  assert.match(permissions.markdown, /protected showcase retains its earlier permissions screen/);
+});
+
 test("help links retain business scope and allow only visible real guide anchors", () => {
   const owner = helpTopics(source, "owner", true);
   const employee = helpTopics(source, "employee", true);
@@ -129,6 +140,7 @@ test("core contextual help destinations and documented screen/link labels stay w
     ["src/app/setup/page.tsx", "Set up your workspace", "Help with workspace setup"],
     ["src/app/people/page.tsx", "Your people", "Help with managing people"],
     ["src/app/settings/departments/page.tsx", "Departments and roles", "Department help"],
+    ["src/app/settings/permissions/page.tsx", "Business permissions", "Help with permissions"],
     ["src/components/onboarding-checklist.tsx", "Get your first roster ready", "Help with your first roster"],
     ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters"],
     ["src/app/my-schedule/page.tsx", "My schedule", "Help with your schedule"],

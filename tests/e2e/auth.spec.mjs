@@ -2431,6 +2431,8 @@ async function withPermissionFixtures(initialRole, run) {
       boh_manager: { role: "boh_manager", venue_id: venueIds[0], department_id: departmentIds[1] },
       employee: { role: "employee", venue_id: venueIds[0], department_id: departmentIds[0] },
       owner: { role: "owner", venue_id: null, department_id: null },
+      admin: { role: "admin", venue_id: null, department_id: null },
+      department_manager: { role: "department_manager", venue_id: venueIds[0], department_id: departmentIds[0] },
     };
     expect((await admin.from("business_memberships").insert([
       { business_id: businessId, user_id: userIds[0], role: "owner" },
@@ -2459,25 +2461,35 @@ async function verifyLivePermissionChange(page, browser, initialRole, role) {
     await signIn(page, `owner-${suffix}@example.test`, password);
     await page.getByRole("link", { name: "Permissions", exact: true }).click();
     await expect(page.getByRole("heading", { name: "Business permissions" })).toBeVisible();
-    const memberForm = page.getByRole("region", { name: `Permissions for member-${suffix}@example.test` });
+    await page.getByRole("link", { name: `View access for member-${suffix}`, exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Member access", exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Business role", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit permissions" }).click();
     const targetContext = await browser.newContext({ baseURL: appUrl });
     try {
       const targetPage = await targetContext.newPage();
       await signIn(targetPage, `member-${suffix}@example.test`, password);
       const { venue_id: venueId, department_id: departmentId } = scopes[role];
-      await memberForm.getByRole("combobox", { name: "Role", exact: true }).selectOption(role);
-      await memberForm.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueId ?? "");
-      await memberForm.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId ?? "");
+      await page.getByRole("combobox", { name: "Business role", exact: true }).selectOption(role);
+      if (venueId) await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueId);
+      if (departmentId) await page.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentId);
+      await page.getByRole("button", { name: "Review change" }).click();
+      await expect(page.getByRole("heading", { name: "Review access change" })).toBeFocused();
+      await expect(page.getByText("Current access", { exact: true })).toBeVisible();
+      await expect(page.getByText("New access", { exact: true })).toBeVisible();
+      await page.getByLabel("I confirm this change to the member's business access.").check();
       await Promise.all([
         page.waitForResponse((response) => response.request().method() === "POST" &&
-          new URL(response.url()).pathname === "/settings/permissions"),
-        memberForm.getByRole("button", { name: "Save permissions" }).click(),
+          new URL(response.url()).pathname.toLowerCase() === `/settings/permissions/${userIds[1]}`),
+        page.getByRole("button", { name: "Confirm and save permissions" }).click(),
       ]);
-      await expect(page.getByRole("status")).toHaveText("Permissions updated.");
+      await expect(page.getByRole("status").filter({ hasText: "Permissions updated." })).toBeVisible();
       const stored = await admin.from("business_memberships").select("role, venue_id, department_id")
         .eq("user_id", userIds[1]).eq("business_id", businessId).single();
       expect(stored.error).toBeNull();
       expect(stored.data).toEqual(scopes[role]);
+      await page.reload();
+      await expect(page.getByText(permissionRoleDisplay(role), { exact: true })).toBeVisible();
       await navigateDuringSessionChange(targetPage, "/");
       await expect(targetPage.getByRole("heading", { name: "Butterbox AI Rostering" })).toBeVisible();
       await expect(targetPage.getByRole("link", { name: "Permissions", exact: true })).toHaveCount(role === "owner" ? 1 : 0);
@@ -2526,6 +2538,13 @@ async function verifyLivePermissionChange(page, browser, initialRole, role) {
   });
 }
 
+function permissionRoleDisplay(role) {
+  return ({
+    owner: "Owner", general_manager: "General manager", foh_manager: "FOH manager",
+    boh_manager: "BOH manager", employee: "Employee",
+  })[role];
+}
+
 test("live permissions: employee to general manager", async ({ page, browser }) =>
   verifyLivePermissionChange(page, browser, "employee", "general_manager"));
 test("live permissions: general manager to FOH manager", async ({ page, browser }) =>
@@ -2536,6 +2555,384 @@ test("live permissions: BOH manager to employee", async ({ page, browser }) =>
   verifyLivePermissionChange(page, browser, "boh_manager", "employee"));
 test("live permissions: employee to owner", async ({ page, browser }) =>
   verifyLivePermissionChange(page, browser, "employee", "owner"));
+
+test("permissions UX: search, cancel, stale save and audit", async ({ page }) => {
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId, venueIds, departmentIds, scopes }) => {
+    const owner = createClient(apiUrl, anonKey, options);
+    expect((await owner.auth.signInWithPassword({ email: `owner-${suffix}@example.test`, password })).error).toBeNull();
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/permissions?business=${businessId}`);
+    const filters = page.getByRole("form", { name: "Member directory filters" });
+    await filters.getByRole("searchbox", { name: "Search members" }).fill(`member-${suffix}`);
+    await filters.getByRole("combobox", { name: "Business role" }).selectOption("employee");
+    await filters.getByRole("combobox", { name: "Venue" }).selectOption(venueIds[0]);
+    await filters.getByRole("combobox", { name: "Department" }).selectOption(departmentIds[0]);
+    await filters.getByRole("combobox", { name: "Sort by" }).selectOption("role");
+    await Promise.all([
+      page.waitForURL(/role=employee/),
+      filters.getByRole("button", { name: "Apply filters" }).click(),
+    ]);
+    await expect(page.getByText("1 member of 2", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: `View access for member-${suffix}`, exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Member access", exact: true })).toBeVisible();
+    await expect(page.getByText("Employee", { exact: true })).toBeVisible();
+    await expect(page.getByRole("combobox", { name: "Business role" })).toHaveCount(0);
+    await page.getByRole("button", { name: "Edit permissions" }).click();
+    await expect(page.getByRole("heading", { name: "Edit permissions", exact: true })).toBeFocused();
+    await page.getByRole("combobox", { name: "Business role" }).selectOption("foh_manager");
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueIds[1]);
+    await expect(page.getByRole("button", { name: "Review change" })).toBeDisabled();
+    await page.getByRole("button", { name: "Cancel", exact: true }).click();
+    await page.getByRole("button", { name: "Discard changes" }).click();
+    await expect(page.getByRole("button", { name: "Edit permissions" })).toBeFocused();
+    const before = await admin.from("business_memberships").select("role, venue_id, department_id")
+      .eq("business_id", businessId).eq("user_id", userIds[1]).single();
+    expect(before.error).toBeNull();
+    expect(before.data).toEqual(scopes.employee);
+    await page.getByRole("button", { name: "Edit permissions" }).click();
+    await expect(page.getByRole("combobox", { name: "Business role" })).toHaveValue("employee");
+    await expect(page.getByRole("combobox", { name: "Venue", exact: true })).toHaveValue(venueIds[0]);
+    await page.getByRole("combobox", { name: "Business role" }).selectOption("foh_manager");
+    expect((await owner.rpc("assign_business_member_role", {
+      p_business_id: businessId, p_user_id: userIds[1], p_role: "general_manager",
+      p_venue_id: venueIds[1], p_department_id: null,
+    })).error).toBeNull();
+    await page.getByRole("button", { name: "Review change" }).click();
+    await page.getByLabel("I confirm this change to the member's business access.").check();
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("These permissions changed while you were editing");
+    await expect(page.getByText("General manager", { exact: true })).toBeVisible();
+    const after = await admin.from("business_memberships").select("role, venue_id, department_id")
+      .eq("business_id", businessId).eq("user_id", userIds[1]).single();
+    expect(after.error).toBeNull();
+    expect(after.data).toEqual(scopes.general_manager);
+    const audit = await owner.from("sensitive_action_audit").select("old_values, new_values")
+      .eq("business_id", businessId).eq("source_table", "business_memberships").eq("operation", "UPDATE");
+    expect(audit.error).toBeNull();
+    expect(audit.data).toHaveLength(1);
+    expect(audit.data[0].old_values.role).toBe("employee");
+    expect(audit.data[0].new_values.role).toBe("general_manager");
+    await page.getByRole("link", { name: "Back to members" }).click();
+    await expect(filters.getByRole("searchbox", { name: "Search members" })).toHaveValue(`member-${suffix}`);
+    await expect(filters.getByRole("combobox", { name: "Business role" })).toHaveValue("employee");
+    await expect(page.getByText("No members match these filters. Try resetting them.")).toBeVisible();
+    await page.getByRole("link", { name: "Help with permissions" }).click();
+    await expect(page.getByRole("heading", { name: "Delegating access" })).toBeVisible();
+    await expect(page.getByText("Only owners can inspect and manage this directory", { exact: false })).toBeVisible();
+  });
+});
+
+test("permissions UX: legacy administrator cannot inspect or forge access changes", async ({ page }) => {
+  await withPermissionFixtures("admin", async ({ suffix, password, userIds, businessId, venueIds, departmentIds }) => {
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/permissions/${userIds[1].toUpperCase()}?business=${businessId}`);
+    await expect(page.getByRole("heading", { name: "Member access", exact: true })).toBeVisible();
+    await expect(page.getByText("Administrator (legacy)", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Edit permissions" }).click();
+    await expect(page.getByText("This member has a legacy role.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review change" })).toBeDisabled();
+    await page.getByRole("combobox", { name: "Business role" }).selectOption("employee");
+    await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueIds[0]);
+    await page.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
+    await page.getByRole("button", { name: "Review change" }).click();
+    const confirmation = page.getByLabel("I confirm this change to the member's business access.");
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    expect(await confirmation.evaluate((checkbox) => checkbox.validity.valueMissing)).toBe(true);
+    await confirmation.check();
+
+    const memberPage = await page.context().newPage();
+    await memberPage.goto("/");
+    await memberPage.getByRole("button", { name: "Sign out" }).click();
+    await signIn(memberPage, `member-${suffix}@example.test`, password);
+    await memberPage.goto(`/settings/permissions/${userIds[1]}?business=${businessId}`);
+    await expect(memberPage).toHaveURL(/\/\?error=permission/);
+    await expect(memberPage.getByRole("heading", { name: "Member access" })).toHaveCount(0);
+    await Promise.all([
+      page.waitForResponse((response) => response.request().method() === "POST" &&
+        new URL(response.url()).pathname.toLowerCase() === `/settings/permissions/${userIds[1]}`),
+      page.getByRole("button", { name: "Confirm and save permissions" }).click(),
+    ]);
+    await expect(page).toHaveURL(/\/\?error=permission/);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("No changes were saved");
+    const membership = await admin.from("business_memberships").select("role, venue_id, department_id")
+      .eq("business_id", businessId).eq("user_id", userIds[1]).single();
+    expect(membership.error).toBeNull();
+    expect(membership.data).toEqual({ role: "admin", venue_id: null, department_id: null });
+    await memberPage.close();
+  });
+});
+
+test("permissions UX: last owner is protected and successful self-demotion is reported", async ({ page }) => {
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId, venueIds, departmentIds }) => {
+    const owner = createClient(apiUrl, anonKey, options);
+    expect((await owner.auth.signInWithPassword({ email: `owner-${suffix}@example.test`, password })).error).toBeNull();
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    await page.goto(`/settings/permissions/${userIds[0]}?business=${businessId}`);
+    async function prepareDemotion() {
+      await page.getByRole("button", { name: "Edit permissions" }).click();
+      await page.getByRole("combobox", { name: "Business role" }).selectOption("employee");
+      await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueIds[0]);
+      await page.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
+      await page.getByRole("button", { name: "Review change" }).click();
+      await page.getByLabel("I confirm this change to the member's business access.").check();
+    }
+    await prepareDemotion();
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("A business must retain an owner");
+    expect((await owner.rpc("assign_business_member_role", {
+      p_business_id: businessId, p_user_id: userIds[1], p_role: "owner",
+      p_venue_id: null, p_department_id: null,
+    })).error).toBeNull();
+    await prepareDemotion();
+    await page.locator('input[name="user_id"]').evaluate((input) => { input.value = input.value.toUpperCase(); });
+    const submitted = page.waitForRequest((request) => request.method() === "POST" &&
+      new URL(request.url()).pathname === `/settings/permissions/${userIds[0]}`);
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    expect((await submitted).postData()).toContain(userIds[0].toUpperCase());
+    await expect(page.getByRole("status").filter({ hasText: "Your permissions were updated" })).toBeVisible();
+    await expect(page.getByText("No changes were saved")).toHaveCount(0);
+    const membership = await admin.from("business_memberships").select("role, venue_id, department_id")
+      .eq("business_id", businessId).eq("user_id", userIds[0]).single();
+    expect(membership.error).toBeNull();
+    expect(membership.data).toEqual({ role: "employee", venue_id: venueIds[0], department_id: departmentIds[0] });
+    await page.goto(`/settings/permissions?business=${businessId}`);
+    await expect(page).toHaveURL(/\/\?error=permission/);
+  });
+});
+
+test("permissions UX: cross-business details and forged member IDs are denied", async ({ page }) => {
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId, venueIds, scopes }) => {
+    const outsideBusiness = randomUUID();
+    const outsideVenue = randomUUID();
+    const outsideEmail = `permissions-outside-${suffix}@example.test`;
+    let outsideUser;
+    try {
+      const created = await admin.auth.admin.createUser({ email: outsideEmail, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      outsideUser = created.data.user.id;
+      expect((await admin.from("businesses").insert({ id: outsideBusiness, name: "Outside permissions cafe" })).error).toBeNull();
+      expect((await admin.from("venues").insert({ id: outsideVenue, business_id: outsideBusiness, name: "Outside" })).error).toBeNull();
+      expect((await admin.from("business_memberships").insert({
+        business_id: outsideBusiness, user_id: outsideUser, role: "owner",
+      })).error).toBeNull();
+
+      await signIn(page, `owner-${suffix}@example.test`, password);
+      const response = await page.goto(`/settings/permissions/${outsideUser}?business=${businessId}`);
+      expect([200, 404]).toContain(response.status());
+      await expect(page.getByRole("heading", { name: "Page not found", exact: true })).toBeVisible();
+      await expect(page.locator('meta[name="robots"][content="noindex"]').first()).toHaveAttribute("content", "noindex");
+      await expect(page.getByRole("heading", { name: "Member access" })).toHaveCount(0);
+      await expect(page.getByText(outsideEmail, { exact: true })).toHaveCount(0);
+      await page.goto(`/settings/permissions?business=${businessId}&venue=${outsideVenue}`);
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("directory filters are unavailable");
+      await expect(page.getByText(outsideEmail, { exact: true })).toHaveCount(0);
+      await page.goto(`/settings/permissions?business=${businessId}&role=constructor&error=constructor`);
+      await expect(page.getByRole("heading", { name: "Business permissions" })).toBeVisible();
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("couldn't confirm the permission change");
+      await expect(page.getByRole("combobox", { name: "Business role" })).toHaveValue("constructor");
+      await page.goto(`/settings/permissions/${userIds[1]}?business=${businessId}`);
+      await page.getByRole("button", { name: "Edit permissions" }).click();
+      await page.getByRole("combobox", { name: "Business role" }).selectOption("general_manager");
+      await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(venueIds[0]);
+      await page.getByRole("button", { name: "Review change" }).click();
+      await page.getByLabel("I confirm this change to the member's business access.").check();
+      await page.locator('input[name="user_id"]').evaluate((input, value) => { input.value = value; }, outsideUser);
+      await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+      await expect(page.getByRole("main").getByRole("alert")).toContainText("That member is no longer available in this business");
+      const [inside, outside] = await Promise.all([
+        admin.from("business_memberships").select("role, venue_id, department_id")
+          .eq("business_id", businessId).eq("user_id", userIds[1]).single(),
+        admin.from("business_memberships").select("role, venue_id, department_id")
+          .eq("business_id", outsideBusiness).eq("user_id", outsideUser).single(),
+      ]);
+      expect(inside.error).toBeNull();
+      expect(outside.error).toBeNull();
+      expect(inside.data).toEqual(scopes.employee);
+      expect(outside.data).toEqual({ role: "owner", venue_id: null, department_id: null });
+    } finally {
+      await assertBusinessFixturesPreserved(admin, outsideBusiness);
+      if (outsideUser) expect((await admin.auth.admin.deleteUser(outsideUser)).error).toBeNull();
+    }
+  });
+});
+
+test("permissions UX: an empty member list is distinct from filtered results", async ({ page }) => {
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId }) => {
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    const removed = await admin.from("profiles").delete().in("id", userIds);
+    expect(removed.error).toBeNull();
+    await page.goto(`/settings/permissions?business=${businessId}`);
+    await expect(page.getByText("No business members are available.")).toBeVisible();
+    await expect(page.getByText("No members match these filters. Try resetting them.")).toHaveCount(0);
+    await expect(page.getByText("0 members", { exact: true })).toBeVisible();
+  });
+});
+
+test("permissions UX: loading and failed saves are announced and recoverable", async ({ page }) => {
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId, scopes }) => {
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    let releaseNavigation;
+    const navigationHeld = new Promise((resolve) => { releaseNavigation = resolve; });
+    await page.route("**/settings/permissions**", async (route) => {
+      const headers = route.request().headers();
+      if (headers.rsc === "1" && !headers["next-router-prefetch"]) await navigationHeld;
+      await route.continue();
+    });
+    try {
+      await page.getByRole("navigation", { name: "Main navigation" })
+        .getByRole("link", { name: "Permissions", exact: true }).click();
+      await expect(page.getByRole("status").filter({ hasText: "Loading…" })).toBeVisible();
+      releaseNavigation();
+      await expect(page.getByRole("heading", { name: "Business permissions" })).toBeVisible();
+    } finally {
+      releaseNavigation();
+      await page.unrouteAll({ behavior: "wait" });
+    }
+
+    await page.goto(`/settings/permissions/${userIds[1]}?business=${businessId}`);
+    async function prepareChange() {
+      await page.getByRole("button", { name: "Edit permissions" }).click();
+      await page.getByRole("combobox", { name: "Business role" }).selectOption("foh_manager");
+      await page.getByRole("button", { name: "Review change" }).click();
+      await page.getByLabel("I confirm this change to the member's business access.").check();
+    }
+    await prepareChange();
+    let releaseSave;
+    const saveHeld = new Promise((resolve) => { releaseSave = resolve; });
+    await page.route("**/settings/permissions/**", async (route) => {
+      if (route.request().method() === "POST" && route.request().headers()["next-action"]) {
+        await saveHeld;
+        await route.fulfill({ status: 500, contentType: "text/plain", body: "Simulated outage" });
+      } else {
+        await route.continue();
+      }
+    });
+    try {
+      await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+      await expect(page.getByRole("button", { name: "Saving..." })).toBeDisabled();
+    } finally {
+      releaseSave();
+    }
+    await expect(page.getByRole("heading", { name: "Permissions unavailable" })).toBeFocused();
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("check the current access before trying again");
+    const unchanged = await admin.from("business_memberships").select("role, venue_id, department_id")
+      .eq("business_id", businessId).eq("user_id", userIds[1]).single();
+    expect(unchanged.error).toBeNull();
+    expect(unchanged.data).toEqual(scopes.employee);
+    await page.unroute("**/settings/permissions/**");
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(page.getByText("Employee", { exact: true })).toBeVisible();
+    await prepareChange();
+    await page.getByRole("button", { name: "Confirm and save permissions" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Permissions updated." })).toBeVisible();
+    await page.reload();
+    await expect(page.getByText("FOH manager", { exact: true })).toBeVisible();
+  });
+});
+
+test("permissions UX: stable filtered pagination returns to the selected page", async ({ page }) => {
+  test.setTimeout(180_000);
+  await withPermissionFixtures("employee", async ({ suffix, password, businessId, venueIds, departmentIds }) => {
+    const added = [];
+    try {
+      for (let index = 0; index < 26; index += 1) {
+        const name = `Directory Worker ${String(index).padStart(2, "0")}`;
+        const created = await admin.auth.admin.createUser({
+          email: `directory-worker-${index}-${suffix}@example.test`,
+          password, email_confirm: true, user_metadata: { full_name: name },
+        });
+        expect(created.error).toBeNull();
+        added.push(created.data.user.id);
+      }
+      expect((await admin.from("business_memberships").insert(added.map((userId) => ({
+        business_id: businessId, user_id: userId, role: "employee",
+        venue_id: venueIds[0], department_id: departmentIds[0],
+      })))).error).toBeNull();
+      await signIn(page, `owner-${suffix}@example.test`, password);
+      await page.goto(`/settings/permissions?business=${businessId}`);
+      const filters = page.getByRole("form", { name: "Member directory filters" });
+      await filters.getByRole("searchbox", { name: "Search members" }).fill("Directory Worker");
+      await filters.getByRole("combobox", { name: "Business role" }).selectOption("employee");
+      await filters.getByRole("button", { name: "Apply filters" }).click();
+      await expect(page.getByText("26 members of 28", { exact: true })).toBeVisible();
+      await expect(page.getByText("Page 1 of 2", { exact: true })).toBeVisible();
+      await page.getByRole("navigation", { name: "Member pages" }).getByRole("link", { name: "Next" }).click();
+      await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+      await page.getByRole("link", { name: "View access for Directory Worker 25", exact: true }).click();
+      await expect(page.getByRole("heading", { name: "Directory Worker 25", exact: true })).toBeVisible();
+      await page.getByRole("link", { name: "Back to members" }).click();
+      await expect(page.getByText("Page 2 of 2", { exact: true })).toBeVisible();
+      await expect(filters.getByRole("searchbox", { name: "Search members" })).toHaveValue("Directory Worker");
+      await expect(filters.getByRole("combobox", { name: "Business role" })).toHaveValue("employee");
+    } finally {
+      for (const user of added) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+    }
+  });
+});
+
+test("permissions UX: five-width accessible directory, detail and confirmation", async ({ page }) => {
+  test.setTimeout(300_000);
+  await withPermissionFixtures("employee", async ({ suffix, password, userIds, businessId }) => {
+    const screenshots = process.env.BUTTERBOX_TEST_SCREENSHOT_DIR;
+    await signIn(page, `owner-${suffix}@example.test`, password);
+    async function checkLayout(label) {
+      await expect(page).toHaveTitle(/Butterbox/);
+      const layout = await page.evaluate(() => {
+        const width = document.documentElement.clientWidth;
+        const overflow = [...document.querySelectorAll("body *")].filter((element) => {
+          const box = element.getBoundingClientRect();
+          return box.right > width + 1 || (element.clientWidth > 0 && element.scrollWidth > element.clientWidth + 1);
+        }).slice(0, 20).map((element) => ({
+          tag: element.tagName, className: element.getAttribute("class"),
+          width: element.clientWidth, scrollWidth: element.scrollWidth,
+        }));
+        return { width, scrollWidth: document.documentElement.scrollWidth, overflow };
+      });
+      expect(layout.scrollWidth, `${label}: horizontal page overflow ${JSON.stringify(layout.overflow)}`)
+        .toBeLessThanOrEqual(layout.width);
+      const results = await new AxeBuilder({ page }).withTags(wcagTags).analyze();
+      const violations = results.violations
+        .map((item) => `${item.impact} ${item.id}: ${item.nodes.map((node) => node.target.join(" ")).join(", ")}`);
+      expect(violations, `${label}: accessibility violations`).toEqual([]);
+    }
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`/settings/permissions?business=${businessId}`);
+      await expect(page.getByRole("heading", { name: "Business permissions" })).toBeVisible();
+      await checkLayout(`${width} directory`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-directory-${width}.png`, fullPage: true });
+      const link = page.getByRole("link", { name: `View access for member-${suffix}`, exact: true });
+      await link.focus();
+      await expect(link).toBeFocused();
+      await page.keyboard.press("Tab");
+      await expect(link).not.toBeFocused();
+      await page.keyboard.press("Shift+Tab");
+      await expect(link).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(page).toHaveURL(new RegExp(`/settings/permissions/${userIds[1]}`));
+      await expect(page.getByRole("heading", { name: "Member access", exact: true })).toBeVisible();
+      await checkLayout(`${width} detail`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-detail-${width}.png`, fullPage: true });
+      const edit = page.getByRole("button", { name: "Edit permissions" });
+      await edit.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { name: "Edit permissions", exact: true })).toBeFocused();
+      await checkLayout(`${width} edit`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-edit-${width}.png`, fullPage: true });
+      await page.getByRole("combobox", { name: "Business role" }).selectOption("foh_manager");
+      const review = page.getByRole("button", { name: "Review change" });
+      await review.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("heading", { name: "Review access change" })).toBeFocused();
+      await checkLayout(`${width} confirmation`);
+      if (screenshots) await page.screenshot({ path: `${screenshots}/after-confirmation-${width}.png`, fullPage: true });
+      await page.getByRole("button", { name: "Cancel", exact: true }).click();
+      await page.getByRole("button", { name: "Discard changes" }).click();
+      await expect(edit).toBeFocused();
+    }
+  });
+});
 
 test("employee profiles and filtered team directory", async ({ page }) => {
   await withPermissionFixtures("employee", async ({ suffix, password, businessId, venueIds, departmentIds }) => {
