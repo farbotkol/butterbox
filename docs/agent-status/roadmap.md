@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-002 — Departments and Roles
 
-- **Last report:** 2026-11-04 01:08 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 01:13 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-002 — Departments & Roles directory and detail management (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable department list and read-first detail; focused department/role/restriction edits with save/cancel, lifecycle confirmation and stale handling; preserved venue settings, qualification rules, histories and authorization; five-width accessible browser checks and actual before/after screenshots.
 - **Phase:** Testing.
-- **Activity:** Debugging and rerunning the two newly added browser scenarios; production lifecycle and role-restriction workflows have passed.
+- **Activity:** Adding a selected-venue guard to focused role mutations and testing forged cross-venue requests, then rerunning the final production-browser scenarios.
 - **Plan:** Keep `/settings/organisation` available for venue settings; add a Departments & Roles workspace with selected department/role editors, reuse the existing server rules and add checked concurrency/lifecycle wrappers. Verify restrictions, history, authorization and five viewport sizes in the disposable environment; update guide/help and evidence without deploying to either showcase.
-- **Progress since previous report:** Added focused browser coverage for scoped access, stale edits, loading/failure recovery and five viewport sizes, plus actual competing-write and revoked-permission integration coverage. Updated the User Guide and contextual Help. Added explicit permission feedback and a retryable department error state. Both protected showcase login endpoints returned **200** at 01:01 AEDT; neither deployment was modified.
-- **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and isolated production build passed. The lifecycle, automatic-qualification and manual-restriction production browser workflows passed (**3/5** in the latest run). Previous People checks remain recorded in the implementation progress.
-- **Failing tests:** The two new browser scenarios failed before completing: one fixture omitted an explicit non-null active flag in a mixed bulk insert, and one alert locator also matched Next.js's route announcer. Both test issues were corrected; reruns are pending. Earlier ambiguous saved-status locators and a missing Help label were corrected and their affected existing checks passed.
+- **Progress since previous report:** Corrected the long-name mobile overflow and reran the lifecycle, five-width scope/layout, and loading/recovery scenarios successfully. Captured 25 post-change browser screenshots. Moved Add department nearer the top and added a selected-venue guard for role actions; those subsequent edits still need final verification. Both protected showcase login endpoints returned **200** at 01:13 AEDT; neither deployment was modified.
+- **Tests and results:** Eight relevant pgTAP files **292/292**, deterministic competing-write/revocation integration **1/1**, directory and Help units **14/14**, changed-file ESLint, TypeScript and isolated production build passed. The latest browser run passed **3/3** lifecycle, scope/layout and loading/recovery scenarios at all required widths; automatic-qualification and manual-restriction scenarios also passed earlier. The newest venue guard and Add placement were made after that run and are not yet verified.
+- **Failing tests:** No test remains failing on the tested snapshot. An earlier 375 px overflow with a long department name was fixed and passed the latest five-width run; final regression after the latest edits is pending.
 - **Blockers requiring intervention:** None identified. The protected local and public showcases must remain unchanged; consolidated owner UX review is separate.
 - **Documentation:** Updated — BB-UXFIX-002 User Guide and contextual Help guidance; criterion-by-criterion evidence remains pending browser verification.
-- **Next concrete action:** Rerun the two corrected scope/layout and loading/recovery scenarios, resolve any product defects, complete screenshot/evidence checks, and run affected venue-settings/navigation regressions.
+- **Next concrete action:** Add forged cross-venue role-action coverage, rerun the production-browser scenarios and affected venue-settings/navigation regressions, then complete screenshot and criterion-by-criterion evidence checks.
 - **Latest development commit:** `4e2fef2881fb26d4754109256c9d37193145ba38`.
-- **Push outcome:** UXFIX-001 and implementation checkpoint `1d158593fb8c0b4bad854b713f066bf6be63d765` were pushed and their remote SHAs verified. The earlier HTTP 400 succeeded on retry over HTTP/1.1. This documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
+- **Push outcome:** UXFIX-001 and documentation checkpoint `c864c8f2d2a1e4ed540fb63ab661ca17c622e0a5` were pushed and their remote SHAs verified. This updated documentation-only checkpoint is pending push; product changes remain unverified and uncommitted.
 
 ## Public synthetic showcase — completed operator request
 
