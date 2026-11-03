@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Butterbox homepage imagery preview (internal, not deployed)</title>
+<style>
+  body { margin: 0; font-family: system-ui, sans-serif; color: #26343A; background: #FBF6EE; }
+  .hero { position: relative; }
+  .hero img { display: block; width: 100%; height: auto; }
+  .hero .copy { position: absolute; inset: 0; padding: 6vw; max-width: 34rem; }
+  /* Phones: stack the copy above the art so text never sits on the sun. */
+  @media (max-width: 599px) { .hero { display: flex; flex-direction: column-reverse; } .hero .copy { position: static; padding: 1.5rem; } }
+  h1 { font-size: clamp(1.6rem, 4vw, 3rem); margin: 0 0 .5rem; }
+  .note { background: #fff; border-left: 4px solid #2F7F86; padding: 1rem; margin: 1.5rem; }
+  .grid { display: grid; gap: 1.5rem; padding: 1.5rem; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); align-items: start; }
+  .grid img { display: block; width: 100%; max-width: 30rem; height: auto; }
+  .band img { display: block; width: 100%; height: auto; }
+</style>
+</head>
+<body>
+<main>
+<section class="hero" aria-labelledby="hero-title">
+<picture>
+  <source media="(max-width: 599px)" type="image/avif" srcset="butterbox-coastal-hero-portrait-480w.avif 480w, butterbox-coastal-hero-portrait-720w.avif 720w, butterbox-coastal-hero-portrait-960w.avif 960w" sizes="100vw" width="480" height="600">
+  <source media="(max-width: 599px)" type="image/webp" srcset="butterbox-coastal-hero-portrait-480w.webp 480w, butterbox-coastal-hero-portrait-720w.webp 720w, butterbox-coastal-hero-portrait-960w.webp 960w" sizes="100vw" width="480" height="600">
+  <source type="image/avif" srcset="butterbox-coastal-hero-wide-640w.avif 640w, butterbox-coastal-hero-wide-960w.avif 960w, butterbox-coastal-hero-wide-1280w.avif 1280w, butterbox-coastal-hero-wide-1920w.avif 1920w, butterbox-coastal-hero-wide-2560w.avif 2560w" sizes="100vw">
+  <img src="butterbox-coastal-hero-wide-960w.webp" srcset="butterbox-coastal-hero-wide-640w.webp 640w, butterbox-coastal-hero-wide-960w.webp 960w, butterbox-coastal-hero-wide-1280w.webp 1280w, butterbox-coastal-hero-wide-1920w.webp 1920w, butterbox-coastal-hero-wide-2560w.webp 2560w" sizes="100vw" width="960" height="420" alt="" fetchpriority="high" decoding="async">
+</picture>
+  <div class="copy"><h1 id="hero-title">Rosters, attendance and payroll prep for hospitality teams</h1>
+  <p>Internal imagery preview for BB-BRAND-004. Illustration only — not a photograph or product screenshot.</p></div>
+</section>
+<p class="note">Decorative images use empty alt text; the message is carried by the real heading. This page is a verification harness and is not a deployed homepage.</p>
+<div class="grid">
+<picture>
+  <source type="image/avif" srcset="butterbox-coastal-feature-tile-480w.avif 480w, butterbox-coastal-feature-tile-960w.avif 960w" sizes="(min-width: 768px) 33vw, 90vw">
+  <img src="butterbox-coastal-feature-tile-960w.webp" srcset="butterbox-coastal-feature-tile-480w.webp 480w, butterbox-coastal-feature-tile-960w.webp 960w" sizes="(min-width: 768px) 33vw, 90vw" width="960" height="960" alt="Butterbox logo above a calm coastal sunrise illustration" loading="lazy" decoding="async">
+</picture>
+<p>The supporting tile contains the Butterbox wordmark, so it has meaningful alternative text.</p>
+</div>
+<div class="band">
+<picture>
+  <source type="image/avif" srcset="butterbox-coastal-section-band-800w.avif 800w, butterbox-coastal-section-band-1600w.avif 1600w, butterbox-coastal-section-band-2400w.avif 2400w" sizes="100vw">
+  <img src="butterbox-coastal-section-band-1600w.webp" srcset="butterbox-coastal-section-band-800w.webp 800w, butterbox-coastal-section-band-1600w.webp 1600w, butterbox-coastal-section-band-2400w.webp 2400w" sizes="100vw" width="1600" height="400" alt="" loading="lazy" decoding="async">
+</picture>
+</div>
+</main>
+</body>
+</html>

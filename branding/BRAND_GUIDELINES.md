@@ -233,7 +233,10 @@ Do not:
 
 **Status:** The concept photography referenced in the governed catalogue (`concept-team`, `concept-roster`,
 `concept-attendance`, `concept-confidence`, `concept-board`) is **missing from the repository**. Until licensed
-photography is supplied, product surfaces use the vector coastal artwork below.
+photography is supplied, product surfaces use the vector coastal artwork below. The owner authorised the
+generated coastal imagery direction on 2026-11-03, but the original files were not found anywhere, so they cannot be
+used or rights-documented. The responsive homepage library in `website/homepage/` is built from the vector
+artwork instead (see `branding/README.md`).
 
 ### Illustration
 

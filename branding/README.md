@@ -111,6 +111,29 @@ These photos are still missing, so BB-BRAND-004 homepage **photography** is bloc
 `website/` are derivatives of the original vector coastal artwork, not photographs. No campaign creative or
 approved marketing release is claimed.
 
+On 2026-11-03 the owner authorised the generated coastal hospitality imagery as the creative direction for the
+internal Showcase. A search of the repository, all Git history, the operator's Mac (Spotlight, Downloads,
+Desktop, Pictures) and agent session files found **none** of the five files above, so their generator, date,
+prompt and usage terms cannot be documented. They remain `missing`; do not recreate them under these names.
+
+## Homepage imagery library (BB-BRAND-004, internal)
+
+`website/homepage/` is a reusable, responsive imagery library built only from the original repository vector
+artwork. Rebuild it with `node scripts/build-homepage-imagery.mjs`; the output is byte-for-byte deterministic and
+the script never modifies `auth/butterbox-coastal-artwork.svg` or other brand assets. No public homepage is
+deployed.
+
+| Set | Aspect / widths | Use | Alt text |
+| --- | --- | --- | --- |
+| `hero-wide` | 16:7 — 640–2560 w | Tablet/desktop hero background | `""` (decorative) |
+| `hero-portrait` | 4:5 — 480/720/960 w | Phone hero via `<picture media>`; cropped to keep the sun | `""` (decorative) |
+| `section-band` | 4:1 — 800/1600/2400 w | Decorative section divider | `""` (decorative) |
+| `feature-tile` | 1:1 — 480/960 w | Supporting tile with the wordmark | "Butterbox logo above a calm coastal sunrise illustration" |
+
+Every size is supplied as AVIF and WebP. `manifest.json` lists dimensions, bytes, SHA-256, `sizes` hints and alt
+text; `preview.html` is the verification harness. On phones, stack text above the hero instead of overlaying
+it. All files are **illustrations** — never present them as photographs or application screenshots.
+
 ## Contributing and storing assets
 
 1. Check the inventory before adding an asset. Preserve original sources;
