@@ -1,22 +1,40 @@
 # Roadmap Agent — Activity Status
 
+## BB-UXFIX-005 — Hospitality Workflow Navigation
+
+- **Last report:** 2026-11-04 07:28 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-UXFIX-005 — Hospitality workflow-based application navigation (P1, In Progress).
+- **Acceptance criteria:** Exact four ordered groups and destinations; existing routes and context preserved; role-aware visibility backed by server authorization; honest feature states; accessible desktop/mobile navigation at five widths; role/tenant, regression and before/after visual evidence.
+- **Phase:** Planning.
+- **Activity:** Inventorying the existing navigation shell, route readiness, role scopes and relevant tests.
+- **Plan:** Preserve server authorization and all existing capabilities, map implemented routes into the owner-approved taxonomy, reuse existing responsive shell and context handling, then verify role/tenant access, navigation, keyboard, accessibility and screenshots only in the disposable environment.
+- **Progress since previous report:** BB-UXFIX-004 was committed and pushed after its selected acceptance checks passed. Both BB-UXFIX-005 prerequisites are Done; no incomplete P0 showcase story is ready.
+- **Tests and results:** No BB-UXFIX-005 tests have run yet. The preceding payroll story's focused checks and five-width browser suite passed as recorded below.
+- **Failing tests:** None observed for this story; baseline verification is pending.
+- **Blockers requiring intervention:** None identified. Consolidated owner UX review and deployment to either protected showcase remain separate.
+- **Documentation:** Pending implementation and verified navigation wording.
+- **Next concrete action:** Inspect the shell and role-aware route inventory, choose targeted baseline tests and capture before views.
+- **Latest development commit:** `401c9b8767151ecf55d22d80e057dc2abb5c0b26`.
+- **Push outcome:** BB-UXFIX-004 feature commit `401c9b8767151ecf55d22d80e057dc2abb5c0b26` was pushed and its remote SHA verified. This planning checkpoint is pending push.
+
 ## BB-UXFIX-004 — Payroll Employee Mapping
 
-- **Last report:** 2026-11-04 06:37 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 07:28 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-004 — Payroll Employee Mapping directory and contextual editor (P1, Done in isolated development).
 - **Acceptance criteria:** Destination-first navigation; searchable mapped/missing directory; read-first focused edit and confirmed unmap; existing case-sensitive uniqueness, revisions, audit and role/tenant isolation; honest provider limitations; five-width accessible production-browser checks and actual before/after screenshots.
 - **Phase:** Complete.
-- **Activity:** Preparing the verified feature, criterion evidence and screenshots for commit and push.
+- **Activity:** Verified feature, criterion evidence and screenshots committed and pushed.
 - **Plan:** Reuse the established directory/detail/edit pattern, preserve business and venue context and existing authoritative mutation rules, add explicit destination/unmap confirmation, then test invalid, stale, concurrent and unauthorized paths without changing payroll calculations or either protected showcase.
 - **Progress since previous report:** Thirty actual synthetic before/after captures were converted to dimension- and pixel-identical lossless WebP. Final TypeScript, changed-file lint and syntax checks passed. The protected local showcase login returned HTTP **200** at 06:36 AEDT.
 - **Tests and results:** Pre-change mapping/CSV browser baseline **2/2**, post-migration mapping/CSV **2/2**, expanded browser **3/5** followed by failed-case rerun **2/2**, final five-width checks **5/5**, database **218/218**, integration **2/2** plus bypass rerun **1/1**, relevant units/Help **42/42**, TypeScript, changed-file ESLint and isolated production build passed.
 - **Failing tests:** None remain in the completed selected checks. Earlier selector clipping and a later tablet timeout were followed by a passing final five-width run.
 - **Blockers requiring intervention:** None identified. Consolidated owner UX review and any deployment to the protected showcases remain separate.
 - **Documentation:** Updated — User Guide, contextual Help, RPC rollout guidance, criterion evidence and 30 synthetic screenshots.
-- **Next concrete action:** Inspect, commit and push the verified story, then assess the next ready work.
-- **Latest development commit:** `4857bb9f797f07e53d234b9e6178729635d08238`.
-- **Push outcome:** Testing checkpoint `959db8c95bcec5193285932d3cb8396abac29b1d` was pushed and its remote SHA verified. The verified feature commit is pending.
+- **Next concrete action:** Begin BB-UXFIX-005 in the separate isolated development environment.
+- **Latest development commit:** `401c9b8767151ecf55d22d80e057dc2abb5c0b26`.
+- **Push outcome:** Feature commit `401c9b8767151ecf55d22d80e057dc2abb5c0b26` was pushed and its remote SHA verified.
 
 ## BB-UXFIX-003 — Business Permissions
 
