@@ -27,7 +27,7 @@ test("employment metadata serializes competing edits and enforces live tenant sc
   const users = {};
 
   async function waitForWaiters(functionName, expected) {
-    assert.match(functionName, /^[a-z_]+$/);
+    assert.match(functionName, /^[a-z_][a-z0-9_]*$/);
     for (let attempt = 0; attempt < 100; attempt += 1) {
       const count = await sql(
         `select count(*) from pg_stat_activity where wait_event_type = 'Lock' and query ilike '%${functionName}%'`,
@@ -80,6 +80,21 @@ test("employment metadata serializes competing edits and enforces live tenant sc
         email: `employment-${role}-${suffix}@example.test`, password,
       })).error);
     }
+
+    const directoryInput = {
+      p_business_id: businessId, p_venue_id: venueId, p_department_id: null,
+      p_search: "", p_role: "", p_status: "all",
+    };
+    const firstPage = await clients.owner.rpc("list_people_directory", directoryInput, { count: "exact" })
+      .order("name").order("id").range(0, 0);
+    assert.ifError(firstPage.error);
+    assert.equal(firstPage.count, 1);
+    assert.deepEqual(firstPage.data.map((employee) => employee.id), [employeeId]);
+    const hiddenDirectory = await clients.outsider.rpc("list_people_directory", directoryInput, { count: "exact" })
+      .order("name").order("id").range(0, 0);
+    assert.ifError(hiddenDirectory.error);
+    assert.equal(hiddenDirectory.count, 0);
+    assert.deepEqual(hiddenDirectory.data, []);
 
     const inputs = [
       request("full_time", 0, randomUUID()),
@@ -163,10 +178,42 @@ test("employment metadata serializes competing edits and enforces live tenant sc
       p_business_id: businessId, p_venue_id: venueId,
     }).eq("employee_id", employeeId).single();
     assert.ifError(current.error);
-    const profile = await admin.from("employees").select("name, employment_type").eq("id", employeeId).single();
+    const profile = await admin.from("employees").select("name, employment_type, profile_revision")
+      .eq("id", employeeId).single();
     assert.ifError(profile.error);
     assert.equal(profile.data.employment_type, current.data.employment_basis);
     assert.equal(profile.data.name, profileResults[0].error ? "Worker" : "Edited worker");
+
+    const profileRevisionGate = await holdLock(
+      `select id from public.employees where id = '${employeeId}'::uuid for update`, employeeId,
+    );
+    let competingProfiles;
+    let competingResults;
+    try {
+      competingProfiles = Promise.all([clients.owner, clients.foh].map((client, index) =>
+        client.rpc("save_employee_profile_checked_v2", {
+          p_business_id: businessId, p_department_id: fohId, p_employee_id: employeeId,
+          p_name: `Concurrent profile ${index}`, p_email: "", p_role_title: "Server",
+          p_employment_type: profile.data.employment_type, p_active: true,
+          p_expected_employment_revision: current.data.revision,
+          p_expected_profile_revision: profile.data.profile_revision, p_lifecycle_confirmed: false,
+        })));
+      await waitForWaiters("save_employee_profile_checked_v2", 2);
+      await profileRevisionGate.release(false);
+      competingResults = await competingProfiles;
+    } finally {
+      await profileRevisionGate.release(false);
+      await Promise.allSettled([competingProfiles].filter(Boolean));
+    }
+    assert.equal(competingResults.filter((result) => !result.error).length, 1,
+      "only one concurrent edit of the same profile revision succeeds");
+    assert.equal(competingResults.find((result) => result.error)?.error.message,
+      "Employee profile changed; refresh before saving");
+    const savedProfile = await clients.owner.from("employees").select("name, profile_revision")
+      .eq("id", employeeId).single();
+    assert.ifError(savedProfile.error);
+    assert.equal(savedProfile.data.name, `Concurrent profile ${competingResults.findIndex((result) => !result.error)}`);
+    assert.equal(savedProfile.data.profile_revision, profile.data.profile_revision + 1);
 
     const membershipGate = await holdLock(
       `update public.business_memberships set role = 'employee' where business_id = '${businessId}'::uuid and user_id = '${users.foh}'::uuid returning id`,

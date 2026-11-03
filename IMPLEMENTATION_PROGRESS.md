@@ -2,7 +2,26 @@
 
 ## Execution summary
 
-- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 In Progress; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. Start with People, preserving existing actions, tenant/role scope and dated employment rules. Before/after screenshots, all five required viewport checks and isolated role/security acceptance remain pending. The existing showcases must not be changed or redeployed.
+- **Owner-prioritised UXFIX Wave 1: BB-UXFIX-001 In Progress; BB-UXFIX-002 through BB-UXFIX-004 Backlog (P1).** A shared directory → selected detail → contextual Edit/Save/Cancel pattern for People, Departments & Roles, Business Permissions and Payroll Employee Mapping. Start with People, preserving existing actions, tenant/role scope and dated employment rules. Before screenshots are captured; after screenshots, all five required post-change viewport checks and complete isolated role/security acceptance remain pending. The existing showcases must not be changed or redeployed.
+
+- **BB-UXFIX-001 technical checkpoint, 2026-11-03 23:42 AEDT:** Captured
+  actual pre-change People screenshots at 375, 390, 768, 1024 and 1440 px in
+  a separately built app against the disposable `butterbox-report-002-55b9`
+  project. Added an RLS-invoker, venue-scoped directory query and a
+  revision-checked profile-save wrapper; neither is wired to the existing UI
+  yet. Scoped People/employment/role/invitation pgTAP **212/212**, competing
+  profile/employment HTTP concurrency **1/1**, directory-filter unit tests
+  **4/4**, and the existing People production-browser journey **1/1** passed.
+  Changed-file ESLint, TypeScript and the baseline split production build
+  passed. The first mobile screenshot captured the previous dashboard during
+  navigation; the rerun waited for the People heading and corrected it. An
+  initial concurrency run exposed an overly restrictive test-helper name
+  pattern; it was corrected and the rerun passed. The new directory/profile
+  UI, direct/tampered action and all five after-change viewport checks remain
+  **not started**; the story remains **In Progress**. The protected showcases
+  were not reset, reseeded or redeployed. **Documentation: not applicable
+  to this backend-only checkpoint**; update the User Guide and contextual Help
+  when the user-facing workflow is implemented and verified.
 
 - Total stories: **131** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.

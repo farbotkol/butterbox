@@ -2,21 +2,21 @@
 
 ## BB-UXFIX-001 — People Directory and Employee Profile
 
-- **Last report:** 2026-11-03 23:34 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-03 23:42 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-UXFIX-001 — People Directory + Employee Profile (P1, In Progress).
 - **Acceptance criteria:** Scoped searchable/filterable/sortable directory; individual read-first profile; focused edit/save/cancel and lifecycle controls; preserved existing actions, tenant/venue/department permissions and history; accessible responsive states; real before/after screenshots and isolated acceptance tests.
-- **Phase:** Testing (baseline).
-- **Activity:** Capturing the existing People page in a separately built application snapshot and preparing the scoped refactor.
+- **Phase:** Coding.
+- **Activity:** Preparing a scoped, paginated directory and revision-safe profile actions before building the list/detail interface.
 - **Plan:** Keep the existing server-side rules; build a bounded directory and canonical detail route with contextual section edits; verify persistence, cancel, permissions, concurrency and five viewport sizes in a separate isolated test environment; update guide/help and acceptance evidence before committing the feature.
-- **Progress since previous report:** Verified the isolated disposable project `butterbox-report-002-55b9`, its PostgreSQL database and loopback-only ports 58421/58422/58424; confirmed its migration files match the repository. Started only its minimal services and a separate application snapshot. The running showcases were neither reset nor redeployed.
-- **Tests and results:** Existing People profile/filter browser scenario **1/1 passed** against the disposable project after a split production build and TypeScript check. Local and public showcase login endpoints both returned **200** after the test project started. Five baseline screenshots were captured; visual inspection exposed a navigation race in the initial mobile image, and a corrected capture is running.
-- **Failing tests:** None observed. The initial mobile screenshot captured the preceding dashboard rather than People; the capture now waits for the People heading before taking images.
+- **Progress since previous report:** Verified corrected before screenshots at five required widths. Added an RLS-invoker directory query, profile revision and checked-save wrapper, and safe filter/context helpers; these are not yet wired to the UI. Applied the migration only to the verified disposable database and confirmed the existing UI remains compatible.
+- **Tests and results:** Targeted People/employment/role/invitation pgTAP **212/212**, real competing-profile/employment HTTP concurrency **1/1**, directory helper unit tests **4/4**, existing People production-browser journey **1/1**, changed-file ESLint, TypeScript and baseline split build passed. Local and public showcase login endpoints last returned **200** after the test project started.
+- **Failing tests:** None currently. The first mobile screenshot captured the dashboard during navigation and was recaptured after waiting for People. An initial concurrency test failed because its safe function-name matcher rejected a digit; after correcting the matcher, the test passed.
 - **Blockers requiring intervention:** None identified. Keep the two running showcases and their shared synthetic database untouched.
 - **Documentation:** User Guide and contextual Help updates are required with the implemented behavior.
-- **Next concrete action:** Verify the corrected baseline screenshots, then implement the bounded directory and canonical employee profile using existing scoped actions.
-- **Latest development commit:** `cfcabb51a3cd0b890f51bd05b21b48a5a3aa79dd`; latest planning checkpoint `d63160140881551c93e6b590dd550f4eec35edc5`.
-- **Push outcome:** Planning checkpoint `d631601` was pushed and its remote SHA verified; this baseline checkpoint is pending push.
+- **Next concrete action:** Connect the bounded directory and canonical employee profile to the existing scoped actions, then implement contextual editing and lifecycle confirmation.
+- **Latest development commit:** `cfcabb51a3cd0b890f51bd05b21b48a5a3aa79dd`; latest baseline checkpoint `427b2b77b42f441b15ea8dbf3278582f2c5b4934`.
+- **Push outcome:** Baseline checkpoint `427b2b7` was pushed and its remote SHA verified; this technical checkpoint is pending push.
 
 ## Public synthetic showcase — completed operator request
 
