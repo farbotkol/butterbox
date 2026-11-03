@@ -116,6 +116,11 @@ internal Showcase. A search of the repository, all Git history, the operator's M
 Desktop, Pictures) and agent session files found **none** of the five files above, so their generator, date,
 prompt and usage terms cannot be documented. They remain `missing`; do not recreate them under these names.
 
+The owner's photography brief for replacement homepage imagery (hero, team-collaboration and optional login
+images inspired by Long Reef / Northern Beaches) is in
+[briefs/BB-BRAND-004-homepage-photography-brief.md](briefs/BB-BRAND-004-homepage-photography-brief.md), with crop sizes,
+provenance requirements and the acceptance checklist. No images have been produced from it yet.
+
 ## Homepage imagery library (BB-BRAND-004, internal)
 
 `website/homepage/` is a reusable, responsive imagery library built only from the original repository vector
