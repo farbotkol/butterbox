@@ -18,6 +18,7 @@ import {
 } from "@/lib/employment-rule-metadata";
 import type { PendingStaffInvitation } from "@/lib/invitations";
 import { readAllPages } from "@/lib/paginated-rows";
+import { isPublicShowcase } from "@/lib/showcase";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace, type BusinessMember } from "@/lib/workspace";
@@ -482,6 +483,7 @@ export default async function PeoplePage({
           : params.error === "shared-groups" ? "These profiles belong to different shared workers. Unlink the incorrect profiles before linking them."
           : params.error === "shared-clock" ? "Finish at least one open clock session before linking these profiles."
           : params.error === "shared" ? "Could not change the shared-worker link. Check the profiles and try again."
+          : params.error === "invite-disabled" ? "Email invitations are unavailable in the public demo."
           : params.error === "invite-duplicate" ? "An active invitation already exists. Resend or revoke it before creating another."
           : params.error === "invite-email" ? "Enter a valid invitation email address."
           : params.error === "invite-send" ? "The invitation was saved, but its email could not be requested. Check your email configuration or try Resend email later."
@@ -572,9 +574,11 @@ export default async function PeoplePage({
                   <EmployeeAccountForm employee={employee} members={members.data ?? []} venueId={venueId} />
                 )}
                 {departments.data?.some((department) => department.id === employee.department_id) && (
-                  <EmployeeInvitationForm employee={employee} venueId={venueId}
-                    departmentActive={Boolean(departments.data.find((department) => department.id === employee.department_id)?.active)}
-                    invitation={invitations.data?.find((invitation) => invitation.employee_id === employee.id)} />
+                  isPublicShowcase()
+                    ? <p className="mt-4 text-sm text-muted">Email invitations are unavailable in the public demo.</p>
+                    : <EmployeeInvitationForm employee={employee} venueId={venueId}
+                        departmentActive={Boolean(departments.data.find((department) => department.id === employee.department_id)?.active)}
+                        invitation={invitations.data?.find((invitation) => invitation.employee_id === employee.id)} />
                 )}
                 {departments.data?.some((department) => department.id === employee.department_id) ? <>
                   <section aria-label={`Employment metadata for ${employee.name}`} className="mt-4 rounded-lg border border-line p-4 text-sm">

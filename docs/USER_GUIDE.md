@@ -17,18 +17,29 @@
 
 ## Internal synthetic showcase
 
-This is a **local internal evaluation**, not a live customer workspace.
+This is a **synthetic internal evaluation**, not a live customer workspace.
 An authorized operator must prepare the separately verified showcase using the
 [operator procedure](../README.md#isolated-local-synthetic-showcase). Do not
 create a sample business through ordinary signup/setup or enter real names,
 contact details, attendance or payroll information. The local review app is
-`http://127.0.0.1:3137`; remote reviewer access has not been verified.
+`http://127.0.0.1:3137`. The operator can also supply a separate temporary
+HTTPS link to the internet-accessible preview.
 
 - Use only the scoped review account supplied privately by the operator.
   The private account inventory is not a public user guide or shared attachment.
   Existing password login works; public signup is disabled. There are
   14 fictional FOH/BOH staff, including department managers, plus the owner
   and a separate outside-business control owner.
+- The public preview is reachable on the internet, not a private network or
+  public marketing launch. Anyone with the link can reach the sign-in page;
+  workspace access requires a provisioned account. Share credentials privately.
+  It depends on the operator's computer, isolated backend and encrypted tunnel
+  remaining online. Public and local reviews use the same synthetic data, so
+  changes made by one reviewer are visible to other reviewers.
+- In the public preview, sign-up, password changes and recovery, email
+  invitations, and offline attendance claims/reopening are unavailable.
+  Online clocking is shown, but an internet-accessible clock mutation was not
+  independently acceptance-tested. Ask the operator for access.
 - An operator may designate an internal test-only owner address during isolated
   showcase preparation. Even if that address matches a login in another
   workspace, the showcase account is separate and has its own generated
@@ -59,11 +70,12 @@ contact details, attendance or payroll information. The local review app is
   browser journeys). Ask whether it passed on the current version; if any step
   failed, the showcase should not be presented. The most recent run (3 November
   2026, version `dfaf495`) passed every step; the showcase was reseeded, so
-  reviewers need the newly issued private passwords. The owner's own review
-  outcome is still pending.
+  reviewers need the newly issued private passwords. The owner accepted the
+  internal delivery milestone; individual features and production use have
+  not been separately approved.
 
-This environment does not imply final branding approval, hosted reviewer
-access, production readiness or legal/payroll compliance.
+This environment does not imply final branding approval, durable hosted
+reviewer access, production readiness or legal/payroll compliance.
 
 ### Guided owner and payroll-preparation review
 
@@ -160,6 +172,9 @@ Award Central and production/legal acceptance are not implied.
 
 ### Accounts and business access
 
+- In the optional public showcase preview, use an operator-provided review
+  account. Registration, password changes and recovery are unavailable there;
+  contact the operator if you cannot sign in.
 - **Create account** opens registration (`/signup`); enter your email and a
   password of at least ten characters, then complete email verification.
   **Sign in** (`/login`) uses **Email address** and **Password**. Invalid
@@ -231,6 +246,9 @@ the current scope. Do not treat a hidden button as the security boundary.
 - Employment rule metadata retains effective-dated employment basis and award/contract references. **This alone does not calculate or certify award-compliant pay.**
 
 #### Maintain profiles, qualifications and invitations
+
+The optional public showcase preview does not send staff invitations. Its review
+accounts are provisioned by the operator.
 
 1. Open **People** (`/people`, heading **Employee profiles**). Use **Search
    team**, **Venue**, **Department**, **Role** and **Status**, then **Filter
@@ -462,6 +480,10 @@ pay or prove award breaches. External alert delivery is not enabled.
    must be reopened before attendance can change; refresh after a stale-data error.
 
 #### Use the offline fallback safely
+
+The optional public showcase preview does not support offline claims or
+reopening. The following instructions apply to environments where the offline
+fallback is available.
 
 - While signed in and online, expand **Prepare this tab for offline reopening**,
   choose matching **Offline passphrase** values of 12 to 128 characters and

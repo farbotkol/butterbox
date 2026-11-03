@@ -5,6 +5,7 @@ import { signInAction } from "@/app/actions";
 import { AuthLayout } from "@/components/auth-layout";
 import { PasswordInput } from "@/components/password-input";
 import { AnnounceSessionEnd } from "@/components/session-sync";
+import { isPublicShowcase } from "@/lib/showcase";
 import { isSupabaseConfigured, createClient } from "@/lib/supabase/server";
 
 type LoginPageProps = {
@@ -19,6 +20,7 @@ const errors: Record<string, string> = {
 
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const configured = isSupabaseConfigured();
+  const publicShowcase = isPublicShowcase();
   const params = await searchParams;
   if (configured) {
     const supabase = await createClient();
@@ -43,6 +45,12 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         Your team, rosters and timesheets, all in one place.
       </p>
 
+      {publicShowcase && (
+        <p role="status" className="mt-5 rounded-lg border border-sand bg-soft-sand p-4 text-sm text-ocean">
+          This public demo uses pre-provisioned fictional accounts. Sign-up, password changes and
+          recovery, and email invitations are unavailable; contact the demo operator for access.
+        </p>
+      )}
       {params.error && (
         <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
           {errors[params.error] ?? "Something went wrong. Please try again."}
@@ -101,9 +109,9 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         <label className="block text-sm font-medium text-ink" htmlFor="password">
           <span className="flex items-center justify-between gap-3">
             Password
-            <Link href="/forgot-password" className="text-xs font-medium text-ocean underline-offset-4 hover:underline">
+            {!publicShowcase && <Link href="/forgot-password" className="text-xs font-medium text-ocean underline-offset-4 hover:underline">
               Forgot password?
-            </Link>
+            </Link>}
           </span>
           <PasswordInput autoComplete="current-password" id="password" name="password" />
         </label>
@@ -116,17 +124,19 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </button>
       </form>
 
-      <div className="my-7 flex items-center gap-3 text-xs text-muted">
-        <span className="h-px flex-1 bg-line" />
-        NEW TO BUTTERBOX
-        <span className="h-px flex-1 bg-line" />
-      </div>
-      <Link
-        className="flex min-h-12 w-full items-center justify-center rounded-lg border border-ocean/35 bg-white px-5 py-3 text-sm font-semibold text-ocean transition hover:bg-soft-sea focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean"
-        href="/signup"
-      >
-        Create account
-      </Link>
+      {!publicShowcase && <>
+        <div className="my-7 flex items-center gap-3 text-xs text-muted">
+          <span className="h-px flex-1 bg-line" />
+          NEW TO BUTTERBOX
+          <span className="h-px flex-1 bg-line" />
+        </div>
+        <Link
+          className="flex min-h-12 w-full items-center justify-center rounded-lg border border-ocean/35 bg-white px-5 py-3 text-sm font-semibold text-ocean transition hover:bg-soft-sea focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean"
+          href="/signup"
+        >
+          Create account
+        </Link>
+      </>}
     </AuthLayout>
   );
 }

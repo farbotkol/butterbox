@@ -91,7 +91,8 @@ remaining isolation, historical-data assessment and clean-conversion requirement
 ### Isolated local synthetic showcase
 
 BB-DEMO-001 provides a tested **local internal review** environment, not a
-production deployment or verified remote reviewer endpoint. It contains
+production deployment. A separately built, temporary internet-accessible
+synthetic preview is described below. The showcase contains
 14 fictional FOH/BOH employees, scoped review accounts, availability, published
 rosters/open shifts, original clock/break events, an attributable correction
 and approved/finalised sample time. No production data is copied. Do not seed
@@ -154,7 +155,8 @@ forwarding. Stop the proxy with Ctrl-C when finished. Do not make these ports
 public or use this as a production/shared-host security boundary: the CLI still
 uses its standard local PostgreSQL password, and trusted local operators have
 Docker access. Do not forward backend ports. Remote/private reviewer access
-has not been verified; the Codespaces port-visibility API returned 403.
+through the Codespaces port-visibility API was not verified (it returned 403);
+the optional public preview uses a separate application-only HTTPS gateway.
 
 Verification checks every required service, generated signing-secret wiring,
 the real Auth endpoint, acceptance of the project's signed administrative JWT
@@ -199,8 +201,9 @@ The app displays **SIMULATION ONLY**; every downloaded sample CSV row also
 contains **SIMULATION ONLY - NOT FOR PAYROLL**. The notice is not an
 authorization boundary; normal server permissions and RLS still apply.
 
-Stop the review app with Ctrl-C **before** reset. Keep the backend/proxy running
-and explicitly confirm the destructive reset of this synthetic project only:
+Stop both the local review app and any public preview **before** reset. Keep the
+backend/proxy running and explicitly confirm the destructive reset of this
+synthetic project only:
 
 ```sh
 node --experimental-strip-types scripts/showcase-fixtures.mjs reset /private/operator/path/butterbox-showcase --confirm-synthetic-reset=butterbox-showcase
@@ -260,14 +263,92 @@ the output privately. Every step must pass; stop at the first failure.
 | Integration or browser step fails | Fixture or app regression | Do not present the showcase; record the failure and fix it first |
 | Reviewer cannot sign in after reseed | Passwords are regenerated | Supply the new private credentials |
 
-Known gaps: access is loopback-only on the operator machine (no hosted or
-remote reviewer access); browser-level cross-business checks cover the Help
-Center only, with data isolation proven by the integration step; dashboard
+Known gaps: the normal showcase address is loopback-only; the optional public
+preview depends on the operator's computer and is not durable hosting.
+Browser-level cross-business checks cover the Help Center and sample export,
+with data isolation also proven by the local integration step; dashboard
 forecasting, labour optimisation, compliance checks and AI Copilot are
-labelled concepts; there is no public marketing homepage (BB-BRAND-004);
+labelled concepts; there is no cleared public marketing launch (BB-BRAND-004);
 the Coastal Wave logo system awaits the owner's final visual review; external
 notifications, live payroll, award calculation and production readiness are
 out of scope.
+
+#### Temporary public synthetic preview
+
+The optional public preview exposes the **application only** through a dedicated
+random HTTPS OpenTunnel route. It is an internet-accessible demonstration,
+not a private network, production deployment, durable hosted service or
+approval to publish the draft marketing imagery. The route and TLS private key
+belong to the operator's dedicated profile; the gateway and app remain on
+`127.0.0.1:3140` and `127.0.0.1:3141`. The Supabase API/database and ordinary
+app must remain loopback-only and must never be tunnel targets.
+
+The public and local showcases share the same synthetic database. Reviewer edits
+are shared, and the launcher refuses to start if the known fictional identity,
+business, venue or employee inventory no longer matches. Do not enter real
+personal information, use production data, run live payroll, or share review
+passwords publicly. Public sign-up, password changes and recovery, email
+invitations, offline attendance claims and offline reopening are disabled.
+Clocking controls are present online; a public clock mutation was not executed
+as part of the read-only review. CSV exports remain simulation-only.
+
+For the verified Mac operator environment, provision the separately owned
+`$HOME/butterbox-showcase-public/app` source snapshot and its own dependencies
+from a trusted revision. Install the checksum-verified OpenTunnel client at
+`$HOME/butterbox-showcase-public/bin/opentunnel`, with the dedicated
+`butterbox-showcase` profile configured for exactly one route to
+`127.0.0.1:3140`. Adding a route can install an automatic login service: run
+`"$HOME/butterbox-showcase-public/bin/opentunnel" --profile butterbox-showcase down`
+and confirm `status` reports
+**stopped** before using the supervised runner. Do not use the CLI's `up`
+autostart mode or expose a second route through this profile.
+
+With the previously verified isolated backend/proxy and private workdir
+running, and with the required Docker/CLI variables from the local setup
+exported, build the separate snapshot and start its supervised public app,
+gateway and tunnel. Substitute the dedicated route's HTTPS origin; never use a
+production project:
+
+```sh
+node --experimental-strip-types scripts/public-showcase.mjs build "$HOME/butterbox-showcase"
+node --experimental-strip-types scripts/public-showcase.mjs serve "$HOME/butterbox-showcase" "$PUBLIC_SHOWCASE_ORIGIN"
+```
+
+Set `PUBLIC_SHOWCASE_ORIGIN` to the exact HTTPS route shown by the profile's
+`status` command before starting the runner.
+
+With the preview running, the following targeted checks sign in with the
+private synthetic review accounts without changing seeded staff or attendance:
+
+```sh
+BUTTERBOX_SHOWCASE_WORKDIR="$HOME/butterbox-showcase" \
+BUTTERBOX_TEST_PUBLIC_SHOWCASE=yes \
+BUTTERBOX_TEST_APP_URL="$PUBLIC_SHOWCASE_ORIGIN" \
+node --experimental-strip-types node_modules/@playwright/test/cli.js test tests/e2e/public-showcase.spec.mjs --browser=chromium --workers=1
+```
+
+The runner verifies the isolated project, known fictional inventory and stopped
+single-route profile, starts the gateway only after app readiness, and
+supervises the tunnel and app together. It shuts the tunnel down before
+releasing the gateway during a normal stop; it also stops the remaining
+services if the app or tunnel exits. A forced kill, computer sleep, network
+loss, certificate expiry or reboot can still interrupt the preview. Do not
+reassign the gateway port while the tunnel might be running. Give trusted
+reviewers the current HTTPS URL and only their own provisioned credentials;
+the private fixture inventory is never a public download.
+
+Check `"$HOME/butterbox-showcase-public/bin/opentunnel" --profile butterbox-showcase status`,
+fetch the HTTPS login
+and compare the served certificate fingerprint to the locally held certificate
+before sharing the link. To stop the preview, send Ctrl-C to its supervised
+runner and confirm the tunnel is stopped before starting any other process on
+port 3140. If the runner cannot be stopped normally, first run
+`"$HOME/butterbox-showcase-public/bin/opentunnel" --profile butterbox-showcase down`,
+verify the tunnel is stopped,
+then stop the public gateway/app. The local showcase on port 3137 is a separate
+process and need not be interrupted. Rebuild only after stopping the public
+runner; copy the current user guide into the public source snapshot before
+building so in-app Help matches the actual preview.
 
 To pause while preserving storage, use:
 

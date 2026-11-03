@@ -33,6 +33,7 @@ import { localDateTimeAsUtc, offerFailureCode, responseFailureCode } from "@/lib
 import { isSwapUuid, swapFailureCode } from "@/lib/shift-swaps";
 import { parseTimesheetDecisionInput } from "@/lib/timesheet-approvals";
 import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage } from "@/lib/payroll-periods";
+import { isPublicShowcase } from "@/lib/showcase";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
 import {
@@ -102,6 +103,10 @@ export async function signInAction(formData: FormData) {
 }
 
 export async function signUpAction(formData: FormData) {
+  if (isPublicShowcase()) {
+    console.error("Public showcase sign-up is unavailable.");
+    redirect("/login");
+  }
   if (!isSupabaseConfigured()) redirect("/signup?error=setup");
 
   const email = text(formData, "email", 254).toLowerCase();
@@ -123,6 +128,10 @@ export async function signUpAction(formData: FormData) {
 }
 
 export async function resetPasswordAction(formData: FormData) {
+  if (isPublicShowcase()) {
+    console.error("Public showcase password recovery is unavailable.");
+    redirect("/login");
+  }
   if (!isSupabaseConfigured()) redirect("/forgot-password?error=setup");
 
   const email = text(formData, "email", 254).toLowerCase();
@@ -143,6 +152,10 @@ export async function resetPasswordAction(formData: FormData) {
 }
 
 export async function updatePasswordAction(formData: FormData) {
+  if (isPublicShowcase()) {
+    console.error("Public showcase password changes are unavailable.");
+    redirect("/login");
+  }
   if (!isSupabaseConfigured()) redirect("/login?error=setup");
 
   const password = secret(formData, "password", 128);
@@ -215,6 +228,10 @@ async function sendInvitationEmail(email: string, invitationId: string): Promise
 }
 
 export async function createStaffInvitationAction(formData: FormData) {
+  if (isPublicShowcase()) {
+    console.error("Public showcase email invitations are unavailable.");
+    redirect("/people?error=invite-disabled");
+  }
   const venueIds = uuidList(formData, "venue_id", 1);
   const departmentIds = uuidList(formData, "department_id", 1);
   const employeeIds = uuidList(formData, "employee_id", 1);
@@ -268,6 +285,10 @@ async function findManageableInvitation(formData: FormData) {
 }
 
 export async function resendStaffInvitationAction(formData: FormData) {
+  if (isPublicShowcase()) {
+    console.error("Public showcase email invitations are unavailable.");
+    redirect("/people?error=invite-disabled");
+  }
   const { invitation, destination } = await findManageableInvitation(formData);
   if (invitation.status !== "pending") {
     redirect(`${destination}&error=invite-expired`);

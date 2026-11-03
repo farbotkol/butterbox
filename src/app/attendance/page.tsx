@@ -22,6 +22,7 @@ import {
   locationReasonLabels, parseLocationExceptions, type LocationException,
 } from "@/lib/attendance-location";
 import { withBusiness } from "@/lib/business-selection";
+import { isPublicShowcase } from "@/lib/showcase";
 import {
   hasPriorAttendanceLink, offlineMatchKey, offlineWorkerKey, parseOfflineBreakResolutions, parseOfflineClaimReviews,
   parseOfflineMatchEvents, parseOfflineOpenBreaks, parseOfflineOpenSessions, parseSubmittedOfflineClaims,
@@ -513,13 +514,20 @@ export default async function AttendancePage({ searchParams }: AttendancePagePro
           )}
         </section>
       )}
-      {!loadError && options && <OfflineAttendance
-        key={`${workspace.user.id}:${workspace.business.id}:${workspace.venue.id}`}
-        url={supabaseUrl}
-        anonKey={supabaseAnonKey}
-        actorId={workspace.user.id} businessId={workspace.business.id} venueId={workspace.venue.id}
-        options={options}
-      />}
+      {!loadError && options && (isPublicShowcase()
+        ? <section aria-label="Offline attendance fallback" className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
+            <h2 className="text-lg font-semibold">Offline attendance fallback</h2>
+            <p className="mt-2 text-sm text-muted">
+              Offline claims and reopening are unavailable in the public demo. Online clocking remains available.
+            </p>
+          </section>
+        : <OfflineAttendance
+            key={`${workspace.user.id}:${workspace.business.id}:${workspace.venue.id}`}
+            url={supabaseUrl}
+            anonKey={supabaseAnonKey}
+            actorId={workspace.user.id} businessId={workspace.business.id} venueId={workspace.venue.id}
+            options={options}
+          />)}
       <section id="request-attendance-correction" aria-label="Request an attendance correction"
         className="mt-6 rounded-xl border border-line bg-white p-5 sm:p-6">
         <h2 className="text-lg font-semibold">Request a missed clock time</h2>

@@ -5,6 +5,35 @@
 - Total stories: **127** (including 22 Award Central BB-PAYRULES, three
   BB-DOC, ten BB-BRAND and five BB-DEMO stories). Verified Done: **66**.
   In Progress: **0**. Blocked: **6**. Not started (Backlog): **55**.
+- **Owner-requested public synthetic preview, 2026-11-03:** The existing
+  showcase database remains isolated and shared with its local review app.
+  A separately built app snapshot (`dfaf495` baseline plus the public-preview
+  changes) runs behind a host/origin-validated loopback gateway and a dedicated
+  OpenTunnel HTTPS route. The public certificate matched the locally held
+  certificate; normal app, local showcase, Supabase API and database listeners
+  remained on loopback. No reset, production data, live payroll, external
+  message or paid service was used. This is a temporary public demonstration,
+  not durable hosting, a public marketing launch or production approval.
+  Signup, password changes/recovery, invitation email and offline attendance
+  claims/reopening are disabled in public mode. Online attendance controls were
+  checked without creating a new clock event. BB-REPORT-002 is not deployed
+  in this older snapshot; final branding/image rights remain separate gates.
+  Targeted live HTTPS Chromium **7/7** passed: login/sign-out and secure
+  HttpOnly cookies; direct disabled actions and blocked backend routes;
+  owner, FOH/BOH manager and mobile employee journeys; tenant/department
+  restrictions; roster, timesheet, hours report and 14-row simulation CSV;
+  mobile overflow/axe and in-app Help. The original local showcase's
+  owner/FOH/BOH/employee browser journeys also passed **4/4**. Node/guide
+  **18/18**, changed-file ESLint, TypeScript and split production build
+  passed. Stopping either the
+  public app or tunnel stopped the other public services; graceful shutdown
+  preserved the local showcase. An initial control-owner sign-out test timed
+  out on an unavailable-workspace page and passed using its existing business
+  chooser; a harmless direct password-change check exposed a missing guard,
+  which was added and verified. Full regression, a physical external device
+  and a public clock mutation were intentionally not run. **Documentation:
+  updated** — README, User Guide and in-app Help; status/acceptance evidence
+  updated without changing story priorities or completion statuses.
 - BB-REPORT-002 is **Done**: a manager-scoped read-only exceptions report highlights overlapping shifts,
   incomplete sessions and optional operational hours thresholds, without inferring award breaches. Focused
   pgTAP **30/30**, related pgTAP **167/167**, Node **31/31**, HTTP authorization **1/1**, adjacent
