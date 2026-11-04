@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 11:19 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 11:24 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL and update the local showcase for shared-database compatibility; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and scoped security; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts; keep the local showcase compatible.
 - **Phase:** Testing.
 - **Activity:** Running post-deployment public and local workflow, role and responsive smoke tests.
-- **Progress since previous report:** Reverified the synthetic inventory, gracefully stopped only the two showcase supervisors, and created a fresh private pre-migration archive. Applied exactly the nine rehearsed migrations to the shared project, verified the scoped payroll grant and preserved identity/employee counts, and restarted compatible UXFIX builds on both ports. The public tunnel reconnected using its original profile and route; the certificate fingerprint matched its pre-cutover value.
-- **Tests and results:** Public and local login returned HTTP **200** after restart. Six focused pre-cutover pgTAP files passed **174/174** assertions. Both UXFIX production compile, TypeScript and generation passed; staged login and read-only readiness checks passed.
-- **Failing tests:** Initial scratch restore failed because `pg_cron` is restricted to the test cluster's primary database; the corrected partial-platform restore passed. Public UXFIX role, route and accessibility smoke tests are still pending; deployment acceptance is not yet claimed.
+- **Progress since previous report:** Independently restored the fresh cutover archive into the disposable test cluster and compared all 81 pre-existing application tables with the live database. Row contents matched after excluding only the new profile revision and the scheduled attendance worker's advancing completion timestamp. Removed the scratch copy; retained the private recovery archives.
+- **Tests and results:** Public and local login returned HTTP **200** after restart. Public owner navigation, People and departments edit/discard, payroll setup, roster/timesheets, five responsive widths, mobile keyboard and targeted accessibility checks passed in the first smoke run. Outside-business isolation, local compatibility and gateway restrictions passed. Six pre-cutover pgTAP files passed **174/174** assertions; both UXFIX builds and TypeScript passed.
+- **Failing tests:** Four first-run assertions failed: one exact Playwright label match and three checks performed before streamed redirects settled. A focused browser diagnostic confirmed the permissions editor opened and a manager was redirected after settling; the corrected complete smoke run is in progress. Initial scratch restore had failed on the test cluster's `pg_cron` database restriction; the corrected partial-platform restore passed. Deployment acceptance is not yet claimed.
 - **Blockers requiring intervention:** None identified after the owner's compatibility-update approval; the security revoke must remain intact.
 - **Documentation:** `IMPLEMENTATION_PROGRESS.md` records preparation and the previous blocker; update it with the authorised cutover and actual result. User Guide not applicable unless user-facing behavior changes from the already documented UXFIX.
-- **Next concrete action:** Verify actual public owner, manager and employee authentication, navigation, UXFIX surfaces, existing workflows, tenant isolation and responsive layouts, plus local compatibility.
+- **Next concrete action:** Finish the corrected full public smoke rerun, inspect any remaining failures and runtime errors, then record actual results in progress and issue #5.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Pre-cutover checkpoint `581b4b12fc25c9b98af269fe79bda7b78d5d6020` was pushed and verified; this deployment checkpoint is pending push.
+- **Push outcome:** Cutover checkpoint `cd9e34fb56c066b77448d090e8ada598a349a64b` was pushed and verified; this verification checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 
