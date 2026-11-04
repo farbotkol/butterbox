@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import ts from "typescript";
 import {
   parseConversationContext, parseConversationMessages, parseConversationSummaries,
   parseShiftMessageInput, shiftConversationHref,
@@ -40,6 +42,36 @@ test("conversation links preserve business and venue context", () => {
     `/shift-conversations?business=${business}&venue=${venue}&shift=${shift}`);
   assert.equal(shiftConversationHref(business, venue, { conversationId: conversation }),
     `/shift-conversations?business=${business}&venue=${venue}&conversation=${conversation}`);
+});
+
+test("roster and schedule discussion links include their visible text in the accessible name", () => {
+  for (const file of ["roster", "my-schedule"]) {
+    const url = new URL(`../src/app/${file}/page.tsx`, import.meta.url);
+    const source = ts.createSourceFile(url.pathname, readFileSync(url, "utf8"),
+      ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let links = 0;
+    const visit = (node) => {
+      if (ts.isJsxElement(node) && node.openingElement.tagName.getText(source) === "Link") {
+        const attributes = node.openingElement.attributes.properties.filter(ts.isJsxAttribute);
+        const href = attributes.find((attribute) => attribute.name.getText(source) === "href")?.initializer;
+        if (href && ts.isJsxExpression(href) && href.expression && ts.isCallExpression(href.expression) &&
+            href.expression.expression.getText(source) === "shiftConversationHref" &&
+            href.expression.arguments.length === 3) {
+          links++;
+          const visibleText = node.children.filter(ts.isJsxText).map((child) => child.text).join("").trim();
+          assert.equal(visibleText, "Discuss shift", file);
+          const label = attributes.find((attribute) => attribute.name.getText(source) === "aria-label")?.initializer;
+          assert.ok(label && ts.isJsxExpression(label) && label.expression &&
+            ts.isTemplateExpression(label.expression), `${file}: missing contextual accessible name`);
+          assert.ok(label.expression.head.text.startsWith(`${visibleText} `),
+            `${file}: accessible name must begin with the visible action before shift details`);
+        }
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(source);
+    assert.equal(links, 1, `${file}: discussion entry point was not checked`);
+  }
 });
 
 test("conversation context fails closed on malformed or incomplete responses", () => {
