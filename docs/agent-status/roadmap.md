@@ -2,21 +2,21 @@
 
 ## BB-AI-005 — Fill open shifts assistant
 
-- **Last report:** 2026-11-04 14:34 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 14:37 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-AI-005 — Fill open shifts assistant (P1, Blocked after verified partial implementation).
 - **Acceptance criteria:** Recommendations consider skills, availability, overlaps and hours; alternatives are provided; no offers are sent without manager approval.
 - **Phase:** Blocked.
-- **Activity:** Recording verified rule-based functionality and the unresolved AI-intent boundary; selecting independent ready work without deploying.
+- **Activity:** Assessed remaining story readiness and recorded the unresolved AI-intent boundary without deploying.
 - **Plan:** Reuse server-enforced candidate eligibility, scoped role tags and department-week scheduled time; explain missing availability and hidden hours. Suggestions are read-only and use no external model. Existing explicit manager send and claim confirmation remain authoritative.
-- **Progress since previous report:** Final isolated production build and browser checks passed; the verified rule-based feature and User Guide were committed and pushed. The three functional checks pass for that slice, but the AI story is not claimed complete.
+- **Progress since previous report:** Final isolated production checks and criterion evidence were committed and pushed. Remaining AI, forecasting, provider, marketing and award work was assessed for prerequisites; no additional story was confirmed ready for a complete safe slice. Separate Award Central PR #3 remains Draft and its source access/current-roadmap integration are unverified.
 - **Tests and results:** Suggestion, offer and Help units **31/31**; offer, role and availability pgTAP **78/78**, **45/45**, **53/53**; authenticated scoped offer/concurrency integration **1/1**; final production browser journeys **3/3** including the exact 200/201 boundary. TypeScript, changed-file ESLint and production compile/generation passed. Five widths, mobile/desktop axe, keyboard access, role/tenant isolation and stale eligibility were exercised.
 - **Failing tests:** The development boundary attempt timed out in the previously observed Fast Refresh/login reload loop; the same boundary passed in production. Earlier fixture and Help-link failures were fixed and rerun successfully.
-- **Blockers requiring intervention:** No AI model or model evaluation was built. Clarify whether deterministic suggestions satisfy the story's AI intent, or approve an AI approach and appropriate data governance/evaluation.
+- **Blockers requiring intervention:** No AI model or model evaluation was built. Clarify whether deterministic suggestions satisfy the story's AI intent, or approve an AI approach and appropriate data governance/evaluation. Other candidate stories need their identified provider, forecast, brand or specialist prerequisites.
 - **Documentation:** Updated User Guide v1.12 and contextual Help; no showcase deployment.
-- **Next concrete action:** Assess remaining priority and dependencies, then begin the highest-priority independent safe story.
+- **Next concrete action:** Resolve the BB-AI-005 AI-intent decision or establish an approved AI approach; resume an independent provider/source-dependent story once its prerequisite is available.
 - **Latest development commit:** `56fc81a119a7a9e0cc341ee77a8aec1f4a4819dc` (BB-AI-005 partial feature).
-- **Push outcome:** Feature commit `56fc81a119a7a9e0cc341ee77a8aec1f4a4819dc` was pushed and its remote SHA verified; this evidence checkpoint is pending.
+- **Push outcome:** Evidence commit `ff3d73bda4f4943a659ff7150545b7ee60f7ad71` was pushed and its remote SHA verified; this readiness checkpoint is pending.
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
