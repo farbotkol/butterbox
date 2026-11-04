@@ -20,6 +20,7 @@ const definitions: readonly TopicDefinition[] = [
   { id: "availability", title: "Availability, leave and preferences", heading: "Maintain availability, leave and preferences", category: "People", roles: members },
   { id: "rosters", title: "Building and publishing rosters", heading: "Rostering", category: "Rosters", roles: managers },
   { id: "shifts", title: "Open shifts and swaps", heading: "Open shifts and swaps", category: "Rosters", roles: members },
+  { id: "shift-conversations", title: "Shift conversations", heading: "Shift conversations", category: "Rosters", roles: members },
   { id: "attendance", title: "Clocking and corrections", heading: "Clock, review location and correct reported time", category: "Attendance", roles: members },
   { id: "offline", title: "Offline attendance", heading: "Use the offline fallback safely", category: "Attendance", roles: members },
   { id: "kiosk", title: "Setting up a QR kiosk", heading: "Set up a QR clock kiosk", category: "Attendance", roles: ["owner"] },

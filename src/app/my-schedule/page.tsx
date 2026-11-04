@@ -8,6 +8,7 @@ import { RosterNotificationBanner } from "@/components/roster-notification-banne
 import { groupEmployeeSchedule, type EmployeeScheduleShift } from "@/lib/employee-schedule";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
+import { shiftConversationHref } from "@/lib/shift-conversations";
 import { outcomeLabels, parseMyShiftOffers, responseLabels, type MyShiftOffer } from "@/lib/shift-offers";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
@@ -91,8 +92,8 @@ function ShiftOffers({ offers, venue, week }: { offers: MyShiftOffer[]; venue: V
   );
 }
 
-function ShiftDetails({ shift, venue, week, acknowledgements }: {
-  shift: ScheduleShift; venue: Venue; week: string;
+function ShiftDetails({ shift, venue, week, acknowledgements, businessId }: {
+  shift: ScheduleShift; venue: Venue; week: string; businessId: string;
   acknowledgements: Map<string, string | null> | null;
 }) {
   const startDate = getVenueDate(shift.starts_at, venue.timezone);
@@ -139,6 +140,11 @@ function ShiftDetails({ shift, venue, week, acknowledgements }: {
           </form>
         )
       )}
+      <Link href={shiftConversationHref(businessId, venue.id, { shiftId: shift.id })}
+        aria-label={`Discuss ${shift.role_title} shift on ${formatDay(startDate)} at ${formatTime(shift.starts_at, venue.timezone)}`}
+        className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Discuss shift
+      </Link>
     </div>
   );
 }
@@ -242,6 +248,10 @@ export default async function MySchedulePage({
               className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
               Request or review shift swaps
             </Link>
+            <Link href={shiftConversationHref(workspace.business.id, workspace.venue.id)}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Conversation history
+            </Link>
           </div>
         </div>
         {(venueResult.data ?? []).length > 1 && (
@@ -305,7 +315,7 @@ export default async function MySchedulePage({
             <h2 id="next-shift-heading" className="text-lg font-semibold">Next shift</h2>
             <div className="mt-3">
               {nextShift
-                ? <ShiftDetails shift={nextShift} venue={venue} week={week} acknowledgements={acknowledgements} />
+                ? <ShiftDetails shift={nextShift} venue={venue} week={week} acknowledgements={acknowledgements} businessId={workspace.business.id} />
                 : <p className="text-sm text-muted">You have no upcoming published shifts at this venue.</p>}
             </div>
           </section>
@@ -333,7 +343,7 @@ export default async function MySchedulePage({
                   <h3 id={`schedule-${day.date}`} className="mb-2 text-sm font-semibold">{formatDay(day.date)}</h3>
                   {day.shifts.length
                     ? <div className="space-y-2">{day.shifts.map((shift) => (
-                      <ShiftDetails key={shift.id} shift={shift} venue={venue} week={week} acknowledgements={acknowledgements} />
+                      <ShiftDetails key={shift.id} shift={shift} venue={venue} week={week} acknowledgements={acknowledgements} businessId={workspace.business.id} />
                     ))}</div>
                     : <p className="text-sm text-muted">No shifts</p>}
                 </section>

@@ -46,6 +46,17 @@ test("attendance help uses the current clock navigation label", () => {
   }
 });
 
+test("shift conversation help explains scope, retained messages and delivery limits", () => {
+  for (const role of ["owner", "foh_manager", "employee"]) {
+    const topic = helpTopics(source, role).find((candidate) => candidate.id === "shift-conversations");
+    assert.ok(topic, role);
+    for (const phrase of ["Discuss shift", "Conversation history", "cannot see the previous employee's messages",
+      "no automatic conversation notifications", "not been deployed"]) {
+      assert.ok(topic.markdown.replace(/\s+/g, " ").toLowerCase().includes(phrase.toLowerCase()), `${role}: ${phrase}`);
+    }
+  }
+});
+
 test("help visibility is derived from effective roles, not a requested topic or search", () => {
   const employee = helpTopics(source, "employee");
   const manager = helpTopics(source, "foh_manager");
@@ -191,6 +202,7 @@ test("core contextual help destinations and documented screen/link labels stay w
     ["src/app/settings/payroll/new/page.tsx", "Help with payroll preparation"],
     ["src/app/announcements/page.tsx", "Announcements", "Help with announcements"],
     ["src/components/future-vision-preview.tsx", "Help with future concepts"],
+    ["src/app/shift-conversations/page.tsx", "Help with shift conversations"],
   ];
   const topics = [...helpTopics(source, "owner"), ...helpTopics(source, "new_owner")];
   for (const [file, ...labels] of screens) {

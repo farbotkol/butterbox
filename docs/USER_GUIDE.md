@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.10 — reviewed 2026-11-04 (Core Roadmap; UXFIX and optional future-concept guidance; other sections retain their earlier review dates).
+**Guide version:** 1.11 — reviewed 2026-11-04 (Core Roadmap; UXFIX, future-concept and shift-conversation guidance; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -498,6 +498,36 @@ manager uses **Approve swap** or supplies **Reason for rejection** and **Reject
 swap**. Both consent and current eligibility/conflicts are required. If a
 shift changes, create a new request; a stale snapshot cannot be approved.
 Both employees receive in-app outcomes; verify the resulting published shifts.
+
+### Shift conversations
+
+The in-app shift conversation is available in the isolated development version;
+it has not been deployed to the protected or public showcases.
+
+1. A manager with access to the department can choose **Discuss shift** on a
+   published, assigned shift in **Weekly roster**. The assigned employee can
+   choose **Discuss shift** on the same shift in **My schedule**. An active
+   linked employee account is required to send a message.
+2. Read **Messages**, enter up to 2,000 characters in **Message**, then choose
+   **Send message**. Messages are plain text and retained in order; they cannot
+   be edited or deleted. Avoid payroll and other sensitive details. If sending
+   cannot be confirmed, check **Conversation history** before retrying.
+3. Use **Conversation history** from the roster or schedule to reopen threads.
+   The employee and managers currently authorised for the conversation's
+   department can see it; other employees and managers from another department
+   cannot. Revoked business access or an unlinked account removes employee
+   access.
+4. If a shift is reassigned, the former employee's conversation stays read-only
+   for that employee and authorised managers. A replacement has a separate
+   conversation and cannot see the previous employee's messages. A later
+   account relink does not transfer the old account's conversation. If the
+   shift's department changes, the previous department's conversation is
+   read-only and the new department has a separate thread. Refresh if the
+   shift, department or participant changes before sending.
+
+There are no automatic conversation notifications, email, push, message
+previews or external delivery. Check the conversation for replies. Sending a
+message does not change a roster, create a shift offer or approve a swap.
 
 ### Attendance
 
@@ -1017,6 +1047,7 @@ Use the following contextual links without submitting a workflow form:
 | Owner's first-roster checklist | Help with your first roster | Getting started |
 | Weekly roster | Help with rosters | Building/publishing for managers; employee self-service for employees |
 | My schedule | Help with your schedule | Employee self-service |
+| Shift conversations | Help with shift conversations | Scoped in-app messages, retained history and delivery limitations |
 | Clock in / out | Help with clocking and corrections | Clocking, recorded breaks, location and correction requests |
 | Weekly timesheet review | Help with timesheet review | Scoped review, approval and finalisation limitations |
 | Generic payroll CSV section | Help with payroll CSV | Preparing/reconciling approved-hours CSV; only shown with the existing finalisation/export permission |
@@ -1057,6 +1088,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.8 | 2026-11-04 | BB-UXFIX-005 | Isolated role-sensitive navigation, mobile menu and selected-venue context; protected showcases retain earlier navigation |
 | 1.9 | 2026-11-04 | Authorized UXFIX-001–005 showcase deployment | Public/local role smoke, five-width, keyboard and targeted accessibility checks; owner review pending |
 | 1.10 | 2026-11-04 | BB-DEMO-005 future concepts | Opt-in fictional, nonfunctional preview and unavailable-feature guidance; isolated testing only |
+| 1.11 | 2026-11-04 | BB-COMMS-004 shift conversations | Scoped in-app shift discussion and retained history; isolated development only |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -1159,6 +1191,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-DEMO-004 | Internal synthetic showcase — owner-accepted internal delivery and operator acceptance evidence; later UX review remains separate |
 | BB-DEMO-003 | Mobile **Menu** navigation, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels |
 | BB-DEMO-005 | Optional fictional future concepts — explicit nonfunctional labels, isolated enablement and existing Help guidance |
+| BB-COMMS-004 | Shift conversations — department-scoped manager and assigned employee messaging; no external delivery or previews |
 | BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
 **Document ownership:** Main Roadmap feature agent maintains user-facing guidance with each completed feature. Update this guide and any relevant help UI when workflows change; indicate unavailable or blocked capabilities explicitly.

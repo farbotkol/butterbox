@@ -56,6 +56,7 @@ const result = spawnSync(
           "tests/employment-rule-metadata-concurrency.integration.test.mjs",
           "tests/shift-offers-concurrency.integration.test.mjs",
           "tests/shift-swaps-concurrency.integration.test.mjs",
+          "tests/shift-conversations-concurrency.integration.test.mjs",
         ] : []),
   ],
   {

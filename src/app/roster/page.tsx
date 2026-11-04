@@ -42,6 +42,7 @@ import { parseRosterPublicationMode, parseRosterReviews } from "@/lib/roster-rev
 import { collapsedRosterDepartments, matchesRosterSearch, rosterSearchQuery, rosterViewHref as buildRosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
+import { shiftConversationHref } from "@/lib/shift-conversations";
 import {
   defaultOfferExpiry,
   hasShiftStarted,
@@ -635,6 +636,10 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
               Review shift swaps
             </Link>
+            <Link href={shiftConversationHref(workspace.business.id, workspace.venue.id)}
+              className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+              Conversation history
+            </Link>
           </div>
           <p className="text-sm text-muted">
             This editing and publication roster uses Monday–Sunday operational weeks.{" "}
@@ -1111,6 +1116,13 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                       : acknowledgementStatuses.get(shift.id) === null
                                         ? "Awaiting acknowledgement" : "Acknowledged"}
                                 </p>
+                              )}
+                              {shift.is_published && canManageDepartment(shift.department_id) && (
+                                <Link href={shiftConversationHref(workspace.business.id, workspace.venue.id, { shiftId: shift.id })}
+                                  aria-label={`Discuss ${employee.name}'s ${shift.role_title} shift on ${formatDay(date)}`}
+                                  className="inline-flex min-h-11 items-center text-[11px] font-semibold text-ocean underline">
+                                  Discuss shift
+                                </Link>
                               )}
                               {canManageDepartment(shift.department_id) &&
                                 departments.find((item) => item.id === shift.department_id)?.active && (

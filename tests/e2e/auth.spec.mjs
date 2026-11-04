@@ -273,6 +273,220 @@ test("future vision previews are isolated, honest and accessible", async ({ page
   }
 });
 
+test("shift conversations preserve participant privacy and accessible in-app history", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, fohId, bohId, workerId, replacementId, shiftId] =
+    Array.from({ length: 9 }, () => randomUUID());
+  const roles = ["manager", "boh", "worker", "coworker", "replacement", "relinked", "outside"];
+  const users = {};
+  const contexts = [];
+  const pageErrors = [];
+  const unexpectedOrigins = [];
+  const allowedOrigins = new Set([appUrl, apiUrl, mailUrl].map((value) => new URL(value).origin));
+  const history = `/shift-conversations?business=${businessId}&venue=${venueId}`;
+  const shift = `${history}&shift=${shiftId}`;
+  const conversation = (id) => `${history}&conversation=${id}`;
+  const accessError = (rolePage) => rolePage.getByRole("alert").filter({
+    hasText: /We couldn't load this conversation|Your business and venue access could not be verified/,
+  });
+  const originalMessage = `Private service message <img src=x onerror="window.__conversationInjected=true"> ${"x".repeat(300)}`;
+
+  async function monitor(context, monitoredPage) {
+    monitoredPage.on("pageerror", (error) => pageErrors.push(error.message));
+    await context.route("**/*", (route) => {
+      const origin = new URL(route.request().url()).origin;
+      if (allowedOrigins.has(origin)) return route.continue();
+      unexpectedOrigins.push(origin);
+      return route.abort("blockedbyclient");
+    });
+  }
+
+  async function openRole(role, viewport = { width: 390, height: 844 }) {
+    const context = await browser.newContext({ viewport });
+    contexts.push(context);
+    const rolePage = await context.newPage();
+    await monitor(context, rolePage);
+    await signIn(rolePage, `conversation-ui-${role}-${suffix}@example.test`, password);
+    return { context, page: rolePage };
+  }
+
+  try {
+    for (const role of roles) {
+      const result = await admin.auth.admin.createUser({
+        email: `conversation-ui-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users[role] = result.data.user.id;
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Conversation UI cafe" }, { id: outsideId, name: "Outside UI cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Harbour", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.manager, role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users.boh, role: "boh_manager", venue_id: venueId, department_id: bohId },
+      ...["worker", "coworker", "replacement", "relinked"].map((role) => ({
+        business_id: businessId, user_id: users[role], role: "employee", venue_id: venueId, department_id: fohId,
+      })),
+      { business_id: outsideId, user_id: users.outside, role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: workerId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.worker, name: "Conversation worker", role_title: "Server" },
+      { id: replacementId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users.replacement, name: "Replacement worker", role_title: "Server" },
+    ])).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      id: shiftId, business_id: businessId, venue_id: venueId, department_id: fohId,
+      employee_id: workerId, role_title: "Server", starts_at: "2032-04-05T09:00:00Z",
+      ends_at: "2032-04-05T13:00:00Z", is_published: true,
+    })).error).toBeNull();
+
+    await monitor(page.context(), page);
+    const anonymousNavigations = [];
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) anonymousNavigations.push(frame.url());
+    });
+    await page.goto(shift, { waitUntil: "commit", timeout: 15_000 });
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole("heading", { name: "Welcome to Butterbox" })).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(anonymousNavigations.filter((url) => new URL(url).pathname === "/login").length,
+      "anonymous conversation redirects should settle without a login reload loop").toBeLessThan(5);
+    await signIn(page, `conversation-ui-manager-${suffix}@example.test`, password);
+    await page.goto(`/roster?week=2032-04-05&business=${businessId}&venue=${venueId}&department=all`);
+    await page.locator(`#roster-shift-${shiftId}`).getByRole("link", { name: /Discuss Conversation worker's Server shift/ }).click();
+    await expect(page.getByRole("heading", { name: "Shift conversations", exact: true })).toBeVisible();
+    await expect(page.getByText("No messages yet. Start the conversation below.")).toBeVisible();
+    await expect(page.getByText(/No email, push or automatic notifications are sent/)).toBeVisible();
+    const managerForm = page.getByRole("form", { name: "Send shift message" });
+    await managerForm.getByLabel("Message", { exact: true }).fill("x".repeat(2001));
+    await managerForm.getByRole("button", { name: "Send message" }).click();
+    await expect(managerForm.getByRole("alert")).toContainText("up to 2,000 characters");
+    expect(Number(await sql(`select count(*) from public.shift_conversation_messages where business_id = '${businessId}'::uuid`))).toBe(0);
+    await managerForm.getByLabel("Message", { exact: true }).fill(originalMessage);
+    await managerForm.getByRole("button", { name: "Send message" }).click();
+    await expect(page.getByRole("status")).toContainText("Message sent in-app.");
+    await expect(page.getByText(originalMessage, { exact: true })).toBeVisible();
+    const firstThread = new URL(page.url()).searchParams.get("conversation");
+    expect(firstThread).toBeTruthy();
+    await expect(page.locator("section[aria-labelledby='conversation-heading'] ol img")).toHaveCount(0);
+    expect(await page.evaluate(() => window.__conversationInjected)).toBeUndefined();
+    await page.reload();
+    await expect(page.getByText(originalMessage, { exact: true })).toBeVisible();
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.getByRole("heading", { name: "Shift conversations", exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (width === 375 || width === 1440) {
+        const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+        expect(accessibility.violations).toEqual([]);
+      }
+    }
+    await page.goto(history);
+    await expect(page.getByRole("heading", { name: "Conversation history", exact: true })).toBeVisible();
+    await expect(page.getByText(originalMessage, { exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: /Server · Conversation worker/ }).click();
+    await expect(page.getByText(originalMessage, { exact: true })).toBeVisible();
+
+    const worker = await openRole("worker", { width: 375, height: 812 });
+    await worker.page.goto(`/my-schedule?week=2032-04-05&business=${businessId}&venue=${venueId}`);
+    await worker.page.getByRole("region", { name: "Weekly schedule" })
+      .getByRole("link", { name: /Discuss Server shift/ }).first().click();
+    await expect(worker.page.getByText(originalMessage, { exact: true })).toBeVisible();
+    await expect(worker.page.locator("section[aria-labelledby='conversation-heading'] ol img")).toHaveCount(0);
+    const workerForm = worker.page.getByRole("form", { name: "Send shift message" });
+    await workerForm.getByLabel("Message", { exact: true }).fill("Employee keyboard reply");
+    await workerForm.getByLabel("Message", { exact: true }).focus();
+    await worker.page.keyboard.press("Tab");
+    await expect(workerForm.getByRole("button", { name: "Send message" })).toBeFocused();
+    await worker.page.keyboard.press("Enter");
+    await expect(worker.page.getByRole("status")).toContainText("Message sent in-app.");
+    await worker.page.reload();
+    const ordered = worker.page.locator("section[aria-labelledby='conversation-heading'] ol > li");
+    await expect(ordered).toHaveCount(2);
+    await expect(ordered.nth(0)).toContainText("Private service message");
+    await expect(ordered.nth(1)).toContainText("Employee keyboard reply");
+    await worker.page.goto(`/notifications?business=${businessId}&venue=${venueId}`);
+    await expect(worker.page.getByRole("heading", { name: "Notifications", exact: true })).toBeVisible();
+    await expect(worker.page.locator("body")).not.toContainText("Private service message");
+    await expect(worker.page.locator("body")).not.toContainText("Employee keyboard reply");
+    await worker.page.goto(conversation(firstThread));
+    await expect(worker.page.getByText("Employee keyboard reply", { exact: true })).toBeVisible();
+
+    for (const role of ["coworker", "boh", "outside"]) {
+      const visitor = await openRole(role);
+      await visitor.page.goto(conversation(firstThread));
+      await expect(accessError(visitor.page)).toBeVisible();
+      await expect(visitor.page.getByText(originalMessage, { exact: true })).toHaveCount(0);
+      await expect(visitor.page.getByText("Employee keyboard reply", { exact: true })).toHaveCount(0);
+      if (role !== "outside") {
+        await visitor.page.goto(history);
+        await expect(visitor.page.getByText("No conversations yet.", { exact: false })).toBeVisible();
+      }
+      await visitor.context.close();
+    }
+
+    await sql(`update public.shifts set employee_id = '${replacementId}'::uuid where id = '${shiftId}'::uuid`);
+    await workerForm.getByLabel("Message", { exact: true }).fill("Stale reply must not send");
+    await workerForm.getByRole("button", { name: "Send message" }).click();
+    await expect(workerForm.getByRole("alert")).toContainText("shift, department or linked participant changed");
+    await worker.page.reload();
+    await expect(worker.page.getByText(originalMessage, { exact: true })).toBeVisible();
+    await expect(worker.page.getByText(/This conversation is read-only/)).toBeVisible();
+    await expect(worker.page.getByRole("form", { name: "Send shift message" })).toHaveCount(0);
+
+    const replacement = await openRole("replacement");
+    await replacement.page.goto(conversation(firstThread));
+    await expect(accessError(replacement.page)).toBeVisible();
+    await expect(replacement.page.getByText(originalMessage, { exact: true })).toHaveCount(0);
+    await replacement.page.goto(shift);
+    await expect(replacement.page.getByText("No messages yet. Start the conversation below.")).toBeVisible();
+    const replacementForm = replacement.page.getByRole("form", { name: "Send shift message" });
+    await replacementForm.getByLabel("Message", { exact: true }).fill("Replacement-only reply");
+    await replacementForm.getByRole("button", { name: "Send message" }).click();
+    await expect(replacement.page.getByRole("status")).toContainText("Message sent in-app.");
+    const replacementThread = new URL(replacement.page.url()).searchParams.get("conversation");
+    expect(replacementThread).toBeTruthy();
+    expect(replacementThread).not.toBe(firstThread);
+    await worker.page.goto(conversation(replacementThread));
+    await expect(accessError(worker.page)).toBeVisible();
+    await expect(worker.page.getByText("Replacement-only reply", { exact: true })).toHaveCount(0);
+
+    await sql(`update public.employees set auth_user_id = '${users.relinked}'::uuid where id = '${replacementId}'::uuid`);
+    await replacement.page.goto(conversation(replacementThread));
+    await expect(accessError(replacement.page)).toBeVisible();
+    const relinked = await openRole("relinked");
+    await relinked.page.goto(conversation(replacementThread));
+    await expect(accessError(relinked.page)).toBeVisible();
+    await relinked.page.goto(shift);
+    await expect(relinked.page.getByText("No messages yet. Start the conversation below.")).toBeVisible();
+    await expect(relinked.page.getByText("Replacement-only reply", { exact: true })).toHaveCount(0);
+
+    await page.goto(history);
+    await expect(page.getByRole("link", { name: /Server · Conversation worker/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /Server · Replacement worker/ })).toBeVisible();
+    await expect(page.getByText("Employee keyboard reply", { exact: true })).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+    expect(unexpectedOrigins).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("scoped announcements publish immutable plain-text history with real acknowledgements and concurrent retries", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
