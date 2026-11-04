@@ -2,21 +2,21 @@
 
 ## BB-COMMS-004 — Contextual shift conversation
 
-- **Last report:** 2026-11-04 12:56 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 13:06 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-COMMS-004 — Contextual shift conversation (P2, In Progress).
 - **Acceptance criteria:** Only authorised participants can read/write; messages are ordered and retained; notification previews never expose private details.
-- **Phase:** Testing.
-- **Activity:** Preparing isolated manager/employee browser acceptance and production build after database and concurrency checks.
+- **Phase:** Debugging.
+- **Activity:** Correcting an anonymous streamed-redirect navigation loop before completing isolated browser acceptance.
 - **Plan:** Create per-shift, per-employee in-app discussions with server-enforced scope, ordered retained plain-text messages and safe retries; prevent a replacement employee from viewing the prior worker's thread. Add manager/employee entry points and accessible Help. Do not send external messages or create private-content notifications.
-- **Progress since previous report:** Corrected a department-transfer privacy defect by including department in thread identity and expected send scope. Applied migration `20261104090000` only to verified disposable project `butterbox-report-002-55b9`; protected showcases remain unchanged.
-- **Tests and results:** Applied-migration and rolled-back conversation pgTAP **45/45** each; neighboring roster/offer/swap/acknowledgement pgTAP **232/232**; authenticated concurrency integration **1/1**; conversation/Help units **21/21**; TypeScript and changed-file ESLint passed. Browser acceptance and production build remain pending.
-- **Failing tests:** Initial reassignment preflight **1/38** and department-transfer preflight **4/44** failed; both defects were corrected and the expanded suite passed.
+- **Progress since previous report:** The first browser journey reached manager send, employee keyboard reply, retained history, five viewport widths and two axe checks. Moved the conversation loading boundary inside the authenticated shell to address repeated anonymous navigation; the change is not yet verified.
+- **Tests and results:** Applied-migration and rolled-back conversation pgTAP **45/45** each; neighboring database regressions **232/232**; concurrency integration **1/1**; conversation/Help units **21/21**; earlier TypeScript and changed-file ESLint passed. The full browser case and production build remain pending.
+- **Failing tests:** The first browser attempt timed out during streamed redirect; the next failed on an ambiguous test alert selector, now corrected; a bounded rerun exposed repeated anonymous login navigations. The latest redirect change requires a rerun. Earlier reassignment and department-transfer preflight failures were corrected.
 - **Blockers requiring intervention:** Approved external channels and reviewed employment restrictions remain unavailable for higher-priority dependent work; no BB-COMMS-004 blocker identified.
 - **Documentation:** User Guide and contextual Help updated in the uncommitted working tree; runtime verification remains pending.
-- **Next concrete action:** Push this documentation-only milestone, then implement and run focused isolated browser acceptance and a production build.
+- **Next concrete action:** Push this documentation-only milestone, rerun the anonymous redirect and complete the focused isolated browser journey, then build production.
 - **Latest development commit:** `88ddd917c0a51dd979ac65818cdf247e131e2a60` (BB-DEMO-005); completion evidence is `467f0d35b9fab03f75caf0c9a0ea33c99de3f456`.
-- **Push outcome:** Coding checkpoint `7ff7f7e052e87e391700634f6fbe6fb7b9e53669` was pushed and verified; this testing checkpoint is pending.
+- **Push outcome:** Testing checkpoint `a7ddad389a3ecc47c1c1f7b16fb9905108d19071` was pushed and verified; this debugging checkpoint is pending.
 
 ## BB-DEMO-005 — Clearly labelled future-vision concept previews
 
