@@ -2,21 +2,21 @@
 
 ## BB-AI-005 — Fill open shifts assistant
 
-- **Last report:** 2026-11-04 14:16 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 14:29 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-AI-005 — Fill open shifts assistant (P1, In Progress).
 - **Acceptance criteria:** Recommendations consider skills, availability, overlaps and hours; alternatives are provided; no offers are sent without manager approval.
 - **Phase:** Testing.
-- **Activity:** Verifying a read-only, scoped open-shift suggestion list in the isolated development snapshot; no showcase deployment.
+- **Activity:** Verifying complete candidate pagination and the existing 200-recipient offer limit in the isolated development snapshot; no showcase deployment.
 - **Plan:** Reuse server-enforced candidate eligibility, scoped role tags and department-week scheduled time; explain missing availability and hidden hours. Suggestions are read-only and use no external model. Existing explicit manager send and claim confirmation remain authoritative.
-- **Progress since previous report:** Implemented scoped deterministic suggestions using the existing eligibility RPC, matching role tags and department-week gross scheduled time. The UI discloses missing availability and out-of-scope hours, and never sends an offer on viewing suggestions.
-- **Tests and results:** Suggestion and existing offer units passed **10/10**; offer, role and availability pgTAP passed **78/78**, **45/45** and **53/53** in the verified disposable database. TypeScript, changed-file ESLint and one isolated development browser journey passed. The browser journey covered five widths, mobile/desktop axe, keyboard access, owner/manager/employee and cross-tenant scope, no automatic offer, and stale eligibility rejection.
-- **Failing tests:** The first browser attempt exposed missing defaults in a synthetic multi-row fixture; it was corrected and the journey passed. The previously observed development Fast Refresh/login reload risk remains unrelated and unresolved.
+- **Progress since previous report:** Added scoped suggestions, user guidance and contextual Help. An existing candidate loader could truncate large audiences, so it now requests counted, ordered pages and fails on incomplete snapshots. Audiences above the existing 200-recipient limit start unselected and display the limit.
+- **Tests and results:** Suggestion, offer and Help units passed **31/31**; offer, role and availability pgTAP passed **78/78**, **45/45** and **53/53**. Authenticated offer/tenant/concurrency integration passed **1/1**, including the real paginated RPC. TypeScript and changed-file ESLint passed. Before the pagination change, isolated production build and **2/2** browser journeys passed; rerunning the final version remains necessary.
+- **Failing tests:** A synthetic multi-row fixture and a Help-link convention failure were corrected and their tests passed. The exact 200/201 browser test is still running and has shown the previously observed development login reload loop; its outcome is not yet known.
 - **Blockers requiring intervention:** No blocker for the rule-based slice. It is not a generative model; whether this fully satisfies the story's AI wording remains an explicit acceptance risk.
-- **Documentation:** Pending final verification.
-- **Next concrete action:** Run the concurrent-offer integration and isolated production build/browser journeys; update user guidance and criterion-level evidence after verification.
+- **Documentation:** User Guide and contextual Help updated; final browser verification remains pending.
+- **Next concrete action:** Finish the active boundary test, then run the final isolated production build and focused browser journeys; record criterion-level evidence.
 - **Latest development commit:** `47144699c04a01152af6128f89af53fa21b52cd3` (BB-FORECAST-001).
-- **Push outcome:** BB-AI-005 planning checkpoint `86e95e948039b887b5717db998b5916240d3180a` was pushed and its remote SHA verified; this testing checkpoint is pending.
+- **Push outcome:** Testing checkpoint `473faa582ba25221ee4c2a3004a1797e1b3656ab` was pushed and its remote SHA verified; this checkpoint is pending.
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
