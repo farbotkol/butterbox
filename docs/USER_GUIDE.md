@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.11 — reviewed 2026-11-04 (Core Roadmap; UXFIX, future-concept and shift-conversation guidance; other sections retain their earlier review dates).
+**Guide version:** 1.12 — reviewed 2026-11-04 (Core Roadmap; historical demand and rule-based open-shift guidance; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -489,6 +489,28 @@ expires** time before shift start. Employees see **Claim shift** or decline in
 before the shift is assigned. Competing confirmations cannot both fill it;
 if a candidate is no longer available, refresh and reassess rather than
 assuming assignment. Managers may withdraw an open offer.
+
+**Suggestions for an open shift:** In the isolated development version, a manager
+authorised for the department can open **Offer shift**, then **Suggested
+candidates**. The rule-based list is not a generative AI model. It includes
+eligible alternatives, preferring a matching active role tag, then less
+scheduled time in that department during the displayed week. Ties use a stable
+identifier rather than a name. Time includes breaks and draft or published
+shifts that start in the week; it excludes other departments, venues and
+businesses and shifts starting before the week. It is not a calculation of
+worked hours, pay or award compliance.
+
+The eligibility check considers role restrictions, availability and
+overlapping work, but a missing availability pattern may be treated as
+available. **No availability pattern visible** is not confirmation that the
+person is available. If suggestions are unavailable, reload and reassess.
+Data can change, so refresh before choosing; the server checks eligibility
+again when sending and confirming. Opening suggestions sends nothing. Review
+the selected staff and choose **Send offer** explicitly. An offer can include
+1 to 200 eligible team members; when more than 200 are eligible, none are
+selected by default. A manager must still confirm a claim. This suggestion
+feature has not been deployed to the protected or public showcases.
+The **Help with open shifts** link opens this guidance.
 
 **Swap sequence:** Follow the shift-swaps link to `/shift-swaps`. The requester
 chooses a colleague and **Request swap**. The recipient chooses **Choose your
@@ -1141,6 +1163,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.9 | 2026-11-04 | Authorized UXFIX-001–005 showcase deployment | Public/local role smoke, five-width, keyboard and targeted accessibility checks; owner review pending |
 | 1.10 | 2026-11-04 | BB-DEMO-005 future concepts | Opt-in fictional, nonfunctional preview and unavailable-feature guidance; isolated testing only |
 | 1.11 | 2026-11-04 | BB-COMMS-004 shift conversations | Scoped in-app shift discussion and retained history; isolated development only |
+| 1.12 | 2026-11-04 | BB-FORECAST-001; BB-AI-005 partial | Owner-only historical-demand imports and scoped, rule-based open-shift suggestions; isolated development only |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -1231,6 +1254,7 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-SHIFTS-001 | Open shifts and swaps — offer audience/expiry |
 | BB-SHIFTS-002 | Open shifts and swaps — employee claim/decline |
 | BB-SHIFTS-003 | Open shifts and swaps — manager confirmation and competing claims |
+| BB-AI-005 (partial) | Open shifts and swaps — rule-based candidates and limitations; no model-based assistant claimed |
 | BB-SHIFTS-004 | Open shifts and swaps — two-party consent and scoped review |
 | BB-COMMS-002 | For employees — Notifications and distinction from task decisions |
 | BB-RULES-001 | Maintain profiles, qualifications and invitations — effective-dated employment metadata |

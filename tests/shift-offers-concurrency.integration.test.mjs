@@ -3,6 +3,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { createClient } from "@supabase/supabase-js";
+import { loadRosterShiftOffers } from "../src/lib/shift-offers.ts";
 import { assertBusinessFixturesPreserved, disposableDatabase } from "./helpers/disposable-database.mjs";
 
 const container = process.env.BUTTERBOX_TEST_DB_CONTAINER;
@@ -73,6 +74,11 @@ test("open shift offers enforce HTTP scope and confirm exactly one concurrent cl
         email: `offer-${role}-${suffix}@example.test`, password,
       })).error);
     }
+    const candidates = await loadRosterShiftOffers(clients.foh, businessId, venueId, [shiftId]);
+    assert.ok(candidates, "the scoped candidate snapshot is complete");
+    assert.deepEqual(candidates.candidates.get(shiftId).map((candidate) => candidate.employee_name), ["Ann", "Ben"]);
+    assert.equal(await loadRosterShiftOffers(clients.outsider, businessId, venueId, [shiftId]), null,
+      "another tenant cannot load a manager's candidate list");
 
     const offer = (client) => client.rpc("create_shift_offer", {
       p_business_id: businessId, p_venue_id: venueId, p_shift_id: shiftId,

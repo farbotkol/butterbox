@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { formatLocalDateTime } from "./dates.ts";
+import { readAllPages } from "./paginated-rows.ts";
 
 export type OfferIneligibility = "venue" | "department" | "role" | "availability" | "conflict" | "shift_unavailable";
 export type OfferCandidate = { employee_id: string; employee_name: string; ineligibility: OfferIneligibility | null };
@@ -196,13 +197,19 @@ export async function loadRosterShiftOffers(
     });
   }
   const unoffered = ids.filter((id) => !result.offers.has(id));
-  const candidateResults = await Promise.all(unoffered.map((shiftId) => supabase.rpc("list_shift_offer_candidates", {
-    p_business_id: businessId, p_venue_id: venueId, p_shift_id: shiftId,
-  })));
+  const candidateResults = await Promise.all(unoffered.map((shiftId) =>
+    readAllPages<OfferCandidate>((from, to) => supabase.rpc("list_shift_offer_candidates", {
+      p_business_id: businessId, p_venue_id: venueId, p_shift_id: shiftId,
+    }, { count: "exact" }).order("employee_name").order("employee_id").range(from, to),
+    (candidate) => candidate.employee_id),
+  ));
   for (const [index, response] of candidateResults.entries()) {
     const candidates = response.error ? null : parseOfferCandidates(response.data);
     if (!candidates) {
-      console.error("Could not load shift offer candidates.", { code: response.error?.code, message: response.error?.message });
+      console.error("Could not load shift offer candidates.", {
+        code: response.error?.code,
+        message: response.error?.message ?? "The server returned an invalid candidate snapshot.",
+      });
       return null;
     }
     result.candidates.set(unoffered[index], candidates);

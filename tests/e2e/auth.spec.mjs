@@ -7850,6 +7850,265 @@ test("required shift acknowledgements stay scoped and survive later publications
   }
 });
 
+test("open shift suggestions are scoped, explained and require manager action", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, fohId, bohId, outsideDepartmentId,
+    heavyId, lightId, untaggedId, conflictId, unavailableId, outsideEmployeeId,
+    roleId, otherRoleId, openShiftId, staleShiftId] = Array.from({ length: 17 }, () => randomUUID());
+  const users = [];
+  const contexts = [];
+  const pageErrors = [];
+  const roster = `/roster?business=${businessId}&week=2032-04-05&venue=${venueId}&department=${fohId}`;
+  page.on("pageerror", (error) => pageErrors.push(error.message));
+
+  try {
+    for (const name of ["owner", "foh", "boh", "employee", "outside"]) {
+      const result = await admin.auth.admin.createUser({
+        email: `suggest-${name}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(result.error).toBeNull();
+      users.push(result.data.user.id);
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Suggestion cafe ${suffix}` },
+      { id: outsideId, name: `Outside cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Suggestion venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert([
+      { id: fohId, business_id: businessId, venue_id: venueId, name: "Front of House" },
+      { id: bohId, business_id: businessId, venue_id: venueId, name: "Back of House" },
+      { id: outsideDepartmentId, business_id: outsideId, venue_id: outsideVenueId, name: "Outside" },
+    ])).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: businessId, user_id: users[1], role: "foh_manager", venue_id: venueId, department_id: fohId },
+      { business_id: businessId, user_id: users[2], role: "boh_manager", venue_id: venueId, department_id: bohId },
+      { business_id: businessId, user_id: users[3], role: "employee", venue_id: venueId, department_id: fohId },
+      { business_id: outsideId, user_id: users[4], role: "owner" },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert([
+      { id: heavyId, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Zoe Tagged", role_title: "Barista" },
+      { id: lightId, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Amy Tagged", role_title: "Barista" },
+      { id: untaggedId, business_id: businessId, venue_id: venueId, department_id: fohId,
+        auth_user_id: users[3], name: "Alex Untagged", role_title: "Server" },
+      { id: conflictId, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Casey Conflict", role_title: "Server" },
+      { id: unavailableId, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Uma Leave", role_title: "Server" },
+      { id: outsideEmployeeId, business_id: outsideId, venue_id: outsideVenueId, department_id: outsideDepartmentId,
+        name: "Outside Worker", role_title: "Barista" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_departments").insert({
+      business_id: businessId, employee_id: lightId, department_id: bohId,
+    })).error).toBeNull();
+    expect((await admin.from("job_roles").insert([
+      { id: roleId, business_id: businessId, venue_id: venueId, department_id: fohId, name: "Barista" },
+      { id: otherRoleId, business_id: businessId, venue_id: venueId, department_id: bohId, name: "Barista" },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_job_roles").insert([
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: heavyId, job_role_id: roleId },
+      { business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: lightId, job_role_id: roleId },
+      { business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: lightId, job_role_id: otherRoleId },
+    ])).error).toBeNull();
+    expect((await admin.from("employee_availability_patterns").insert({
+      business_id: businessId, venue_id: venueId, employee_id: lightId,
+    })).error).toBeNull();
+    expect((await admin.from("employee_availability_intervals").insert({
+      business_id: businessId, venue_id: venueId, employee_id: lightId,
+      weekday: 2, start_minute: 540, end_minute: 1020,
+    })).error).toBeNull();
+    expect((await admin.from("employee_availability_exceptions").insert({
+      business_id: businessId, venue_id: venueId, employee_id: unavailableId,
+      starts_on: "2032-04-06", ends_on: "2032-04-06", exception_type: "leave", status: "approved",
+    })).error).toBeNull();
+    expect((await admin.from("shifts").insert([
+      { id: openShiftId, business_id: businessId, venue_id: venueId, department_id: fohId, role_title: "Barista",
+        starts_at: "2032-04-06T09:00:00Z", ends_at: "2032-04-06T12:00:00Z", break_minutes: 0, is_published: true },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: heavyId, role_title: "Service",
+        starts_at: "2032-04-05T09:00:00Z", ends_at: "2032-04-05T17:00:00Z", break_minutes: 30, is_published: true },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: lightId, role_title: "Service",
+        starts_at: "2032-04-05T09:00:00Z", ends_at: "2032-04-05T13:00:00Z", break_minutes: 0, is_published: false },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: bohId, employee_id: lightId, role_title: "Kitchen",
+        starts_at: "2032-04-07T08:00:00Z", ends_at: "2032-04-07T20:00:00Z", break_minutes: 0, is_published: true },
+      { id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: conflictId, role_title: "Service",
+        starts_at: "2032-04-06T10:00:00Z", ends_at: "2032-04-06T14:00:00Z", break_minutes: 0, is_published: true },
+    ])).error).toBeNull();
+
+    await signIn(page, `suggest-foh-${suffix}@example.test`, password);
+    await page.goto(roster);
+    const openShifts = page.locator("#open-shifts");
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    const disclosure = openShifts.getByText("Suggested candidates", { exact: true });
+    await disclosure.focus();
+    await page.keyboard.press("Enter");
+    const suggestions = openShifts.getByRole("list", { name: /Suggested candidates for open shift Barista/ });
+    await expect(suggestions).toBeVisible();
+    await expect(suggestions.locator("li")).toHaveCount(3);
+    await expect(suggestions.locator("li").nth(0)).toContainText("Amy Tagged");
+    await expect(suggestions.locator("li").nth(0)).toContainText("4h 0m 0s scheduled");
+    await expect(suggestions.locator("li").nth(0)).toContainText("Matching role tag recorded");
+    await expect(suggestions.locator("li").nth(0)).toContainText("Availability pattern on file");
+    await expect(suggestions.locator("li").nth(1)).toContainText("Zoe Tagged");
+    await expect(suggestions.locator("li").nth(1)).toContainText("8h 0m 0s scheduled");
+    await expect(suggestions.locator("li").nth(1)).toContainText("No availability pattern visible");
+    await expect(suggestions.locator("li").nth(2)).toContainText("Alex Untagged");
+    await expect(suggestions.locator("li").nth(2)).toContainText("No matching role tag recorded");
+    await expect(suggestions).not.toContainText("Casey Conflict");
+    await expect(suggestions).not.toContainText("Uma Leave");
+    await expect(suggestions).not.toContainText("Outside Worker");
+    await expect(openShifts).toContainText("Rule-based suggestions, not a generative AI model");
+    await expect(openShifts).toContainText("other departments, venues and businesses are excluded");
+    await expect(openShifts).toContainText("not confirmed availability");
+    await expect(openShifts.getByRole("link", { name: "Help with open shifts" }))
+      .toHaveAttribute("href", `/help?business=${businessId}&contextVenue=${venueId}&topic=shifts`);
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(suggestions).toBeVisible();
+      expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth),
+        `${width}px has no horizontal overflow`).toBe(true);
+      if (width === 375 || width === 1440) {
+        const accessibility = await new AxeBuilder({ page }).include("#open-shifts")
+          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+        expect(accessibility.violations.map((violation) => violation.id), `${width}px accessibility`).toEqual([]);
+      }
+    }
+    const before = await admin.from("shift_offers").select("id", { count: "exact", head: true }).eq("shift_id", openShiftId);
+    expect(before.error).toBeNull();
+    expect(before.count).toBe(0);
+
+    for (const name of ["boh", "employee", "outside"]) {
+      const context = await browser.newContext({ baseURL: appUrl });
+      contexts.push(context);
+      const other = await context.newPage();
+      await signIn(other, `suggest-${name}-${suffix}@example.test`, password);
+      await other.goto(roster);
+      await expect(other.getByText("Suggested candidates", { exact: true })).toHaveCount(0);
+      await expect(other.getByText("Zoe Tagged", { exact: true })).toHaveCount(0);
+      await context.close();
+      contexts.pop();
+    }
+    const ownerContext = await browser.newContext({ baseURL: appUrl });
+    contexts.push(ownerContext);
+    const owner = await ownerContext.newPage();
+    await signIn(owner, `suggest-owner-${suffix}@example.test`, password);
+    await owner.goto(roster);
+    await owner.locator("#open-shifts").getByText("Offer shift", { exact: true }).click();
+    await owner.locator("#open-shifts").getByText("Suggested candidates", { exact: true }).click();
+    await expect(owner.getByRole("list", { name: /Suggested candidates for open shift Barista/ }))
+      .toContainText("Amy Tagged");
+    await owner.getByRole("link", { name: "Help with open shifts" }).click();
+    await expect(owner.getByRole("heading", { name: "Open shifts and swaps" })).toBeVisible();
+    await expect(owner.locator("main")).toContainText("not a generative AI model");
+    await ownerContext.close();
+    contexts.pop();
+
+    expect((await admin.from("shifts").insert({
+      id: staleShiftId, business_id: businessId, venue_id: venueId, department_id: fohId, employee_id: lightId,
+      role_title: "New conflicting shift", starts_at: "2032-04-06T10:00:00Z", ends_at: "2032-04-06T11:00:00Z",
+    })).error).toBeNull();
+    await openShifts.getByRole("button", { name: "Send offer" }).click();
+    await expect(page.getByText("A selected team member is no longer eligible. Review the list and try again.")).toBeVisible();
+    const after = await admin.from("shift_offers").select("id", { count: "exact", head: true }).eq("shift_id", openShiftId);
+    expect(after.error).toBeNull();
+    expect(after.count).toBe(0);
+    const stillOpen = await admin.from("shifts").select("employee_id").eq("id", openShiftId).single();
+    expect(stillOpen.error).toBeNull();
+    expect(stillOpen.data.employee_id).toBeNull();
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    await openShifts.getByText("Suggested candidates", { exact: true }).click();
+    await expect(suggestions).not.toContainText("Amy Tagged");
+    await expect(suggestions).toContainText("Zoe Tagged");
+    expect((await admin.from("employee_availability_exceptions").insert([
+      { business_id: businessId, venue_id: venueId, employee_id: heavyId,
+        starts_on: "2032-04-06", ends_on: "2032-04-06", exception_type: "leave", status: "approved" },
+      { business_id: businessId, venue_id: venueId, employee_id: untaggedId,
+        starts_on: "2032-04-06", ends_on: "2032-04-06", exception_type: "leave", status: "approved" },
+    ])).error).toBeNull();
+    await page.reload();
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    await openShifts.getByText("Suggested candidates", { exact: true }).click();
+    await expect(openShifts.getByText("No eligible suggestions are available for this shift.")).toBeVisible();
+    await expect(suggestions).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const id of users) expect((await admin.auth.admin.deleteUser(id)).error).toBeNull();
+  }
+});
+
+test("open shift offer audiences handle the 200-person boundary", async ({ page }) => {
+  test.setTimeout(240_000);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, venueId, departmentId, openShiftId] = Array.from({ length: 4 }, () => randomUUID());
+  let userId;
+  try {
+    const user = await admin.auth.admin.createUser({
+      email: `suggest-limit-${suffix}@example.test`, password, email_confirm: true,
+    });
+    expect(user.error).toBeNull();
+    userId = user.data.user.id;
+    expect((await admin.from("businesses").insert({ id: businessId, name: `Large offer cafe ${suffix}` })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Large offer venue", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert({
+      business_id: businessId, user_id: userId, role: "owner",
+    })).error).toBeNull();
+    const employee = (index) => ({
+      id: randomUUID(), business_id: businessId, venue_id: venueId, department_id: departmentId,
+      name: `Offer worker ${String(index).padStart(3, "0")}`, role_title: "Server",
+    });
+    expect((await admin.from("employees").insert(Array.from({ length: 200 }, (_, index) => employee(index)))).error).toBeNull();
+    expect((await admin.from("shifts").insert({
+      id: openShiftId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      role_title: "Cover service", starts_at: "2032-04-06T09:00:00Z", ends_at: "2032-04-06T12:00:00Z",
+      is_published: true,
+    })).error).toBeNull();
+
+    await signIn(page, `suggest-limit-${suffix}@example.test`, password);
+    await page.goto(`/roster?business=${businessId}&week=2032-04-05&venue=${venueId}&department=${departmentId}`);
+    const openShifts = page.locator("#open-shifts");
+    const audience = openShifts.getByRole("group", { name: /Invite eligible team members for open shift Cover service/ });
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    await expect(audience.getByRole("checkbox")).toHaveCount(200);
+    await expect(audience.locator('input[type="checkbox"]:checked')).toHaveCount(200);
+
+    expect((await admin.from("employees").insert(employee(200))).error).toBeNull();
+    await page.reload();
+    await openShifts.getByText("Offer shift", { exact: true }).click();
+    await expect(audience.getByRole("checkbox")).toHaveCount(201);
+    await expect(audience.locator('input[type="checkbox"]:checked')).toHaveCount(0);
+    await expect(audience).toContainText("More than 200 team members are eligible. Select up to 200");
+    await openShifts.getByText("Suggested candidates", { exact: true }).click();
+    await expect(openShifts.getByRole("list", { name: /Suggested candidates for open shift Cover service/ }).locator("li"))
+      .toHaveCount(201);
+    await audience.getByRole("checkbox", { name: "Offer worker 000" }).check();
+    await openShifts.getByRole("button", { name: "Send offer" }).click();
+    await expect(page.locator("main").getByRole("status"))
+      .toHaveText("Shift offer sent. The shift stays open until you confirm a claim.");
+    const offer = await admin.from("shift_offers").select("id").eq("shift_id", openShiftId).single();
+    expect(offer.error).toBeNull();
+    const recipients = await admin.from("shift_offer_recipients")
+      .select("employee_id", { count: "exact", head: true }).eq("offer_id", offer.data.id);
+    expect(recipients.error).toBeNull();
+    expect(recipients.count).toBe(1);
+  } finally {
+    expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
+    await assertBusinessFixturesPreserved(admin, businessId);
+    if (userId) expect((await admin.auth.admin.deleteUser(userId)).error).toBeNull();
+  }
+});
+
 test("managers offer published open shifts to eligible staff and confirm one timestamped claim", async ({ page, browser }) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

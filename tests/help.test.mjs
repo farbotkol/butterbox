@@ -57,6 +57,18 @@ test("shift conversation help explains scope, retained messages and delivery lim
   }
 });
 
+test("open-shift help explains rule-based suggestions and the approval boundary", () => {
+  for (const role of ["owner", "foh_manager", "employee"]) {
+    const topic = helpTopics(source, role).find((candidate) => candidate.id === "shifts");
+    assert.ok(topic, role);
+    const text = topic.markdown.replace(/\*\*/g, "").replace(/\s+/g, " ").toLowerCase();
+    for (const phrase of [
+      "Suggested candidates", "not a generative AI model", "other departments, venues and businesses",
+      "not confirmation", "Opening suggestions sends nothing", "not been deployed",
+    ]) assert.ok(text.includes(phrase.toLowerCase()), `${role}: ${phrase}`);
+  }
+});
+
 test("demand history help describes owner access, duplicate handling and the upload limits", () => {
   const topic = helpTopics(source, "owner").find((candidate) => candidate.id === "demand-history");
   assert.ok(topic);
@@ -207,7 +219,7 @@ test("core contextual help destinations and documented screen/link labels stay w
     ["src/app/settings/permissions/page.tsx", "Business permissions", "Help with permissions"],
     ["src/app/settings/permissions/[userId]/page.tsx", "Help with permissions"],
     ["src/components/onboarding-checklist.tsx", "Get your first roster ready", "Help with your first roster"],
-    ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters"],
+    ["src/app/roster/page.tsx", "Weekly roster", "Help with rosters", "Help with open shifts"],
     ["src/app/my-schedule/page.tsx", "My schedule", "Help with your schedule"],
     ["src/app/attendance/page.tsx", "Clock in / out", "Help with clocking and corrections"],
     ["src/app/timesheets/page.tsx", "Weekly timesheet review", "Help with timesheet review", "Help with payroll CSV"],

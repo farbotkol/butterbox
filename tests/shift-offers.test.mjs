@@ -4,6 +4,7 @@ import {
   defaultOfferExpiry,
   hasShiftStarted,
   localDateTimeAsUtc,
+  loadRosterShiftOffers,
   offerFailureCode,
   parseMyShiftOffers,
   parseOfferCandidates,
@@ -73,4 +74,74 @@ test("database failures map to specific user-facing codes", () => {
   assert.equal(responseFailureCode("Shift offer has expired"), "offer-expired");
   assert.equal(responseFailureCode("Shift offer already answered"), "offer-answered");
   assert.equal(responseFailureCode(undefined), "offer");
+});
+
+function candidatePageClient(pages) {
+  const calls = [];
+  const client = {
+    from(table) {
+      assert.equal(table, "shift_offers");
+      return {
+        select() { return this; },
+        eq() { return this; },
+        in() { return Promise.resolve({ data: [], error: null }); },
+      };
+    },
+    rpc(name, args, options) {
+      assert.equal(name, "list_shift_offer_candidates");
+      assert.equal(options.count, "exact");
+      assert.equal(args.p_shift_id, id(10000));
+      const orders = [];
+      return {
+        order(column) { orders.push(column); return this; },
+        range(from, to) {
+          calls.push({ from, to, orders });
+          return Promise.resolve(pages[calls.length - 1]);
+        },
+      };
+    },
+  };
+  return { client, calls };
+}
+
+test("offer candidates are fully paginated with a stable order", async () => {
+  const rows = Array.from({ length: 1001 }, (_, index) => ({
+    employee_id: id(index + 1), employee_name: `Staff ${index}`, ineligibility: null,
+  }));
+  const { client, calls } = candidatePageClient([
+    { data: rows.slice(0, 1000), count: 1001, error: null },
+    { data: rows.slice(1000), count: 1001, error: null },
+  ]);
+  const result = await loadRosterShiftOffers(client, id(20000), id(20001), [id(10000)]);
+  assert.deepEqual(result.candidates.get(id(10000)), rows);
+  assert.deepEqual(calls, [
+    { from: 0, to: 999, orders: ["employee_name", "employee_id"] },
+    { from: 1000, to: 1999, orders: ["employee_name", "employee_id"] },
+  ]);
+});
+
+test("incomplete or invalid candidate snapshots fail rather than offering partial recommendations", async () => {
+  const rows = Array.from({ length: 1000 }, (_, index) => ({
+    employee_id: id(index + 1), employee_name: `Staff ${index}`, ineligibility: null,
+  }));
+  const cases = [
+    [{ data: rows, count: 1001, error: null }, { data: [rows[0]], count: 1001, error: null }],
+    [{ data: rows, count: 1001, error: null }, { data: [], count: 1002, error: null }],
+    [{ data: rows, count: null, error: null }],
+    [{ data: [{ ...rows[0], ineligibility: "unknown" }], count: 1, error: null }],
+    [{ data: null, count: null, error: { code: "denied", message: "Permission denied" } }],
+  ];
+  const original = console.error;
+  const logged = [];
+  console.error = (...args) => logged.push(args);
+  try {
+    for (const pages of cases) {
+      const { client } = candidatePageClient(pages);
+      assert.equal(await loadRosterShiftOffers(client, id(20000), id(20001), [id(10000)]), null);
+    }
+  } finally {
+    console.error = original;
+  }
+  assert.equal(logged.length, cases.length);
+  assert.ok(logged.every(([message]) => message === "Could not load shift offer candidates."));
 });

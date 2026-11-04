@@ -53,7 +53,12 @@ import {
   type ManagedShiftOffer,
   type OfferCandidate,
 } from "@/lib/shift-offers";
+import {
+  suggestShiftOfferCandidates,
+  type ShiftOfferSuggestion,
+} from "@/lib/shift-offer-suggestions";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
+import { formatWorkedDuration } from "@/lib/worked-time";
 import {
   addDays,
   formatDay,
@@ -118,7 +123,7 @@ const errorMessages: Record<string, string> = {
   inactive: "That department or job role is inactive. Choose an active one for new shifts.",
   "no-eligible": "No eligible worker is available. Check availability, leave, qualifications and overlapping shifts.",
   offer: "We couldn't update that shift offer. Check your permissions and try again.",
-  "offer-audience": "Choose at least one eligible team member to offer the shift to.",
+  "offer-audience": "Choose between 1 and 200 eligible team members to offer the shift to.",
   "offer-expiry": "Choose an offer expiry in the future and before the shift starts.",
   "offer-ineligible": "A selected team member is no longer eligible. Review the list and try again.",
   "offer-exists": "This shift already has an open offer.",
@@ -144,7 +149,7 @@ const reviewMessages: Record<string, string> = {
   withdrawn: "Roster review withdrawn. The submitted shifts remain drafts.",
 };
 
-type OfferFormContext = { week: string; venueId: string; filterDepartment?: string; collapsed: string[] };
+type OfferFormContext = { week: string; businessId: string; venueId: string; filterDepartment?: string; collapsed: string[] };
 
 function OfferContextFields({ context }: { context: OfferFormContext }) {
   return (
@@ -157,11 +162,13 @@ function OfferContextFields({ context }: { context: OfferFormContext }) {
   );
 }
 
-function ShiftOfferPanel({ shiftId, label, startsAt, timezone, offer, candidates, employeeNames, context }: {
+function ShiftOfferPanel({ shiftId, label, startsAt, timezone, offer, candidates, suggestions, employeeNames, context }: {
   shiftId: string; label: string; startsAt: string; timezone: string;
   offer?: ManagedShiftOffer; candidates?: OfferCandidate[];
+  suggestions: ShiftOfferSuggestion[] | null;
   employeeNames: Map<string, string>; context: OfferFormContext;
 }) {
+  const { businessId, venueId } = context;
   const formatStamp = (value: string) => new Intl.DateTimeFormat("en-AU", {
     timeZone: timezone, day: "numeric", month: "short", hour: "numeric", minute: "2-digit",
   }).format(new Date(value));
@@ -212,6 +219,7 @@ function ShiftOfferPanel({ shiftId, label, startsAt, timezone, offer, candidates
   }
   if (!candidates) return null;
   const eligible = candidates.filter((candidate) => !candidate.ineligibility);
+  const audienceTooLarge = eligible.length > 200;
   const expiryId = `offer-expiry-${shiftId}`;
   return (
     <details className="mt-2 rounded-lg border border-amber-200 bg-white text-xs">
@@ -219,15 +227,60 @@ function ShiftOfferPanel({ shiftId, label, startsAt, timezone, offer, candidates
       <form action={sendShiftOfferAction} className="space-y-2 px-3 pb-3">
         <OfferContextFields context={context} />
         <input type="hidden" name="shift_id" value={shiftId} />
+        <details className="rounded border border-line bg-soft-sand">
+          <summary className="cursor-pointer px-3 py-2 font-semibold text-ocean">Suggested candidates</summary>
+          <div className="space-y-2 px-3 pb-3 text-muted">
+            <p>
+              Rule-based suggestions, not a generative AI model. Eligible staff are checked for role
+              restrictions, availability and overlapping work. A matching role tag ranks first, then
+              the least scheduled time this week in this department. Ties use a stable identifier.
+            </p>
+            <p>
+              Scheduled time includes breaks and draft or published shifts starting this week; other
+              departments, venues and businesses are excluded. A missing availability pattern may be
+              treated as available, not confirmed availability. Data can change: refresh before choosing.
+              No offer is sent until you review the selected staff and choose Send offer; confirming a claim is separate.
+            </p>
+            <Link href={helpHref("shifts", businessId, venueId)} className="inline-block font-semibold text-ocean underline">
+              Help with open shifts
+            </Link>
+            {suggestions === null ? (
+              <p role="alert" className="font-semibold text-red-800">
+                Suggestions are unavailable. Reload the roster before relying on them.
+              </p>
+            ) : suggestions.length === 0 ? (
+              <p>No eligible suggestions are available for this shift.</p>
+            ) : (
+              <ol aria-label={`Suggested candidates for ${label}`} className="list-decimal space-y-2 pl-5">
+                {suggestions.map((suggestion) => (
+                  <li key={suggestion.employeeId} className="break-words">
+                    <span className="font-semibold text-ink">{suggestion.employeeName}</span>
+                    {" — "}{suggestion.roleMatch === "recorded" ? "Matching role tag recorded"
+                      : suggestion.roleMatch === "not_recorded" ? "No matching role tag recorded"
+                      : "No matching active role tag configured"}
+                    {" · "}{formatWorkedDuration(suggestion.scheduledSeconds)} scheduled
+                    {" · "}{suggestion.hasAvailabilityPattern ? "Availability pattern on file"
+                      : "No availability pattern visible"}
+                  </li>
+                ))}
+              </ol>
+            )}
+          </div>
+        </details>
         <fieldset>
           <legend className="font-semibold text-ink">Invite eligible team members for {label}</legend>
           {candidates.length === 0 && <p className="mt-1 text-muted">No active team members are linked to this department.</p>}
+          {audienceTooLarge && (
+            <p className="mt-1 text-muted">
+              More than 200 team members are eligible. Select up to 200 to send this offer.
+            </p>
+          )}
           <ul className="mt-1 space-y-1">
             {candidates.map((candidate) => (
               <li key={candidate.employee_id}>
                 <label className={`flex items-center gap-2 ${candidate.ineligibility ? "text-muted" : "text-ink"}`}>
                   <input type="checkbox" name="employee_id" value={candidate.employee_id}
-                    disabled={Boolean(candidate.ineligibility)} defaultChecked={!candidate.ineligibility} />
+                    disabled={Boolean(candidate.ineligibility)} defaultChecked={!candidate.ineligibility && !audienceTooLarge} />
                   <span>{candidate.employee_name}</span>
                   {candidate.ineligibility && <span>· {ineligibilityLabels[candidate.ineligibility]}</span>}
                 </label>
@@ -586,6 +639,31 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const rosterOffers = await loadRosterShiftOffers(
     workspace.supabase, workspace.business.id, workspace.venue.id, offerableShiftIds,
   );
+  const roleAssignments = rosterOffers && rosterOffers.candidates.size > 0
+    ? await readAllPages((from, to) => workspace.supabase.from("employee_job_roles")
+      .select("employee_id, department_id, job_role_id", { count: "exact" })
+      .eq("business_id", workspace.business.id).eq("venue_id", workspace.venue.id)
+      .order("employee_id").order("job_role_id").range(from, to),
+    (assignment) => `${assignment.employee_id}:${assignment.job_role_id}`)
+    : { data: [], error: null };
+  if (roleAssignments.error) {
+    console.error("Could not load role tags for shift suggestions.", {
+      code: roleAssignments.error.code, message: roleAssignments.error.message,
+    });
+  }
+  const suggestionsByShift = new Map<string, ShiftOfferSuggestion[] | null>();
+  for (const shift of visibleShifts) {
+    const candidates = rosterOffers?.candidates.get(shift.id);
+    if (!candidates) continue;
+    const suggestions = suggestShiftOfferCandidates({
+      candidates, departmentId: shift.department_id, roleTitle: shift.role_title,
+      roles: jobRoleRows ?? [], assignments: roleAssignments.data, shifts: shifts ?? [], patternEmployees,
+    });
+    if (roleAssignments.data && suggestions === null) {
+      console.error("Could not rank shift suggestions because a scheduled duration was invalid.", { shiftId: shift.id });
+    }
+    suggestionsByShift.set(shift.id, suggestions);
+  }
   const employeeNames = new Map((employeeRows ?? []).map((employee) => [employee.id, employee.name]));
   const editingShift = params.edit && selectedDepartment && canManageSelectedDepartment && selectedDepartmentActive
     ? visibleShifts.find((shift) =>
@@ -1234,8 +1312,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                         label={`open shift ${shift.role_title}, ${getVenueDate(shift.starts_at, workspace.venue.timezone)}`}
                         startsAt={shift.starts_at} timezone={workspace.venue.timezone}
                         offer={rosterOffers.offers.get(shift.id)} candidates={rosterOffers.candidates.get(shift.id)}
+                        suggestions={suggestionsByShift.get(shift.id) ?? null}
                         employeeNames={employeeNames}
-                        context={{ week, venueId: workspace.venue.id, filterDepartment, collapsed }} />
+                        context={{ week, businessId: workspace.business.id, venueId: workspace.venue.id, filterDepartment, collapsed }} />
                     ) : (
                       <p role="alert" className="mt-1 text-xs font-semibold text-red-800">Shift offer status unavailable.</p>
                     ))}
