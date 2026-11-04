@@ -1101,6 +1101,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-FORECAST-001 — Historical demand ingestion [P2]
 
+**Status:** In Progress in isolated development; no external provider or showcase deployment is authorized.
+
 **User story:** As an owner, I want to connect or upload sales and booking history.
 
 **Acceptance criteria**

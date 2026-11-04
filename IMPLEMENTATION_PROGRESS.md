@@ -2,6 +2,8 @@
 
 ## Execution summary
 
+- **BB-FORECAST-001 — Historical demand ingestion, 2026-11-04 13:15 AEDT: In Progress (planning).** Following the completed BB-COMMS-004, this is the next independent P2 showcase story: a local upload satisfies the story without connecting to a provider. Plan an owner-only, bounded sales/booking import with explicit source and venue timezone, validation of missing values and duplicate source IDs, append-only original records, provenance and safe retry/concurrency behavior. Reject unsupported fields rather than collecting customer names or contact details. Test invalid timestamps, timezone/DST boundaries, duplicates, unauthorized and cross-tenant access, retention, retries and mobile/accessibility in the verified disposable project. No model, forecast, external delivery or protected deployment is included. **Documentation: pending implementation and verification.**
+
 - **BB-COMMS-004 — Contextual shift conversation, 2026-11-04 13:14 AEDT: Done in isolated development; not deployed.** Feature commit `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` was pushed and its remote SHA verified. In-app threads are scoped to a published shift, department, employee and linked account. Reassignment, department transfer or account relinking cannot transfer private history to a replacement.
 
   | Acceptance criterion and identifier | Implementation and actual verification evidence | Result |

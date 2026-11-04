@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-FORECAST-001 — Historical demand ingestion
+
+- **Last report:** 2026-11-04 13:15 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, In Progress).
+- **Acceptance criteria:** Validate timezone, missing values and duplicates; display source provenance; never silently overwrite raw records.
+- **Phase:** Planning.
+- **Activity:** Reviewing existing authorization, immutable-history and upload patterns before implementation.
+- **Plan:** Provide an owner-only bounded local sales/booking upload with explicit source and venue timezone, append-only original records, duplicate rejection, safe retries, scoped provenance and task-oriented Help. Exclude customer names/contact fields and do not call external providers or deploy to a showcase.
+- **Progress since previous report:** Completed and pushed BB-COMMS-004 and its criterion-level acceptance evidence. Selected this independent P2 story; higher-priority AI stories lack their proposal/provider or safe reassignment prerequisites.
+- **Tests and results:** BB-COMMS-004 applied-migration pgTAP **46/46**, neighboring database assertions **232/232**, concurrency **1/1**, units **21/21**, production browser scenarios **3/3** plus privacy rerun **1/1**, development browser **1/1**, TypeScript, ESLint and production compile/generation passed. BB-FORECAST-001 tests have not run.
+- **Failing tests:** None currently observed for the completed story; new-story tests are not yet written.
+- **Blockers requiring intervention:** No blocker identified for the local upload; external delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
+- **Documentation:** Pending for the new user-facing workflow.
+- **Next concrete action:** Push this planning checkpoint, then implement scoped immutable import storage and validation in the disposable project.
+- **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
+- **Push outcome:** BB-COMMS-004 acceptance checkpoint `a5d616c9c7f2cacc3da1385363ad120c29301bab` was pushed and verified; this planning checkpoint is pending.
+
 ## BB-COMMS-004 — Contextual shift conversation
 
 - **Last report:** 2026-11-04 13:14 AEDT (UTC+1100), observed on the operator's clock.
