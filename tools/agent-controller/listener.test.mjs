@@ -32,6 +32,7 @@ async function fixture(t, settings = {}) {
   await writeFile(path.join(cwd, 'AGENTS.md'), 'Synthetic instructions only.');
   const config = { profiles: { roadmap: { cwd, branch: BRANCH } } };
   const comments = [];
+  const closures = [];
   const executions = [];
   let taskCalls = 0;
   const github = {
@@ -39,6 +40,7 @@ async function fixture(t, settings = {}) {
     issues: async () => [issue()],
     task: async () => { taskCalls++; return parseTask(issue()); },
     comment: async (number, message) => { comments.push({ number, message }); },
+    closeCompleted: async (number) => { closures.push(number); },
     ...settings.github,
   };
   const exec = async (command, args, options) => {
@@ -56,7 +58,7 @@ async function fixture(t, settings = {}) {
     ...settings, store, config, github, exec: settings.exec ?? exec,
     mode: settings.mode ?? 'synthetic', enabled: settings.enabled ?? true,
   });
-  return { directory, store, cwd, config, github, exec, controller, comments, executions,
+  return { directory, store, cwd, config, github, exec, controller, comments, closures, executions,
     taskCalls: () => taskCalls };
 }
 
@@ -556,4 +558,59 @@ test('checkout changes during running status reporting block dispatch and requir
   assert.equal(value.executions.length, 0);
   assert.equal((await value.store.read(42)).status, 'failed');
   await rejects(value.controller.tick(), 'run_requires_local_review');
+});
+
+test('successful synthetic execution closes its issue exactly once and skips replay', async t => {
+  const f = await fixture(t);
+  assert.deepEqual(await f.controller.tick(), { eligible: 1, executed: 1 });
+  assert.deepEqual(f.closures, [42]);
+  assert.equal((await f.store.read(42)).status, 'succeeded');
+  assert.deepEqual(await f.controller.tick(), { eligible: 0, executed: 0 });
+  // Fixture reports the issue still open, so the following poll retries only closure,
+  // not task execution (normal GitHub will stop returning the closed issue).
+  assert.deepEqual(f.closures, [42, 42]);
+  assert.equal(f.executions.length, 1);
+});
+
+test('failed or interrupted execution never closes a GitHub issue', async t => {
+  const f = await fixture(t, { exec: async (command, args, opts) => {
+    if (command === 'git') return args.join(' ') === 'remote get-url origin'
+      ? 'https://github.com/farbotkol/butterbox.git'
+      : args.join(' ') === 'rev-parse --show-toplevel'
+        ? opts.cwd
+        : args.join(' ') === 'branch --show-current' ? BRANCH
+          : args.join(' ') === 'rev-parse HEAD' ? 'a'.repeat(40) : '';
+    throw new Error('synthetic failure');
+  } });
+  await assert.rejects(() => f.controller.tick());
+  assert.equal((await f.store.read(42)).status, 'failed');
+  assert.deepEqual(f.closures, []);
+});
+
+test('GitHub closure failure never replays completed work and allows later retry', async t => {
+  let attempts = 0;
+  const f = await fixture(t, { github: {
+    closeCompleted: async () => { attempts++; if (attempts === 1) throw new Error('offline'); },
+  } });
+  assert.deepEqual(await f.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal((await f.store.read(42)).status, 'succeeded');
+  assert.equal((await f.store.read(42)).closeError, 'github_issue_close_failed');
+  assert.deepEqual(await f.controller.tick(), { eligible: 0, executed: 0 });
+  assert.equal(attempts, 2);
+  assert.equal((await f.store.read(42)).closeError, undefined);
+  assert.equal(f.executions.length, 1);
+});
+
+test('GitHub closeCompleted uses bounded API update and verifies closed state', async () => {
+  const commands = [];
+  const api = new GitHub(async (_command, args) => {
+    commands.push(args);
+    return JSON.stringify({ state: 'closed' });
+  });
+  await api.closeCompleted(42);
+  assert.deepEqual(commands[0], [
+    'api', '--hostname', 'github.com', 'repos/farbotkol/butterbox/issues/42',
+    '--method', 'PATCH', '-f', 'state=closed', '-f', 'state_reason=completed'
+  ]);
+  assert.ok(commands[0].includes('state_reason=completed'));
 });
