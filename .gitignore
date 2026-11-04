@@ -46,3 +46,6 @@ next-env.d.ts
 # supabase local CLI state (contains local secrets)
 /supabase/.temp/
 /supabase/.branches/
+
+# local agent-controller approvals and ledgers (default state is outside Git)
+/.agent-controller/

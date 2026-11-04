@@ -1,0 +1,111 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Butterbox owner-authorised local agent tasks",
+    "version": "1.0.0",
+    "description": "GitHub transport only. Local execution remains separately gated by the Mac controller. Never submit an execution command during ordinary conversation."
+  },
+  "servers": [{ "url": "https://api.github.com" }],
+  "security": [{ "githubOwnerOAuth": ["repo"] }],
+  "components": {
+    "securitySchemes": {
+      "githubOwnerOAuth": {
+        "type": "oauth2",
+        "flows": {
+          "authorizationCode": {
+            "authorizationUrl": "https://github.com/login/oauth/authorize",
+            "tokenUrl": "https://github.com/login/oauth/access_token",
+            "scopes": { "repo": "Owner access to the private Butterbox repository; review this broad OAuth scope before granting it." }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/user": {
+      "get": {
+        "operationId": "verifyButterboxOwner",
+        "summary": "Confirm login farbotkol, numeric ID 11307166 and type User before submitting",
+        "responses": {
+          "200": {
+            "description": "Authenticated GitHub principal",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": { "login": { "type": "string" }, "id": { "type": "integer" }, "type": { "type": "string" } }
+            } } }
+          }
+        }
+      }
+    },
+    "/repos/farbotkol/butterbox/issues": {
+      "post": {
+        "operationId": "submitOwnerAgentTask",
+        "x-openai-isConsequential": true,
+        "summary": "Submit ONLY after the owner explicitly authorises the exact task and workstream",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["title", "body", "labels"],
+            "properties": {
+              "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+              "body": {
+                "type": "string", "minLength": 1, "maxLength": 6000,
+                "description": "Entire body must be /butterbox run on its own first line, a blank line, then one json fenced block containing ONLY workstream (roadmap or award-central) and task (1-4000 characters). No prose outside the envelope."
+              },
+              "labels": { "type": "array", "minItems": 1, "maxItems": 1, "items": { "type": "string", "enum": ["butterbox-agent-task"] } }
+            }
+          } } }
+        },
+        "responses": {
+          "201": {
+            "description": "Task issue created; verify user ID and login. Creation does not prove local execution.",
+            "content": { "application/json": { "schema": {
+              "type": "object",
+              "properties": {
+                "number": { "type": "integer" }, "html_url": { "type": "string" },
+                "user": { "type": "object", "properties": {
+                  "login": { "type": "string" }, "id": { "type": "integer" }, "type": { "type": "string" }
+                } }
+              }
+            } } }
+          }
+        }
+      }
+    },
+    "/graphql": {
+      "post": {
+        "operationId": "readOriginalOwnerTaskReports",
+        "x-openai-isConsequential": false,
+        "summary": "Read status comments; trust only original unedited farbotkol User comments, not collaborator claims",
+        "requestBody": {
+          "required": true,
+          "content": { "application/json": { "schema": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["query", "variables"],
+            "properties": {
+              "query": {
+                "type": "string",
+                "enum": ["query($number:Int!,$cursor:String){repository(owner:\"farbotkol\",name:\"butterbox\"){issue(number:$number){number state comments(first:100,after:$cursor){nodes{body lastEditedAt author{login ... on User{databaseId}}}pageInfo{hasNextPage endCursor}}}}}"]
+              },
+              "variables": {
+                "type": "object", "additionalProperties": false, "required": ["number"],
+                "properties": { "number": { "type": "integer", "minimum": 1 }, "cursor": { "type": ["string", "null"] } }
+              }
+            }
+          } } }
+        },
+        "responses": {
+          "200": {
+            "description": "GraphQL task status page; any errors mean status is unverified",
+            "content": { "application/json": { "schema": {
+              "type": "object", "properties": { "data": { "type": "object" }, "errors": { "type": "array", "items": { "type": "object" } } }
+            } } }
+          }
+        }
+      }
+    }
+  }
+}

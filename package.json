@@ -9,7 +9,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
-    "test:auth": "node scripts/test-auth.mjs"
+    "test:auth": "node scripts/test-auth.mjs",
+    "agent:listener": "node tools/agent-controller/listener.mjs",
+    "test:agent-listener": "node --test tools/agent-controller/listener.test.mjs"
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",

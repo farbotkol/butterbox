@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "roadmap": {
+      "cwd": "/absolute/canonical/path/to/clean-roadmap-checkout",
+      "branch": "copilot/finish-roadmap-for-app"
+    },
+    "award-central": {
+      "cwd": "/absolute/canonical/path/to/clean-award-central-checkout",
+      "branch": "feature/award-central-foundation"
+    }
+  },
+  "copilotPath": "/absolute/path/to/installed/copilot",
+  "copilotHome": "/absolute/path/to/private/controller-copilot-home"
+}
