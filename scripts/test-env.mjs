@@ -324,11 +324,15 @@ export function summarizeReports(reports, artifactsDir, containerArtifacts = "/a
     for (const spec of suite.specs ?? []) {
       if (spec.ok) continue;
       const results = spec.tests.flatMap((test) => test.results ?? []);
+      const errors = results.flatMap((result) => result.errors ?? [])
+        .map((error) => stripAnsi(error.message ?? error.value ?? "")).filter(Boolean);
       failures.push({
         title: [...titles, spec.title].filter(Boolean).join(" › "),
         location: `${spec.file.startsWith("tests/") ? spec.file : `tests/e2e/${spec.file}`}:${spec.line}`,
-        errors: results.flatMap((result) => result.errors ?? [])
-          .map((error) => stripAnsi(error.message ?? error.value).slice(0, 4000)).slice(0, 5),
+        durationSeconds: Math.round(results.reduce((max, result) => Math.max(max, result.duration ?? 0), 0) / 1000),
+        timedOut: results.some((result) => result.status === "timedOut")
+          || errors.some((error) => /Test timeout of \d+ms exceeded/.test(error)),
+        errors: errors.map((error) => error.slice(0, 4000)).slice(0, 5),
         attachments: results.flatMap((result) => result.attachments ?? [])
           .filter((attachment) => attachment.path).map((attachment) => mapPath(attachment.path)),
       });
@@ -347,6 +351,26 @@ export function summarizeReports(reports, artifactsDir, containerArtifacts = "/a
   return { stats, failures };
 }
 
+// Playwright writes its JSON report only when it exits, so a stopped run falls back to the list reporter's lines.
+export function failuresFromLog(text) {
+  const failures = [];
+  const seen = new Set();
+  for (const line of stripAnsi(text).split("\n")) {
+    const match = line.match(/^\s*✘\s+\d+\s+(?:\[[^\]]+\]\s+›\s+)?(\S+\.spec\.mjs):(\d+):\d+\s+›\s+(.+?)(?:\s+\((\d+(?:\.\d+)?)(ms|s|m)\))?\s*$/);
+    if (!match) continue;
+    const [, file, lineNumber, title, amount, unit] = match;
+    const location = `${file.startsWith("tests/") ? file : `tests/e2e/${file}`}:${lineNumber}`;
+    if (seen.has(`${location} ${title}`)) continue;
+    seen.add(`${location} ${title}`);
+    const durationSeconds = amount === undefined ? undefined
+      : Math.round(Number(amount) * { ms: 0.001, s: 1, m: 60 }[unit]);
+    failures.push({ title, location, durationSeconds, timedOut: false,
+      errors: ["Error details are unavailable because the run stopped before Playwright wrote its report;"
+        + " see the full log or rerun this test with the focused command."], attachments: [] });
+  }
+  return failures;
+}
+
 export function summaryMarkdown(result) {
   const lines = [`# Butterbox ${result.suite} test run: ${result.status.toUpperCase()}`, "",
     `- Run: ${result.runId} (${result.runner} runner) — ${result.durationSeconds}s`,
@@ -358,9 +382,27 @@ export function summaryMarkdown(result) {
     const { expected, unexpected, flaky, skipped } = result.playwright;
     lines.push(`- Browser tests: ${expected} passed, ${unexpected} failed, ${flaky} flaky, ${skipped} skipped`);
   }
+  if (result.host) {
+    const { cpus, loadStart, loadEnd } = result.host;
+    lines.push(`- Host load average: ${loadStart ?? "?"} at start, ${loadEnd ?? "?"} at end (${cpus} CPUs)`);
+  }
   if (result.note) lines.push("", result.note);
+  if (result.partialFailures) {
+    lines.push("", `> The run stopped before Playwright wrote its report. ${result.failures.length} failure(s) were`
+      + " recovered from the log; tests that had not yet run are not reported.");
+  }
+  const timedOut = result.failures.filter((failure) => failure.timedOut);
+  if (timedOut.length) {
+    const busy = result.host && Math.max(result.host.loadStart ?? 0, result.host.loadEnd ?? 0) > result.host.cpus;
+    lines.push("", `> **${timedOut.length} failure(s) are Playwright timeouts.**${busy
+      ? " The host was overloaded (load average above its CPU count), so this may be resource starvation rather"
+        + " than an application defect." : ""} Rerun the test on its own with the focused command and compare its duration with the`
+      + " GitHub Actions log before changing application code. Do not raise timeouts to make it pass.");
+  }
   for (const failure of result.failures) {
     lines.push("", `## ${failure.title}`, failure.location ? `Location: \`${failure.location}\`` : "",
+      failure.durationSeconds !== undefined
+        ? `Duration: ${failure.durationSeconds}s${failure.timedOut ? " (timed out)" : ""}` : undefined,
       ...failure.errors.map((error) => ["```", error.split("\n").slice(0, 30).join("\n"), "```"].join("\n")));
     if (failure.attachments.length) lines.push("Artifacts:", ...failure.attachments.map((file) => `- ${file}`));
     if (failure.location) {
@@ -374,6 +416,10 @@ export function summaryMarkdown(result) {
 // ---------------------------------------------------------------------------------------------------------------
 
 const active = { children: new Set(), container: undefined, interrupted: undefined };
+
+function hostLoad() {
+  return Math.round(os.loadavg()[0] * 10) / 10;
+}
 
 function capture(command, args, env, options = {}) {
   const result = spawnSync(command, args, { encoding: "utf8", env, timeout: options.timeoutMs ?? 120_000,
@@ -674,7 +720,8 @@ export async function run(ctx, options) {
   const started = Date.now();
   const result = { schema: 1, runId, suite: options.suite, runner: options.runner, status: "error",
     startedAt: new Date(started).toISOString(), source: { path: source }, steps: [], failures: [], log: logFile,
-    artifacts, selection: { grep: options.grep, tests: options.tests, repeat: options.repeat } };
+    artifacts, selection: { grep: options.grep, tests: options.tests, repeat: options.repeat },
+    host: { cpus: os.cpus().length, loadStart: hostLoad() } };
   let release;
   let timer;
   const finish = (status, note) => {
@@ -735,6 +782,9 @@ export async function run(ctx, options) {
       const summary = summarizeReports(reports, artifacts);
       result.playwright = summary.stats;
       result.failures = summary.failures;
+    } else if (result.steps.some((step) => step.name === "auth")) {
+      try { result.failures = failuresFromLog(fs.readFileSync(logFile, "utf8")); } catch { /* best effort */ }
+      result.partialFailures = true;
     }
     if (active.interrupted) finish(active.interrupted);
     else if (result.steps.every((step) => step.exitCode === 0)) {
@@ -751,6 +801,7 @@ export async function run(ctx, options) {
     fs.rmSync(path.join(runDir, "src"), { recursive: true, force: true });
     release?.();
     result.finishedAt = new Date().toISOString();
+    result.host.loadEnd = hostLoad();
     result.durationSeconds = Math.round((Date.now() - started) / 1000);
     fs.writeFileSync(path.join(artifacts, "result.json"), `${JSON.stringify(result, null, 2)}\n`, { mode: 0o644 });
     fs.writeFileSync(path.join(artifacts, "summary.md"), summaryMarkdown(result), { mode: 0o644 });

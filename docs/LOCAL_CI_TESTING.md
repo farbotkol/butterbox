@@ -122,6 +122,24 @@ Every run writes to `/Users/Shared/butterbox-test-runs/runs/<run-id>/artifacts/`
 The exit codes are 0 for passed, 1 for failed, 2 for invalid usage, 3 for an environment error, 124 for a timeout
 and 130 for an interrupted run.
 
+**Timeouts and host load.** The local VM gets 2 CPUs and the runner container 2 CPUs and 3 GB. On a busy machine,
+local runs can be several times slower than GitHub Actions. On 2026-11-05, an 8-CPU host had a load average of
+about 13. The same tests took about 5× longer than in CI, so the two heaviest "five viewport layouts" tests hit
+their Playwright timeouts locally even though they passed in CI on the same commit.
+
+`summary.md` therefore records:
+- the host load average at the start and end of the run;
+- each failure's duration;
+- a warning when failures are timeouts.
+
+When that warning appears:
+1. Close CPU-heavy applications.
+2. Rerun the failing tests with the focused command.
+3. Compare their durations with the GitHub Actions log.
+4. Treat the failure as an application defect only if it also fails when the host is not overloaded.
+
+Never increase a test's timeout to make it pass.
+
 ### Recommended workflow
 
 1. `npm run test:fast` while editing.

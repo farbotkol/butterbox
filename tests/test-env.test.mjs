@@ -5,7 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   BLOCKED_RANGES, LOCAL_RUNS_ROOT, PORTS, PROJECT, colimaConfig, context, egressScript, parseArgs, runnerArgs,
-  summarizeReports, summaryMarkdown, testEnvironment, testProjectConfig, verifyColimaConfig, verifyEgressRules,
+  failuresFromLog, summarizeReports, summaryMarkdown, testEnvironment, testProjectConfig, verifyColimaConfig, verifyEgressRules,
 } from "../scripts/test-env.mjs";
 import { controllerChanged, fastEnvironment, parseFastArgs } from "../scripts/test-fast.mjs";
 
@@ -153,7 +153,8 @@ test("Playwright reports become actionable failures with artifacts and rerun com
   assert.deepEqual(summary.stats, { expected: 2, unexpected: 1, flaky: 0, skipped: 1 });
   assert.equal(summary.failures.length, 2);
   assert.deepEqual(summary.failures[0], {
-    title: "draft shifts", location: `${AUTH}:7137`, errors: ["Expected: 0\nReceived: 1"],
+    title: "draft shifts", location: `${AUTH}:7137`, durationSeconds: 0, timedOut: false,
+    errors: ["Expected: 0\nReceived: 1"],
     attachments: ["/runs/r1/artifacts/playwright/test-results-1/trace.zip"],
   });
   const markdown = summaryMarkdown({ suite: "auth-focused", status: "failed", runId: "r1", runner: "container",
@@ -163,6 +164,46 @@ test("Playwright reports become actionable failures with artifacts and rerun com
   assert.match(markdown, /abc with uncommitted changes/);
   assert.match(markdown, new RegExp(`Rerun: \`npm run test:auth:focused -- --test ${AUTH}:7137\``));
   assert.match(markdown, /trace\.zip/);
+  assert.doesNotMatch(markdown, /Playwright timeouts/);
+});
+
+test("timeouts on an overloaded host are flagged as possible resource starvation", () => {
+  const report = { stats: { expected: 0, unexpected: 1, flaky: 0, skipped: 0 }, suites: [{ title: "auth.spec.mjs",
+    file: "auth.spec.mjs", specs: [{ title: "five viewport layouts", ok: false, file: "auth.spec.mjs", line: 3844,
+      tests: [{ results: [{ status: "timedOut", duration: 360_400,
+        errors: [{ message: "Test timeout of 360000ms exceeded." }] }] }] }] }] };
+  const { stats, failures } = summarizeReports([report], "/runs/r2/artifacts");
+  assert.equal(failures[0].timedOut, true);
+  assert.equal(failures[0].durationSeconds, 360);
+  const base = { suite: "database", status: "failed", runId: "r2", runner: "container", durationSeconds: 400,
+    source: { commit: "abc" }, steps: [], playwright: stats, failures, log: "/runs/r2/artifacts/run.log" };
+  const busy = summaryMarkdown({ ...base, host: { cpus: 8, loadStart: 11.3, loadEnd: 13.2 } });
+  assert.match(busy, /Host load average: 11\.3 at start, 13\.2 at end \(8 CPUs\)/);
+  assert.match(busy, /1 failure\(s\) are Playwright timeouts\.\*\* The host was overloaded/);
+  assert.match(busy, /Duration: 360s \(timed out\)/);
+  assert.match(busy, /Do not raise timeouts/);
+  const idle = summaryMarkdown({ ...base, host: { cpus: 8, loadStart: 1, loadEnd: 2 } });
+  assert.match(idle, /Playwright timeouts/);
+  assert.doesNotMatch(idle, /host was overloaded/);
+});
+
+test("failures are recovered from the list reporter when a stopped run leaves no JSON report", () => {
+  const log = [
+    "  ✓   30 tests/e2e/auth.spec.mjs:3750:1 › employee profiles and filtered team directory (49.5s)",
+    "\u001b[31m  ✘   31 tests/e2e/auth.spec.mjs:3844:1 › People directory … five viewport layouts (6.0m)\u001b[39m",
+    "  ✘   64 tests/e2e/auth.spec.mjs:8456:1 › managers correct finished attendance (3.3m)",
+    "  ✘   12 [chromium] › auth.spec.mjs:484:1 › owners configure venue geofences (900ms)",
+    "  ✘   31 tests/e2e/auth.spec.mjs:3844:1 › People directory … five viewport layouts (6.0m)",
+    "Time limit of 100 minutes reached; stopping the run.",
+  ].join("\n");
+  const failures = failuresFromLog(log);
+  assert.deepEqual(failures.map(({ location, durationSeconds }) => [location, durationSeconds]), [
+    [`${AUTH}:3844`, 360], [`${AUTH}:8456`, 198], [`${AUTH}:484`, 1]]);
+  assert.equal(failures[1].title, "managers correct finished attendance");
+  const markdown = summaryMarkdown({ suite: "database", status: "timeout", runId: "r3", runner: "container",
+    durationSeconds: 6005, source: { commit: "abc" }, steps: [], failures, partialFailures: true, log: "/r3/run.log" });
+  assert.match(markdown, /3 failure\(s\) were recovered from the log/);
+  assert.match(markdown, new RegExp(`Rerun: \`npm run test:auth:focused -- --test ${AUTH}:8456\``));
 });
 
 const shim = path.join(root, "tools/test-runner/docker-shim.mjs");
