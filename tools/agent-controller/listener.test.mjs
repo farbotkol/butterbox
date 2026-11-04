@@ -444,7 +444,7 @@ test('child deadline terminates descendants, not only the process leader', async
 test('minimal CLI home refuses permissive settings and unknown authentication configuration', async t => {
   const value = await codingFixture(t);
   await writeFile(path.join(value.home, 'config.json'), '{"defaultPermissionMode":"allow-all"}', { mode: 0o600 });
-  await rejects(codingHome(value.home), 'unsafe_copilot_auth_config');
+  await rejects(codingHome(value.home), 'unsafe_copilot_config');
   await unlink(path.join(value.home, 'config.json'));
   await writeFile(path.join(value.home, 'settings.json'), '{"defaultPermissionMode":"allow-all","disableAllHooks":true}');
   await rejects(codingHome(value.home), 'unsafe_copilot_settings');
@@ -613,4 +613,134 @@ test('GitHub closeCompleted uses bounded API update and verifies closed state', 
     '--method', 'PATCH', '-f', 'state=closed', '-f', 'state_reason=completed'
   ]);
   assert.ok(commands[0].includes('state_reason=completed'));
+});
+
+// Layout observed on the owner's Apple Silicon Mac after `copilot login` and a restricted prompt run
+// with Copilot CLI 1.0.105 (values synthetic; structure, comments, modes and key names as observed).
+async function observedCopilotHome(t) {
+  const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'copilot-home-')));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const home = path.join(root, 'home');
+  const checkout = path.join(root, 'checkout');
+  await mkdir(home, { mode: 0o700 });
+  await writeFile(path.join(home, 'config.json'), '// User settings belong in settings.json.\n' +
+    '// This file is managed automatically.\n' + JSON.stringify({
+      firstLaunchAt: '2026-11-04T10:43:00.000Z', appTipShown: true, reasoningSummariesCleanupDone: true,
+      trustedFolders: [checkout],
+    }, null, 2) + '\n', { mode: 0o600 });
+  await writeFile(path.join(home, 'settings.json'), JSON.stringify({
+    defaultPermissionMode: 'manual', disableAllHooks: true, bashEnv: false,
+  }, null, 2), { mode: 0o600 });
+  for (const name of ['command-history-state.json', 'open-sessions-state.json']) {
+    await writeFile(path.join(home, name), '{}', { mode: 0o600 });
+  }
+  for (const name of ['config.json.trusted-folders.lock', 'installed-plugins.lock', 'settings.json.lock']) {
+    await writeFile(path.join(home, name), '', { mode: 0o600 });
+  }
+  for (const name of ['session-store.db', 'session-store.db-shm', 'session-store.db-wal']) {
+    await writeFile(path.join(home, name), 'synthetic', { mode: 0o644 });
+    await chmod(path.join(home, name), 0o644);
+  }
+  for (const name of ['ide', 'installed-plugins', 'servers', 'logs', 'sidebar-sessions-state',
+    'session-state/.session-operation-locks']) {
+    await mkdir(path.join(home, name), { recursive: true, mode: 0o700 });
+  }
+  await writeFile(path.join(home, 'logs', 'process-1.log'), 'synthetic', { mode: 0o600 });
+  return { root, home, checkout };
+}
+
+test('coding home accepts the observed Copilot CLI 1.0.105 layout without modifying it', async t => {
+  const { home, checkout } = await observedCopilotHome(t);
+  const before = (await readdir(home)).sort();
+  const settings = await readFile(path.join(home, 'settings.json'), 'utf8');
+  const config = await readFile(path.join(home, 'config.json'), 'utf8');
+  assert.equal(await codingHome(home, [checkout]), home);
+  assert.equal(await codingHome(home), home);
+  assert.deepEqual((await readdir(home)).sort(), before);
+  assert.equal(await readFile(path.join(home, 'settings.json'), 'utf8'), settings);
+  assert.equal(await readFile(path.join(home, 'config.json'), 'utf8'), config);
+  await unlink(path.join(home, 'config.json'));
+  assert.equal(await codingHome(home, [checkout]), home);
+});
+
+test('coding home still rejects MCP servers, plugins, hooks, IDE bridges and unsafe entries', async t => {
+  const cases = [
+    ['mcp-config.json', home => writeFile(path.join(home, 'mcp-config.json'), '{"mcpServers":{}}', { mode: 0o600 })],
+    ['hooks', home => mkdir(path.join(home, 'hooks'), { mode: 0o700 })],
+    ['agents', home => mkdir(path.join(home, 'agents'), { mode: 0o700 })],
+    ['skills', home => mkdir(path.join(home, 'skills'), { mode: 0o700 })],
+    ['plugin', home => mkdir(path.join(home, 'installed-plugins', 'example'), { mode: 0o700 })],
+    ['server', home => writeFile(path.join(home, 'servers', 'server.json'), '{}', { mode: 0o600 })],
+    ['ide', home => writeFile(path.join(home, 'ide', '1234.lock'), '{}', { mode: 0o600 })],
+    ['symlink', async home => {
+      await unlink(path.join(home, 'session-store.db'));
+      await symlink('/etc/hosts', path.join(home, 'session-store.db'));
+    }],
+    ['writable', home => chmod(path.join(home, 'session-store.db'), 0o666)],
+    ['wrong type', async home => {
+      await unlink(path.join(home, 'installed-plugins.lock'));
+      await mkdir(path.join(home, 'installed-plugins.lock'), { mode: 0o700 });
+    }],
+  ];
+  for (const [, mutate] of cases) {
+    const { home, checkout } = await observedCopilotHome(t);
+    await mutate(home);
+    await rejects(codingHome(home, [checkout]), 'unsafe_copilot_home_contents');
+  }
+});
+
+test('coding home rejects unsafe 1.0.105 settings, config keys, comments and broad trusted folders', async t => {
+  const settings = [
+    { defaultPermissionMode: 'manual', disableAllHooks: true, bashEnv: true },
+    { defaultPermissionMode: 'allow-all', disableAllHooks: true, bashEnv: false },
+    { defaultPermissionMode: 'manual', disableAllHooks: false },
+    { defaultPermissionMode: 'manual', disableAllHooks: true, allowedTools: ['shell'] },
+  ];
+  for (const value of settings) {
+    const { home, checkout } = await observedCopilotHome(t);
+    await writeFile(path.join(home, 'settings.json'), JSON.stringify(value));
+    await rejects(codingHome(home, [checkout]), 'unsafe_copilot_settings');
+  }
+  const header = '// This file is managed automatically.\n';
+  const configs = [
+    header + '{"allowedTools":["shell"]}',
+    header + '{"mcpServers":{"x":{"command":"node"}}}',
+    header + '{"appTipShown":"yes"}',
+    header + '{"trustedFolders":"/"}',
+    '/* block */ {"appTipShown":true}',
+    header + '{"appTipShown":true} // trailing',
+    '{"appTipShown":true}\n// trailing',
+  ];
+  for (const text of configs) {
+    const { home, checkout } = await observedCopilotHome(t);
+    await writeFile(path.join(home, 'config.json'), text);
+    await rejects(codingHome(home, [checkout]), 'unsafe_copilot_config');
+  }
+  const { root } = await observedCopilotHome(t);
+  for (const folders of [['/'], [os.homedir()], [path.dirname(os.homedir())], [root], ['relative/path'],
+    [`${root}/../escape`]]) {
+    const { home, checkout } = await observedCopilotHome(t);
+    await writeFile(path.join(home, 'config.json'), header + JSON.stringify({ trustedFolders: folders }));
+    await rejects(codingHome(home, [checkout, path.join(root, 'checkout')]), 'unsafe_copilot_trusted_folder');
+  }
+});
+
+test('coding dispatch accepts an observed 1.0.105 home but rejects checkout MCP, agent or skill configuration', async t => {
+  const value = await codingFixture(t);
+  const observed = await observedCopilotHome(t);
+  await rm(value.home, { recursive: true });
+  await (await import('node:fs/promises')).cp(observed.home, value.home, { recursive: true });
+  await value.controller.approve(42, parseTask(issue()).digest, ['src/demo.ts']);
+  for (const name of ['.mcp.json', '.github/agents', '.github/skills', '.vscode/mcp.json']) {
+    await mkdir(path.dirname(path.join(value.cwd, name)), { recursive: true });
+    await writeFile(path.join(value.cwd, name), '{}');
+    await rejects(value.controller.approve(42, parseTask(issue()).digest, ['src/demo.ts']),
+      'coding_checkout_has_cli_configuration');
+    await rm(path.join(value.cwd, name), { recursive: true });
+  }
+  await value.controller.tick();
+  assert.equal(value.calls.length, 1);
+  assert.equal(value.calls[0].opts.env.COPILOT_HOME, value.home);
+  for (const flag of ['--disable-builtin-mcps', '--deny-tool=shell', '--no-bash-env',
+    '--available-tools=view,glob,grep,create,edit']) assert.ok(value.calls[0].args.includes(flag));
 });

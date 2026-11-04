@@ -121,17 +121,50 @@ in that dedicated home must contain exactly:
 {"defaultPermissionMode":"manual","disableAllHooks":true}
 ```
 
-Set that directory's mode to `0700` and the settings file to `0600`. CLI login
-may create `config.json`; the controller accepts only authentication metadata
-keys `logged_in_users` and `last_logged_in_user`. Unknown configuration fails
-closed rather than guessing. MCP/plugin/hook files are rejected. New CLI
-versions/configuration schemas require review.
+Set that directory's mode to `0700` and the settings file to `0600`. Copilot CLI
+1.0.105 may add `"bashEnv": false` itself after a `--no-bash-env` run; that is
+the only extra setting accepted (`bashEnv: true` or any other key is rejected).
+
+The controller accepts the reviewed CLI **1.0.105** home layout observed on the
+owner's Mac and never modifies it:
+
+- `config.json` with Copilot's leading `//` notice lines and only the keys
+  `firstLaunchAt`, `appTipShown`, `reasoningSummariesCleanupDone`,
+  `trustedFolders`, `logged_in_users` and `last_logged_in_user`. Other keys, block
+  or trailing comments fail closed as `unsafe_copilot_config`.
+- `trustedFolders` entries must be absolute, normalized paths. A folder that is
+  `/`, your home directory or one of its ancestors, or that encloses a configured
+  coding checkout, fails as `unsafe_copilot_trusted_folder`. Trust is not needed
+  for prompt-mode runs.
+- Runtime state: `session-state/`, `sidebar-sessions-state/`, `logs/`,
+  `sessions/`, `session-store.db*`, `command-history-state.json`,
+  `open-sessions-state.json`, `version` and the `config.json.trusted-folders`,
+  `settings.json` and `installed-plugins` `.lock` files. Each must be owned by
+  you, not a symlink and not group/world writable. Copilot creates its session
+  database `0644`; the `0700` home keeps it private.
+- `installed-plugins/`, `servers/` and `ide/` may exist but **must be empty**.
+- Anything else, including `mcp-config.json`, `hooks`, `agents`, `skills`, or
+  plugin/server/IDE entries, fails closed as `unsafe_copilot_home_contents`. New
+  CLI versions or configuration schemas require review.
 
 Set `copilotPath` and `copilotHome` in the private controller config. The coding
 checkout may contain **no ignored files** (including `.env`, `node_modules`,
-build outputs), tracked symlinks, or repository CLI hooks/settings. Do not
+build outputs), tracked symlinks, or repository CLI hooks/settings/agents/skills
+or MCP config (`.github/hooks`, `.github/copilot`, `.github/agents`,
+`.github/skills`, `.copilot`, `mcp-config.json`, `.mcp.json`, `.vscode/mcp.json`).
+Do not
 remove data from an existing workspace to satisfy this: prepare a separate
-checkout and assess its tracked content before sending it to a model.
+checkout and assess its tracked content before sending it to a model. For
+example:
+
+```sh
+git clone --branch copilot/finish-roadmap-for-app --single-branch \
+  https://github.com/farbotkol/butterbox.git "$HOME/butterbox-agent-roadmap"
+cd "$HOME/butterbox-agent-roadmap" && pwd -P   # use this exact path as the roadmap cwd
+```
+
+Never run `npm install`, add `.env*` files or open it as a development
+workspace; that would make it ineligible.
 
 Every coding task also requires a **local approval of its exact digest, Git
 commit and writable files**. Obtain the digest from a dry-run poll, inspect the
@@ -238,7 +271,10 @@ token, public webhook or owner-identity impersonation is used as a workaround.
 | `copilot_not_installed` / `unsupported_copilot_cli` | Install/inspect an approved CLI; no permissive fallback. |
 | `coding_permissions_not_verified` | Complete disposable CLI permission validation; do not set the gate just to suppress the error. |
 | `local_approval_mismatch` | Re-read task/commit and renew exact approval, never edit ledger manually to bypass it. |
-| `unsafe_copilot_*` | Use the dedicated minimal CLI home and reviewed supported schema. |
+| `unsafe_copilot_home_contents` | Remove only the reported plugin/MCP/hook/IDE entry via the CLI, or use a fresh dedicated home; never chmod/symlink around it. |
+| `unsafe_copilot_settings` / `unsafe_copilot_config` | Restore the reviewed `settings.json`; review unknown `config.json` keys before any controller change. |
+| `unsafe_copilot_trusted_folder` | Remove the broad trusted folder from the dedicated Copilot home; trust is not required. |
+| `coding_checkout_contains_ignored_files_or_symlinks` / `dirty_worktree` | Point the profile at a separate clean clone, not your development workspace. |
 
 No Butterbox feature, showcase, database, external messaging or payroll is changed
 by setup/synthetic validation. See [REQUIREMENTS.md](./REQUIREMENTS.md) for the
@@ -284,3 +320,41 @@ users/farbotkol` returned ID `11307166`; issue #7 shows closed, owner-authored,
 labelled, with original owner queued/running/succeeded reports; and
 `npm run agent:listener -- --once` printed `dry-run; GitHub owner verified` and
 `Poll complete: eligible=0; executed=0` (exit 0).
+
+### Copilot CLI 1.0.105 compatibility (4 November 2026, 22:04 AEDT)
+
+Root cause: the home validator allowed only `config.json`, `settings.json`,
+`sessions`, `logs` and `version`, parsed `config.json` as strict JSON and allowed
+only login keys. Installed CLI 1.0.105 (`/opt/homebrew/bin/copilot`) writes a
+commented `config.json` (`firstLaunchAt`, `appTipShown`,
+`reasoningSummariesCleanupDone`, `trustedFolders`), `.lock` files, empty
+`ide/`, `servers/` and `installed-plugins/`, session/UI state and a `0644`
+`session-store.db*`, and persists `bashEnv: false` in `settings.json`.
+
+Observed evidence:
+
+- A live restricted run used the controller's exact `copilotArguments` with the
+  dedicated home in a disposable, secret-free `git init` sandbox (since deleted).
+  The CLI reported shell, sub-agents, web fetch, skills and SQL tools disabled;
+  the model listed only `view`, `create`, `edit`, `grep`, `glob` and
+  `MCP_TOOLS: none`. Shell `touch` could not run. Only the approved
+  `allowed.txt` was created. An unapproved new file, an edit to tracked
+  `README.md`, and a write outside the checkout were each denied ("no one to
+  approve"). Note: the CLI exited 0 despite denials, so exit status is not
+  acceptance.
+- That run caused Copilot itself to add `session-store.db*` and
+  `"bashEnv": false`. The controller made no change to the home, its
+  `config.json`, `settings.json` or authentication.
+- `codingHome` accepts the real dedicated home read-only (a before/after
+  `stat` snapshot was identical). A coding-mode `--once` start verified the
+  owner and polled with `eligible=0; executed=0`.
+- The configured roadmap profile is the development workspace, so it is still
+  refused (`dirty_worktree`; ignored `.env.local`, `node_modules` and others).
+  A disposable fresh clone passed `repository()` with no ignored files or
+  symlinks and all required context files present, and was then deleted.
+- `node --test tools/agent-controller/listener.test.mjs`: 42/42 pass. Four new
+  regressions cover the observed layout and the hostile variants listed above,
+  including MCP/plugin/hook/IDE entries and checkout `.mcp.json`/agents/skills.
+  ESLint, `node --check` and `git diff --check` pass.
+
+No real coding task was approved or executed.

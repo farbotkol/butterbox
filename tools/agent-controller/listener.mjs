@@ -186,13 +186,16 @@ async function syncDirectory(directory) {
   try { await handle.sync(); } finally { await handle.close(); }
 }
 
-async function privateJson(filename) {
+async function privateJson(filename, { leadingLineComments = false, invalid = 'corrupt_controller_state' } = {}) {
   await privatePath(filename);
   const handle = await open(filename, constants.O_RDONLY | constants.O_NOFOLLOW);
   try {
     if ((await handle.stat()).size > 32_000) fail('state_file_too_large');
-    try { return JSON.parse(await handle.readFile('utf8')); }
-    catch (error) { if (error instanceof SyntaxError) fail('corrupt_controller_state'); throw error; }
+    let text = await handle.readFile('utf8');
+    // Copilot CLI 1.0.105 prefixes its managed config.json with whole-line `//` notices only.
+    if (leadingLineComments) text = text.replace(/^(?:[ \t]*\/\/[^\r\n]*\r?\n|[ \t]*\r?\n)*/, '');
+    try { return JSON.parse(text); }
+    catch (error) { if (error instanceof SyntaxError) fail(invalid); throw error; }
   } finally { await handle.close(); }
 }
 
@@ -317,7 +320,8 @@ async function codingWorkspace(cwd, exec, signal, workstream) {
   const ignored = await exec('git', ['ls-files', '--others', '--ignored', '--exclude-standard'], { cwd, signal });
   const tracked = await exec('git', ['ls-files', '--stage'], { cwd, signal });
   if (ignored || /^120000 /m.test(tracked)) fail('coding_checkout_contains_ignored_files_or_symlinks');
-  for (const name of ['.github/hooks', '.github/copilot', '.copilot', 'mcp-config.json']) {
+  for (const name of ['.github/hooks', '.github/copilot', '.github/agents', '.github/skills', '.copilot',
+    'mcp-config.json', '.mcp.json', '.vscode/mcp.json']) {
     try { await lstat(path.join(cwd, name)); fail('coding_checkout_has_cli_configuration'); }
     catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
@@ -331,21 +335,70 @@ async function codingWorkspace(cwd, exec, signal, workstream) {
   }
 }
 
-export async function codingHome(directory) {
+// Reviewed top-level layout of a dedicated Copilot CLI 1.0.105 home. Anything else (mcp-config.json,
+// hooks, agents, skills, plugins, lsp config, saved approvals) fails closed.
+const copilotHomeEntries = new Map([
+  ['config.json', 'file'], ['settings.json', 'file'], ['version', 'file'],
+  ['command-history-state.json', 'file'], ['open-sessions-state.json', 'file'],
+  ['session-store.db', 'file'], ['session-store.db-shm', 'file'], ['session-store.db-wal', 'file'],
+  ['session-store.db-journal', 'file'],
+  ['config.json.trusted-folders.lock', 'file'], ['settings.json.lock', 'file'], ['installed-plugins.lock', 'file'],
+  ['logs', 'directory'], ['sessions', 'directory'], ['session-state', 'directory'],
+  ['sidebar-sessions-state', 'directory'],
+  // Integration directories may exist but must stay empty: no plugins, MCP/LSP servers or IDE bridges.
+  ['installed-plugins', 'empty'], ['servers', 'empty'], ['ide', 'empty'],
+]);
+const copilotConfigKeys = {
+  logged_in_users: () => true, last_logged_in_user: () => true,
+  firstLaunchAt: value => typeof value === 'string',
+  appTipShown: value => typeof value === 'boolean',
+  reasoningSummariesCleanupDone: value => typeof value === 'boolean',
+  trustedFolders: value => Array.isArray(value) && value.length <= 50,
+};
+const within = (parent, child) => {
+  const relative = path.relative(parent, child);
+  return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+
+export async function codingHome(directory, workspaces = []) {
   if (typeof directory !== 'string' || !path.isAbsolute(directory) ||
     directory === path.join(os.homedir(), '.copilot')) fail('dedicated_copilot_home_required');
   await privatePath(directory, true);
-  // Only authentication metadata may survive login; hooks, plugins and saved approvals are rejected.
-  const allowed = new Set(['config.json', 'settings.json', 'sessions', 'logs', 'version']);
-  if ((await readdir(directory)).some(name => !allowed.has(name))) fail('unsafe_copilot_home_contents');
-  const settings = await privateJson(path.join(directory, 'settings.json'));
-  if (!record(settings) || Object.keys(settings).sort().join(',') !== 'defaultPermissionMode,disableAllHooks' ||
-    settings.defaultPermissionMode !== 'manual' || settings.disableAllHooks !== true) fail('unsafe_copilot_settings');
+  for (const name of await readdir(directory)) {
+    const kind = copilotHomeEntries.get(name);
+    if (!kind) fail('unsafe_copilot_home_contents');
+    const stat = await lstat(path.join(directory, name));
+    // The home itself is 0700; Copilot-created entries (e.g. its 0644 session database) must still
+    // be owned by this user, non-symlinks and not group/world writable.
+    if (stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o022) ||
+      (kind === 'file' ? !stat.isFile() : !stat.isDirectory()) ||
+      (kind === 'empty' && (await readdir(path.join(directory, name))).length)) {
+      fail('unsafe_copilot_home_contents');
+    }
+  }
+  const settings = await privateJson(path.join(directory, 'settings.json'), { invalid: 'unsafe_copilot_settings' });
+  // The CLI persists `--no-bash-env` as bashEnv:false; no other setting may be introduced.
+  if (!record(settings) || settings.defaultPermissionMode !== 'manual' || settings.disableAllHooks !== true ||
+    (Object.hasOwn(settings, 'bashEnv') && settings.bashEnv !== false) ||
+    Object.keys(settings).some(key => !['defaultPermissionMode', 'disableAllHooks', 'bashEnv'].includes(key))) {
+    fail('unsafe_copilot_settings');
+  }
+  let config;
   try {
-    const config = await privateJson(path.join(directory, 'config.json'));
-    if (!record(config) || Object.keys(config).some(key =>
-      !['logged_in_users', 'last_logged_in_user'].includes(key))) fail('unsafe_copilot_auth_config');
+    config = await privateJson(path.join(directory, 'config.json'),
+      { leadingLineComments: true, invalid: 'unsafe_copilot_config' });
   } catch (error) { if (error.code !== 'ENOENT') throw error; }
+  if (config !== undefined && (!record(config) || Object.entries(config).some(([key, value]) =>
+    !Object.hasOwn(copilotConfigKeys, key) || !copilotConfigKeys[key](value)))) fail('unsafe_copilot_config');
+  const home = os.homedir();
+  for (const folder of config?.trustedFolders ?? []) {
+    // A broad trusted folder would trust configuration above a coding checkout; exact or unrelated
+    // folders do not change the controller's restricted invocation.
+    if (typeof folder !== 'string' || !path.isAbsolute(folder) || path.normalize(folder) !== folder ||
+      within(folder, home) || workspaces.some(cwd => cwd !== folder && within(folder, cwd))) {
+      fail('unsafe_copilot_trusted_folder');
+    }
+  }
   return directory;
 }
 
@@ -424,6 +477,7 @@ export class Controller {
     this.exec = exec; this.mode = mode; this.signal = signal;
     this.heartbeatMs = heartbeatMs; this.taskTimeoutMs = taskTimeoutMs;
   }
+  workspaces() { return Object.values(this.config.profiles).map(profile => profile.cwd); }
   async approve(number, digest, files) {
     if (!digestPattern.test(digest)) fail('invalid_approval_digest');
     await this.github.identity(this.signal);
@@ -433,7 +487,7 @@ export class Controller {
     if (!profile) fail('workstream_not_configured');
     const repo = await repository(profile, this.exec, this.signal);
     await codingWorkspace(repo.cwd, this.exec, this.signal, task.workstream);
-    const home = await codingHome(this.config.copilotHome);
+    const home = await codingHome(this.config.copilotHome, this.workspaces());
     files = approvedFiles(files);
     await verifyFilePaths(repo.cwd, files);
     const cli = await verifyCopilot(this.config.copilotPath, this.exec, this.signal);
@@ -503,7 +557,7 @@ export class Controller {
           approval.commit !== repo.commit || approval.cwd !== repo.cwd) fail('local_approval_mismatch');
         approvedFiles(approval.files);
         await codingWorkspace(repo.cwd, this.exec, this.signal, task.workstream);
-        if (approval.home !== await codingHome(this.config.copilotHome)) fail('copilot_home_changed');
+        if (approval.home !== await codingHome(this.config.copilotHome, this.workspaces())) fail('copilot_home_changed');
         await verifyFilePaths(repo.cwd, approval.files);
         cli = await verifyCopilot(this.config.copilotPath, this.exec, this.signal);
         if (JSON.stringify(cli) !== JSON.stringify(approval.cli)) fail('copilot_changed_since_approval');
@@ -537,7 +591,7 @@ export class Controller {
       }
       if (this.mode === 'coding') {
         await codingWorkspace(repo.cwd, this.exec, this.signal, task.workstream);
-        await codingHome(approval.home);
+        await codingHome(approval.home, this.workspaces());
         await verifyFilePaths(repo.cwd, approval.files);
         if (JSON.stringify(await verifyCopilot(this.config.copilotPath, this.exec, this.signal)) !==
           JSON.stringify(approval.cli)) fail('copilot_changed_since_approval');
