@@ -470,16 +470,33 @@ export function taskPrompt(task, instructions) {
 export const REVIEWED_SANDBOX_VERSIONS = ['1.0.105'];
 const protectedChanges = /^(?:\.github\/|\.gitmodules$|\.gitattributes$|(?:.*\/)?\.git(?:\/|$))/;
 
+// Issue text is untrusted, so agent shell egress is an explicit allowlist (an empty list would mean
+// unrestricted outbound). Every Butterbox dependency resolves from the npm registry.
+export const DEFAULT_ALLOWED_HOSTS = ['registry.npmjs.org'];
+const LOOPBACK_HOSTS = ['localhost', '127.0.0.1', '::1'];
+const hostRule = /^(?:\*\.)?(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
+function validAllowedHosts(hosts) {
+  return Array.isArray(hosts) && hosts.length >= 1 && hosts.length <= 20 &&
+    new Set(hosts).size === hosts.length && hosts.every(host => typeof host === 'string' &&
+      hostRule.test(host) &&
+      // Wildcards must sit under a registrable domain (e.g. *.example.com), never a bare TLD.
+      (!host.startsWith('*.') || host.split('.').length >= 3) &&
+      !/(^|\.)(localhost|local|internal|localdomain|home\.arpa)$/.test(host));
+}
+
 export function autonomousSettings(config, home = os.homedir()) {
   const value = config.autonomous;
   if (!record(value)) fail('autonomous_config_required');
-  const allowed = ['taskRoot', 'timeoutMinutes', 'maxAiCredits', 'maxChangedFiles', 'model', 'keepSucceeded'];
+  const allowed = ['taskRoot', 'timeoutMinutes', 'maxAiCredits', 'maxChangedFiles', 'model', 'keepSucceeded',
+    'allowedHosts'];
   if (Object.keys(value).some(key => !allowed.includes(key))) fail('invalid_autonomous_config');
   const settings = {
     taskRoot: value.taskRoot, timeoutMinutes: value.timeoutMinutes ?? 45,
     maxAiCredits: value.maxAiCredits, maxChangedFiles: value.maxChangedFiles ?? 60,
     model: value.model, keepSucceeded: value.keepSucceeded ?? false,
+    allowedHosts: Object.hasOwn(value, 'allowedHosts') ? value.allowedHosts : DEFAULT_ALLOWED_HOSTS,
   };
+  if (!validAllowedHosts(settings.allowedHosts)) fail('invalid_autonomous_config');
   // Denying the whole home folder inside the sandbox also denies a working directory beneath it.
   if (typeof settings.taskRoot !== 'string' || !path.isAbsolute(settings.taskRoot) ||
     path.normalize(settings.taskRoot) !== settings.taskRoot || within(settings.taskRoot, home) ||
@@ -493,7 +510,8 @@ export function autonomousSettings(config, home = os.homedir()) {
   return settings;
 }
 
-export function sandboxSettings(taskDir, home = os.homedir()) {
+export function sandboxSettings(taskDir, home = os.homedir(), allowedHosts = DEFAULT_ALLOWED_HOSTS) {
+  if (!validAllowedHosts(allowedHosts)) fail('invalid_autonomous_config');
   return {
     defaultPermissionMode: 'manual', disableAllHooks: true, bashEnv: false,
     sandbox: {
@@ -507,8 +525,10 @@ export function sandboxSettings(taskDir, home = os.homedir()) {
           readonlyPaths: [path.join(taskDir, 'repo', '.git')],
           deniedPaths: [home, path.join(taskDir, 'copilot-home')],
         },
-        // Probed on 1.0.105: with no allowedHosts list, local network (127.0.0.1, ::1, localhost) is blocked.
-        network: { allowOutbound: true, allowLocalNetwork: false, allowedHosts: [], blockedHosts: [], proxy: {} },
+        // Probed on 1.0.105: allowlisted hosts pass the sandbox proxy; other hosts, direct sockets, raw IPs
+        // and DNS are denied. Loopback is blocked explicitly because a non-empty allowlist may add it.
+        network: { allowOutbound: true, allowLocalNetwork: false, allowedHosts: [...allowedHosts],
+          blockedHosts: [...LOOPBACK_HOSTS], proxy: {} },
         seatbelt: { keychainAccess: false },
       },
     },
@@ -545,7 +565,8 @@ export function autonomousPrompt(task, instructions) {
       : 'Preserve Roadmap context in IMPLEMENTATION_PROGRESS.md; never alter Award Central status.',
     'You may investigate, edit any files needed for this one task, install dependencies and run tests ' +
       '(for example npm ci, npm test, npx eslint). Fix failures you introduce.',
-    'You are sandboxed: no home folder, credentials, local services, databases or Supabase are available. ' +
+    'You are sandboxed: no home folder, credentials, local services, databases or Supabase are available, ' +
+      'and network access is limited to the package registry (other hosts return 403). ' +
       'Do not attempt deployments, migrations against any database, git commits, pushes, branch changes or ' +
       'GitHub operations; the controller commits, pushes a task branch and opens a draft pull request for owner review. ' +
       'Never edit .github/, .gitmodules or .gitattributes.',
@@ -729,7 +750,8 @@ export class Controller {
     value.baseCommit = await git(['rev-parse', 'HEAD']);
     await this.store.save(value);
     await writeFile(path.join(taskDir, 'copilot-home', 'settings.json'),
-      JSON.stringify(sandboxSettings(taskDir), null, 2), { mode: 0o600, flag: 'wx' });
+      JSON.stringify(sandboxSettings(taskDir, os.homedir(), settings.allowedHosts), null, 2),
+      { mode: 0o600, flag: 'wx' });
     const agents = path.join(cwd, 'AGENTS.md');
     const stat = await lstat(agents);
     if (!stat.isFile() || stat.size > 64_000) fail('agent_instructions_too_large');

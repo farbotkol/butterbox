@@ -15,6 +15,7 @@
     "taskRoot": "/Users/Shared/butterbox-agent-tasks",
     "timeoutMinutes": 45,
     "maxAiCredits": 300,
-    "maxChangedFiles": 60
+    "maxChangedFiles": 60,
+    "allowedHosts": ["registry.npmjs.org"]
   }
 }

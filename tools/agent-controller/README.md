@@ -218,6 +218,8 @@ run first. Then the controller:
    - denies your whole home folder and the task's Copilot home;
    - makes the clone's `.git` read-only;
    - blocks local network and keychain access;
+   - limits outbound network access to an allowlist of hosts. The default list is
+     `registry.npmjs.org` only;
    - injects no git or `gh` credentials (`sandbox.auth`) and no developer-tool
      credentials.
 
@@ -252,16 +254,27 @@ Verified sandbox boundaries on Copilot CLI 1.0.105 (probes on 4 November 2026):
 | Blocked | Allowed |
 | --- | --- |
 | Home folder (`ls ~`, `~/.gitconfig`, `~/.ssh`, `~/.npmrc`, `~/.zsh_history`, `~/.aws`) | Read and write in the task clone |
-| `gh` hosts and keychain | Outbound internet, including the npm registry |
+| `gh` hosts and keychain | HTTPS to `registry.npmjs.org` (`npm install`, `npm view`) |
 | Controller state and the task Copilot home | `npm install` and `npm test` |
 | Writes to `.git` (hook planting, `git commit`) | Read-only `git status` and `git diff` |
 | `127.0.0.1`, `localhost` and `::1` (showcase :3137, Supabase :54321) | |
+| Any other host, e.g. `example.com`, `api.github.com`, paste sites (HTTPS exit 56, HTTP 403) | |
+| Proxy bypass (`--noproxy`), direct IP sockets, raw Node sockets and DNS lookups | |
 | `/private/tmp` writes, workspace `.env.local` | |
 | Secret environment variables | |
 
-Outbound internet is open because the agent may need package registries. The
-sandbox holds no credentials, but anything the agent can read (the task clone)
-could be sent out. The sandbox policy schema was reviewed only for CLI
+Outbound network access is restricted because issue text is untrusted. Without an
+allowlist, a hostile instruction could send task-clone contents to any server.
+Copilot's sandbox treats an empty `allowedHosts` list as "all hosts", so the
+controller refuses an empty list. It writes `allowedHosts` (default
+`["registry.npmjs.org"]`), blocks the loopback names and denies local network
+access. Every repository dependency in `package-lock.json` resolves from
+`registry.npmjs.org`. To allow another registry, set `autonomous.allowedHosts` to
+1–20 lowercase host names. A `*.` wildcard needs at least two labels after it
+(`*.example.com`, not `*.com`). IP addresses, `localhost`, `.local`, `.internal`
+and URLs are rejected. Each extra host is a channel for data to leave the task.
+
+The sandbox policy schema was reviewed only for CLI
 **1.0.105**, so any other version fails closed with
 `unreviewed_copilot_sandbox_version` until it is reviewed again. Task folders must
 be **outside your home folder**, because denying home would otherwise deny the
@@ -287,7 +300,7 @@ mode `0600`.
 ```
 
 Only `taskRoot` is required. Defaults: 45 minutes, no credit cap and 60 files.
-`model` and `keepSucceeded` are also accepted. Successful task folders are deleted
+`model`, `allowedHosts` and `keepSucceeded` are also accepted. Successful task folders are deleted
 unless `keepSucceeded` is `true`; failed folders are kept for review.
 
 Start continuous autonomous mode. It polls every 60 seconds and stops with Ctrl+C:
@@ -311,7 +324,12 @@ Limitations:
 - No container. The isolation is Copilot's native Seatbelt sandbox plus
   controller-side checks.
 - Concurrency is fixed at one task.
-- Agent shell commands can reach the internet.
+- Remaining network channels: allowlisted hosts (by default, the agent could
+  encode data into npm registry requests, which an attacker cannot read and
+  which cannot publish without credentials) and the Copilot model API, which
+  receives whatever the agent reads by design.
+- Copilot's built-in file-edit tools follow the policy but are not OS-sandboxed
+  like shell commands; the controller's post-run diff checks are the backstop.
 - Exit code 0 is not acceptance; review the draft PR and its CI.
 - The PR body includes the last 4,000 characters of the agent's summary, which is
   unverified agent output.

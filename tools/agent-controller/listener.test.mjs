@@ -834,7 +834,22 @@ test('autonomous invocation is sandboxed, credential-free and never grants all p
   assert.ok(settings.sandbox.userPolicy.filesystem.deniedPaths.includes('/Users/owner'));
   assert.deepEqual(settings.sandbox.userPolicy.filesystem.readonlyPaths, ['/Users/Shared/t/issue-1/repo/.git']);
   assert.equal(settings.sandbox.userPolicy.network.allowLocalNetwork, false);
-  assert.deepEqual(settings.sandbox.userPolicy.network.allowedHosts, []);
+  // An empty allowlist would mean unrestricted egress; untrusted issue text must not reach arbitrary hosts.
+  assert.deepEqual(settings.sandbox.userPolicy.network.allowedHosts, ['registry.npmjs.org']);
+  assert.deepEqual(settings.sandbox.userPolicy.network.blockedHosts, ['localhost', '127.0.0.1', '::1']);
+  assert.deepEqual(sandboxSettings('/Users/Shared/t/issue-1', '/Users/owner', ['registry.npmjs.org', '*.example.com'])
+    .sandbox.userPolicy.network.allowedHosts, ['registry.npmjs.org', '*.example.com']);
+  for (const hosts of [[], undefined, null, '*', ['*'], ['*.com'], ['1.1.1.1'], ['localhost'], ['::1'],
+    ['printer.local'], ['db.internal'], ['https://registry.npmjs.org'], ['registry.npmjs.org:443'],
+    ['Registry.NPMJS.org'], ['registry.npmjs.org', 'registry.npmjs.org'], ['a..b.com'], ['-x.example.com']]) {
+    assert.throws(() => sandboxSettings('/Users/Shared/t/issue-1', '/Users/owner', hosts ?? []),
+      error => error.code === 'invalid_autonomous_config', JSON.stringify(hosts));
+    if (hosts !== undefined) {
+      assert.throws(() => autonomousSettings({ autonomous: { taskRoot: '/Users/Shared/t', allowedHosts: hosts } }),
+        error => error.code === 'invalid_autonomous_config', JSON.stringify(hosts));
+    }
+  }
+  assert.deepEqual(autonomousSettings({ autonomous: { taskRoot: '/Users/Shared/t' } }).allowedHosts, ['registry.npmjs.org']);
   assert.equal(settings.sandbox.userPolicy.seatbelt.keychainAccess, false);
   const args = autonomousArguments('prompt', { maxAiCredits: 50, model: 'm' });
   for (const flag of ['--allow-all', '--yolo', '--allow-all-paths', '--allow-all-urls']) assert.ok(!args.includes(flag));
@@ -860,6 +875,8 @@ test('autonomous success commits, pushes only a task branch, opens a draft PR an
   const call = value.agents[0];
   assert.ok(call.options.cwd.startsWith(value.taskRoot));
   assert.ok(call.settings.sandbox.userPolicy.filesystem.deniedPaths.includes(os.homedir()));
+  assert.deepEqual(call.settings.sandbox.userPolicy.network.allowedHosts, ['registry.npmjs.org']);
+  assert.deepEqual(call.settings.sandbox.userPolicy.network.blockedHosts, ['localhost', '127.0.0.1', '::1']);
   assert.equal(call.options.env.GH_TOKEN, undefined);
   const pr = value.prs[0].args;
   assert.ok(pr.includes('--draft'));
