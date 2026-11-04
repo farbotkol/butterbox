@@ -226,8 +226,8 @@ These four owner-prioritised stories form **Wave 1: list / detail / contextual e
 | BB-DEMO-001 | Isolated synthetic showcase café | P0 | Done | — |
 | BB-DEMO-002 | Guided owner, manager and employee showcase journeys | P0 | Done | BB-DEMO-001 |
 | BB-DEMO-003 | Showcase UI, navigation and mobile polish | P0 | Done | BB-BRAND-002; BB-DEMO-002 |
-| BB-DEMO-004 | Repeatable showcase acceptance and reset | P0 | Blocked | BB-DEMO-001; BB-DEMO-002; BB-DEMO-003 |
-| BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | Backlog | BB-DEMO-002 |
+| BB-DEMO-004 | Repeatable showcase acceptance and reset | P0 | Done | BB-DEMO-001; BB-DEMO-002; BB-DEMO-003 |
+| BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | In Progress | BB-DEMO-002 |
 
 ### Story acceptance requirements
 
@@ -938,6 +938,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-SHIFTS-005 — Scenario-driven staffing change [P1]
 
+**Status:** Blocked until reviewed employment restrictions can be surfaced and verified for proposed changes.
+
 **User story:** As a manager, I want a guided weather, rush, sickness or early-finish workflow.
 
 **Acceptance criteria**
@@ -1164,6 +1166,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-RULES-002 — Minimum engagement and break warnings [P1]
 
+**Status:** Blocked pending reviewed, validated rule sources and versions for minimum engagement and breaks.
+
 **User story:** As a manager, I want warning checks before publishing.
 
 **Acceptance criteria**
@@ -1185,6 +1189,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 
 ### BB-RULES-004 — Roster change safeguards [P1]
+
+**Status:** Blocked pending reviewed notice and minimum-engagement requirements.
 
 **User story:** As a manager, I want cancellation and change notices to respect configured requirements.
 
@@ -1728,6 +1734,8 @@ or production deployment.
 **Dependencies:** BB-BRAND-001;BB-BRAND-003
 
 ### BB-BRAND-006 — Create reusable marketing visuals [P2]
+
+**Status:** Blocked pending rights clearance and owner approval of specific reusable templates.
 
 **User story:** As a marketer, I want reusable and truthful visual templates.
 

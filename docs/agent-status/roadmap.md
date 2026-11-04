@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-DEMO-005 — Clearly labelled future-vision concept previews
+
+- **Last report:** 2026-11-04 12:12 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-DEMO-005 — Clearly labelled future-vision concept previews (P2, In Progress).
+- **Acceptance criteria:** Optional AI, forecasting and Award Central concepts must be clearly nonfunctional, use illustrative data only, make no payroll or award-compliance claims, and not change production workflows.
+- **Phase:** Planning.
+- **Activity:** Reviewing existing showcase gates and selecting an isolated verification approach; no protected showcase is being redeployed.
+- **Plan:** Add an optional static concept preview gated to the showcase or explicitly enabled isolated development, with no external service or real data; test honest labels, feature gating, accessibility, mobile layouts and existing Help integration.
+- **Progress since previous report:** The owner authorized resuming ordinary backlog work. Confirmed BB-ATTEND-006 is Done and no ready Showcase P0 remains. Recorded BB-RULES-002/004 and BB-SHIFTS-005 as blocked on reviewed employment-rule sources, and BB-BRAND-006 as blocked on specific template approval and rights clearance.
+- **Tests and results:** No BB-DEMO-005 tests have run yet. The branch and remote matched at `37dd4a24115fd611e07e39bc71ab66d413c66eb3`; unrelated `.eslintcache` and `.vscode/` changes were left untouched.
+- **Failing tests:** None observed for this story; verification has not started.
+- **Blockers requiring intervention:** Reviewed employment-rule sources and marketing-template approval/rights remain external blockers for the higher-priority stories; no BB-DEMO-005 blocker identified yet.
+- **Documentation:** Planned; update the User Guide, backlog and criterion-level implementation evidence after verification.
+- **Next concrete action:** Verify an isolated development environment and implement the gated concept component and focused tests.
+- **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (BB-REPORT-003); current branch checkpoint is `37dd4a24115fd611e07e39bc71ab66d413c66eb3`.
+- **Push outcome:** Branch checkpoint `37dd4a24115fd611e07e39bc71ab66d413c66eb3` was verified on the remote; this planning checkpoint is pending push.
+
 ## Owner-requested UXFIX public deployment — issue #5
 
 - **Last report:** 2026-11-04 11:35 AEDT (UTC+1100), observed on the operator's clock.
