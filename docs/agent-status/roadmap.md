@@ -16,6 +16,27 @@
 - **Latest development commit:** unknown (Git inspection blocked).
 - **Commit / push outcome:** Not attempted; explicitly prohibited in this task. Delivery is delegated to the configured controller, not claimed complete here.
 
+## Agent controller — self-healing recovery
+
+- **Last report:** 2026-11-05 07:10 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Listener PID 69807 is still running the code from before this change, with an empty queue. It is being restarted on the new commit. A later state is not implied.
+- **Phase:** Testing. The live run continues for issue #18.
+- **Issue #18 so far:**
+  - Attempt 3's agent finished at 06:55 AEDT and its work was committed as `ffb08b8`.
+  - The push then failed with `command_exit_1`. Old code charged this delivery failure to the agent's last attempt and blocked the issue.
+  - Other issues continued. The real stderr was discarded, so the cause is not known.
+- **Fixes in this change:**
+  - Delivery stages now have their own budget (`maxDeliveryRetries`). Retries resume the preserved commit and never rerun the agent.
+  - Redacted command diagnostics are saved.
+  - Secret-scanning, credential and protected-branch rejections are classified as terminal.
+  - Unpushed CI-repair commits are preserved.
+  - Moved-base conflicts are resolved by a scoped merge commit.
+  - Recent shared-budget delivery blocks are requeued once.
+- **Tests:** controller suite **95/95** pass. ESLint is clean.
+- **Next concrete action:** Commit and push this change, then restart the listener. Observe #18's requeue, push, CI, repair, merge and close, and record the actual outcome.
+- **Documentation:** Updated in `tools/agent-controller/README.md`. User Guide not applicable: internal tooling.
+- **Latest development commit:** `7c24405` before this change.
+
 ## Workstream 5 — Reliable payroll-delivery foundation
 
 - **Last report:** 2026-11-04 18:35 AEDT (UTC+1100), observed on the operator's clock.
