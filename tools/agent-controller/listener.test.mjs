@@ -1627,6 +1627,8 @@ test('autonomous transient push failure retries delivery with the preserved comm
   assert.equal(done.deliveryRetries, 1);
   assert.equal(value.agents.length, 1);
   assert.equal(pushes.length, 2);
+  // Pushes are buffered so GitHub receives a sized request rather than chunked encoding (HTTP 400 on #18).
+  for (const args of pushes) assert.ok(args.indexOf('http.postBuffer=268435456') === args.indexOf('push') - 1);
   assert.equal(value.prs.length, 1);
   assert.deepEqual(value.closures, [42]);
 });

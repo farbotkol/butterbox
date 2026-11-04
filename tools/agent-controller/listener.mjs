@@ -814,6 +814,7 @@ export function taskBranch(task) {
 
 // Controller-side git runs outside the sandbox, so never execute repository-controlled hooks or monitors.
 const gitSafe = ['-c', 'core.hooksPath=/dev/null', '-c', 'core.fsmonitor=false', '-c', 'commit.gpgsign=false'];
+const PUSH_POST_BUFFER = 256 * 1024 * 1024;
 
 export async function changedPaths(cwd, exec, signal, maxChangedFiles) {
   const git = args => exec('git', [...gitSafe, ...args], { cwd, signal });
@@ -1299,7 +1300,10 @@ export class Controller {
     value.stage = 'push';
     await this.store.save(value);
     // Never forced: GitHub rejects the push if the task branch moved in a way the ledger does not know.
-    await this.taskGit(value, signal)(['push', '--quiet', 'origin', `HEAD:refs/heads/${value.branch}`]);
+    // Packs above git's default 1 MB post buffer are sent with chunked encoding, which GitHub answered with
+    // a deterministic "HTTP 400 ... unexpected disconnect" for issue #18; buffering sends a sized request instead.
+    await this.taskGit(value, signal)(['-c', `http.postBuffer=${PUSH_POST_BUFFER}`, 'push', '--quiet', 'origin',
+      `HEAD:refs/heads/${value.branch}`]);
     value.commit = value.pendingCommit; value.pushed = true;
     delete value.pendingCommit;
     await this.store.save(value);
