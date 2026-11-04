@@ -1365,6 +1365,31 @@ test('autonomous mode rejects unreviewed Copilot sandbox versions before reservi
   assert.equal(value.agents.length, 0);
 });
 
+test('autonomous Copilot session start-up failure pauses the queue without spending task attempts', async t => {
+  const value = await autonomousFixture(t, { agent: async () => {
+    const error = new ControllerError('command_exit_1');
+    Object.defineProperty(error, 'diagnostics', { value: { stdout: '', stderr:
+      'Failed to initialize session: Error: model resolution leaf failed: alias requires dynamic Auto tiers.' } });
+    throw error;
+  }, github: { issues: async () => [issue(), issue({ number: 43 })], task: async number => parseTask(issue({ number })) } });
+  await rejects(value.controller.tick(), 'copilot_session_init_failed');
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.error, 'copilot_session_init_failed');
+  assert.equal(ledger.attempts, 0);
+  assert.ok(Date.parse(ledger.retryAt) > Date.now() + 800_000);
+  assert.equal(ledger.final, undefined);
+  assert.deepEqual(value.labels, []);
+  assert.match(value.comments.at(-1), /paused #42: Copilot CLI could not start a session/);
+  assert.match(await readFile(path.join(ledger.taskDir, 'copilot-output-failed.txt'), 'utf8'), /dynamic Auto tiers/);
+  assert.equal(await value.store.read(43), null);
+  // Still paused on the next poll: no new reservation and no repeated comment.
+  const comments = value.comments.length;
+  await rejects(value.controller.tick(), 'copilot_session_init_failed');
+  assert.equal(value.comments.length, comments);
+  assert.equal(await value.store.read(43), null);
+  assert.equal(value.agents.length, 1);
+});
+
 test('autonomous mode isolates non-owner or edited issues without executing them or stopping the poll', async t => {
   const value = await autonomousFixture(t, { github: {
     issues: async () => [issue({ user: { login: 'attacker', id: 1, type: 'User' } }), issue({ number: 43 })],

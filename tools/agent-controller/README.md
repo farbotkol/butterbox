@@ -318,6 +318,18 @@ Routine failures recover without owner action:
 - Errors on one issue (including a GitHub error while reading it) are logged and
   skipped; later issues still run. Owner identity, Copilot version and profile
   checks still fail the whole poll closed.
+- If Copilot cannot start a session at all (`copilot_session_init_failed`, for
+  example an unavailable `model`), the controller treats it as a configuration
+  fault, not a task failure:
+  - the attempt is refunded;
+  - the issue gets one `paused` comment;
+  - polls fail closed and no new issue is reserved;
+  - it retries every 15 minutes until the configuration works.
+
+  A failed agent's stdout and stderr tails are saved only in the private task
+  folder as `copilot-output-failed.txt` (never posted to GitHub). The
+  `"fusion"` model alias fails this way in the isolated task Copilot home
+  ("requires dynamic Auto tiers"); use `"auto"` or omit `model`.
 - GitHub comments, labels and closures go through a durable per-issue
   **outbox** in the ledger. A GitHub outage delays reports but never stops the
   queue or loses them:

@@ -97,6 +97,7 @@ export function execFile(command, args, {
     });
     if (child.pid) onSpawn?.(child.pid);
     let output = '';
+    let errors = '';
     let bytes = 0;
     let reason = null;
     let killTimer;
@@ -121,6 +122,7 @@ export function execFile(command, args, {
     child.stderr.on('data', data => {
       bytes += data.length;
       if (bytes > maxBytes) stop('command_output_limit');
+      else errors = (errors + data.toString()).slice(-8000);
     });
     const cleanup = () => {
       clearTimeout(timer); clearTimeout(killTimer);
@@ -130,9 +132,11 @@ export function execFile(command, args, {
     child.on('error', () => { cleanup(); reject(new ControllerError('command_unavailable')); });
     child.on('close', (code, childSignal) => {
       cleanup();
-      if (reason) reject(new ControllerError(reason));
-      else if (code !== 0) reject(new ControllerError(`command_exit_${code ?? childSignal}`));
-      else resolve(output.trim());
+      if (!reason && code === 0) return resolve(output.trim());
+      const error = new ControllerError(reason ?? `command_exit_${code ?? childSignal}`);
+      // Local diagnostics only; callers decide where (if anywhere) these bounded tails are stored.
+      Object.defineProperty(error, 'diagnostics', { value: { stdout: output.slice(-8000), stderr: errors } });
+      reject(error);
     });
   });
 }
@@ -979,7 +983,13 @@ export class Controller {
     await this.github.identity(this.signal);
     const autonomous = this.mode === 'autonomous';
     const records = await this.store.recoverRuns({ autonomous });
-    if (autonomous) await this.recover(records);
+    if (autonomous) {
+      await this.recover(records);
+      // A Copilot configuration fault pauses all new work until its retry is due, not just one issue.
+      const paused = records.find(value => value.mode === 'autonomous' && !value.final &&
+        value.error === 'copilot_session_init_failed' && Date.parse(value.retryAt) > Date.now());
+      if (paused) fail('copilot_session_init_failed');
+    }
     else if (records.length && this.mode !== 'dry-run') fail('run_requires_local_review');
     for (const profile of Object.values(this.config.profiles)) {
       await repository(profile, this.exec, this.signal, false);
@@ -1140,9 +1150,30 @@ export class Controller {
     const git = this.taskGit(value, signal);
     const head = await git(['rev-parse', 'HEAD']);
     let spawned = Promise.resolve();
-    const output = await this.exec(cli.executable, autonomousArguments(prompt, this.autonomous),
-      { cwd, signal, timeoutMs: this.taskTimeoutMs, maxBytes: 4_000_000, env: autonomousEnvironment(value.taskDir),
-        onSpawn: pid => { value.agentPid = pid; spawned = this.store.save(value); } });
+    let output;
+    try {
+      output = await this.exec(cli.executable, autonomousArguments(prompt, this.autonomous),
+        { cwd, signal, timeoutMs: this.taskTimeoutMs, maxBytes: 4_000_000, env: autonomousEnvironment(value.taskDir),
+          onSpawn: pid => { value.agentPid = pid; spawned = this.store.save(value); } });
+    } catch (error) {
+      await spawned;
+      delete value.agentPid;
+      // Kept in the private task folder for diagnosis; never posted to GitHub.
+      if (error?.diagnostics) {
+        const failed = outputName.replace(/\.txt$/, '-failed.txt');
+        await writeFile(path.join(value.taskDir, failed), `${error.code}\n\n--- stdout (tail) ---\n` +
+          `${error.diagnostics.stdout}\n\n--- stderr (tail) ---\n${error.diagnostics.stderr}\n`, { mode: 0o600 })
+          .catch(() => {});
+        audit(value, 'agent_failed_output_saved', failed);
+        // Copilot refusing to start (bad model, auth or settings) breaks every task alike: a configuration fault.
+        if (/Failed to initialize session/i.test(error.diagnostics.stderr)) {
+          const config = new ControllerError('copilot_session_init_failed');
+          Object.defineProperty(config, 'diagnostics', { value: error.diagnostics });
+          throw config;
+        }
+      }
+      throw error;
+    }
     await spawned;
     delete value.agentPid;
     await writeFile(path.join(value.taskDir, outputName), output, { mode: 0o600 });
@@ -1505,6 +1536,23 @@ export class Controller {
     value.finishedAt = new Date().toISOString();
     if (autonomous) {
       // A separate bounded report may complete after Ctrl+C; no agent can remain running.
+      if (value.error === 'copilot_session_init_failed') {
+        // Not the task's fault: refund the attempt, keep the issue queued and fail polls closed until fixed.
+        value.attempts = Math.max(0, (value.attempts ?? 1) - 1);
+        value.retryAt = new Date(Date.now() + Math.max(this.retryBaseMs * 8, 900_000)).toISOString();
+        audit(value, 'configuration_error', value.error);
+        await this.store.save(value);
+        if (!value.configErrorReported) {
+          value.configErrorReported = true;
+          await this.notify(value, [{ kind: 'comment', body: `paused #${task.number}: Copilot CLI could not start a ` +
+            'session (copilot_session_init_failed), which is a controller configuration problem such as an ' +
+            'unavailable model, not a task failure. The attempt was not counted. The queue is paused and retried ' +
+            'every 15 minutes; see the failed agent output in the local task folder.' }], null);
+        }
+        const error = new ControllerError('copilot_session_init_failed');
+        error.global = true;
+        throw error;
+      }
       if (value.status !== 'succeeded') {
         await this.store.save(value);
         // Retried after reconciliation or blocked on its own issue; later polls continue with other tasks.
