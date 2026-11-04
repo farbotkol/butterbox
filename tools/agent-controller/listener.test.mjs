@@ -756,7 +756,8 @@ const sh = (cwd, ...args) => {
 
 // Real git against a local bare "GitHub" remote, a fake Copilot agent and a fake gh; no network or credentials.
 async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(cwd, 'feature.txt'), 'done\n'),
-  version = 'GitHub Copilot CLI 1.0.105.', github = {}, signal, keepSucceeded } = {}) {
+  version = 'GitHub Copilot CLI 1.0.105.', github = {}, signal, keepSucceeded, autoMerge,
+  checks = async () => [{ name: 'verify', done: true, ok: true, result: 'success' }] } = {}) {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'controller-auto-')));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const remote = path.join(directory, 'remote.git');
@@ -796,17 +797,29 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     }
     throw new Error(`unexpected command ${command}`);
   };
+  const labels = []; const merges = []; const deleted = []; const checkCalls = [];
+  const head = () => sh(remote, 'rev-parse', taskBranch(parseTask(issue())));
+  const pr = { merged: false };
   const githubClient = {
     identity: async () => {}, issues: async () => [issue()], task: async () => parseTask(issue()),
     comment: async (number, message) => { comments.push(message); },
-    closeCompleted: async number => { closures.push(number); }, ...github,
+    closeCompleted: async number => { closures.push(number); },
+    labelBlocked: async number => { labels.push(number); },
+    checks: async sha => { checkCalls.push(sha); return checks(sha, checkCalls.length); },
+    pullRequest: async number => ({ number, state: pr.merged ? 'closed' : 'open', merged: pr.merged,
+      mergeable: true, merge_commit_sha: pr.merged ? 'c'.repeat(40) : null,
+      base: { ref: BRANCH }, head: { ref: taskBranch(parseTask(issue())), sha: head() } }),
+    merge: async (number, sha) => { merges.push({ number, sha }); pr.merged = true; return 'c'.repeat(40); },
+    contains: async () => true,
+    deleteBranch: async branch => { deleted.push(branch); }, ...github,
   };
   const config = { profiles: { roadmap: { cwd: profile, branch: BRANCH } }, copilotPath: copilot,
-    autonomous: { taskRoot, ...(keepSucceeded === undefined ? {} : { keepSucceeded }) } };
+    autonomous: { taskRoot, ...(keepSucceeded === undefined ? {} : { keepSucceeded }),
+      ...(autoMerge === undefined ? {} : { autoMerge }) } };
   const controller = new Controller({ github: githubClient, store, config, exec, mode: 'autonomous', enabled: true,
-    autonomousEnabled: true, signal });
+    autonomousEnabled: true, signal, checksPollMs: 1, checksGraceMs: 0 });
   return { directory, remote, profile, taskRoot, store, controller, comments, closures, prs, agents, config, exec,
-    github: githubClient, task: parseTask(issue()) };
+    github: githubClient, task: parseTask(issue()), labels, merges, deleted, checkCalls, pr, head };
 }
 
 test('autonomous mode needs both execution gates and a task root outside the home folder', async t => {
@@ -863,8 +876,10 @@ test('autonomous invocation is sandboxed, credential-free and never grants all p
   assert.equal(env.GIT_CONFIG_GLOBAL, '/dev/null');
 });
 
-test('autonomous success commits, pushes only a task branch, opens a draft PR and never replays or closes', async t => {
-  const value = await autonomousFixture(t);
+test('autonomous success waits for green CI, squash-merges the exact commit, then closes and never replays', async t => {
+  const value = await autonomousFixture(t, { checks: async (sha, call) => call === 1
+    ? [{ name: 'verify', done: false, ok: false, result: 'in_progress' }]
+    : [{ name: 'verify', done: true, ok: true, result: 'success' }, { name: 'database', done: true, ok: true, result: 'success' }] });
   assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
   const branch = taskBranch(value.task);
   assert.match(branch, /^agent\/issue-42-[a-f0-9]{8}$/);
@@ -879,20 +894,56 @@ test('autonomous success commits, pushes only a task branch, opens a draft PR an
   assert.deepEqual(call.settings.sandbox.userPolicy.network.blockedHosts, ['localhost', '127.0.0.1', '::1']);
   assert.equal(call.options.env.GH_TOKEN, undefined);
   const pr = value.prs[0].args;
-  assert.ok(pr.includes('--draft'));
+  assert.ok(!pr.includes('--draft'));
   assert.equal(pr[pr.indexOf('--base') + 1], BRANCH);
   assert.equal(pr[pr.indexOf('--head') + 1], branch);
   assert.match(pr[pr.indexOf('--body') + 1], /^Refs #42/);
-  assert.ok(!pr.includes('merge'));
+  const commit = value.head();
+  assert.ok(value.checkCalls.length >= 2 && value.checkCalls.every(sha => sha === commit));
+  assert.deepEqual(value.merges, [{ number: 77, sha: commit }]);
+  assert.deepEqual(value.deleted, [branch]);
   const ledger = await value.store.read(42);
   assert.equal(ledger.status, 'succeeded');
-  assert.equal(ledger.pullRequest, 'https://github.com/farbotkol/butterbox/pull/77');
-  assert.match(value.comments.at(-1), /draft pull request https:\/\/github.com\/farbotkol\/butterbox\/pull\/77/);
+  assert.equal(ledger.mergeVerified, true);
+  assert.equal(ledger.mergeCommit, 'c'.repeat(40));
+  assert.deepEqual(ledger.checks, ['verify: success', 'database: success']);
+  assert.match(value.comments.at(-1), /completed #42\. Pull request https:\/\/github.com\/farbotkol\/butterbox\/pull\/77 passed every CI check/);
+  assert.match(value.comments.at(-1), /- database: success/);
+  assert.deepEqual(value.closures, [42]);
+  assert.deepEqual(value.labels, []);
   assert.deepEqual(await readdir(value.taskRoot), []);
   assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
   assert.equal(value.agents.length, 1);
+  assert.equal(value.merges.length, 1);
+});
+
+test('autonomous autoMerge false keeps the draft-only review flow and never merges or closes', async t => {
+  const value = await autonomousFixture(t, { autoMerge: false });
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.ok(value.prs[0].args.includes('--draft'));
+  assert.deepEqual(value.merges, []);
+  assert.deepEqual(value.checkCalls, []);
+  assert.match(value.comments.at(-1), /draft pull request https:\/\/github.com\/farbotkol\/butterbox\/pull\/77/);
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
   assert.deepEqual(value.closures, []);
 });
+
+async function assertBlocked(value, code, { pushed = false } = {}) {
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'failed');
+  assert.equal(ledger.error, code);
+  assert.equal(ledger.blockedReported, true);
+  assert.deepEqual(value.labels, [42]);
+  assert.deepEqual(value.closures, []);
+  assert.match(value.comments.at(-1), new RegExp(`blocked #42; failed: ${code}.*The issue stays open`));
+  assert.match(value.comments.at(-1), /Tasks never replay automatically/);
+  if (!pushed) assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
+  // A blocked task never stops the queue and never replays.
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.labels, [42]);
+  return ledger;
+}
 
 for (const [name, agent, code] of [
   ['no changes', async () => 'nothing to do', 'no_changes_produced'],
@@ -904,24 +955,92 @@ for (const [name, agent, code] of [
   ['too many files', async cwd => { for (let i = 0; i < 61; i++) await writeFile(path.join(cwd, `f${i}`), 'x'); },
     'too_many_changed_files'],
 ]) {
-  test(`autonomous ${name} fails closed without push or PR and blocks the queue for review`, async t => {
+  test(`autonomous ${name} fails closed without push or PR, labels the issue blocked and continues`, async t => {
     const value = await autonomousFixture(t, { agent });
-    await rejects(value.controller.tick(), code);
-    const ledger = await value.store.read(42);
-    assert.equal(ledger.status, 'failed');
-    assert.equal(ledger.error, code);
-    assert.equal(ledger.pushed, undefined);
+    assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
     assert.equal(value.prs.length, 0);
-    assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
-    assert.match(value.comments.at(-1), new RegExp(`failed #42; ${code}. No pull request`));
+    const ledger = await assertBlocked(value, code);
+    assert.equal(ledger.pushed, undefined);
+    assert.match(value.comments.find(text => text.includes(': blocked #')), /No pull request was created/);
     assert.deepEqual(await readdir(ledger.taskDir), ['cache', 'copilot-home', 'repo', 'tmp'].concat(
       code === 'command_exit_1' ? [] : ['copilot-output.txt']).sort());
-    await rejects(value.controller.tick(), 'run_requires_local_review');
-    await value.store.acknowledge(42);
-    assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
-    assert.equal(value.agents.length, 1);
   });
 }
+
+test('autonomous failing CI never merges or closes; the check results are reported', async t => {
+  const value = await autonomousFixture(t, { checks: async () => [
+    { name: 'verify', done: true, ok: true, result: 'success' },
+    { name: 'database', done: true, ok: false, result: 'failure' }] });
+  await value.controller.tick();
+  assert.deepEqual(value.merges, []);
+  const ledger = await assertBlocked(value, 'ci_checks_failed', { pushed: true });
+  assert.equal(ledger.stage, 'checks');
+  assert.match(value.comments.find(text => text.includes(': blocked #')), /pull\/77 \(not merged\)[\s\S]*- database: failure/);
+});
+
+for (const [name, github, code] of [
+  ['moved head', { pullRequest: async number => ({ number, state: 'open', mergeable: true, base: { ref: BRANCH },
+    head: { ref: 'agent/x', sha: 'd'.repeat(40) } }) }, 'pull_request_changed'],
+  ['unmergeable PR', { pullRequest: async number => ({ number, state: 'open', mergeable: false, base: { ref: BRANCH },
+    head: { ref: 'agent/issue-42-x', sha: 'd'.repeat(40) } }) }, 'pull_request_changed'],
+  ['transient check API failure', { checks: async () => { throw new ControllerError('command_exit_1'); } }, 'command_exit_1'],
+]) {
+  test(`autonomous ${name} blocks before merging`, async t => {
+    const value = await autonomousFixture(t, { github });
+    await value.controller.tick();
+    assert.deepEqual(value.merges, []);
+    await assertBlocked(value, code, { pushed: true });
+  });
+}
+
+test('autonomous merge requires post-merge confirmation before closing', async t => {
+  const value = await autonomousFixture(t, { github: { contains: async () => false } });
+  await value.controller.tick();
+  assert.equal(value.merges.length, 1);
+  const ledger = await assertBlocked(value, 'merge_verification_failed', { pushed: true });
+  assert.equal(ledger.merged, true);
+  assert.notEqual(ledger.mergeVerified, true);
+  assert.match(value.comments.find(text => text.includes(': blocked #')), /merged as c{40}; post-merge verification did not complete/);
+});
+
+test('autonomous merge accepts a lost merge response only when GitHub confirms that exact head merged', async t => {
+  const value = await autonomousFixture(t);
+  value.github.merge = async (number, sha) => { value.merges.push({ number, sha }); value.pr.merged = true;
+    throw new ControllerError('command_exit_1'); };
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal((await value.store.read(42)).mergeVerified, true);
+  assert.deepEqual(value.closures, [42]);
+});
+
+test('autonomous merges refuse default branches and mismatched workstream bases', async t => {
+  const value = await autonomousFixture(t);
+  const signal = new AbortController().signal;
+  for (const base of ['main', 'master', 'feature/award-central-foundation']) {
+    await rejects(value.controller.mergeVerified({ workstream: 'roadmap', pullRequest: 'https://github.com/farbotkol/butterbox/pull/1' },
+      base, signal), 'merge_base_refused');
+  }
+  assert.deepEqual(value.checkCalls, []);
+});
+
+test('GitHub checks include every check run and commit status on the exact commit', async () => {
+  const calls = [];
+  const github = new GitHub(async (command, args) => {
+    calls.push(args.join(' '));
+    return JSON.stringify(args.some(arg => arg.endsWith('/check-runs'))
+      ? { total_count: 3, check_runs: [{ name: 'a', status: 'completed', conclusion: 'success' },
+        { name: 'b', status: 'completed', conclusion: 'skipped' }, { name: 'c', status: 'in_progress', conclusion: null }] }
+      : { statuses: [{ context: 'd', state: 'failure' }] });
+  });
+  const sha = 'a'.repeat(40);
+  assert.deepEqual((await github.checks(sha)).map(check => [check.name, check.done, check.ok]),
+    [['a', true, true], ['b', true, true], ['c', false, false], ['d', true, false]]);
+  assert.ok(calls.every(call => call.includes(sha)));
+  await rejects(github.checks('main'), 'invalid_commit_sha');
+  const truncated = new GitHub(async () => JSON.stringify({ total_count: 101, check_runs: [], statuses: [] }));
+  await rejects(truncated.checks(sha), 'invalid_check_response');
+  await rejects(github.deleteBranch(BRANCH), 'refused_branch_deletion');
+  await rejects(github.merge(1, 'HEAD'), 'invalid_merge_request');
+});
 
 test('autonomous mode rejects unreviewed Copilot sandbox versions before reserving a task', async t => {
   const value = await autonomousFixture(t, { version: 'GitHub Copilot CLI 1.0.106.' });
@@ -940,23 +1059,33 @@ test('autonomous mode never executes non-owner or edited issues', async t => {
   assert.equal(await value.store.read(42), null);
 });
 
-test('interrupted autonomous run is recorded, never pushed and never replayed', async t => {
+test('interrupted autonomous run is recorded, reported blocked on restart and never replayed', async t => {
   const abort = new AbortController();
   const value = await autonomousFixture(t, { signal: abort.signal, agent: async () => {
     abort.abort(); throw new ControllerError('operation_cancelled');
   } });
-  await rejects(value.controller.tick(), 'operation_cancelled');
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
   const ledger = await value.store.read(42);
   assert.equal(ledger.status, 'interrupted');
+  assert.equal(ledger.blockedReported, true);
   assert.equal(value.prs.length, 0);
   assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
-  ledger.status = 'running'; delete ledger.acknowledgedAt;
+  // Simulate a process that died mid-run without reporting.
+  ledger.status = 'running'; delete ledger.blockedReported;
   await value.store.save(ledger);
+  const comments = value.comments.length;
   const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
     mode: 'autonomous', enabled: true, autonomousEnabled: true });
-  await rejects(restarted.tick(), 'run_requires_local_review');
-  assert.equal((await value.store.read(42)).error, 'previous_process_interrupted');
-  await value.store.acknowledge(42);
   assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+  const recovered = await value.store.read(42);
+  assert.equal(recovered.error, 'previous_process_interrupted');
+  assert.equal(recovered.blockedReported, true);
+  assert.match(value.comments.at(-1), /blocked #42; interrupted: previous_process_interrupted/);
+  assert.equal(value.comments.length, comments + 1);
+  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.comments.length, comments + 1);
   assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.closures, []);
+  const dry = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec });
+  assert.deepEqual(await dry.tick(), { eligible: 0, executed: 0 });
 });

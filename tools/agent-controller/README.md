@@ -199,13 +199,15 @@ tests, install dependencies, commit/push, call databases or deploy**. Dirty
 results block the next task until the owner reviews them. Exit code 0 is
 reported as process success, not proof of a feature's acceptance.
 
-## Autonomous mode (sandboxed, draft pull request only)
+## Autonomous mode (sandboxed; merge after green CI, then close)
 
 Autonomous mode is a separate, explicitly enabled mode. Restricted `coding` mode
 above is unchanged. The controller only dispatches. GitHub Copilot CLI's own agent
 does the investigation, edits, dependency installs and test runs. There is no
-per-file approval. The controller then commits, pushes a task branch and opens a
-**draft** pull request.
+per-file approval. The controller then commits, pushes a task branch, opens a
+pull request, waits for **every** CI check to pass, squash-merges it into the
+workstream branch, verifies the merge and closes the issue. The loop is: do the
+task, verify, close, next.
 
 For each eligible owner issue, the existing owner, provenance and replay checks
 run first. Then the controller:
@@ -243,11 +245,34 @@ run first. Then the controller:
    - files over 2 MB;
    - more than `maxChangedFiles` changed files.
 5. Commits as you, then pushes **only** `refs/heads/agent/issue-N-<digest8>`
-   without force. It runs `gh pr create --draft` against the workstream branch
-   with `Refs #N`, then comments the PR URL on the issue.
+   without force. It runs `gh pr create` against the workstream branch with
+   `Refs #N`.
+6. Waits up to `checksTimeoutMinutes` (default 90) for the PR's head commit.
+   Every GitHub check run and commit status on that exact commit must finish as
+   `success`, `neutral` or `skipped`. A 2-minute grace period lets every workflow
+   register first. One failure, a timeout or no checks at all blocks the task.
+   Today, `.github/workflows/ci.yml` runs `verify` (unit tests, lint, build,
+   container health) and `database` (pgTAP, tenant isolation, browser tests).
+7. Re-reads the PR and requires it to be open, mergeable, still on the same
+   base, branch and head commit. It then squash-merges with GitHub's `sha` guard,
+   so a head that moved after the checks is refused.
+8. Confirms that GitHub reports the PR merged with that merge commit, and that
+   the workstream branch contains it. Then it deletes the task branch, posts a
+   completion summary (PR, merge commit, every check result, agent summary) and
+   closes the issue as completed.
 
-It **never merges, deploys or closes the issue**. The issue stays open until you
-review the PR.
+It never merges into `main`/`master` or any branch other than the issue's
+workstream branch, and **never deploys**. Set `"autoMerge": false` to keep the
+previous draft-PR-only behaviour (no merge, no close).
+
+If anything fails (no changes, rejected paths, a Copilot error or timeout,
+failing CI, an unmergeable or moved PR, or failed merge verification), the
+controller comments `blocked` on the issue. The comment gives the error, stage,
+PR state, check results and an agent output excerpt. The controller adds the
+`agent-blocked` label, **leaves the issue open** and continues with the next
+eligible issue on the next poll. Transient GitHub API errors while waiting and
+merging are retried up to 3 times. The issue is never closed just because the
+agent finished: closing requires a verified merge.
 
 Verified sandbox boundaries on Copilot CLI 1.0.105 (probes on 4 November 2026):
 
@@ -299,7 +324,8 @@ mode `0600`.
   "timeoutMinutes": 45, "maxAiCredits": 300, "maxChangedFiles": 60 }
 ```
 
-Only `taskRoot` is required. Defaults: 45 minutes, no credit cap and 60 files.
+Only `taskRoot` is required. Defaults: 45 minutes, no credit cap, 60 files,
+`autoMerge: true` and `checksTimeoutMinutes: 90` (10–240).
 `model`, `allowedHosts` and `keepSucceeded` are also accepted. Successful task folders are deleted
 unless `keepSucceeded` is `true`; failed folders are kept for review.
 
@@ -313,11 +339,12 @@ AGENT_CONTROLLER_ENABLED=true AGENT_CONTROLLER_AUTONOMOUS=true \
 The first poll executes **every open, eligible, unreserved owner issue**, oldest
 first and one at a time. Run a dry-run first, without the two variables, to see
 which issues will run. Tasks run one at a time under the single listener lock, so
-two tasks never modify the same checkout. A failed or interrupted run (no
-changes, rejected paths, a Copilot error, a timeout or Ctrl+C) is reported on the
-issue and blocks the queue until you inspect `<taskRoot>/issue-N-*/` and run
-`--acknowledge N`. Reserved issues **never** run again; to retry, create a new
-issue.
+two tasks never modify the same checkout. A failed or interrupted run (including
+Ctrl+C, or a crash detected at the next start) is reported `blocked` on its
+issue, labelled `agent-blocked` and left open, and other issues continue. Failed
+task folders stay in `<taskRoot>/issue-N-*/` for inspection. Reserved issues
+**never** run again; to retry, create a new issue. Only a failure to post a
+GitHub status report still stops the queue until `--acknowledge N`.
 
 Limitations:
 
@@ -330,8 +357,19 @@ Limitations:
   receives whatever the agent reads by design.
 - Copilot's built-in file-edit tools follow the policy but are not OS-sandboxed
   like shell commands; the controller's post-run diff checks are the backstop.
-- Exit code 0 is not acceptance; review the draft PR and its CI.
-- The PR body includes the last 4,000 characters of the agent's summary, which is
+- Merge safety rests on CI. Anything CI does not test can be merged unreviewed.
+  The workstream branch is not branch-protected, so the controller enforces the
+  "all checks green" rule itself.
+- As of 4 November 2026 the workstream branch's own CI is red: three existing
+  browser tests in the `database` job fail (draft-shift editing, WCAG smoke and
+  showcase navigation). Until they are fixed, **every** autonomous task will stop
+  as `ci_checks_failed` and none will merge.
+- Squash merges are checked against the PR's tested head, but GitHub does not
+  re-run CI on the combined result if the workstream branch moved during the
+  wait.
+- Tasks are never retried automatically; the agent's own test-and-fix loop
+  happens inside its single run.
+- The PR body and completion comment include agent summaries, which are
   unverified agent output.
 
 ## How ChatGPT can submit voice-authorised instructions
