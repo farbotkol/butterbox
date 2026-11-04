@@ -1068,6 +1068,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-AI-006 — Safe conversational permissions [P1]
 
+**Foundation Ready:** AI-GOV-001 provides strict output-scope and allow-list validation only. It does not authenticate callers, retrieve tenant data, enforce membership or apply actions. The complete parent story remains Backlog.
+
 **User story:** As an owner, I want the assistant to respect venue and department access.
 
 **Acceptance criteria**
@@ -1079,6 +1081,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 
 ### BB-AI-007 — AI quality controls [P1]
+
+**Foundation Ready:** AI-GOV-001 adds model-free offline fixtures for ambiguity, injected/malicious output, missing context and unauthorized actions. It does not evaluate an actual model or provide durable request logging, spend/latency measurement, budgets or circuit breakers. The complete parent story remains Backlog.
 
 **User story:** As a product owner, I want to monitor hallucinations, latency and spend.
 

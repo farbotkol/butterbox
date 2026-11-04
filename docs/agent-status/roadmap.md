@@ -2,20 +2,20 @@
 
 ## Workstream 1 — AI governance foundations
 
-- **Last report:** 2026-11-04 18:14 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 18:17 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active in this coding session; no background continuation is implied.
-- **Current slice:** AI-GOV-001 — typed proposal contract and offline evaluation (planned Foundation Ready slice linked to BB-AI-006 and BB-AI-007; both parent statuses remain open).
+- **Current slice:** AI-GOV-001 — typed proposal contract and offline evaluation (Foundation Ready; linked to BB-AI-006 and BB-AI-007; both parent statuses remain Backlog).
 - **Acceptance criteria for the slice:** Validate structured proposals against server-supplied business/venue/department scope and allow-listed shift/employee identifiers; provide a reusable mock-only offline evaluator for ambiguous, injected, malformed, missing-context and unauthorized-action cases; no provider call or roster mutation.
-- **Phase:** Planning.
-- **Activity:** Reviewed current branch, AI backlog criteria, existing rule-based open-shift suggestion code and security/test patterns. No general AI request endpoint or provider exists.
-- **Progress since previous report:** Verified the local branch and remote are both at `e50049b`; preserved the unrelated `.eslintcache` deletion and `.vscode/` untracked content. Confirmed open Draft PR #3 has separate Award Central files and must not be merged or duplicated.
-- **Tests and results:** No tests for AI-GOV-001 have been written or run yet. The pinned Supabase CLI is available via npx, but Docker is not running.
-- **Failing tests:** None observed for this slice.
-- **Blockers requiring intervention:** Database-backed per-business enablement, server authorization and audit/budget persistence need a positively verified isolated database. Current database ports are SSH tunnels; no migration or database operation will target them until the exact project, host and synthetic-only contents are verified.
-- **Documentation:** Foundation scope will be recorded against BB-AI-006/007; parent stories will remain Backlog until their full criteria pass.
-- **Next concrete action:** Implement the pure typed proposal validator and mock-only offline evaluation harness, then run focused Node tests and static checks.
-- **Latest development commit:** `e50049b580d0ca3322fde8140c0f5d5917dcb3ea`.
-- **Push outcome:** The remote branch SHA was verified to match `e50049b580d0ca3322fde8140c0f5d5917dcb3ea`; this workstream-start status update is pending.
+- **Phase:** Complete for AI-GOV-001; remaining Workstream 1 server/database controls are blocked pending isolated database verification.
+- **Activity:** Implemented strict typed proposal validation and a mock-only offline evaluation harness. The parser accepts draft assignment data only and has no apply path.
+- **Progress since previous report:** The seven-case local fixture suite and scope-boundary tests are in place; AI-GOV-001 is documented as Foundation Ready. BB-AI-006 and BB-AI-007 remain Backlog; BB-AI-008 is unchanged.
+- **Tests and results:** Focused Node test **7/7** passed; repository TypeScript check passed; targeted ESLint passed; `git diff --check` passed. No provider, database test, migration or app build was run.
+- **Failing tests:** None in the final AI-GOV-001 verification.
+- **Blockers requiring intervention:** The separate persisted business switch, authenticated RLS/server gate, durable audit, budgets and deployment-safe circuit-breaker state require an isolated database. Docker is not running; existing DB ports are SSH tunnels and their exact targets are unverified. No database operation was attempted.
+- **Documentation:** Added the internal AI governance foundation record and marked the limited BB-AI-006/007 slices Foundation Ready. Parent acceptance remains open; User Guide update not applicable because no UI behavior changed.
+- **Next concrete action:** Begin Workstream 2 with a pure, deterministic venue-local aggregation and leakage-safe backtest slice; defer database integration until a disposable environment is positively identified.
+- **Latest development commit:** `3fe77b74408e0857acc7117d5239fb19e5e4ffa9` before the AI-GOV-001 implementation commit.
+- **Push outcome:** Workstream-start status commit `3fe77b74408e0857acc7117d5239fb19e5e4ffa9` was pushed and its remote SHA verified. AI-GOV-001 implementation/evidence is pending.
 
 ## BB-PAY-007 — QuickBooks discovery and adapter
 

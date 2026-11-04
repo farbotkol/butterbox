@@ -2,6 +2,22 @@
 
 ## Execution summary
 
+- **AI-GOV-001 — Typed proposal contract and offline response evaluation, 2026-11-04 18:17 AEDT: Foundation Ready (partial; linked to BB-AI-006 and BB-AI-007; parent stories remain Backlog).**
+
+  | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
+  | --- | --- | --- |
+  | Exact typed scope and proposal contract | Added bounded request context and strict response parser. The only supported action is a draft `assign_shift` referencing the same business/venue/department, an allow-listed shift and an eligible employee. Unknown fields/kinds, invalid IDs/text, duplicate shifts and action-bearing clarifications/refusals reject. No roster apply/mutation function exists. | Pass for contract/schema boundary |
+  | Reusable offline safety evaluation | Added local fixture evaluator and mocked fixtures for valid, ambiguous, prompt-injection-style role escalation, malformed output, missing context, unauthorized employee and cross-tenant scope. Evaluation output excludes request and response content. | Pass for listed fixture behavior; not a model evaluation |
+  | Provider and data boundary | The evaluator consumes supplied fixtures only. No live model/provider, network call, credentials, personal-data fixture or roster action was used. | Pass for offline-only slice |
+
+  **Testing:** `node --experimental-strip-types --test tests/ai-governance.test.mjs` passed **7/7**. Repository TypeScript check (`./node_modules/.bin/tsc --noEmit --incremental false`) passed. Targeted ESLint passed for the new modules and tests. `git diff --check` passed.
+
+  **Documentation: updated** in `docs/ai-governance-foundation.md`, the BB-AI-006/007 story notes and their backlog evidence. No User Guide update is applicable: no user-visible assistant or settings behavior was added.
+
+  **Not delivered / blocked:** No server-authenticated tenant/role gate, database-backed per-business default-off switch, retrieval, privacy-minimal durable request log, provider terms, request timeout enforcement, usage budget, circuit breaker or actual model validation. Docker is unavailable, and the known database ports are SSH tunnels whose exact project/host has not been verified. No migration or database operation was attempted. Do not mark BB-AI-006/007/008 Done.
+
+  **Next:** Continue with Workstream 2's pure venue-local aggregation and leakage-safe backtest foundation using authorized historical/synthetic inputs; do not make a database change until an isolated disposable target is positively verified.
+
 - **BB-PAY-007 — QuickBooks discovery and adapter, 2026-11-04 15:07 AEDT: Done (product discovery only; no adapter).**
 
   **Commit and push:** `68380251f5a30ff78e83c807b8601ed7ac638948` (`docs(BB-PAY-007): document QuickBooks integration limits`) is on `copilot/finish-roadmap-for-app`; the remote branch SHA was verified to match.
