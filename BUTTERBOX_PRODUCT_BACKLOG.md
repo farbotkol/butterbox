@@ -889,6 +889,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 2. Retries have backoff and bounded attempts.
 3. Audit and reconciliation UI show external status.
 
+**Foundation Ready — PAY-DELIVERY-001:** Added a deterministic provider-neutral key derived from an immutable export batch/finalisation and a bounded exponential retry calculation for explicitly transient failures. This does not persist attempts, contact a provider, guarantee provider idempotency, record external status or provide reconciliation UI. The parent story remains Backlog pending durable delivery state and authorised provider integration testing. See `docs/payroll-delivery-foundation.md`.
+
 
 ## Epic SHIFTS — Open shifts, offers and swaps (P1)
 

@@ -2,6 +2,22 @@
 
 ## Execution summary
 
+- **PAY-DELIVERY-001 — Provider-neutral payroll-delivery policy: Foundation Ready (partial; linked to BB-PAY-008; parent remains Backlog).**
+
+  **Implementation:** Added `src/lib/payroll-delivery-policy.ts` with a SHA-256 idempotency key derived from the immutable export batch/finalisation IDs and a deterministic, bounded exponential retry-delay function. Retry is scheduled only when the caller identifies a failure as transient; permanent/unknown failures and the attempt limit stop automatically. This module has no network or persistence behavior.
+
+  | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
+  | --- | --- | --- |
+  | Stable export/version key | Unit tests confirm case-normalized deterministic keys and distinct keys for different batch or finalisation identities; malformed IDs reject. | Pass for local key derivation only |
+  | Bounded retry policy | Unit tests cover exponential delays, cap, attempt exhaustion, no retry for permanent/unknown failures, and invalid/unbounded policy input. | Pass for pure policy calculation |
+  | External delivery and reconciliation | No provider request, durable attempt ledger, external status audit or reconciliation UI exists. No provider test account or isolated database was available. | Not delivered; parent criterion remains open |
+
+  **Testing:** Targeted payroll delivery and existing payroll-export unit tests passed **12/12**; repository `npx tsc --noEmit` passed; targeted ESLint passed for the new module/tests. No provider, database, migration, browser, production build or full application regression was run.
+
+  **Documentation: updated** in `docs/payroll-delivery-foundation.md`, the BB-PAY-008 story note, `BACKLOG_INDEX.csv` and this evidence record. **User Guide: not applicable** — no user-facing delivery workflow was added.
+
+  **Limitations:** The current immutable generic payroll batch is idempotent at local export creation; this is not external-delivery idempotency. Provider-specific transient error classification, persisted attempts/outbox, provider responses, delivery audit, reconciliation UX and end-to-end duplicate prevention remain unimplemented. No payroll was sent and no provider connection was made.
+
 - **BB-SAAS-001 — Venue-based plans: Blocked, no billing behavior changed.** Repository review found the story's Starter/Pro/Plus entitlement requirement but no approved tier-feature matrix, venue billability definition or rate/limit policy. No plan, billing state, venue-counting logic, payment integration or migration was added. Do not infer customer charges or entitlements; resume when policy is defined and an isolated database is positively identified. **Documentation: updated** in the story, `BACKLOG_INDEX.csv` and this blocker record. User Guide: not applicable because no user-visible behavior changed.
 
 - **FCAST-BASE-001 — Venue-local demand aggregation and comparable-day backtest, 2026-11-04 18:25 AEDT: Foundation Ready (partial; linked to BB-FORECAST-003 and BB-FORECAST-005; parent stories remain Backlog).**

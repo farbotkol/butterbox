@@ -2,20 +2,20 @@
 
 ## Workstream 5 — Reliable payroll-delivery foundation
 
-- **Last report:** 2026-11-04 18:30 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 18:33 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active in this coding session; no background continuation is implied.
 - **Current slice:** PAY-DELIVERY-001 — provider-neutral idempotency/retry policy contract (Foundation Ready candidate linked to BB-PAY-008; parent remains Backlog).
 - **Acceptance criteria for the slice:** Define deterministic delivery identity from an immutable export batch/finalisation; calculate a bounded exponential retry delay only for explicitly transient failures; reject invalid attempts and policy values; document the persistence/provider/UI boundary.
-- **Phase:** Planning.
-- **Activity:** Reviewing the existing immutable export batch, idempotency, reconciliation and canonical snapshot contracts before adding a pure policy module; no provider call or delivery record is being created.
-- **Progress since previous report:** FCAST-BASE-001 committed and pushed. Read-only review of open Draft PR #3 confirmed its Award Central shared-library/source-ingestion migrations and tests; do not merge or duplicate that work. BB-SAAS-001 is blocked pending explicit Starter/Pro/Plus entitlements and venue-counting policy; no billing behavior is being inferred.
-- **Tests and results:** PAY-DELIVERY-001 tests are not written yet. Latest focused forecast + demand-history suite passed **17/17**; TypeScript, targeted ESLint, backlog CSV parse and diff checks passed.
+- **Phase:** Testing complete for the pure policy slice; ready for commit.
+- **Activity:** Implemented a deterministic hash key for immutable export/finalisation IDs and a bounded retry delay calculator; added tests and internal limitation documentation.
+- **Progress since previous report:** Completed four policy-focused tests alongside eight existing payroll-export unit tests. No provider, database or user interface behavior was added.
+- **Tests and results:** Payroll-delivery policy plus generic payroll export tests passed **12/12**; repository `npx tsc --noEmit` passed; targeted ESLint, backlog CSV parse and `git diff --check` passed.
 - **Failing tests:** None observed for PAY-DELIVERY-001.
 - **Blockers requiring intervention:** No verified disposable database or authorised provider test account. Existing payroll exports are immutable CSV batches; do not claim remote delivery, durable retry state, provider-side idempotency, or reconciliation of external status.
-- **Documentation:** Planned internal foundation record and parent acceptance evidence. User Guide not applicable unless a user-facing delivery workflow is added.
-- **Next concrete action:** Implement the pure deterministic key and transient-only bounded retry calculation, test retries/terminal/invalid input, and keep BB-PAY-008 Backlog.
+- **Documentation:** Updated in `docs/payroll-delivery-foundation.md`, BB-PAY-008 story criteria, `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`. User Guide not applicable because no user-facing delivery workflow was added.
+- **Next concrete action:** Review the staged PAY-DELIVERY-001 change, commit and push it, record the verified feature SHA, then continue with the next safe backlog work.
 - **Latest development commit:** `033a528a1ba017bd60032c3421fcdceac2e7b548` (`feat(FCAST-BASE-001): add venue-local demand baseline`).
-- **Push outcome:** Forecast feature push and remote SHA were verified. Start-of-slice status checkpoint is pending.
+- **Push outcome:** Forecast feature push and remote SHA were verified. The BB-SAAS-001 blocker/status checkpoint was pushed and its remote SHA matched; PAY-DELIVERY-001 is not yet committed.
 
 ## Workstream 4 — Subscription entitlements
 
