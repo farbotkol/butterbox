@@ -2,21 +2,21 @@
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
-- **Last report:** 2026-11-04 13:54 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 14:02 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, In Progress).
+- **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, Done in isolated development; not deployed).
 - **Acceptance criteria:** Validate timezone, missing values and duplicates; display source provenance; never silently overwrite raw records.
-- **Phase:** Testing.
-- **Activity:** Adding focused import-boundary and invalid-timezone coverage before the final isolated acceptance rerun; the implementation remains uncommitted.
+- **Phase:** Complete.
+- **Activity:** Recording criterion-level acceptance and selecting the next eligible story without deploying to a showcase.
 - **Plan:** Provide an owner-only bounded local sales/booking upload with explicit source and venue timezone, append-only original records, duplicate rejection, safe retries, scoped provenance and task-oriented Help. Exclude customer names/contact fields and do not call external providers or deploy to a showcase.
-- **Progress since previous report:** Isolated production compile, type checking and page generation succeeded; **2/2** production browser scenarios passed, covering the import journey and existing Hours & Labour. Diagnostics reproduced intermittent development Fast Refresh/login reloads on existing login, shift-conversation and Hours & Labour routes as well as the new route. Boundary checks and a clearer invalid-venue-timezone error are being added.
-- **Tests and results:** Applied-migration pgTAP passed **56/56**; concurrency passed **1/1**; demand and Help units passed **26/26**; TypeScript and changed-file ESLint passed; three development browser journeys and two production browser scenarios passed. Tests after the latest edits are pending.
-- **Failing tests:** Earlier development journeys timed out or failed redirect settling during intermittent Fast Refresh reloads; the behavior also occurred on existing routes and is not claimed fixed. No production failure was observed in the completed run.
-- **Blockers requiring intervention:** No blocker identified for the local upload; external delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
-- **Documentation:** Drafted in the User Guide and contextual Help; pending verification against the implemented workflow.
-- **Next concrete action:** Push this status-only checkpoint, complete targeted boundary coverage, rerun affected tests and record criterion-level evidence.
-- **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
-- **Push outcome:** BB-FORECAST-001 diagnostic checkpoint `ebb2b52bc4a12dccbecba9c42f89249e1f6c4eb8` was pushed and verified; this follow-up checkpoint is pending.
+- **Progress since previous report:** Added and verified exact 1,000-record, invalid-timezone, UTF-8, file-size and pagination boundaries, including a client guard for uploads above the framework body limit. Committed and pushed feature `47144699c04a01152af6128f89af53fa21b52cd3`; issue #6 was closed with evidence.
+- **Tests and results:** Applied-migration pgTAP passed **59/59**; concurrency passed **1/1**; demand/Help units passed **26/26**; final Help rerun passed **17/17**; TypeScript, changed-file ESLint, production compile/generation and the final production browser journey passed. A prior production run passed **2/2** import and existing Hours & Labour scenarios; three earlier development import journeys passed. Both protected showcase logins returned HTTP **200**.
+- **Failing tests:** Earlier development journeys timed out or failed redirect settling during intermittent Fast Refresh reloads; the behavior also occurred on existing routes and is not claimed fixed. No production failure was observed in the completed runs.
+- **Blockers requiring intervention:** No criterion blocker for the local upload. No supported correction/deletion workflow exists for imported records. External delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
+- **Documentation:** Updated in the User Guide and owner-only contextual Help; feature is not deployed.
+- **Next concrete action:** Push completion evidence, then assess the highest-priority ready story and its prerequisites.
+- **Latest development commit:** `47144699c04a01152af6128f89af53fa21b52cd3` (BB-FORECAST-001).
+- **Push outcome:** Feature commit `47144699c04a01152af6128f89af53fa21b52cd3` was pushed and verified; completion-evidence push is pending.
 
 ## BB-COMMS-004 — Contextual shift conversation
 
