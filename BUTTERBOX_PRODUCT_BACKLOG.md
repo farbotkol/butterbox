@@ -1277,6 +1277,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 **User story:** As a customer, I want straightforward per-venue subscriptions instead of per-person charges.
 
+**Status: Blocked.** No approved Starter/Pro/Plus entitlement matrix, venue billability definition or rate/limit policy is recorded. Do not infer customer billing behavior. A database-backed implementation also requires a positively identified isolated project.
+
 **Acceptance criteria**
 
 1. Starter/Pro/Plus entitlements stored centrally.

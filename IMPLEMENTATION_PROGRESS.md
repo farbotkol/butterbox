@@ -2,6 +2,8 @@
 
 ## Execution summary
 
+- **BB-SAAS-001 — Venue-based plans: Blocked, no billing behavior changed.** Repository review found the story's Starter/Pro/Plus entitlement requirement but no approved tier-feature matrix, venue billability definition or rate/limit policy. No plan, billing state, venue-counting logic, payment integration or migration was added. Do not infer customer charges or entitlements; resume when policy is defined and an isolated database is positively identified. **Documentation: updated** in the story, `BACKLOG_INDEX.csv` and this blocker record. User Guide: not applicable because no user-visible behavior changed.
+
 - **FCAST-BASE-001 — Venue-local demand aggregation and comparable-day backtest, 2026-11-04 18:25 AEDT: Foundation Ready (partial; linked to BB-FORECAST-003 and BB-FORECAST-005; parent stories remain Backlog).**
 
   **Implementation:** Added `src/lib/demand-forecast.ts` and `tests/demand-forecast.test.mjs`. Aggregation is bounded and deterministic; validates daypart coverage, venue timezone and expected local dates; detects duplicates and invalid/out-of-window rows; keeps unobserved periods distinct from observed zero; and rejects unsafe aggregate totals. The baseline uses only prior same-weekday history within the configured lookback and before the strict training cutoff. Backtests retain source import IDs and baseline/aggregation versions, and report MAE/WAPE with explicit sparse-history and zero-actual handling.
