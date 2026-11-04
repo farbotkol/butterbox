@@ -6,6 +6,8 @@
 
   **Implementation:** Added `src/lib/demand-forecast.ts` and `tests/demand-forecast.test.mjs`. Aggregation is bounded and deterministic; validates daypart coverage, venue timezone and expected local dates; detects duplicates and invalid/out-of-window rows; keeps unobserved periods distinct from observed zero; and rejects unsafe aggregate totals. The baseline uses only prior same-weekday history within the configured lookback and before the strict training cutoff. Backtests retain source import IDs and baseline/aggregation versions, and report MAE/WAPE with explicit sparse-history and zero-actual handling.
 
+  **Commit and push:** `033a528a1ba017bd60032c3421fcdceac2e7b548` (`feat(FCAST-BASE-001): add venue-local demand baseline`) was pushed to `copilot/finish-roadmap-for-app`; `git ls-remote` verified the remote branch SHA matched.
+
   | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
   | --- | --- | --- |
   | Venue-local aggregation and data quality | Unit tests cover configured daypart boundaries, Sydney spring DST gap and repeated autumn hour, explicit zero vs unobserved, duplicate/invalid/out-of-window records, and invalid timezone/date/coverage rejection. | Pass for pure library behavior |

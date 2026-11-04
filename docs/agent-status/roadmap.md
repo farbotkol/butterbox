@@ -2,7 +2,7 @@
 
 ## Workstream 2 — Forecasting data and baseline
 
-- **Last report:** 2026-11-04 18:26 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 18:27 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active in this coding session; no background continuation is implied.
 - **Current slice:** FCAST-BASE-001 — venue-local aggregation, completeness and strict time-ordered comparable-day backtest (Foundation Ready; linked to BB-FORECAST-003 and BB-FORECAST-005; parents remain Backlog).
 - **Acceptance criteria for the slice:** Aggregate supplied sales/booking observations by explicit venue timezone and configured dayparts; distinguish unobserved from observed zero; report quality/coverage; prevent holdout leakage; report MAE/WAPE with zero-demand handling and source/version provenance.
@@ -14,8 +14,8 @@
 - **Blockers requiring intervention:** No verified disposable database. No database or showcase was queried or changed; no real-venue forecast accuracy or role-level staffing need is established.
 - **Documentation:** Updated in `docs/demand-forecast-foundation.md`, the backlog story criteria, `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`. User Guide not applicable because no user-visible behavior was added.
 - **Next concrete action:** Inspect the Award Central Draft PR #3 integration boundary without merging or duplicating it, then evaluate the next safe authorized foundation.
-- **Latest development commit:** `d7703005180477a2c03be7b36c78f9efa029c006` (FCAST-BASE-001 changes are prepared but not yet committed).
-- **Push outcome:** No FCAST-BASE-001 commit or push has occurred yet. The prior AI-GOV-001 commit is pushed; verify the forecast commit remotely after it is created.
+- **Latest development commit:** `033a528a1ba017bd60032c3421fcdceac2e7b548` (`feat(FCAST-BASE-001): add venue-local demand baseline`).
+- **Push outcome:** Pushed to `copilot/finish-roadmap-for-app`; `git ls-remote origin refs/heads/copilot/finish-roadmap-for-app` matched `033a528a1ba017bd60032c3421fcdceac2e7b548`.
 
 ## Workstream 1 — AI governance foundations
 
