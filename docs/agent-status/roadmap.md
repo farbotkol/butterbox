@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## Workstream 2 — Forecasting data and baseline
+
+- **Last report:** 2026-11-04 18:19 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active in this coding session; no background continuation is implied.
+- **Current slice:** FCAST-BASE-001 — explicit venue-local period aggregation, data completeness and time-ordered holdout comparable-day baseline/backtest (Foundation Ready candidate linked to BB-FORECAST-003 and BB-FORECAST-005; parents remain Backlog).
+- **Acceptance criteria for the slice:** Aggregate existing sales/booking observations in an explicit timezone and configured dayparts; distinguish unobserved periods from zero demand; report quality/coverage; compute explainable same-weekday baselines from training dates strictly before the holdout; report MAE/WAPE with zero-demand handling and source/version provenance.
+- **Phase:** Planning.
+- **Activity:** Reviewing the immutable BB-FORECAST-001 import schema and existing parser/test patterns before implementing a pure, deterministic library.
+- **Progress since previous report:** AI-GOV-001 was completed as a model-free Foundation Ready slice and pushed. W1's DB-backed controls remain blocked; the workstream is proceeding to the next authorized priority.
+- **Tests and results:** FCAST-BASE-001 tests are not written yet. AI-GOV-001 passed 7/7 focused tests, TypeScript, targeted ESLint and diff validation.
+- **Failing tests:** None observed for FCAST-BASE-001.
+- **Blockers requiring intervention:** No verified disposable database. Do not query or migrate the SSH-forwarded database ports. The pure aggregation/backtest slice will not modify data or claim production forecast acceptance.
+- **Documentation:** Planned internal foundation record; User Guide not applicable unless a user-visible surface is added.
+- **Next concrete action:** Implement the pure aggregation, quality, comparable-day baseline and holdout metrics, then test DST, missing periods, duplicates, sparse history, zero actuals and future-data leakage.
+- **Latest development commit:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd`.
+- **Push outcome:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd` is on the remote branch; its SHA was verified.
+
 ## Workstream 1 — AI governance foundations
 
 - **Last report:** 2026-11-04 18:17 AEDT (UTC+1100), observed on the operator's clock.
@@ -14,8 +31,8 @@
 - **Blockers requiring intervention:** The separate persisted business switch, authenticated RLS/server gate, durable audit, budgets and deployment-safe circuit-breaker state require an isolated database. Docker is not running; existing DB ports are SSH tunnels and their exact targets are unverified. No database operation was attempted.
 - **Documentation:** Added the internal AI governance foundation record and marked the limited BB-AI-006/007 slices Foundation Ready. Parent acceptance remains open; User Guide update not applicable because no UI behavior changed.
 - **Next concrete action:** Begin Workstream 2 with a pure, deterministic venue-local aggregation and leakage-safe backtest slice; defer database integration until a disposable environment is positively identified.
-- **Latest development commit:** `3fe77b74408e0857acc7117d5239fb19e5e4ffa9` before the AI-GOV-001 implementation commit.
-- **Push outcome:** Workstream-start status commit `3fe77b74408e0857acc7117d5239fb19e5e4ffa9` was pushed and its remote SHA verified. AI-GOV-001 implementation/evidence is pending.
+- **Latest development commit:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd` (`feat(AI-GOV-001): add typed proposal safety foundation`).
+- **Push outcome:** Feature commit `cfa3fec711e1256a8256fefd12a8d5268be40ecd` was pushed and its remote SHA verified. Database-backed controls remain blocked; no migration was attempted.
 
 ## BB-PAY-007 — QuickBooks discovery and adapter
 

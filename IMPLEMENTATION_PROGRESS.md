@@ -4,6 +4,8 @@
 
 - **AI-GOV-001 — Typed proposal contract and offline response evaluation, 2026-11-04 18:17 AEDT: Foundation Ready (partial; linked to BB-AI-006 and BB-AI-007; parent stories remain Backlog).**
 
+  **Commit and push:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd` (`feat(AI-GOV-001): add typed proposal safety foundation`) was pushed to `copilot/finish-roadmap-for-app`; the remote SHA was verified to match.
+
   | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
   | --- | --- | --- |
   | Exact typed scope and proposal contract | Added bounded request context and strict response parser. The only supported action is a draft `assign_shift` referencing the same business/venue/department, an allow-listed shift and an eligible employee. Unknown fields/kinds, invalid IDs/text, duplicate shifts and action-bearing clarifications/refusals reject. No roster apply/mutation function exists. | Pass for contract/schema boundary |
