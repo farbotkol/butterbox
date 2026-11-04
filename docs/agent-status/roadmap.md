@@ -2,21 +2,21 @@
 
 ## BB-COMMS-004 — Contextual shift conversation
 
-- **Last report:** 2026-11-04 13:08 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 13:14 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-COMMS-004 — Contextual shift conversation (P2, In Progress).
+- **Current story:** BB-COMMS-004 — Contextual shift conversation (P2, Done in isolated development; not deployed).
 - **Acceptance criteria:** Only authorised participants can read/write; messages are ordered and retained; notification previews never expose private details.
-- **Phase:** Testing.
-- **Activity:** Preparing a production build and focused roster/schedule browser regressions after the new conversation journey passed.
+- **Phase:** Complete.
+- **Activity:** Recording criterion-level acceptance and selecting the next eligible story without deploying to a showcase.
 - **Plan:** Create per-shift, per-employee in-app discussions with server-enforced scope, ordered retained plain-text messages and safe retries; prevent a replacement employee from viewing the prior worker's thread. Add manager/employee entry points and accessible Help. Do not send external messages or create private-content notifications.
-- **Progress since previous report:** Verified the authenticated loading boundary and complete isolated development browser journey. The protected local and public showcase login endpoints returned HTTP 200 and were not altered.
-- **Tests and results:** Development browser **1/1**, including stable anonymous redirect, manager/employee messaging, denial, retained history, relinking, keyboard, five widths and two axe checks; applied-migration and rolled-back pgTAP **45/45** each; neighboring database regressions **232/232**; concurrency **1/1**; conversation/Help units **21/21**; TypeScript and changed-file ESLint passed.
-- **Failing tests:** Earlier anonymous redirect, test-selector, reassignment and department-transfer failures were corrected; the affected reruns passed. Production build and neighboring browser regressions remain pending.
+- **Progress since previous report:** Production compile/generation and three focused production browser scenarios passed; verified actual notification-centre privacy in an additional production rerun. Committed and pushed feature `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63`.
+- **Tests and results:** Applied-migration conversation pgTAP **46/46**, neighboring database assertions **232/232**, authenticated concurrency **1/1**, units **21/21**, production browser scenarios **3/3** plus enhanced privacy rerun **1/1**, development browser **1/1**, TypeScript and changed-file ESLint passed. Browser coverage includes scoped access, retained history, keyboard, five widths and two axe checks.
+- **Failing tests:** Earlier anonymous redirect, test-selector, reassignment and department-transfer failures were corrected; the affected final reruns passed.
 - **Blockers requiring intervention:** Approved external channels and reviewed employment restrictions remain unavailable for higher-priority dependent work; no BB-COMMS-004 blocker identified.
-- **Documentation:** User Guide and contextual Help updated in the uncommitted working tree; runtime verification remains pending.
-- **Next concrete action:** Push this documentation-only milestone, then run the isolated production build and focused conversation, roster and personal-schedule browser regressions.
-- **Latest development commit:** `88ddd917c0a51dd979ac65818cdf247e131e2a60` (BB-DEMO-005); completion evidence is `467f0d35b9fab03f75caf0c9a0ea33c99de3f456`.
-- **Push outcome:** Debugging checkpoint `0e03abb221debae8fabd3e49a8d1500a816ed88e` was pushed and verified; this testing checkpoint is pending.
+- **Documentation:** Updated in the User Guide and contextual Help; no external delivery or automatic notification is claimed.
+- **Next concrete action:** Push completion evidence, then identify the next eligible story without deploying to a protected showcase.
+- **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
+- **Push outcome:** Feature commit `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` was pushed and verified; completion-evidence push is pending.
 
 ## BB-DEMO-005 — Clearly labelled future-vision concept previews
 

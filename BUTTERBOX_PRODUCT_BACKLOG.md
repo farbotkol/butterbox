@@ -992,7 +992,7 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-COMMS-004 — Contextual shift conversation [P2]
 
-**Status:** In Progress in isolated development; no external delivery or showcase deployment is authorized.
+**Status:** Done in isolated development; no external delivery or showcase deployment is authorized. See `IMPLEMENTATION_PROGRESS.md` for criterion-level evidence.
 
 **User story:** As a manager and employee, I want a discussion linked to a specific shift.
 
