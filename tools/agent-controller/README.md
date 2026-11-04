@@ -250,7 +250,20 @@ run first. Then the controller:
 6. Waits up to `checksTimeoutMinutes` (default 90) for the PR's head commit.
    Every GitHub check run and commit status on that exact commit must finish as
    `success`, `neutral` or `skipped`. A 2-minute grace period lets every workflow
-   register first. One failure, a timeout or no checks at all blocks the task.
+   register first. The controller waits for every check to finish. If any fail,
+   it starts **Copilot CI repair**, up to `maxCiRepairs` times (default 2):
+   - it gives a fresh sandboxed agent the failing checks and their GitHub
+     Actions `--log-failed` excerpts, with ANSI codes and timestamps stripped and
+     a 30 KB limit;
+   - the prompt forbids disabling, skipping or weakening tests or security
+     checks;
+   - a repair that changes files is committed as `CI repair k` and pushed, then
+     every check is awaited again on the new head;
+   - if a repair makes no change, the failed Actions jobs are re-run **once per
+     commit**, in case the failure was infrastructure.
+
+   If checks still fail, the task is blocked as `ci_checks_failed`. Failed code
+   is never merged.
    Today, `.github/workflows/ci.yml` runs `verify` (unit tests, lint, build,
    container health) and `database` (pgTAP, tenant isolation, browser tests).
 7. Re-reads the PR and requires it to be open, mergeable, still on the same
@@ -265,14 +278,59 @@ It never merges into `main`/`master` or any branch other than the issue's
 workstream branch, and **never deploys**. Set `"autoMerge": false` to keep the
 previous draft-PR-only behaviour (no merge, no close).
 
-If anything fails (no changes, rejected paths, a Copilot error or timeout,
-failing CI, an unmergeable or moved PR, or failed merge verification), the
-controller comments `blocked` on the issue. The comment gives the error, stage,
-PR state, check results and an agent output excerpt. The controller adds the
-`agent-blocked` label, **leaves the issue open** and continues with the next
-eligible issue on the next poll. Transient GitHub API errors while waiting and
-merging are retried up to 3 times. The issue is never closed just because the
-agent finished: closing requires a verified merge.
+#### Self-healing recovery
+
+Routine failures recover without owner action:
+
+- **Recoverable** failures are retried, up to `maxAttempts` executions per issue
+  (default 3, range 1–10). Before each retry the controller waits
+  `2 min × 4^(attempt−1)`, capped at 1 hour, and comments `recovering #N`.
+  Recoverable failures are:
+  - GitHub or `gh` command errors and unconfirmed responses;
+  - check-API errors, a check timeout, or no checks reported;
+  - an unknown mergeability state or failed post-merge verification;
+  - a listener crash or Ctrl+C (`previous_process_interrupted`);
+  - Copilot exiting non-zero.
+- **Every retry reconciles with GitHub first**, so a confirmed step is never
+  repeated:
+  - It reads the task branch head and any pull request for that branch.
+  - A push whose response was lost is recognised from the commit recorded
+    before pushing.
+  - An existing PR is adopted instead of opening a duplicate.
+  - A PR GitHub already merged on the exact head only needs verification.
+  - If nothing was pushed, the old task folder is archived as
+    `<folder>.attempt-<time>` and a fresh clone runs the agent again. Partial
+    agent work is never reused.
+  - A still-running orphaned Copilot process from a crashed listener is
+    stopped first. It is matched by PID and executable path.
+- **Terminal** failures block only that issue:
+  - no changes, rejected paths, too many files, symlinks;
+  - a Copilot timeout;
+  - CI still red after repair;
+  - a PR that moved, became unmergeable or was closed unmerged;
+  - a task branch that diverged from the ledger or disappeared;
+  - an issue edited or no longer owner-authorised before a retry;
+  - exhausted retries.
+
+  The controller comments `blocked` with the error, stage, attempts, PR state,
+  check results and agent excerpt, then adds `agent-blocked`. It **leaves the
+  issue open** and continues with other issues.
+- Errors on one issue (including a GitHub error while reading it) are logged and
+  skipped; later issues still run. Owner identity, Copilot version and profile
+  checks still fail the whole poll closed.
+- GitHub comments, labels and closures go through a durable per-issue
+  **outbox** in the ledger. A GitHub outage delays reports but never stops the
+  queue or loses them:
+  - delivery is retried with backoff each poll;
+  - each comment carries a hidden `<!-- butterbox-report:ID -->` marker, so a
+    retried comment whose earlier response was lost is not posted twice;
+  - after 30 failed attempts an item moves to `undelivered` in the ledger.
+- Each ledger keeps a capped `history` audit trail, for example
+  `interrupted`, `retry_scheduled`, `reconciled_push`, `ci_failed`,
+  `repair_pushed`, `report_deferred` and `blocked`.
+
+The issue is never closed just because the agent finished: closing requires a
+verified merge.
 
 Verified sandbox boundaries on Copilot CLI 1.0.105 (probes on 4 November 2026):
 
@@ -325,7 +383,8 @@ mode `0600`.
 ```
 
 Only `taskRoot` is required. Defaults: 45 minutes, no credit cap, 60 files,
-`autoMerge: true` and `checksTimeoutMinutes: 90` (10–240).
+`autoMerge: true`, `checksTimeoutMinutes: 90` (10–240), `maxAttempts: 3` (1–10)
+and `maxCiRepairs: 2` (0–5).
 `model`, `allowedHosts` and `keepSucceeded` are also accepted. Successful task folders are deleted
 unless `keepSucceeded` is `true`; failed folders are kept for review.
 
@@ -339,12 +398,15 @@ AGENT_CONTROLLER_ENABLED=true AGENT_CONTROLLER_AUTONOMOUS=true \
 The first poll executes **every open, eligible, unreserved owner issue**, oldest
 first and one at a time. Run a dry-run first, without the two variables, to see
 which issues will run. Tasks run one at a time under the single listener lock, so
-two tasks never modify the same checkout. A failed or interrupted run (including
-Ctrl+C, or a crash detected at the next start) is reported `blocked` on its
-issue, labelled `agent-blocked` and left open, and other issues continue. Failed
-task folders stay in `<taskRoot>/issue-N-*/` for inspection. Reserved issues
-**never** run again; to retry, create a new issue. Only a failure to post a
-GitHub status report still stops the queue until `--acknowledge N`.
+two tasks never modify the same checkout. A crash or Ctrl+C is detected at the
+next start and resumed through the recovery rules above. A stale lock from a
+dead listener is reclaimed automatically. Terminal failures are reported
+`blocked`, labelled `agent-blocked` and left open, and other issues continue.
+Failed task folders, and archived earlier attempts, stay in
+`<taskRoot>/issue-N-*` for inspection. A blocked issue never runs again; to
+retry, create a new issue. Run the listener from this up-to-date workspace, not
+from the profile clone, and keep the profile clone current with
+`git -C ~/butterbox-agent-roadmap pull --ff-only`.
 
 Limitations:
 
@@ -362,13 +424,17 @@ Limitations:
   "all checks green" rule itself.
 - As of 4 November 2026 the workstream branch's own CI is red: three existing
   browser tests in the `database` job fail (draft-shift editing, WCAG smoke and
-  showcase navigation). Until they are fixed, **every** autonomous task will stop
-  as `ci_checks_failed` and none will merge.
+  showcase navigation). Until they are fixed, every autonomous task's PR
+  inherits those failures. CI repair will try to fix them, otherwise the task
+  stops as `ci_checks_failed` and does not merge. Issue #18 targets this fix.
 - Squash merges are checked against the PR's tested head, but GitHub does not
   re-run CI on the combined result if the workstream branch moved during the
   wait.
-- Tasks are never retried automatically; the agent's own test-and-fix loop
-  happens inside its single run.
+- CI repair can only reason from logs: the sandbox has no database, Supabase
+  or browser services. Infrastructure that never recovers ends as
+  `ci_checks_failed`.
+- A recovered execution reruns the agent from scratch only when nothing was
+  pushed. Agent work is not deterministic, so the replacement may differ.
 - The PR body and completion comment include agent summaries, which are
   unverified agent output.
 
@@ -420,14 +486,19 @@ token, public webhook or owner-identity impersonation is used as a workaround.
 - Ctrl+C/SIGTERM cancels the current child process group and poll sleep. A final
   bounded GitHub report may take up to 30 seconds. No child is intentionally
   detached or left running.
-- After a crash, a stale lock does not auto-clear. Verify the old process is
-  dead, then run `npm run agent:listener -- --recover-lock`. This refuses a live
-  PID. Missing/corrupt lock metadata requires manual owner inspection; do not
-  delete broad directories.
-- Reserved/running records become interrupted on restart. Failed/interrupted
-  runs or reporting failures block new work until the owner inspects local state
-  and uses `--acknowledge N`. Acknowledging clears the block, **never replays** the
-  issue. Retry via a new, explicitly authorised issue.
+- After a crash, the listener reclaims a stale lock automatically at start-up,
+  but only when the recorded PID has exited or now belongs to a non-listener
+  process. A live listener, or a process whose command line cannot be read,
+  keeps the lock. Manual `npm run agent:listener -- --recover-lock` stays
+  strict and refuses any live PID. Missing or corrupt lock metadata requires
+  manual owner inspection; do not delete broad directories.
+- Reserved/running records become interrupted on restart. In autonomous mode
+  they are recovered as described in
+  [Self-healing recovery](#self-healing-recovery), and nothing blocks the queue.
+  In synthetic and coding modes, failed/interrupted runs or reporting failures
+  still block new work (`run_requires_local_review`) until the owner inspects
+  local state and uses `--acknowledge N`. Acknowledging clears the block and
+  **never replays** the issue. Retry via a new, explicitly authorised issue.
 - If polling or reporting fails, no new task is executed on a success-shaped
   fallback. Errors are static codes; CLI output, task contents and credentials
   are not copied into GitHub reports. Exception: autonomous mode's draft PR body
@@ -442,8 +513,9 @@ token, public webhook or owner-identity impersonation is used as a workaround.
 | `issue_not_original_owner_command` | Check original author, no body edits, exact envelope, label and open state. Create a new issue; do not relax the check. |
 | `dirty_worktree` | Review changes; use a separate clean checkout. No automatic stash/reset. |
 | `wrong_workstream_branch` / `unexpected_git_origin` | Correct the private profile; listener never switches branches. |
-| `listener_lock_exists` | Stop the existing controller or verify a dead PID before `--recover-lock`. |
-| `run_requires_local_review` | Inspect ledger and result, then `--acknowledge N`; use a new issue for retry. |
+| `listener_lock_exists` / `listener_process_still_running` | Another listener is running; stop it, or verify the PID before `--recover-lock`. Dead or reused PIDs are reclaimed automatically. |
+| `run_requires_local_review` | In autonomous mode this comes from an **out-of-date controller**: check `git log -1` where you started the listener, and run it from this updated workspace. In synthetic or coding mode, inspect the ledger and result, then `--acknowledge N`; use a new issue for retry. |
+| `agent-blocked` label on an issue | Read the `blocked` comment and the ledger `history`; fix the cause and create a new issue. Other issues keep running. |
 | `copilot_not_installed` / `unsupported_copilot_cli` | Install/inspect an approved CLI; no permissive fallback. |
 | `coding_permissions_not_verified` | Complete disposable CLI permission validation; do not set the gate just to suppress the error. |
 | `local_approval_mismatch` | Re-read task/commit and renew exact approval, never edit ledger manually to bypass it. |

@@ -756,7 +756,8 @@ const sh = (cwd, ...args) => {
 
 // Real git against a local bare "GitHub" remote, a fake Copilot agent and a fake gh; no network or credentials.
 async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(cwd, 'feature.txt'), 'done\n'),
-  version = 'GitHub Copilot CLI 1.0.105.', github = {}, signal, keepSucceeded, autoMerge,
+  version = 'GitHub Copilot CLI 1.0.105.', github = {}, signal, keepSucceeded, autoMerge, autonomous = {},
+  retryBaseMs = 0,
   checks = async () => [{ name: 'verify', done: true, ok: true, result: 'success' }] } = {}) {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'controller-auto-')));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -787,9 +788,9 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
       if (args.includes('--help')) return help;
       const settings = JSON.parse(await readFile(path.join(options.env.COPILOT_HOME, 'settings.json'), 'utf8'));
       agents.push({ args, options, settings });
-      return String((await agent(options.cwd, options)) ?? 'Agent summary: changed files, tests passed.');
+      return String((await agent(options.cwd, options, args)) ?? 'Agent summary: changed files, tests passed.');
     }
-    if (command === 'gh') { prs.push({ args, options }); return 'https://github.com/farbotkol/butterbox/pull/77'; }
+    if (command === 'gh') { prs.push({ args, options }); pr.created = true; pr.branch = args[args.indexOf('--head') + 1]; return 'https://github.com/farbotkol/butterbox/pull/77'; }
     if (command === 'git') {
       const index = args.indexOf('set-url');
       if (index > -1) args = [...args.slice(0, index + 2), remote];
@@ -797,29 +798,42 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     }
     throw new Error(`unexpected command ${command}`);
   };
-  const labels = []; const merges = []; const deleted = []; const checkCalls = [];
-  const head = () => sh(remote, 'rev-parse', taskBranch(parseTask(issue())));
-  const pr = { merged: false };
+  const labels = []; const merges = []; const deleted = []; const checkCalls = []; const reruns = []; const logs = [];
+  const head = () => sh(remote, 'rev-parse', pr.branch ?? taskBranch(parseTask(issue())));
+  const remoteHead = branch => {
+    const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`],
+      { cwd: remote, encoding: 'utf8' });
+    return result.status === 0 ? result.stdout.trim() : null;
+  };
+  const pr = { merged: false, created: false };
+  const pullRequest = number => ({ number, html_url: `https://github.com/farbotkol/butterbox/pull/${number}`,
+    state: pr.merged ? 'closed' : 'open', merged: pr.merged,
+    mergeable: true, merge_commit_sha: pr.merged ? 'c'.repeat(40) : null,
+    base: { ref: BRANCH }, head: { ref: pr.branch ?? taskBranch(parseTask(issue())), sha: head() } });
   const githubClient = {
     identity: async () => {}, issues: async () => [issue()], task: async () => parseTask(issue()),
     comment: async (number, message) => { comments.push(message); },
+    findComment: async (number, marker) => comments.some(text => text.includes(marker)),
     closeCompleted: async number => { closures.push(number); },
     labelBlocked: async number => { labels.push(number); },
     checks: async sha => { checkCalls.push(sha); return checks(sha, checkCalls.length); },
-    pullRequest: async number => ({ number, state: pr.merged ? 'closed' : 'open', merged: pr.merged,
-      mergeable: true, merge_commit_sha: pr.merged ? 'c'.repeat(40) : null,
-      base: { ref: BRANCH }, head: { ref: taskBranch(parseTask(issue())), sha: head() } }),
+    pullRequest: async number => pullRequest(number),
+    branchHead: async branch => remoteHead(branch),
+    pullRequestForBranch: async branch => pr.created && pr.branch === branch ? pullRequest(77) : null,
+    failedJobLog: async id => { logs.push(id); return `job ${id}\tRun tests\t2026-11-04T00:00:00.0000000Z \u001b[31mexpected 1 got 2\u001b[0m`; },
+    rerunFailedJobs: async id => { reruns.push(id); },
     merge: async (number, sha) => { merges.push({ number, sha }); pr.merged = true; return 'c'.repeat(40); },
     contains: async () => true,
     deleteBranch: async branch => { deleted.push(branch); }, ...github,
   };
   const config = { profiles: { roadmap: { cwd: profile, branch: BRANCH } }, copilotPath: copilot,
-    autonomous: { taskRoot, ...(keepSucceeded === undefined ? {} : { keepSucceeded }),
+    autonomous: { taskRoot, ...autonomous, ...(keepSucceeded === undefined ? {} : { keepSucceeded }),
       ...(autoMerge === undefined ? {} : { autoMerge }) } };
   const controller = new Controller({ github: githubClient, store, config, exec, mode: 'autonomous', enabled: true,
-    autonomousEnabled: true, signal, checksPollMs: 1, checksGraceMs: 0 });
+    autonomousEnabled: true, signal, checksPollMs: 1, checksGraceMs: 0, retryBaseMs });
   return { directory, remote, profile, taskRoot, store, controller, comments, closures, prs, agents, config, exec,
-    github: githubClient, task: parseTask(issue()), labels, merges, deleted, checkCalls, pr, head };
+    github: githubClient, task: parseTask(issue()), labels, merges, deleted, checkCalls, pr, head, reruns, logs,
+    copilot, remoteHead };
 }
 
 test('autonomous mode needs both execution gates and a task root outside the home folder', async t => {
@@ -928,19 +942,23 @@ test('autonomous autoMerge false keeps the draft-only review flow and never merg
   assert.deepEqual(value.closures, []);
 });
 
-async function assertBlocked(value, code, { pushed = false } = {}) {
+async function assertBlocked(value, code, { pushed = false, agents = 1, exhausted = false } = {}) {
   const ledger = await value.store.read(42);
   assert.equal(ledger.status, 'failed');
   assert.equal(ledger.error, code);
   assert.equal(ledger.blockedReported, true);
+  assert.equal(ledger.final, true);
   assert.deepEqual(value.labels, [42]);
   assert.deepEqual(value.closures, []);
   assert.match(value.comments.at(-1), new RegExp(`blocked #42; failed: ${code}.*The issue stays open`));
-  assert.match(value.comments.at(-1), /Tasks never replay automatically/);
+  assert.match(value.comments.at(-1), exhausted ? /Automatic recovery is exhausted/ : /not safe to retry automatically/);
+  assert.match(value.comments.at(-1), /Other issues continue/);
+  assert.match(value.comments.at(-1), /<!-- butterbox-report:[0-9a-f-]{36} -->$/);
   if (!pushed) assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
-  // A blocked task never stops the queue and never replays.
+  assert.ok(ledger.history.some(entry => entry.event === 'blocked'));
+  // A blocked task never stops the queue and is never replayed.
   assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
-  assert.equal(value.agents.length, 1);
+  assert.equal(value.agents.length, agents);
   assert.deepEqual(value.labels, [42]);
   return ledger;
 }
@@ -951,7 +969,6 @@ for (const [name, agent, code] of [
     await writeFile(path.join(cwd, '.github/workflows/x.yml'), 'on: push'); }, 'protected_path_changed'],
   ['gitattributes change', async cwd => writeFile(path.join(cwd, '.gitattributes'), '* filter=x'), 'protected_path_changed'],
   ['symlink', async cwd => symlink('/etc/passwd', path.join(cwd, 'link')), 'symlink_or_submodule_changed'],
-  ['copilot failure', async () => { throw new ControllerError('command_exit_1'); }, 'command_exit_1'],
   ['too many files', async cwd => { for (let i = 0; i < 61; i++) await writeFile(path.join(cwd, `f${i}`), 'x'); },
     'too_many_changed_files'],
 ]) {
@@ -961,21 +978,94 @@ for (const [name, agent, code] of [
     assert.equal(value.prs.length, 0);
     const ledger = await assertBlocked(value, code);
     assert.equal(ledger.pushed, undefined);
+    assert.equal(ledger.attempts, 1);
     assert.match(value.comments.find(text => text.includes(': blocked #')), /No pull request was created/);
-    assert.deepEqual(await readdir(ledger.taskDir), ['cache', 'copilot-home', 'repo', 'tmp'].concat(
-      code === 'command_exit_1' ? [] : ['copilot-output.txt']).sort());
+    assert.deepEqual(await readdir(ledger.taskDir), ['cache', 'copilot-home', 'copilot-output.txt', 'repo', 'tmp']);
   });
 }
 
-test('autonomous failing CI never merges or closes; the check results are reported', async t => {
+test('autonomous transient agent failure retries in a fresh folder with backoff, then blocks when exhausted', async t => {
+  const value = await autonomousFixture(t, { agent: async () => { throw new ControllerError('command_exit_1'); } });
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+    assert.equal(value.agents.length, attempt);
+  }
+  assert.equal(value.comments.filter(text => /recovering #42; attempt \d\/3 stopped with command_exit_1/.test(text))
+    .length, 2);
+  assert.equal(value.comments.filter(text => /resuming #42; attempt [23]\/3/.test(text)).length, 2);
+  const ledger = await assertBlocked(value, 'command_exit_1', { agents: 3, exhausted: true });
+  assert.equal(ledger.attempts, 3);
+  assert.equal(ledger.archivedTaskDirs.length, 2);
+  for (const folder of ledger.archivedTaskDirs) assert.ok((await readdir(folder)).includes('repo'));
+  assert.equal(value.prs.length, 0);
+});
+
+test('autonomous retry backoff waits before resuming a recoverable failure', async t => {
+  const value = await autonomousFixture(t, { retryBaseMs: 3_600_000,
+    agent: async () => { throw new ControllerError('command_exit_1'); } });
+  await value.controller.tick();
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'failed');
+  assert.ok(Date.parse(ledger.retryAt) > Date.now() + 3_000_000);
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.labels, []);
+});
+
+test('autonomous failed CI gets a Copilot repair commit, then merges once every check passes', async t => {
+  const repairs = [];
+  const value = await autonomousFixture(t, {
+    agent: async (cwd, options, args) => {
+      const prompt = args[args.indexOf('-p') + 1];
+      if (/CI repair attempt/.test(prompt)) {
+        repairs.push(prompt);
+        await writeFile(path.join(cwd, 'fix.txt'), 'fixed\n');
+        return 'Repaired the failing test.';
+      }
+      await writeFile(path.join(cwd, 'feature.txt'), 'done\n');
+    },
+    checks: async sha => sha === value.pushedFirst
+      ? [{ name: 'verify', done: true, ok: true, result: 'success' },
+        { name: 'database', done: true, ok: false, result: 'failure', runId: 5, jobId: 9 }]
+      : [{ name: 'verify', done: true, ok: true, result: 'success' },
+        { name: 'database', done: true, ok: true, result: 'success' }],
+  });
+  const push = value.github.checks;
+  value.github.checks = async sha => { value.pushedFirst ??= sha; return push(sha); };
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(repairs.length, 1);
+  assert.match(repairs[0], /"check":"database","result":"failure"/);
+  assert.match(repairs[0], /expected 1 got 2/);
+  assert.doesNotMatch(repairs[0], /\u001b|2026-11-04T00:00:00/);
+  assert.match(repairs[0], /Never disable, skip or weaken tests/);
+  assert.deepEqual(value.logs, [9]);
+  const branch = taskBranch(value.task);
+  assert.match(sh(value.remote, 'log', '-1', '--format=%B', branch), /CI repair 1[\s\S]*Refs #42[\s\S]*Co-authored-by: Copilot/);
+  assert.equal(sh(value.remote, 'show', `${branch}:fix.txt`), 'fixed');
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.ciRepairs, 1);
+  assert.notEqual(ledger.commit, value.pushedFirst);
+  assert.deepEqual(value.merges, [{ number: 77, sha: ledger.commit }]);
+  assert.equal(value.prs.length, 1);
+  assert.deepEqual(value.closures, [42]);
+  assert.ok(value.comments.some(text => /Starting Copilot CI repair attempt 1\/2/.test(text)));
+  assert.ok(ledger.history.some(entry => entry.event === 'repair_pushed'));
+});
+
+test('autonomous failing CI without a repair reruns failed jobs once, then blocks and never merges', async t => {
   const value = await autonomousFixture(t, { checks: async () => [
     { name: 'verify', done: true, ok: true, result: 'success' },
-    { name: 'database', done: true, ok: false, result: 'failure' }] });
+    { name: 'database', done: true, ok: false, result: 'failure', runId: 5, jobId: 9 }] });
   await value.controller.tick();
   assert.deepEqual(value.merges, []);
-  const ledger = await assertBlocked(value, 'ci_checks_failed', { pushed: true });
+  assert.deepEqual(value.reruns, [5]);
+  // Both bounded repair attempts ran (before and after the rerun) but produced no change.
+  const ledger = await assertBlocked(value, 'ci_checks_failed', { pushed: true, agents: 3 });
   assert.equal(ledger.stage, 'checks');
+  assert.equal(ledger.ciRepairs, 2);
   assert.match(value.comments.find(text => text.includes(': blocked #')), /pull\/77 \(not merged\)[\s\S]*- database: failure/);
+  assert.ok(value.comments.some(text => /re-running the failed jobs once/.test(text)));
 });
 
 for (const [name, github, code] of [
@@ -983,7 +1073,6 @@ for (const [name, github, code] of [
     head: { ref: 'agent/x', sha: 'd'.repeat(40) } }) }, 'pull_request_changed'],
   ['unmergeable PR', { pullRequest: async number => ({ number, state: 'open', mergeable: false, base: { ref: BRANCH },
     head: { ref: 'agent/issue-42-x', sha: 'd'.repeat(40) } }) }, 'pull_request_changed'],
-  ['transient check API failure', { checks: async () => { throw new ControllerError('command_exit_1'); } }, 'command_exit_1'],
 ]) {
   test(`autonomous ${name} blocks before merging`, async t => {
     const value = await autonomousFixture(t, { github });
@@ -993,14 +1082,56 @@ for (const [name, github, code] of [
   });
 }
 
-test('autonomous merge requires post-merge confirmation before closing', async t => {
-  const value = await autonomousFixture(t, { github: { contains: async () => false } });
+test('autonomous transient check API failure resumes from GitHub state without rerunning the agent', async t => {
+  let outage = true;
+  const value = await autonomousFixture(t, { checks: async () => {
+    if (outage) throw new ControllerError('command_exit_1');
+    return [{ name: 'verify', done: true, ok: true, result: 'success' }];
+  } });
   await value.controller.tick();
+  const failed = await value.store.read(42);
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error, 'command_exit_1');
+  assert.equal(failed.stage, 'checks');
+  assert.ok(failed.retryAt);
+  assert.deepEqual(value.merges, []);
+  assert.deepEqual(value.labels, []);
+  outage = false;
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(value.agents.length, 1);
+  assert.equal(value.prs.length, 1);
   assert.equal(value.merges.length, 1);
-  const ledger = await assertBlocked(value, 'merge_verification_failed', { pushed: true });
-  assert.equal(ledger.merged, true);
-  assert.notEqual(ledger.mergeVerified, true);
+  assert.deepEqual(value.closures, [42]);
+  assert.equal((await value.store.read(42)).attempts, 2);
+});
+
+test('autonomous merge verification retries without merging twice', async t => {
+  let verified = false;
+  const value = await autonomousFixture(t, { github: { contains: async () => verified } });
+  await value.controller.tick();
+  const failed = await value.store.read(42);
+  assert.equal(failed.error, 'merge_verification_failed');
+  assert.equal(failed.merged, true);
+  assert.notEqual(failed.mergeVerified, true);
+  assert.deepEqual(value.closures, []);
+  verified = true;
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(value.merges.length, 1);
+  assert.equal(value.agents.length, 1);
+  assert.equal(value.prs.length, 1);
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.mergeVerified, true);
+  assert.ok(ledger.history.some(entry => entry.event === 'reconciled_merge'));
+  assert.deepEqual(value.closures, [42]);
+});
+
+test('autonomous merge verification that never succeeds blocks after the bounded attempts', async t => {
+  const value = await autonomousFixture(t, { github: { contains: async () => false } });
+  for (let i = 0; i < 3; i++) await value.controller.tick();
+  const ledger = await assertBlocked(value, 'merge_verification_failed', { pushed: true, exhausted: true });
+  assert.equal(value.merges.length, 1);
   assert.match(value.comments.find(text => text.includes(': blocked #')), /merged as c{40}; post-merge verification did not complete/);
+  assert.equal(ledger.attempts, 3);
 });
 
 test('autonomous merge accepts a lost merge response only when GitHub confirms that exact head merged', async t => {
@@ -1012,6 +1143,114 @@ test('autonomous merge accepts a lost merge response only when GitHub confirms t
   assert.deepEqual(value.closures, [42]);
 });
 
+test('autonomous lost pull request creation response adopts the existing PR instead of opening a duplicate', async t => {
+  const value = await autonomousFixture(t);
+  const exec = value.exec;
+  value.controller.exec = async (command, args, options) => {
+    if (command === 'gh') { await exec(command, args, options); throw new ControllerError('command_timeout'); }
+    return exec(command, args, options);
+  };
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(value.prs.length, 1);
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.ok(ledger.history.some(entry => entry.event === 'reconciled_pull_request'));
+});
+
+test('autonomous GitHub reporting outage queues reports durably and delivers each exactly once later', async t => {
+  let down = true;
+  const value = await autonomousFixture(t);
+  const posted = [];
+  value.github.comment = async (number, message) => {
+    if (down) {
+      // The first comment reaches GitHub but its response is lost; later ones fail outright.
+      if (!posted.length) posted.push(message);
+      throw new ControllerError('command_exit_1');
+    }
+    posted.push(message);
+  };
+  value.github.findComment = async (number, marker) => posted.some(text => text.includes(marker));
+  value.github.closeCompleted = async number => { if (down) throw new ControllerError('command_exit_1'); value.closures.push(number); };
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  let ledger = await value.store.read(42);
+  // The work itself completed; only status delivery is pending.
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.mergeVerified, true);
+  assert.ok(ledger.outbox.length >= 3);
+  assert.equal(ledger.outbox.at(-1).kind, 'close');
+  assert.ok(ledger.history.some(entry => entry.event === 'report_deferred'));
+  assert.equal(posted.length, 1);
+  down = false;
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+  ledger = await value.store.read(42);
+  assert.equal(ledger.outbox, undefined);
+  assert.equal(value.closures[0], 42);
+  const markers = posted.map(text => text.match(/butterbox-report:([0-9a-f-]{36})/)[1]);
+  assert.equal(new Set(markers).size, markers.length);
+  assert.match(posted[0], /queued #42/);
+  assert.match(posted.at(-1), /completed #42/);
+  assert.ok(ledger.history.some(entry => entry.event === 'report_delivered'));
+  assert.equal(value.agents.length, 1);
+});
+
+test('autonomous legacy reportingError records no longer block the queue', async t => {
+  const value = await autonomousFixture(t, { github: { issues: async () => [issue(), issue({ number: 43 })],
+    task: async number => parseTask(issue({ number })) } });
+  await value.store.save({ issue: 42, digest: parseTask(issue()).digest, workstream: 'roadmap', mode: 'autonomous',
+    status: 'failed', error: 'ci_checks_failed', blockedReported: true, reportingError: 'github_status_report_failed',
+    reservedAt: new Date().toISOString() });
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(value.agents.length, 1);
+  assert.equal((await value.store.read(43)).status, 'succeeded');
+  const legacy = await value.store.read(42);
+  assert.equal(legacy.reportingError, undefined);
+  assert.ok(legacy.history.some(entry => entry.event === 'legacy_reporting_error_requeued'));
+});
+
+test('autonomous diverged task branch is isolated and never force-pushed', async t => {
+  const value = await autonomousFixture(t, { checks: async () => { throw new ControllerError('command_exit_1'); } });
+  await value.controller.tick();
+  const branch = taskBranch(value.task);
+  const before = sh(value.remote, 'rev-parse', branch);
+  const other = path.join(value.directory, 'other');
+  sh(value.directory, 'clone', '--quiet', '--branch', branch, value.remote, other);
+  await writeFile(path.join(other, 'intruder.txt'), 'x');
+  sh(other, 'add', '.'); sh(other, 'commit', '--quiet', '-m', 'outside change'); sh(other, 'push', '--quiet', 'origin', branch);
+  await value.controller.tick();
+  const ledger = await assertBlocked(value, 'task_branch_diverged', { pushed: true });
+  assert.notEqual(sh(value.remote, 'rev-parse', branch), before);
+  assert.deepEqual(value.merges, []);
+  assert.equal(ledger.commit, before);
+});
+
+test('autonomous retry of an edited issue is terminal, not resumed', async t => {
+  let body = issue().body;
+  const value = await autonomousFixture(t, { agent: async () => { throw new ControllerError('command_exit_1'); },
+    github: { issues: async () => [issue({ body })], task: async () => parseTask(issue({ body })) } });
+  await value.controller.tick();
+  body += '\nAlso deploy to production.';
+  await value.controller.tick();
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.error, 'task_changed_before_execution');
+  assert.equal(ledger.final, true);
+  assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.labels, [42]);
+});
+
+test('autonomous per-issue errors are isolated so later eligible issues still run', async t => {
+  const value = await autonomousFixture(t, { github: {
+    issues: async () => [issue(), issue({ number: 43 })],
+    task: async number => {
+      if (number === 42) throw new ControllerError('command_exit_1');
+      return parseTask(issue({ number }));
+    } } });
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(await value.store.read(42), null);
+  assert.equal((await value.store.read(43)).status, 'succeeded');
+});
+
 test('autonomous merges refuse default branches and mismatched workstream bases', async t => {
   const value = await autonomousFixture(t);
   const signal = new AbortController().signal;
@@ -1020,6 +1259,83 @@ test('autonomous merges refuse default branches and mismatched workstream bases'
       base, signal), 'merge_base_refused');
   }
   assert.deepEqual(value.checkCalls, []);
+});
+
+test('GitHub pull request lookup by branch returns the full pull request, including merged state', async () => {
+  const calls = [];
+  const branch = 'agent/issue-42-0123abcd';
+  const github = new GitHub(async (command, args) => {
+    calls.push(args[3]);
+    // The list endpoint omits `merged`, exactly as GitHub's short pull request format does.
+    if (args[3] === 'repos/farbotkol/butterbox/pulls') {
+      return JSON.stringify([{ number: 7, state: 'closed', merged_at: '2026-11-04T00:00:00Z',
+        head: { ref: branch, repo: { full_name: 'farbotkol/butterbox' } } }]);
+    }
+    return JSON.stringify({ number: 7, state: 'closed', merged: true, head: { ref: branch } });
+  });
+  assert.equal((await github.pullRequestForBranch(branch)).merged, true);
+  assert.deepEqual(calls, ['repos/farbotkol/butterbox/pulls', 'repos/farbotkol/butterbox/pulls/7']);
+  await rejects(github.pullRequestForBranch('main'), 'invalid_task_branch');
+});
+
+test('autonomous retry after a merged PR whose branch was already deleted only re-verifies the merge', async t => {
+  let verified = false;
+  const value = await autonomousFixture(t, { github: { contains: async () => verified } });
+  await value.controller.tick();
+  assert.equal((await value.store.read(42)).error, 'merge_verification_failed');
+  spawnSync('git', ['update-ref', '-d', `refs/heads/${taskBranch(value.task)}`], { cwd: value.remote });
+  value.github.pullRequest = async number => ({ number, html_url: `https://github.com/farbotkol/butterbox/pull/${number}`,
+    state: 'closed', merged: true, mergeable: null, merge_commit_sha: 'c'.repeat(40), base: { ref: BRANCH },
+    head: { ref: taskBranch(value.task), sha: (await value.store.read(42)).commit } });
+  value.github.pullRequestForBranch = async () => value.github.pullRequest(77);
+  verified = true;
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal((await value.store.read(42)).mergeVerified, true);
+  assert.equal(value.merges.length, 1);
+  assert.deepEqual(value.labels, []);
+  assert.equal(value.closures[0], 42);
+});
+
+test('listener crash at the start of a resumed attempt is recovered as an interruption, not blocked', async t => {
+  let calls = 0;
+  const value = await autonomousFixture(t, { agent: async cwd => {
+    if (++calls === 1) throw new ControllerError('command_exit_1');
+    await writeFile(path.join(cwd, 'feature.txt'), 'done\n');
+  } });
+  await value.controller.tick();
+  let snapshot;
+  const identity = value.github.identity;
+  let polls = 0;
+  value.github.identity = async () => {
+    // The tick's own identity check passes; the resumed run's check is where the "crash" happens.
+    if (++polls === 2) { snapshot = await value.store.read(42); throw new ControllerError('operation_cancelled'); }
+    return identity();
+  };
+  await value.controller.tick();
+  assert.equal(snapshot.status, 'running');
+  assert.equal(snapshot.attempts, 2);
+  await value.store.save(snapshot);
+  value.github.identity = identity;
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 1, executed: 1 });
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.attempts, 3);
+  assert.deepEqual(value.labels, []);
+});
+
+test('autonomous outbox never re-posts a comment that may have been sent before a crash', async t => {
+  const value = await autonomousFixture(t);
+  const id = '11111111-2222-4333-8444-555555555555';
+  value.comments.push(`Butterbox local controller: earlier\n\n<!-- butterbox-report:${id} -->`);
+  const ledger = { issue: 42, digest: value.task.digest, workstream: 'roadmap', mode: 'autonomous', status: 'succeeded',
+    reservedAt: new Date().toISOString(), outbox: [{ id, kind: 'comment', body: 'earlier',
+      createdAt: new Date().toISOString(), attempts: 0, sending: true }] };
+  await value.store.save(ledger);
+  assert.equal(await value.controller.deliver(ledger), true);
+  assert.equal(value.comments.length, 1);
+  assert.equal((await value.store.read(42)).outbox, undefined);
 });
 
 test('GitHub checks include every check run and commit status on the exact commit', async () => {
@@ -1049,43 +1365,146 @@ test('autonomous mode rejects unreviewed Copilot sandbox versions before reservi
   assert.equal(value.agents.length, 0);
 });
 
-test('autonomous mode never executes non-owner or edited issues', async t => {
+test('autonomous mode isolates non-owner or edited issues without executing them or stopping the poll', async t => {
   const value = await autonomousFixture(t, { github: {
     issues: async () => [issue({ user: { login: 'attacker', id: 1, type: 'User' } }), issue({ number: 43 })],
     task: async () => { throw new ControllerError('issue_not_original_owner_command'); },
   } });
-  await rejects(value.controller.tick(), 'issue_not_original_owner_command');
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
   assert.equal(value.agents.length, 0);
   assert.equal(await value.store.read(42), null);
+  assert.equal(await value.store.read(43), null);
 });
 
-test('interrupted autonomous run is recorded, reported blocked on restart and never replayed', async t => {
-  const abort = new AbortController();
-  const value = await autonomousFixture(t, { signal: abort.signal, agent: async () => {
-    abort.abort(); throw new ControllerError('operation_cancelled');
+test('autonomous identity failure still fails the whole poll closed', async t => {
+  const value = await autonomousFixture(t, { github: {
+    identity: async () => { throw new ControllerError('github_identity_mismatch'); } } });
+  await rejects(value.controller.tick(), 'github_identity_mismatch');
+  assert.equal(value.agents.length, 0);
+});
+
+test('listener crash mid-agent: restart stops the orphan agent, archives partial work and resumes once', async t => {
+  let calls = 0;
+  let snapshot;
+  const value = await autonomousFixture(t, { agent: async cwd => {
+    calls++;
+    if (calls === 1) {
+      await writeFile(path.join(cwd, 'partial.txt'), 'half-finished\n');
+      snapshot = await value.store.read(42);
+      throw new ControllerError('operation_cancelled');
+    }
+    await writeFile(path.join(cwd, 'feature.txt'), 'done\n');
   } });
-  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
-  const ledger = await value.store.read(42);
-  assert.equal(ledger.status, 'interrupted');
-  assert.equal(ledger.blockedReported, true);
-  assert.equal(value.prs.length, 0);
-  assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
-  // Simulate a process that died mid-run without reporting.
-  ledger.status = 'running'; delete ledger.blockedReported;
-  await value.store.save(ledger);
+  await value.controller.tick();
+  // Rewind the ledger to the moment the listener process died: still "running" in the agent stage, with a
+  // Copilot process that outlived it.
+  const orphan = spawn('/bin/sh', ['-c', 'sleep 60; exit 0', value.copilot], { detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-orphan.pid, 'SIGKILL'); } catch { /* already stopped */ } });
+  const exited = new Promise(resolve => orphan.once('exit', resolve));
+  assert.equal(snapshot.status, 'running');
+  assert.equal(snapshot.stage, 'agent');
+  await value.store.save({ ...snapshot, agentPid: orphan.pid });
   const comments = value.comments.length;
   const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
-    mode: 'autonomous', enabled: true, autonomousEnabled: true });
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 1, executed: 1 });
+  await exited;
+  assert.equal(calls, 2);
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.attempts, 2);
+  assert.equal(ledger.agentPid, undefined);
+  const events = ledger.history.map(entry => entry.event);
+  for (const event of ['interrupted', 'retry_scheduled', 'orphan_agent_stopped', 'task_folder_archived']) {
+    assert.ok(events.includes(event), event);
+  }
+  const branch = taskBranch(value.task);
+  assert.throws(() => sh(value.remote, 'show', `${branch}:partial.txt`));
+  assert.equal(value.merges.length, 1);
+  assert.equal(value.prs.length, 1);
+  const added = value.comments.slice(comments);
+  assert.ok(added.some(text => /recovering #42; attempt 1\/3 stopped with previous_process_interrupted/.test(text)));
+  assert.ok(added.some(text => /resuming #42; attempt 2\/3/.test(text)));
+  assert.match(added.at(-1), /completed #42/);
+  // Archived diagnostic folders are cleaned up only after success.
+  assert.deepEqual(await readdir(value.taskRoot), []);
   assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
-  const recovered = await value.store.read(42);
-  assert.equal(recovered.error, 'previous_process_interrupted');
-  assert.equal(recovered.blockedReported, true);
-  assert.match(value.comments.at(-1), /blocked #42; interrupted: previous_process_interrupted/);
-  assert.equal(value.comments.length, comments + 1);
-  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
-  assert.equal(value.comments.length, comments + 1);
+  assert.equal(calls, 2);
+});
+
+test('listener crash after push resumes at the pull request without rerunning the agent or pushing again', async t => {
+  let snapshot;
+  const value = await autonomousFixture(t);
+  const exec = value.exec;
+  value.controller.exec = async (command, args, options) => {
+    if (command === 'gh') {
+      snapshot = await value.store.read(42);
+      throw new ControllerError('operation_cancelled');
+    }
+    return exec(command, args, options);
+  };
+  await value.controller.tick();
+  assert.equal(snapshot.stage, 'pull_request');
+  assert.equal(snapshot.pushed, true);
+  await value.store.save({ ...snapshot, status: 'running' });
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 1, executed: 1 });
   assert.equal(value.agents.length, 1);
-  assert.deepEqual(value.closures, []);
-  const dry = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec });
-  assert.deepEqual(await dry.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.prs.length, 1);
+  assert.equal(value.merges.length, 1);
+  assert.equal((await value.store.read(42)).status, 'succeeded');
+});
+
+test('listener crash between commit and recorded push reconciles the pushed commit instead of pushing twice', async t => {
+  const value = await autonomousFixture(t, { checks: async () => { throw new ControllerError('command_exit_1'); } });
+  await value.controller.tick();
+  const ledger = await value.store.read(42);
+  // Rewind to "commit recorded, push response lost".
+  await value.store.save({ ...ledger, status: 'running', stage: 'push', pendingCommit: ledger.commit,
+    pushed: undefined, commit: undefined, pullRequest: undefined, retryAt: undefined });
+  value.github.checks = async () => [{ name: 'verify', done: true, ok: true, result: 'success' }];
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 1, executed: 1 });
+  const done = await value.store.read(42);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(done.commit, ledger.commit);
+  assert.ok(done.history.some(entry => entry.event === 'reconciled_push'));
+  assert.ok(done.history.some(entry => entry.event === 'reconciled_pull_request'));
+  assert.equal(value.agents.length, 1);
+  assert.equal(value.prs.length, 1);
+});
+
+test('listener start-up recovers a stale lock from a dead or reused PID but never from a live listener', async t => {
+  const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'controller-lock-')));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new StateStore(path.join(directory, 'state'));
+  await store.init();
+  const plant = async pid => {
+    await mkdir(store.lock, { mode: 0o700 });
+    await store.atomic(path.join(store.lock, 'owner.json'), { pid, startedAt: new Date().toISOString() });
+  };
+  const dead = spawnSync(process.execPath, ['-e', 'console.log(process.pid)'], { encoding: 'utf8' });
+  await plant(Number(dead.stdout.trim()));
+  await rejects(store.acquire(), 'listener_lock_exists');
+  assert.equal(await store.recoverLock({ automatic: true }), Number(dead.stdout.trim()));
+  await (await store.acquire())();
+  const reused = spawn('/bin/sleep', ['60'], { stdio: 'ignore' });
+  t.after(() => reused.kill('SIGKILL'));
+  await plant(reused.pid);
+  await rejects(store.recoverLock(), 'listener_process_still_running');
+  assert.equal(await store.recoverLock({ automatic: true }), reused.pid);
+  await plant(process.pid);
+  await rejects(store.recoverLock({ automatic: true }), 'listener_process_still_running');
+  await unlink(path.join(store.lock, 'owner.json'));
+  await rm(store.lock, { recursive: true });
+  // Two listeners starting together: exactly one reclaims the stale lock, and the other never removes it.
+  await plant(Number(dead.stdout.trim()));
+  const results = await Promise.allSettled([store.recoverLock({ automatic: true }),
+    new StateStore(store.directory).recoverLock({ automatic: true })]);
+  assert.equal(results.filter(result => result.status === 'fulfilled').length, 1);
+  assert.equal(results.find(result => result.status === 'rejected').reason.code, 'listener_lock_exists');
+  await (await store.acquire())();
+  assert.deepEqual((await readdir(directory, { recursive: true })).filter(name => name.includes('.stale-')), []);
 });
