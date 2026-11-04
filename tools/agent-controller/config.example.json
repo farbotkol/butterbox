@@ -10,5 +10,11 @@
     }
   },
   "copilotPath": "/absolute/path/to/installed/copilot",
-  "copilotHome": "/absolute/path/to/private/controller-copilot-home"
+  "copilotHome": "/absolute/path/to/private/controller-copilot-home",
+  "autonomous": {
+    "taskRoot": "/Users/Shared/butterbox-agent-tasks",
+    "timeoutMinutes": 45,
+    "maxAiCredits": 300,
+    "maxChangedFiles": 60
+  }
 }

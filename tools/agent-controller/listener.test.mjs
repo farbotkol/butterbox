@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   OWNER_ID, BRANCH, LABEL, parseTask, originalOwnerTask, GitHub, StateStore, Controller,
   ControllerError, execFile, safeEnvironment, approvedFiles, copilotArguments, codingHome, taskPrompt,
+  autonomousSettings, autonomousArguments, autonomousEnvironment, sandboxSettings, taskBranch,
 } from './listener.mjs';
 
 const body = '/butterbox run\n\n```json\n{"workstream":"roadmap","task":"Synthetic owner task"}\n```';
@@ -743,4 +744,202 @@ test('coding dispatch accepts an observed 1.0.105 home but rejects checkout MCP,
   assert.equal(value.calls[0].opts.env.COPILOT_HOME, value.home);
   for (const flag of ['--disable-builtin-mcps', '--deny-tool=shell', '--no-bash-env',
     '--available-tools=view,glob,grep,create,edit']) assert.ok(value.calls[0].args.includes(flag));
+});
+
+const gitEnv = { GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'Test',
+  GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'Test', GIT_COMMITTER_EMAIL: 'test@example.invalid' };
+const sh = (cwd, ...args) => {
+  const result = spawnSync('git', args, { cwd, env: { ...process.env, ...gitEnv }, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return result.stdout.trim();
+};
+
+// Real git against a local bare "GitHub" remote, a fake Copilot agent and a fake gh; no network or credentials.
+async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(cwd, 'feature.txt'), 'done\n'),
+  version = 'GitHub Copilot CLI 1.0.105.', github = {}, signal, keepSucceeded } = {}) {
+  const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'controller-auto-')));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const remote = path.join(directory, 'remote.git');
+  const seed = path.join(directory, 'seed');
+  const profile = path.join(directory, 'profile');
+  sh(directory, 'init', '--quiet', '--bare', '-b', BRANCH, remote);
+  await mkdir(seed);
+  sh(seed, 'init', '--quiet', '-b', BRANCH);
+  await writeFile(path.join(seed, 'AGENTS.md'), 'Synthetic instructions only.');
+  sh(seed, 'add', '.'); sh(seed, 'commit', '--quiet', '-m', 'seed');
+  sh(seed, 'push', '--quiet', remote, BRANCH);
+  sh(directory, 'clone', '--quiet', '--branch', BRANCH, remote, profile);
+  sh(profile, 'remote', 'set-url', 'origin', 'https://github.com/farbotkol/butterbox.git');
+  const copilot = path.join(directory, 'copilot');
+  await writeFile(path.join(copilot), '#!/bin/sh\nexit 1\n');
+  await chmod(copilot, 0o755);
+  const store = new StateStore(path.join(directory, 'state'));
+  await store.init();
+  const taskRoot = path.join(directory, 'tasks');
+  const comments = []; const closures = []; const prs = []; const agents = [];
+  const help = ['--available-tools', '--allow-tool', '--deny-tool', '--no-auto-update', '--no-custom-instructions',
+    '--disable-builtin-mcps', '--disallow-temp-dir', '--no-bash-env', '--no-ask-user', '--log-level', '--stream',
+    '--prompt'].join(' ');
+  const exec = async (command, args, options = {}) => {
+    if (command === copilot) {
+      if (args.includes('--version')) return version;
+      if (args.includes('--help')) return help;
+      const settings = JSON.parse(await readFile(path.join(options.env.COPILOT_HOME, 'settings.json'), 'utf8'));
+      agents.push({ args, options, settings });
+      return String((await agent(options.cwd, options)) ?? 'Agent summary: changed files, tests passed.');
+    }
+    if (command === 'gh') { prs.push({ args, options }); return 'https://github.com/farbotkol/butterbox/pull/77'; }
+    if (command === 'git') {
+      const index = args.indexOf('set-url');
+      if (index > -1) args = [...args.slice(0, index + 2), remote];
+      return execFile('git', args, { ...options, env: { ...safeEnvironment(), ...gitEnv } });
+    }
+    throw new Error(`unexpected command ${command}`);
+  };
+  const githubClient = {
+    identity: async () => {}, issues: async () => [issue()], task: async () => parseTask(issue()),
+    comment: async (number, message) => { comments.push(message); },
+    closeCompleted: async number => { closures.push(number); }, ...github,
+  };
+  const config = { profiles: { roadmap: { cwd: profile, branch: BRANCH } }, copilotPath: copilot,
+    autonomous: { taskRoot, ...(keepSucceeded === undefined ? {} : { keepSucceeded }) } };
+  const controller = new Controller({ github: githubClient, store, config, exec, mode: 'autonomous', enabled: true,
+    autonomousEnabled: true, signal });
+  return { directory, remote, profile, taskRoot, store, controller, comments, closures, prs, agents, config, exec,
+    github: githubClient, task: parseTask(issue()) };
+}
+
+test('autonomous mode needs both execution gates and a task root outside the home folder', async t => {
+  const value = await autonomousFixture(t);
+  const options = { github: value.github, store: value.store, config: value.config, exec: value.exec, mode: 'autonomous' };
+  assert.throws(() => new Controller(options), error => error.code === 'execution_not_enabled');
+  assert.throws(() => new Controller({ ...options, enabled: true }), error => error.code === 'autonomous_mode_not_enabled');
+  assert.throws(() => new Controller({ ...options, enabled: true, autonomousEnabled: true,
+    config: { ...value.config, autonomous: undefined } }), error => error.code === 'autonomous_config_required');
+  for (const autonomous of [{ taskRoot: path.join(os.homedir(), 'tasks') }, { taskRoot: os.homedir() },
+    { taskRoot: '/' }, { taskRoot: '/Users/Shared' }, { taskRoot: 'relative' }, { taskRoot: '/x/../y' },
+    { taskRoot: '/Users/Shared/t', timeoutMinutes: 1 }, { taskRoot: '/Users/Shared/t', maxAiCredits: 5 },
+    { taskRoot: '/Users/Shared/t', model: 'bad model' }, { taskRoot: '/Users/Shared/t', allowAll: true }]) {
+    assert.throws(() => autonomousSettings({ autonomous }), error => error.code === 'invalid_autonomous_config');
+  }
+  assert.equal(autonomousSettings({ autonomous: { taskRoot: '/Users/Shared/t' } }).timeoutMinutes, 45);
+});
+
+test('autonomous invocation is sandboxed, credential-free and never grants all paths or URLs', () => {
+  const settings = sandboxSettings('/Users/Shared/t/issue-1', '/Users/owner');
+  assert.equal(settings.sandbox.enabled, true);
+  assert.equal(settings.sandbox.allowBypass, false);
+  assert.deepEqual(settings.sandbox.auth, { git: false, gh: false });
+  assert.equal(settings.sandbox.allowDevToolAccess, false);
+  assert.ok(settings.sandbox.userPolicy.filesystem.deniedPaths.includes('/Users/owner'));
+  assert.deepEqual(settings.sandbox.userPolicy.filesystem.readonlyPaths, ['/Users/Shared/t/issue-1/repo/.git']);
+  assert.equal(settings.sandbox.userPolicy.network.allowLocalNetwork, false);
+  assert.deepEqual(settings.sandbox.userPolicy.network.allowedHosts, []);
+  assert.equal(settings.sandbox.userPolicy.seatbelt.keychainAccess, false);
+  const args = autonomousArguments('prompt', { maxAiCredits: 50, model: 'm' });
+  for (const flag of ['--allow-all', '--yolo', '--allow-all-paths', '--allow-all-urls']) assert.ok(!args.includes(flag));
+  for (const flag of ['--allow-all-tools', '--disable-builtin-mcps', '--no-custom-instructions', '--disallow-temp-dir',
+    '--excluded-tools=web_fetch', '--deny-tool=shell(git push)', '--deny-tool=shell(gh)']) assert.ok(args.includes(flag));
+  assert.deepEqual(args.slice(args.indexOf('--max-ai-credits'), args.indexOf('--max-ai-credits') + 2), ['--max-ai-credits', '50']);
+  const env = autonomousEnvironment('/Users/Shared/t/issue-1', { PATH: '/bin', HOME: '/Users/owner', GH_TOKEN: 'secret',
+    GITHUB_TOKEN: 'secret', AWS_SECRET_ACCESS_KEY: 'secret', GH_CONFIG_DIR: '/x' });
+  for (const key of ['GH_TOKEN', 'GITHUB_TOKEN', 'AWS_SECRET_ACCESS_KEY', 'GH_CONFIG_DIR']) assert.equal(env[key], undefined);
+  assert.equal(env.COPILOT_HOME, '/Users/Shared/t/issue-1/copilot-home');
+  assert.equal(env.GIT_CONFIG_GLOBAL, '/dev/null');
+});
+
+test('autonomous success commits, pushes only a task branch, opens a draft PR and never replays or closes', async t => {
+  const value = await autonomousFixture(t);
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  const branch = taskBranch(value.task);
+  assert.match(branch, /^agent\/issue-42-[a-f0-9]{8}$/);
+  assert.equal(sh(value.remote, 'show', `${branch}:feature.txt`), 'done');
+  assert.match(sh(value.remote, 'log', '-1', '--format=%B', branch), /Refs #42/);
+  assert.equal(sh(value.remote, 'rev-list', '--count', BRANCH), '1');
+  assert.equal(value.agents.length, 1);
+  const call = value.agents[0];
+  assert.ok(call.options.cwd.startsWith(value.taskRoot));
+  assert.ok(call.settings.sandbox.userPolicy.filesystem.deniedPaths.includes(os.homedir()));
+  assert.equal(call.options.env.GH_TOKEN, undefined);
+  const pr = value.prs[0].args;
+  assert.ok(pr.includes('--draft'));
+  assert.equal(pr[pr.indexOf('--base') + 1], BRANCH);
+  assert.equal(pr[pr.indexOf('--head') + 1], branch);
+  assert.match(pr[pr.indexOf('--body') + 1], /^Refs #42/);
+  assert.ok(!pr.includes('merge'));
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.pullRequest, 'https://github.com/farbotkol/butterbox/pull/77');
+  assert.match(value.comments.at(-1), /draft pull request https:\/\/github.com\/farbotkol\/butterbox\/pull\/77/);
+  assert.deepEqual(await readdir(value.taskRoot), []);
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.closures, []);
+});
+
+for (const [name, agent, code] of [
+  ['no changes', async () => 'nothing to do', 'no_changes_produced'],
+  ['workflow change', async cwd => { await mkdir(path.join(cwd, '.github/workflows'), { recursive: true });
+    await writeFile(path.join(cwd, '.github/workflows/x.yml'), 'on: push'); }, 'protected_path_changed'],
+  ['gitattributes change', async cwd => writeFile(path.join(cwd, '.gitattributes'), '* filter=x'), 'protected_path_changed'],
+  ['symlink', async cwd => symlink('/etc/passwd', path.join(cwd, 'link')), 'symlink_or_submodule_changed'],
+  ['copilot failure', async () => { throw new ControllerError('command_exit_1'); }, 'command_exit_1'],
+  ['too many files', async cwd => { for (let i = 0; i < 61; i++) await writeFile(path.join(cwd, `f${i}`), 'x'); },
+    'too_many_changed_files'],
+]) {
+  test(`autonomous ${name} fails closed without push or PR and blocks the queue for review`, async t => {
+    const value = await autonomousFixture(t, { agent });
+    await rejects(value.controller.tick(), code);
+    const ledger = await value.store.read(42);
+    assert.equal(ledger.status, 'failed');
+    assert.equal(ledger.error, code);
+    assert.equal(ledger.pushed, undefined);
+    assert.equal(value.prs.length, 0);
+    assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
+    assert.match(value.comments.at(-1), new RegExp(`failed #42; ${code}. No pull request`));
+    assert.deepEqual(await readdir(ledger.taskDir), ['cache', 'copilot-home', 'repo', 'tmp'].concat(
+      code === 'command_exit_1' ? [] : ['copilot-output.txt']).sort());
+    await rejects(value.controller.tick(), 'run_requires_local_review');
+    await value.store.acknowledge(42);
+    assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+    assert.equal(value.agents.length, 1);
+  });
+}
+
+test('autonomous mode rejects unreviewed Copilot sandbox versions before reserving a task', async t => {
+  const value = await autonomousFixture(t, { version: 'GitHub Copilot CLI 1.0.106.' });
+  await rejects(value.controller.tick(), 'unreviewed_copilot_sandbox_version');
+  assert.equal(await value.store.read(42), null);
+  assert.equal(value.agents.length, 0);
+});
+
+test('autonomous mode never executes non-owner or edited issues', async t => {
+  const value = await autonomousFixture(t, { github: {
+    issues: async () => [issue({ user: { login: 'attacker', id: 1, type: 'User' } }), issue({ number: 43 })],
+    task: async () => { throw new ControllerError('issue_not_original_owner_command'); },
+  } });
+  await rejects(value.controller.tick(), 'issue_not_original_owner_command');
+  assert.equal(value.agents.length, 0);
+  assert.equal(await value.store.read(42), null);
+});
+
+test('interrupted autonomous run is recorded, never pushed and never replayed', async t => {
+  const abort = new AbortController();
+  const value = await autonomousFixture(t, { signal: abort.signal, agent: async () => {
+    abort.abort(); throw new ControllerError('operation_cancelled');
+  } });
+  await rejects(value.controller.tick(), 'operation_cancelled');
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'interrupted');
+  assert.equal(value.prs.length, 0);
+  assert.equal(sh(value.remote, 'branch', '--list', 'agent/*'), '');
+  ledger.status = 'running'; delete ledger.acknowledgedAt;
+  await value.store.save(ledger);
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true });
+  await rejects(restarted.tick(), 'run_requires_local_review');
+  assert.equal((await value.store.read(42)).error, 'previous_process_interrupted');
+  await value.store.acknowledge(42);
+  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.agents.length, 1);
 });

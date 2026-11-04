@@ -199,6 +199,123 @@ tests, install dependencies, commit/push, call databases or deploy**. Dirty
 results block the next task until the owner reviews them. Exit code 0 is
 reported as process success, not proof of a feature's acceptance.
 
+## Autonomous mode (sandboxed, draft pull request only)
+
+Autonomous mode is a separate, explicitly enabled mode. Restricted `coding` mode
+above is unchanged. The controller only dispatches. GitHub Copilot CLI's own agent
+does the investigation, edits, dependency installs and test runs. There is no
+per-file approval. The controller then commits, pushes a task branch and opens a
+**draft** pull request.
+
+For each eligible owner issue, the existing owner, provenance and replay checks
+run first. Then the controller:
+
+1. Creates a private `0700` task folder `<taskRoot>/issue-N-<digest8>/`. It clones
+   the profile checkout into it and bases branch `agent/issue-N-<digest8>` on the
+   latest `origin/<workstream branch>` from GitHub.
+2. Writes a throwaway `COPILOT_HOME` with a Copilot CLI **native OS sandbox**
+   policy (macOS Seatbelt) in `settings.json`. The policy:
+   - denies your whole home folder and the task's Copilot home;
+   - makes the clone's `.git` read-only;
+   - blocks local network and keychain access;
+   - injects no git or `gh` credentials (`sandbox.auth`) and no developer-tool
+     credentials.
+
+   Copilot authenticates with your existing `gh` login, so the task home needs no
+   login and your restricted Copilot home is never used.
+3. Runs `copilot -p` with `--allow-all-tools` plus these flags and controls:
+   - `--no-custom-instructions`, `--disable-builtin-mcps`, `--disallow-temp-dir`,
+     `--excluded-tools=web_fetch`;
+   - denials for `git push`, `git remote`, `git config`, `gh` and `sudo`;
+   - an optional `--max-ai-credits` and `--model`, and a timeout;
+   - a stripped environment: no tokens, private `TMPDIR` and npm cache, and git
+     and npm user configuration set to `/dev/null`.
+
+   It never uses `--allow-all`, `--yolo`, `--allow-all-paths` or `--allow-all-urls`.
+4. Checks the result outside the sandbox. Git runs with hooks and fsmonitor
+   disabled. The controller rejects:
+   - an empty diff;
+   - changes to `.github/` (CI runs on every push), `.gitmodules` or
+     `.gitattributes`;
+   - symlinks or submodules;
+   - files over 2 MB;
+   - more than `maxChangedFiles` changed files.
+5. Commits as you, then pushes **only** `refs/heads/agent/issue-N-<digest8>`
+   without force. It runs `gh pr create --draft` against the workstream branch
+   with `Refs #N`, then comments the PR URL on the issue.
+
+It **never merges, deploys or closes the issue**. The issue stays open until you
+review the PR.
+
+Verified sandbox boundaries on Copilot CLI 1.0.105 (probes on 4 November 2026):
+
+| Blocked | Allowed |
+| --- | --- |
+| Home folder (`ls ~`, `~/.gitconfig`, `~/.ssh`, `~/.npmrc`, `~/.zsh_history`, `~/.aws`) | Read and write in the task clone |
+| `gh` hosts and keychain | Outbound internet, including the npm registry |
+| Controller state and the task Copilot home | `npm install` and `npm test` |
+| Writes to `.git` (hook planting, `git commit`) | Read-only `git status` and `git diff` |
+| `127.0.0.1`, `localhost` and `::1` (showcase :3137, Supabase :54321) | |
+| `/private/tmp` writes, workspace `.env.local` | |
+| Secret environment variables | |
+
+Outbound internet is open because the agent may need package registries. The
+sandbox holds no credentials, but anything the agent can read (the task clone)
+could be sent out. The sandbox policy schema was reviewed only for CLI
+**1.0.105**, so any other version fails closed with
+`unreviewed_copilot_sandbox_version` until it is reviewed again. Task folders must
+be **outside your home folder**, because denying home would otherwise deny the
+working directory. `/Users/Shared/butterbox-agent-tasks` is the default choice;
+the controller enforces owner-only `0700` permissions.
+
+### Mac setup and start
+
+```sh
+cd "/Users/lukefarbotko/Documents/Butterbox Systems code/butterbox"
+git pull
+brew list --cask --versions copilot-cli   # must report 1.0.105 (reviewed sandbox version)
+gh auth status                    # must be farbotkol
+mkdir -p /Users/Shared/butterbox-agent-tasks && chmod 700 /Users/Shared/butterbox-agent-tasks
+```
+
+Add this block to `~/.butterbox-agent-controller/config.json`. Keep the file at
+mode `0600`.
+
+```json
+"autonomous": { "taskRoot": "/Users/Shared/butterbox-agent-tasks",
+  "timeoutMinutes": 45, "maxAiCredits": 300, "maxChangedFiles": 60 }
+```
+
+Only `taskRoot` is required. Defaults: 45 minutes, no credit cap and 60 files.
+`model` and `keepSucceeded` are also accepted. Successful task folders are deleted
+unless `keepSucceeded` is `true`; failed folders are kept for review.
+
+Start continuous autonomous mode. It polls every 60 seconds and stops with Ctrl+C:
+
+```sh
+AGENT_CONTROLLER_ENABLED=true AGENT_CONTROLLER_AUTONOMOUS=true \
+  npm run agent:listener -- --config "$HOME/.butterbox-agent-controller/config.json" --mode autonomous
+```
+
+The first poll executes **every open, eligible, unreserved owner issue**, oldest
+first and one at a time. Run a dry-run first, without the two variables, to see
+which issues will run. Tasks run one at a time under the single listener lock, so
+two tasks never modify the same checkout. A failed or interrupted run (no
+changes, rejected paths, a Copilot error, a timeout or Ctrl+C) is reported on the
+issue and blocks the queue until you inspect `<taskRoot>/issue-N-*/` and run
+`--acknowledge N`. Reserved issues **never** run again; to retry, create a new
+issue.
+
+Limitations:
+
+- No container. The isolation is Copilot's native Seatbelt sandbox plus
+  controller-side checks.
+- Concurrency is fixed at one task.
+- Agent shell commands can reach the internet.
+- Exit code 0 is not acceptance; review the draft PR and its CI.
+- The PR body includes the last 4,000 characters of the agent's summary, which is
+  unverified agent output.
+
 ## How ChatGPT can submit voice-authorised instructions
 
 Use a ChatGPT custom GPT Action with
@@ -227,9 +344,10 @@ Use these Action instructions:
 The OAuth app and ChatGPT connector were **not configured or end-to-end tested
 from this workspace**. First submit a benign synthetic task through that Action
 and verify its actual API author before claiming the voice path works.
-ChatGPT's UI may still require a confirmation click. Real coding additionally
-requires the local task approval above: completely voice-only unattended
-development is **not yet enabled or verified**. No bot allowlist, shared bearer
+ChatGPT's UI may still require a confirmation click. Restricted coding requires
+the local task approval above. Autonomous mode needs no local approval once
+started, and its GitHub issue → sandboxed Copilot → draft PR path has been
+verified. The ChatGPT Action connection itself is still unverified. No bot allowlist, shared bearer
 token, public webhook or owner-identity impersonation is used as a workaround.
 
 ## State, errors and continuous operation
@@ -256,7 +374,9 @@ token, public webhook or owner-identity impersonation is used as a workaround.
   issue. Retry via a new, explicitly authorised issue.
 - If polling or reporting fails, no new task is executed on a success-shaped
   fallback. Errors are static codes; CLI output, task contents and credentials
-  are not copied into GitHub reports.
+  are not copied into GitHub reports. Exception: autonomous mode's draft PR body
+  contains the tail of the agent's own summary, and the ledger records the task
+  folder, branch, commit and PR URL.
 
 ## Troubleshooting
 
@@ -358,3 +478,36 @@ Observed evidence:
   ESLint, `node --check` and `git diff --check` pass.
 
 No real coding task was approved or executed.
+
+### Autonomous mode (4 November 2026, 22:45 AEDT)
+
+- `node --test tools/agent-controller/listener.test.mjs`: **54/54 pass**, 42
+  existing plus 12 autonomous tests. The autonomous tests use real git against a
+  local bare remote, with a fake Copilot and a fake `gh`. They cover:
+  - both enable gates and the task root outside home;
+  - the sandbox policy and credential-free environment;
+  - success: task branch only, draft PR, no merge or close, no replay;
+  - failures, all with no push or PR and the queue blocked until acknowledged:
+    no changes, `.github` or `.gitattributes` changes, a symlink, a Copilot
+    failure, too many files;
+  - unreviewed CLI version, non-owner or unverified issues and interrupted
+    recovery.
+- `npx eslint tools/agent-controller` is clean.
+- Live end-to-end run with Copilot CLI 1.0.105 and real GitHub. A disposable
+  owner issue #12 was processed with an isolated temporary ledger, filtered so
+  that issue #11 could not run. In about 30 seconds the controller:
+  - cloned into `/Users/Shared/butterbox-agent-tasks`;
+  - ran the sandboxed agent, which created a file and ran `node --check`;
+  - committed, pushed `agent/issue-12-49d893f4` and opened **draft** PR #13
+    against `copilot/finish-roadmap-for-app`;
+  - commented queued, running and succeeded (with the PR URL) on the issue,
+    leaving the issue open.
+
+  A second poll executed nothing. Inside the sandbox the agent reported `ls ~`,
+  `cat ~/.gitconfig`, `git commit` and a file-view read of `~/.gitconfig` as
+  blocked. `http://127.0.0.1:3137` was refused, although the host could reach it
+  (HTTP 307). `https://example.com` was reachable. PR #13 was then closed
+  unmerged, its branch deleted and #12 closed.
+- Gate check with the real config: `--mode autonomous` without
+  `AGENT_CONTROLLER_AUTONOMOUS=true` exits with `autonomous_mode_not_enabled`.
+  A dry-run still lists #11 without executing it. Issue #11 was **not** executed.
