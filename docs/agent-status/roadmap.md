@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 10:59 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Last report:** 2026-11-04 11:04 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Blocked at this checkpoint; no continuing agent activity is implied.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL only; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and other protected showcase; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts.
-- **Phase:** Testing.
-- **Activity:** Rehearsing restoration and the required migrations in a new scratch database inside the separately verified disposable test project.
-- **Progress since previous report:** Verified the shared project's expected 16 synthetic identities, two businesses, one venue and 14 employees. Created a private database archive and verified its manifest and checksum; staged and successfully built the exact UXFIX-only revision separately. The first scratch restore stopped because `pg_cron` can be created only in the test cluster's primary database; retrying with its platform-specific entries excluded. Neither running app, tunnel nor live schema was changed.
-- **Tests and results:** Separate UXFIX production compile, TypeScript and generation passed. At 10:59 AEDT both login endpoints returned HTTP **200**. Previous public synthetic owner, FOH manager and employee sign-ins passed; public blocked endpoints returned 404; mobile landing width had no horizontal overflow. The public owner previously saw **0/4** new navigation groups.
-- **Failing tests:** Initial scratch restore failed on the test cluster's `pg_cron` database restriction; a corrected rehearsal is pending. The requested new public UX is not present; post-deployment smoke tests have not run.
-- **Blockers requiring intervention:** The old local app still calls a payroll RPC that the required migration revokes. Do not bypass the scoped-write controls or silently disrupt the local app; establish a compatible, authorised cutover plan.
-- **Documentation:** Existing blocker and baseline results are recorded in `IMPLEMENTATION_PROGRESS.md`; update them with actual deployment results.
-- **Next concrete action:** Retry the scratch restore excluding only platform-specific cron entries, then rehearse the exact migration sequence and security checks without touching the live schema.
+- **Phase:** Blocked.
+- **Activity:** Recording the verified recovery and rehearsal results without changing the live database, apps or tunnel.
+- **Progress since previous report:** Restored application and Auth data from the private archive into an isolated scratch database, excluding only cluster-specific `pg_cron` entries, and applied all nine candidate migrations there. Verified the migration ledger and scoped payroll privileges. Removed the scratch database after testing; retained the private archive and separately staged UXFIX build. The owner approved sharing the database, but did not explicitly approve updating the separate protected local app.
+- **Tests and results:** Six focused pgTAP files passed **174/174** assertions. UXFIX production compile, TypeScript and generation passed; its temporary loopback server returned HTTP **200** for public-mode login and read-only readiness. At 11:03 AEDT both existing login endpoints returned HTTP **200**. Prior public synthetic owner, FOH manager and employee sign-ins passed; public blocked endpoints returned 404; mobile landing width had no horizontal overflow.
+- **Failing tests:** Initial scratch restore failed because `pg_cron` is restricted to the test cluster's primary database; the corrected partial-platform restore passed. The requested new public UX is not deployed; post-deployment smoke tests have not run.
+- **Blockers requiring intervention:** The old local app calls a payroll RPC that the required migration revokes. Updating that protected app, or another safe compatible plan, requires owner authorisation; skipping the revoke would weaken scoped-write controls.
+- **Documentation:** `IMPLEMENTATION_PROGRESS.md` records actual preparation, results and the remaining blocker. User Guide not applicable because no feature was deployed.
+- **Next concrete action:** Obtain an authorised local-app compatibility plan, then reverify the recovery point, apply reviewed migrations and cut over the existing public endpoint; run actual public smoke tests.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Approval checkpoint `c48728ff1ed99a79cea36fc948b8b398380634a2` was pushed and verified; this build and recovery checkpoint is pending push.
+- **Push outcome:** Preparation checkpoint `9d144246dc21420761af063b9101f91a6ab2dc2e` was pushed and verified; this blocker checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 
