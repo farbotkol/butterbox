@@ -2,21 +2,21 @@
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
-- **Last report:** 2026-11-04 13:23 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 13:28 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, In Progress).
 - **Acceptance criteria:** Validate timezone, missing values and duplicates; display source provenance; never silently overwrite raw records.
-- **Phase:** Coding.
-- **Activity:** Building the bounded CSV upload and owner-scoped immutable database storage; the implementation remains uncommitted and unverified.
+- **Phase:** Testing.
+- **Activity:** Verifying the owner-scoped import, access and data-preservation boundaries; the implementation remains uncommitted.
 - **Plan:** Provide an owner-only bounded local sales/booking upload with explicit source and venue timezone, append-only original records, duplicate rejection, safe retries, scoped provenance and task-oriented Help. Exclude customer names/contact fields and do not call external providers or deploy to a showcase.
-- **Progress since previous report:** Drafted the migration, owner-only upload, provenance views and contextual guidance. The CSV parser is pinned in the dependency manifest. The migration preflight created the schema in a transaction and rolled it back on disposable project `butterbox-report-002-55b9`; it has not been applied.
-- **Tests and results:** The transactional migration syntax preflight, initial TypeScript check and changed-file ESLint passed. BB-FORECAST-001 functional and acceptance tests have not yet run.
-- **Failing tests:** None observed so far; the new functional tests are not yet written.
+- **Progress since previous report:** Applied the reviewed import and truncate-protection migrations to disposable project `butterbox-report-002-55b9` only. Added focused database and CSV validation tests.
+- **Tests and results:** Applied-migration pgTAP passed **56/56**; demand and Help units passed **25/25**. Transactional migration preflight, initial TypeScript and changed-file ESLint passed.
+- **Failing tests:** None currently observed. Concurrency, browser, accessibility and production-build verification remain pending.
 - **Blockers requiring intervention:** No blocker identified for the local upload; external delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
 - **Documentation:** Drafted in the User Guide and contextual Help; pending verification against the implemented workflow.
-- **Next concrete action:** Push this status-only checkpoint, apply the reviewed migration to the disposable database, and write focused database, security, concurrency and browser tests.
+- **Next concrete action:** Push this status-only checkpoint, test concurrent retries and access changes, then verify the isolated browser workflow and production build.
 - **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
-- **Push outcome:** BB-FORECAST-001 planning checkpoint `23afaf3e52c916ec916bd2c83923fbdc6a020320` was pushed and verified; this coding-status checkpoint is pending.
+- **Push outcome:** BB-FORECAST-001 coding checkpoint `ce3e6da23c7fe9c48da5ee8ac272f96a539a89cd` was pushed and verified; this test-status checkpoint is pending.
 
 ## BB-COMMS-004 — Contextual shift conversation
 
