@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## Workstream 1 — AI governance foundations
+
+- **Last report:** 2026-11-04 18:14 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active in this coding session; no background continuation is implied.
+- **Current slice:** AI-GOV-001 — typed proposal contract and offline evaluation (planned Foundation Ready slice linked to BB-AI-006 and BB-AI-007; both parent statuses remain open).
+- **Acceptance criteria for the slice:** Validate structured proposals against server-supplied business/venue/department scope and allow-listed shift/employee identifiers; provide a reusable mock-only offline evaluator for ambiguous, injected, malformed, missing-context and unauthorized-action cases; no provider call or roster mutation.
+- **Phase:** Planning.
+- **Activity:** Reviewed current branch, AI backlog criteria, existing rule-based open-shift suggestion code and security/test patterns. No general AI request endpoint or provider exists.
+- **Progress since previous report:** Verified the local branch and remote are both at `e50049b`; preserved the unrelated `.eslintcache` deletion and `.vscode/` untracked content. Confirmed open Draft PR #3 has separate Award Central files and must not be merged or duplicated.
+- **Tests and results:** No tests for AI-GOV-001 have been written or run yet. The pinned Supabase CLI is available via npx, but Docker is not running.
+- **Failing tests:** None observed for this slice.
+- **Blockers requiring intervention:** Database-backed per-business enablement, server authorization and audit/budget persistence need a positively verified isolated database. Current database ports are SSH tunnels; no migration or database operation will target them until the exact project, host and synthetic-only contents are verified.
+- **Documentation:** Foundation scope will be recorded against BB-AI-006/007; parent stories will remain Backlog until their full criteria pass.
+- **Next concrete action:** Implement the pure typed proposal validator and mock-only offline evaluation harness, then run focused Node tests and static checks.
+- **Latest development commit:** `e50049b580d0ca3322fde8140c0f5d5917dcb3ea`.
+- **Push outcome:** The remote branch SHA was verified to match `e50049b580d0ca3322fde8140c0f5d5917dcb3ea`; this workstream-start status update is pending.
+
 ## BB-PAY-007 — QuickBooks discovery and adapter
 
 - **Last report:** 2026-11-04 15:09 AEDT (UTC+1100), observed on the operator's clock.
