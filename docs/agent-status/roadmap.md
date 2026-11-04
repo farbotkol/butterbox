@@ -2,21 +2,21 @@
 
 ## BB-AI-005 — Fill open shifts assistant
 
-- **Last report:** 2026-11-04 14:07 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 14:16 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-AI-005 — Fill open shifts assistant (P1, In Progress).
 - **Acceptance criteria:** Recommendations consider skills, availability, overlaps and hours; alternatives are provided; no offers are sent without manager approval.
-- **Phase:** Planning.
-- **Activity:** Reviewing the existing published open-shift offer workflow, scoped candidate eligibility and roster data before implementing a transparent rule-based suggestion list.
+- **Phase:** Testing.
+- **Activity:** Verifying a read-only, scoped open-shift suggestion list in the isolated development snapshot; no showcase deployment.
 - **Plan:** Reuse server-enforced candidate eligibility, scoped role tags and department-week scheduled time; explain missing availability and hidden hours. Suggestions are read-only and use no external model. Existing explicit manager send and claim confirmation remain authoritative.
-- **Progress since previous report:** BB-FORECAST-001 feature and acceptance-evidence commits were pushed and verified; issue #6 was closed. BB-AI-005 is the next independent ready P1 slice using the completed open-shift workflow.
-- **Tests and results:** No BB-AI-005 tests have run yet. BB-FORECAST-001 verification is recorded below.
-- **Failing tests:** None observed for BB-AI-005 yet; the previously observed development Fast Refresh/login reload risk remains unrelated and unresolved.
-- **Blockers requiring intervention:** None identified for rule-based suggestions. An external AI provider remains unavailable and is not required for this bounded slice.
-- **Documentation:** Pending implementation and verification.
-- **Next concrete action:** Verify data scopes and implement deterministic suggestion ranking, preserving the existing offer workflow.
+- **Progress since previous report:** Implemented scoped deterministic suggestions using the existing eligibility RPC, matching role tags and department-week gross scheduled time. The UI discloses missing availability and out-of-scope hours, and never sends an offer on viewing suggestions.
+- **Tests and results:** Suggestion and existing offer units passed **10/10**; offer, role and availability pgTAP passed **78/78**, **45/45** and **53/53** in the verified disposable database. TypeScript, changed-file ESLint and one isolated development browser journey passed. The browser journey covered five widths, mobile/desktop axe, keyboard access, owner/manager/employee and cross-tenant scope, no automatic offer, and stale eligibility rejection.
+- **Failing tests:** The first browser attempt exposed missing defaults in a synthetic multi-row fixture; it was corrected and the journey passed. The previously observed development Fast Refresh/login reload risk remains unrelated and unresolved.
+- **Blockers requiring intervention:** No blocker for the rule-based slice. It is not a generative model; whether this fully satisfies the story's AI wording remains an explicit acceptance risk.
+- **Documentation:** Pending final verification.
+- **Next concrete action:** Run the concurrent-offer integration and isolated production build/browser journeys; update user guidance and criterion-level evidence after verification.
 - **Latest development commit:** `47144699c04a01152af6128f89af53fa21b52cd3` (BB-FORECAST-001).
-- **Push outcome:** BB-FORECAST-001 acceptance-evidence commit `a0da0348c62f2bffd80bc1d6e36d6c8a8a74e62d` was pushed and verified; this story-start checkpoint is pending.
+- **Push outcome:** BB-AI-005 planning checkpoint `86e95e948039b887b5717db998b5916240d3180a` was pushed and its remote SHA verified; this testing checkpoint is pending.
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
