@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.12 — reviewed 2026-11-04 (Core Roadmap; historical demand and rule-based open-shift guidance; other sections retain their earlier review dates).
+**Guide version:** 1.13 — reviewed 2026-11-04 (Core Roadmap; QuickBooks workflow distinction; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -749,6 +749,18 @@ The usual attendance screen remains available when scanning is not possible.
    unavailable until separately verified. The generic CSV contains no external
    payroll IDs; saving a destination does not alter that fact.
 
+**QuickBooks is not a connected destination.** Intuit's Australian QuickBooks
+Payroll guide documents employees entering and submitting timesheets in EH
+Work. That is a QuickBooks Payroll workflow, not an import from Butterbox.
+Intuit's QuickBooks Online developer reference places `TimeActivity` under the
+Accounting API; it does not establish a QuickBooks Payroll timesheet import.
+Intuit's separate US QuickBooks Time help documents historical time-data CSV
+imports for QuickBooks Time, not compatibility with Australian QuickBooks
+Payroll. Butterbox has no verified QuickBooks Payroll adapter, OAuth connection
+or tested import workflow. Do not treat a QuickBooks mapping label or generic
+Butterbox payroll CSV as a supported integration. See the [product discovery
+record](./quickbooks-integration-discovery.md) for official sources and limits.
+
 The owner-authorized public and local showcases now use this updated mapping
 workflow; other installations may differ until updated.
 
@@ -1164,6 +1176,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.10 | 2026-11-04 | BB-DEMO-005 future concepts | Opt-in fictional, nonfunctional preview and unavailable-feature guidance; isolated testing only |
 | 1.11 | 2026-11-04 | BB-COMMS-004 shift conversations | Scoped in-app shift discussion and retained history; isolated development only |
 | 1.12 | 2026-11-04 | BB-FORECAST-001; BB-AI-005 partial | Owner-only historical-demand imports and scoped, rule-based open-shift suggestions; isolated development only |
+| 1.13 | 2026-11-04 | BB-PAY-007 product discovery | QuickBooks AU EH Work, accounting TimeActivity and US QuickBooks Time CSV distinction; no adapter or payroll delivery |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

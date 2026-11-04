@@ -2,6 +2,19 @@
 
 ## Execution summary
 
+- **BB-PAY-007 — QuickBooks discovery and adapter, 2026-11-04 15:07 AEDT: Done (product discovery only; no adapter).**
+
+  | Acceptance criterion and identifier | Implementation and actual verification evidence | Result |
+  | --- | --- | --- |
+  | PAY007-01 Supported product/workflow documented before build | Added an internal discovery record and role-based User Guide guidance distinguishing Intuit's Australian QuickBooks Payroll EH Work timesheet-entry tutorial from the QuickBooks Online Accounting API `TimeActivity` reference and the separate US QuickBooks Time historical CSV help. The latter is not evidence of Australian Payroll compatibility. | Pass — documented distinction; no integration selected or represented as supported |
+  | PAY007-02 Adapter only marked available after integration tests | Existing payroll setup already states mapping-only, not an authenticated provider connection, and says no payroll is sent. Documentation explicitly keeps QuickBooks unavailable. No provider credentials, test company, authenticated integration or integration tests were available or claimed. | Pass — availability gate preserved; adapter remains unavailable |
+
+  **Testing:** `node --test tests/help.test.mjs` passed **19/19**, including the new check for role-based product distinctions, source links and the mapping-only limitation. The first run exposed a test assertion that did not normalize Markdown code delimiters; the assertion was corrected and the complete focused suite passed on rerun. `git diff --check` passed. No code, schema, credentials, showcase, or user data changed.
+
+  **Documentation: updated** in User Guide v1.13 and `docs/quickbooks-integration-discovery.md`. **Limitations:** QuickBooks AU account eligibility, product-specific import/API support, OAuth scopes, field mapping, sandbox access, and duplicate/reconciliation behavior remain unverified. No QuickBooks adapter or payroll delivery is available.
+
+- **Roadmap readiness assessment, 2026-11-04 15:06 AEDT:** After BB-PAY-007, no additional story was verified ready for a complete safe implementation. The highest remaining P2-showcase AI stories depend on an approved AI approach, governance/evaluation or actual proposal/apply workflows; BB-AI-005's rule-based suggestions do not supply those foundations. Weather-aware and staffing forecasts lack a verified data source and tested baseline. MYOB/Employment Hero and reliable payroll delivery need provider access and end-to-end testing. P0 Fair Work data ingestion has a separate incomplete Award Central Draft PR #3; source access and integration with this roadmap remain unverified, so do not duplicate or merge that work. Downstream award stories require the source/rule prerequisites and specialist evidence; SaaS work requires billing/provider foundations; marketing stories depend on blocked BB-BRAND-006. **Next action:** resume when a prerequisite is verified, or select a concrete source-backed task that does not duplicate Award Central. Backlog counts: **76 Done, 12 Blocked, 44 Backlog**. No full regression, deployment or provider integration is claimed.
+
 - **BB-AI-005 — Fill open shifts assistant, 2026-11-04 14:34 AEDT: Blocked after verified partial implementation; not deployed.** Feature commit `56fc81a119a7a9e0cc341ee77a8aec1f4a4819dc` was pushed and its remote SHA verified. Authorised managers can view rule-based candidates for upcoming published open shifts. This is not a model-based AI assistant: do not mark the story Done without clarifying whether deterministic suggestions satisfy the AI intent or providing an approved AI approach and evaluation.
 
   | Acceptance criterion and identifier | Implementation and actual verification evidence | Result |

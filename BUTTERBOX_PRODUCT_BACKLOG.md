@@ -869,6 +869,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-PAY-007 — QuickBooks discovery and adapter [P2]
 
+**Status:** Done — product discovery only. QuickBooks Payroll AU's documented EH Work workflow is distinguished from the QuickBooks Online Accounting API `TimeActivity` reference and the separate US QuickBooks Time CSV workflow. Butterbox has no verified QuickBooks Payroll import adapter; none is marked available. No provider connection or integration test is claimed. See [the discovery record](docs/quickbooks-integration-discovery.md) and [implementation evidence](IMPLEMENTATION_PROGRESS.md).
+
 **User story:** As a product owner, I want to distinguish accounting time activities from Australian payroll imports.
 
 **Acceptance criteria**

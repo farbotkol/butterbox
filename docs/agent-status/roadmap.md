@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## BB-PAY-007 — QuickBooks discovery and adapter
+
+- **Last report:** 2026-11-04 15:07 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** This story's discovery and documentation work is complete; this does not imply a background agent remains active.
+- **Current story:** BB-PAY-007 — QuickBooks discovery and adapter (P2, Done for discovery only; no adapter).
+- **Acceptance criteria:** Document the destination product/workflow before build; do not mark an adapter available before integration tests.
+- **Phase:** Complete.
+- **Activity:** Recorded the distinctions among Australian QuickBooks Payroll timesheet entry in EH Work, the QuickBooks Online Accounting API `TimeActivity` reference and the separate US QuickBooks Time CSV workflow. Kept QuickBooks integration unavailable.
+- **Progress since previous report:** Added a dated source-based discovery record, updated the payroll User Guide to v1.13, synchronized the backlog and acceptance evidence, and added a regression assertion for the documented boundaries.
+- **Tests and results:** `node --test tests/help.test.mjs` passed **19/19** after correcting a Markdown-delimiter normalization in the new assertion. `git diff --check` passed. No build, migration, provider test, full regression or deployment was applicable/performed.
+- **Failing tests:** The first focused run failed only because the new test retained inline-code backticks when matching normalized help; the assertion was corrected and the final full focused run passed **19/19**.
+- **Blockers requiring intervention:** No verified Australian QuickBooks Payroll import/API path, OAuth configuration or isolated provider test company; the adapter remains unavailable. No further complete safe story was verified ready: AI/model governance, forecast source/baseline, provider access, or Award Central source/integration foundations remain missing or separately owned.
+- **Documentation:** Updated in the role-based User Guide and `docs/quickbooks-integration-discovery.md`; `Documentation: updated`.
+- **Next concrete action:** Wait for a verifiable prerequisite or choose a source-backed, non-duplicative safe story; do not start a provider integration or Award Central duplicate based on assumptions.
+- **Latest development commit:** `558ab754a412a5f8be57ba3d995cfa9c08683bf0` before this story's documentation commit.
+- **Push outcome:** The prior remote development SHA was verified; this story's changes and completion checkpoint are not yet pushed.
+
 ## BB-AI-005 — Fill open shifts assistant
 
 - **Last report:** 2026-11-04 14:37 AEDT (UTC+1100), observed on the operator's clock.

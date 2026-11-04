@@ -37,6 +37,26 @@ test("payroll help describes the focused mapping workflow and its permissions", 
   }
 });
 
+test("QuickBooks guidance distinguishes Australian Payroll from accounting and US CSV workflows", () => {
+  const payroll = helpTopics(source, "owner").find((topic) => topic.id === "payroll");
+  assert.ok(payroll);
+  const markdown = payroll.markdown.replace(/[`*_]/g, "").replace(/\s+/g, " ").toLowerCase();
+  for (const phrase of [
+    "quickbooks is not a connected destination",
+    "employees entering and submitting timesheets in eh work",
+    "timeactivity under the accounting api",
+    "separate us quickbooks time help",
+    "no verified quickbooks payroll adapter",
+    "do not treat a quickbooks mapping label",
+  ]) assert.ok(markdown.includes(phrase), phrase);
+  const discovery = readFileSync(path.join(root, "docs/quickbooks-integration-discovery.md"), "utf8");
+  for (const url of [
+    "https://quickbooks.intuit.com/au/advisor-resource-centre/create-time-sheets/",
+    "https://developer.intuit.com/app/developer/qbo/docs/api/accounting/all-entities/timeactivity",
+    "https://quickbooks.intuit.com/learn-support/en-us/help-article/time-tracking/export-import-time-data-quickbooks-time/L1f77o0jJ_US_en_US",
+  ]) assert.ok(discovery.includes(url), url);
+});
+
 test("attendance help uses the current clock navigation label", () => {
   const topics = helpTopics(source, "owner");
   for (const id of ["attendance", "alerts", "kiosk", "employee"]) {
