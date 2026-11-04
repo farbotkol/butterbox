@@ -2,6 +2,8 @@
 
 ## Execution summary
 
+- **Roadmap readiness checkpoint — 2026-11-04 18:35 AEDT:** `BACKLOG_INDEX.csv` contains **76 Done, 13 Blocked and 43 Backlog** stories. A targeted CSV check found **no unresolved Backlog story with Showcase_Priority P0 or P1**. The P1 Showcase candidates are recorded Blocked by missing validated employment rules, provider/channel approvals or prerequisite work. The currently considered P2 work requires unavailable provider/data/rule evidence or blocked brand prerequisites; no next P2 story was verified ready. Draft Award Central PR #3 remains open; its shared-library/source-ingestion work was reviewed read-only and was not merged or duplicated. No verified isolated database or external provider test account is available, so no database migration or live integration is safe. **Next action:** resume when a blocked prerequisite is resolved or the owner reprioritizes; no ready implementation was identified in this check.
+
 - **PAY-DELIVERY-001 — Provider-neutral payroll-delivery policy: Foundation Ready (partial; linked to BB-PAY-008; parent remains Backlog).**
 
   **Implementation:** Added `src/lib/payroll-delivery-policy.ts` with a SHA-256 idempotency key derived from the immutable export batch/finalisation IDs and a deterministic, bounded exponential retry-delay function. Retry is scheduled only when the caller identifies a failure as transient; permanent/unknown failures and the attempt limit stop automatically. This module has no network or persistence behavior.
@@ -40,7 +42,7 @@
 
   **Not delivered / limitations:** No dashboard, stored forecast, role-level staffing prediction, weather input, statistically validated confidence interval, drift monitoring, live model/provider, real venue backtest, database integration or authorization path. The min/max is only a historical observed range, not a confidence interval. No database or showcase was accessed or changed. BB-FORECAST-003 and BB-FORECAST-005 remain Backlog; do not claim forecast accuracy or employment/payroll correctness.
 
-  **Next:** Inspect the existing Award Central Draft PR #3 integration boundary without merging or duplicating it, then evaluate the next safe foundation in the authorized workstream.
+  **Next:** Draft Award Central PR #3 was reviewed read-only and remains separate; no merge or duplicate implementation was made. Continue only with an independently ready story after resolving the currently recorded blockers.
 
 - **AI-GOV-001 — Typed proposal contract and offline response evaluation, 2026-11-04 18:17 AEDT: Foundation Ready (partial; linked to BB-AI-006 and BB-AI-007; parent stories remain Backlog).**
 

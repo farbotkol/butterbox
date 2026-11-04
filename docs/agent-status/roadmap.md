@@ -2,8 +2,8 @@
 
 ## Workstream 5 — Reliable payroll-delivery foundation
 
-- **Last report:** 2026-11-04 18:34 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state:** Active in this coding session; no background continuation is implied.
+- **Last report:** 2026-11-04 18:35 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Paused at a readiness checkpoint in this coding session; no background continuation is implied.
 - **Current slice:** PAY-DELIVERY-001 — provider-neutral idempotency/retry policy contract (Foundation Ready candidate linked to BB-PAY-008; parent remains Backlog).
 - **Acceptance criteria for the slice:** Define deterministic delivery identity from an immutable export batch/finalisation; calculate a bounded exponential retry delay only for explicitly transient failures; reject invalid attempts and policy values; document the persistence/provider/UI boundary.
 - **Phase:** Complete for the pure Foundation Ready slice; BB-PAY-008 remains Backlog.
@@ -13,15 +13,15 @@
 - **Failing tests:** None observed for PAY-DELIVERY-001.
 - **Blockers requiring intervention:** No verified disposable database or authorised provider test account. Existing payroll exports are immutable CSV batches; do not claim remote delivery, durable retry state, provider-side idempotency, or reconciliation of external status.
 - **Documentation:** Updated in `docs/payroll-delivery-foundation.md`, BB-PAY-008 story criteria, `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`. User Guide not applicable because no user-facing delivery workflow was added.
-- **Next concrete action:** Evaluate the next independent ready story against current backlog priorities and blockers; do not infer missing subscription policy or create an unverified provider integration.
+- **Next concrete action:** Resume when a blocked prerequisite is resolved or the owner reprioritizes. The current backlog check found no unresolved Showcase_Priority P0/P1 story in Backlog and no safe P2 foundation without unavailable provider/data/rule inputs.
 - **Latest development commit:** `d5c32c340801fe462d85197b3ce9c430767334a1` (`feat(PAY-DELIVERY-001): add safe retry policy foundation`).
-- **Push outcome:** Pushed to `copilot/finish-roadmap-for-app`; `git ls-remote origin refs/heads/copilot/finish-roadmap-for-app` matched `d5c32c340801fe462d85197b3ce9c430767334a1`.
+- **Push outcome:** Feature commit `d5c32c340801fe462d85197b3ce9c430767334a1` is pushed and verified. This readiness checkpoint will be committed and pushed separately.
 
 ## Workstream 4 — Subscription entitlements
 
 - **Current story:** BB-SAAS-001 — Venue-based plans (P1; Blocked, no plan/billing behavior changed).
 - **Readiness decision:** The committed story requires centrally stored Starter/Pro/Plus entitlements and correct venue billing, but no approved tier-feature matrix, venue billability definition or rate/limit policy was found in the repository. Applying unverified billing assumptions would change product scope. Database persistence also requires a positively identified isolated target.
-- **Next action:** Resume only after the owner-defined tier/venue policy and isolated database are available; proceed with independent PAY-DELIVERY-001 meanwhile.
+- **Next action:** Resume only after the owner-defined tier/venue policy and isolated database are available; PAY-DELIVERY-001 has since been completed as a separate partial foundation.
 
 ## Completed Workstream 2 — Forecasting data and baseline
 
