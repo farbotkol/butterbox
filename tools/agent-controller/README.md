@@ -63,7 +63,14 @@ AGENT_CONTROLLER_ENABLED=true npm run agent:listener -- --mode synthetic --once
 The checkout must be clean. Existing unrelated changes are deliberately not
 discarded. Use a separately prepared clean checkout to validate if necessary.
 After a successful synthetic run, the issue receives queued, running and
-succeeded comments. A second poll must not repeat it. Close the test issue.
+succeeded comments and is **automatically closed as completed**, after the
+successful completion report. Subsequent polls do not replay it, even if GitHub
+closure fails: the private local ledger remains the replay guard. If the GitHub
+closure API fails transiently, subsequent polls retry **closure only** for the
+same unchanged, successfully completed issue, without rerunning the task.
+Failed or interrupted tasks remain open for review and require explicit
+acknowledgment/new issue for retry. An exit code of zero is execution success,
+not validation that the underlying product story is Done.
 This does **not** verify real Copilot tool permissions or owner OAuth in ChatGPT.
 
 ## Roadmap and Award Central context
