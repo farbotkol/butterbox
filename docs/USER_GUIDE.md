@@ -818,6 +818,58 @@ They do not approve timesheets, pay staff or send data to any external
 provider. If used in a separately authorized synthetic showcase, filenames and
 populated rows are labelled **SIMULATION ONLY - NOT FOR PAYROLL**.
 
+### Import historical demand — owners
+
+This workflow is implemented and verified in isolated development; it has
+**not** been deployed to the protected public or local showcase. Only a
+business owner can view or import history. It stores source records but does
+not calculate a forecast or connect to a sales or booking provider.
+
+1. Select the intended venue, open **Hours & labour** under **Business**, then
+   choose **Import sales and booking history**. Check the venue and its
+   timezone before importing.
+2. Select **Sales amounts (AUD)** or **Bookings (guest counts)** and enter the
+   non-identifying **Source system name**. Use the same name for later files
+   from the same system: source names are compared without case, while source
+   record IDs are case-sensitive.
+3. Choose a UTF-8 CSV of at most 500,000 bytes and 1,000 data records. Use
+   exactly one of these headers, in this order, without extra columns:
+
+   ```text
+   source_record_id,occurred_at,sales_amount_aud
+   source_record_id,occurred_at,guest_count
+   ```
+
+   Include no customer names, phone numbers, emails or other identifying
+   details, including in the source system name or record IDs. A source
+   record ID must start with a letter or number, use only letters, numbers,
+   `.`, `_`, `:` or `-`, and be at most 128 characters. Source names must
+   also start with a letter or number. Amounts are non-negative AUD values
+   with at most nine digits before and two digits after the decimal point;
+   guest counts are whole numbers from 1 to 999,999.
+4. Each `occurred_at` must include seconds and an explicit offset that matches
+   the venue timezone at that time, for example
+   `2024-01-15T12:30:00+11:00` for Sydney in summer. A daylight-saving gap or
+   an incorrect seasonal offset is rejected. An ambiguous time is accepted
+   only when its explicit offset identifies a valid occurrence. Convert UTC
+   exports to matching venue-local offsets before upload unless the venue is
+   UTC. Years 0001–9998 and up to six fractional-second digits are supported.
+   If the configured venue timezone is invalid, it must be corrected before an
+   import can proceed.
+5. Select **Import history**. The entire file is rejected for missing or
+   invalid values, extra columns or duplicate IDs; existing records are never
+   overwritten. IDs are checked within the file and against earlier imports
+   for that venue, history type and source name. If the result is uncertain,
+   check **Import history** before retrying the same file. A source name
+   change creates a different duplicate-check namespace, so use it consistently.
+6. Open an import to see its source, venue timezone, import time, owner account,
+   record count and original values. History is read-only and recorded in
+   audit history without the individual record values. There is no supported
+   correction or deletion workflow in this version; an incorrectly imported
+   record remains in history and cannot be re-imported under the same ID.
+   Do not rely on incorrect records. The workflow does not send records to a
+   sales, booking or messaging provider.
+
 ### Overtime and exceptions — managers
 
 1. Select **Exceptions** under **Team Management** in the main navigation. Owners, admins,

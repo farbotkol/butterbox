@@ -113,6 +113,214 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("owner demand history imports preserve provenance, isolation and accessibility", async ({ page, browser }) => {
+  test.setTimeout(240_000);
+  const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, secondVenueId, outsideVenueId, departmentId] =
+    Array.from({ length: 6 }, () => randomUUID());
+  const invalidVenueId = randomUUID();
+  const users = {};
+  const contexts = [];
+  const pageErrors = [];
+  const unexpectedOrigins = [];
+  const historyPosts = [];
+  const allowedOrigins = new Set([appUrl, apiUrl, mailUrl].map((value) => new URL(value).origin));
+  const history = `/reports/demand-history?business=${businessId}&venue=${venueId}`;
+  const salesHeader = "source_record_id,occurred_at,sales_amount_aud";
+  const bookingHeader = "source_record_id,occurred_at,guest_count";
+  const longId = "s".repeat(128);
+  const sales = `${salesHeader}\n${longId},2024-01-15T12:30:00+11:00,00012.50\n` +
+    "sale-2,2024-07-15T12:30:00+10:00,0\n" +
+    Array.from({ length: 24 }, (_, index) =>
+      `z${String(index).padStart(2, "0")},2024-01-16T12:30:00+11:00,1\n`).join("");
+  const bookings = `${bookingHeader}\nbooking-1,2024-04-07T02:30:00+10:00,4\n`;
+
+  async function monitor(context, monitoredPage) {
+    monitoredPage.on("pageerror", (error) => pageErrors.push(error.message));
+    await context.route("**/*", (route) => {
+      const origin = new URL(route.request().url()).origin;
+      if (allowedOrigins.has(origin)) return route.continue();
+      unexpectedOrigins.push(origin);
+      return route.abort("blockedbyclient");
+    });
+  }
+  async function importFile(contents, type = "sales") {
+    const form = page.getByRole("form", { name: "Import demand history" });
+    await form.getByLabel("History type").selectOption(type);
+    await form.getByLabel("Source system name").fill("Harbour POS");
+    await form.getByLabel("CSV file").setInputFiles({
+      name: "history.csv", mimeType: "text/csv", buffer: Buffer.from(contents),
+    });
+    await form.getByRole("button", { name: "Import history", exact: true }).click();
+  }
+  const counts = async () => ({
+    imports: Number(await sql(`select count(*) from public.demand_history_imports where business_id = '${businessId}'::uuid`)),
+    records: Number(await sql(`select count(*) from public.demand_history_records where business_id = '${businessId}'::uuid`)),
+  });
+
+  try {
+    for (const role of ["owner", "manager", "worker", "admin", "outside"]) {
+      const email = `demand-ui-${role}-${suffix}@example.test`;
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users[role] = { id: created.data.user.id, email };
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: "Demand UI cafe" }, { id: outsideId, name: "Outside demand cafe" },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Sydney venue", timezone: "Australia/Sydney" },
+      { id: secondVenueId, business_id: businessId, name: "Second venue", timezone: "UTC" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "UTC" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "FOH",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner.id, role: "owner" },
+      { business_id: businessId, user_id: users.manager.id, role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users.worker.id, role: "employee", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users.admin.id, role: "admin" },
+      { business_id: outsideId, user_id: users.outside.id, role: "owner" },
+    ])).error).toBeNull();
+
+    await monitor(page.context(), page);
+    const anonymousNavigations = [];
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) anonymousNavigations.push(frame.url());
+    });
+    page.on("request", (request) => {
+      if (request.method() === "POST" && new URL(request.url()).pathname === "/reports/demand-history") {
+        historyPosts.push(request.url());
+      }
+    });
+    await page.goto(history, { waitUntil: "commit", timeout: 15_000 });
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.getByRole("heading", { name: "Welcome to Butterbox" })).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(anonymousNavigations.filter((url) => new URL(url).pathname === "/login").length,
+      "anonymous demand history redirects should settle without a login reload loop").toBeLessThan(5);
+    await signIn(page, users.owner.email, password);
+    await page.goto(`/reports/hours?business=${businessId}&contextVenue=${venueId}`);
+    await page.getByRole("link", { name: "Import sales and booking history" }).click();
+    await expect(page.getByRole("heading", { name: "Demand history", exact: true })).toBeVisible();
+    await expect(page.getByText("No history has been imported for this venue yet.")).toBeVisible();
+
+    const form = page.getByRole("form", { name: "Import demand history" });
+    await expect(page.getByText("this version has no correction or deletion workflow.", { exact: false })).toBeVisible();
+    await form.getByLabel("History type").focus();
+    await page.keyboard.press("Tab");
+    await expect(form.getByLabel("Source system name")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(form.getByLabel("CSV file")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(form.getByRole("button", { name: "Import history" })).toBeFocused();
+
+    await importFile(`${salesHeader},customer_name\nid,2024-01-15T12:30:00+11:00,1,Person`);
+    await expect(form.getByRole("alert")).toContainText("exactly the columns");
+    expect(await counts()).toEqual({ imports: 0, records: 0 });
+    await importFile(`${salesHeader}\nid,2024-10-06T02:30:00+10:00,1`);
+    await expect(form.getByRole("alert")).toContainText("offset matching Australia/Sydney");
+    expect(await counts()).toEqual({ imports: 0, records: 0 });
+    await importFile(Buffer.from([0xff, 0xfe, 0x61]));
+    await expect(form.getByRole("alert")).toContainText("encoded as UTF-8");
+    const postsBeforeOversizedFile = historyPosts.length;
+    await importFile(Buffer.alloc(0));
+    await expect(form.getByRole("alert")).toContainText("non-empty CSV file");
+    expect(historyPosts.length).toBe(postsBeforeOversizedFile);
+    await importFile(Buffer.alloc(1_100_000, 0x61));
+    await expect(form.getByRole("alert")).toContainText("no larger than 500,000 bytes");
+    await expect(form.getByLabel("CSV file")).toHaveAttribute("aria-invalid", "true");
+    expect(historyPosts.length).toBe(postsBeforeOversizedFile);
+    await form.getByLabel("CSV file").setInputFiles({
+      name: "history.csv", mimeType: "text/csv", buffer: Buffer.alloc(500_001, 0x61),
+    });
+    await form.getByLabel("CSV file").evaluate((input) => input.setCustomValidity(""));
+    const oversizedResponse = page.waitForResponse((response) =>
+      response.request().method() === "POST" && new URL(response.url()).pathname === "/reports/demand-history");
+    await form.getByRole("button", { name: "Import history", exact: true }).click();
+    expect((await oversizedResponse).status()).toBe(200);
+    expect(historyPosts.length).toBe(postsBeforeOversizedFile + 1);
+    await expect(form.getByRole("alert")).toContainText("no larger than 500,000 bytes");
+    expect(await counts()).toEqual({ imports: 0, records: 0 });
+    await importFile(sales);
+    await expect(page.getByRole("status")).toContainText("Import confirmed");
+    await expect(page.getByRole("heading", { name: "Import provenance" })).toBeVisible();
+    await expect(page.getByText("Harbour POS", { exact: true })).toBeVisible();
+    await expect(page.getByText(longId, { exact: true })).toBeVisible();
+    await expect(page.getByText("Sales amount (AUD): 00012.50")).toBeVisible();
+    expect(await counts()).toEqual({ imports: 1, records: 26 });
+    const salesImportId = new URL(page.url()).searchParams.get("import");
+    expect(salesImportId).toBeTruthy();
+    await page.reload();
+    await expect(page.getByText("Sales amount (AUD): 00012.50")).toBeVisible();
+    const pagination = page.getByRole("navigation", { name: "Demand history pages" });
+    await pagination.getByRole("link", { name: "Next page" }).click();
+    await expect(page.getByText("z23", { exact: true })).toBeVisible();
+    await expect(page.getByText(longId, { exact: true })).toHaveCount(0);
+    await pagination.getByRole("link", { name: "Previous page" }).click();
+    await expect(page.getByText(longId, { exact: true })).toBeVisible();
+
+    for (const width of [375, 390, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.getByRole("heading", { name: "Original records" })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      if (width === 375 || width === 1440) {
+        const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+        expect(accessibility.violations).toEqual([]);
+      }
+    }
+    await page.getByRole("link", { name: "Import history", exact: true }).click();
+    await importFile(sales);
+    await expect(form.getByRole("alert")).toContainText("already been imported");
+    expect(await counts()).toEqual({ imports: 1, records: 26 });
+    await importFile(bookings, "bookings");
+    await expect(page.getByRole("status")).toContainText("Import confirmed");
+    await expect(page.getByText("Guest count: 4")).toBeVisible();
+    expect(await counts()).toEqual({ imports: 2, records: 27 });
+    await page.getByRole("link", { name: "Import history", exact: true }).click();
+    await expect(page.getByRole("link", { name: /View sales amounts/ })).toBeVisible();
+    await expect(page.getByRole("link", { name: /View bookings/ })).toBeVisible();
+    await page.getByRole("link", { name: "Help with demand history" }).click();
+    await expect(page.getByRole("heading", { name: "Importing sales and booking history" })).toBeVisible();
+    await expect(page.getByRole("article", { name: "Importing sales and booking history" }))
+      .toContainText("Only a business owner can view or import history");
+    await page.goto(`/reports/demand-history?business=${businessId}&venue=${secondVenueId}`);
+    await expect(page.getByText("No history has been imported for this venue yet.")).toBeVisible();
+    await page.goto(`/reports/demand-history?business=${businessId}&venue=${secondVenueId}&import=${salesImportId}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("couldn't load this import history");
+    await expect(page.getByText(longId, { exact: true })).toHaveCount(0);
+    expect((await admin.from("venues").insert({
+      id: invalidVenueId, business_id: businessId, name: "Invalid timezone venue", timezone: "Invalid/Zone",
+    })).error).toBeNull();
+    await page.goto(`/reports/demand-history?business=${businessId}&venue=${invalidVenueId}`);
+    await expect(page.getByRole("main").getByRole("alert")).toContainText("invalid timezone");
+    await expect(page.getByRole("form", { name: "Import demand history" })).toHaveCount(0);
+
+    for (const role of ["manager", "worker", "admin", "outside"]) {
+      const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
+      contexts.push(context);
+      const rolePage = await context.newPage();
+      await monitor(context, rolePage);
+      await signIn(rolePage, users[role].email, password);
+      await rolePage.goto(history);
+      await expect(rolePage.getByRole("main").getByRole("alert")).toContainText(role === "outside"
+        ? "selected business or venue is unavailable" : "Only a business owner");
+      await expect(rolePage.getByRole("form", { name: "Import demand history" })).toHaveCount(0);
+      await expect(rolePage.getByText("Harbour POS", { exact: true })).toHaveCount(0);
+      await context.close();
+    }
+    expect(pageErrors).toEqual([]);
+    expect(unexpectedOrigins).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const user of Object.values(users)) expect((await admin.auth.admin.deleteUser(user.id)).error).toBeNull();
+  }
+});
+
 test("future vision previews are isolated, honest and accessible", async ({ page, browser }, testInfo) => {
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;

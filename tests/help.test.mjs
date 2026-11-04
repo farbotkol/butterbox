@@ -57,6 +57,20 @@ test("shift conversation help explains scope, retained messages and delivery lim
   }
 });
 
+test("demand history help describes owner access, duplicate handling and the upload limits", () => {
+  const topic = helpTopics(source, "owner").find((candidate) => candidate.id === "demand-history");
+  assert.ok(topic);
+  const text = topic.markdown.replace(/\*\*/g, "").replace(/\s+/g, " ").toLowerCase();
+  for (const phrase of [
+    "Only a business owner", "Import sales and booking history", "500,000 bytes",
+    "source_record_id,occurred_at,sales_amount_aud", "guest_count",
+    "duplicate IDs", "never overwritten", "not been deployed", "does not calculate a forecast",
+  ]) assert.ok(text.includes(phrase.toLowerCase()), phrase);
+  for (const role of ["admin", "foh_manager", "employee"]) {
+    assert.ok(!helpTopics(source, role).some((candidate) => candidate.id === "demand-history"), role);
+  }
+});
+
 test("help visibility is derived from effective roles, not a requested topic or search", () => {
   const employee = helpTopics(source, "employee");
   const manager = helpTopics(source, "foh_manager");

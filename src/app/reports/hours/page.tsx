@@ -89,6 +89,10 @@ export default async function HoursLabourPage({ searchParams }: {
   return <AppShell {...shell}>
     <h1 className="text-2xl font-semibold sm:text-3xl">Hours and labour</h1>
     <p className="mt-2 text-sm text-muted">Published scheduled hours compared with currently approved timesheets. Read-only; not a payroll calculation.</p>
+    <Link href={`/reports/demand-history?${new URLSearchParams({ business: workspace.business.id, venue: workspace.venue.id })}`}
+      className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+      Import sales and booking history
+    </Link>
     <form action="/reports/hours" aria-label="Report filters" className="mt-5 grid gap-4 rounded-xl border border-line bg-white p-5 sm:grid-cols-2 lg:grid-cols-5">
       <input type="hidden" name="business" value={workspace.business.id} />
       <input type="hidden" name="contextVenue" value={workspace.venue.id} />
