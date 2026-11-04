@@ -2,6 +2,8 @@
 
 ## Execution summary
 
+- **BB-AI-005 — Fill open shifts assistant, 2026-11-04 14:07 AEDT: In Progress (planning).** The next ready P1 story builds on the completed open-shift offer/confirmation workflow. Plan a transparent rule-based, read-only suggestion list for published upcoming open shifts: reuse server-authorised eligibility for availability, role restrictions and overlaps; use scoped role tags and department-week scheduled time to order alternatives; disclose missing availability and out-of-scope hours. No external model, automatic offer or assignment is planned. The existing manager's explicit send and claimant-confirmation checks remain authoritative. Criteria AI005-01 (skills, availability, overlaps and hours), AI005-02 (alternatives) and AI005-03 (no offer without manager approval) are **Pending** until targeted security, stale-data, accessibility and browser verification succeeds. **Documentation: pending.** Next: verify scoped source data and implement the smallest complete suggestion slice.
+
 - **BB-FORECAST-001 — Historical demand ingestion, 2026-11-04 14:02 AEDT: Done in isolated development; not deployed.** Feature commit `47144699c04a01152af6128f89af53fa21b52cd3` was pushed and its remote SHA verified; issue #6 was closed with acceptance evidence. An owner may upload bounded local sales or booking CSV files and view scoped import provenance and retained originals. No provider connection, forecasting model or payroll calculation is included.
 
   | Acceptance criterion and identifier | Implementation and actual verification evidence | Result |
@@ -16,7 +18,7 @@
 
   **Remaining risks:** An intermittent development Fast Refresh/login reload loop was reproduced on existing login, shift-conversation and Hours & Labour routes as well as the new route; some development attempts timed out or failed redirect settling. The issue is not claimed fixed; the isolated production build and browser checks passed. Imported records currently have no supported correction or deletion workflow, so incorrect records remain and users are warned to check files before import. Physical-device/assistive-technology review and deployment acceptance were not performed.
 
-  **Documentation: updated** in the User Guide and owner-only contextual Help with actual permissions, file format and limits, duplicate handling, immutability and the absence of external providers or deployment. **Next concrete action:** assess the highest-priority ready story and prerequisites without deploying to a protected showcase.
+  **Documentation: updated** in the User Guide and owner-only contextual Help with actual permissions, file format and limits, duplicate handling, immutability and the absence of external providers or deployment. Completion-evidence commit `a0da0348c62f2bffd80bc1d6e36d6c8a8a74e62d` was pushed and verified. **Next:** BB-AI-005 in isolated development; no protected-showcase deployment.
 
 - **BB-COMMS-004 — Contextual shift conversation, 2026-11-04 13:14 AEDT: Done in isolated development; not deployed.** Feature commit `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` was pushed and its remote SHA verified. In-app threads are scoped to a published shift, department, employee and linked account. Reassignment, department transfer or account relinking cannot transfer private history to a replacement.
 

@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-AI-005 — Fill open shifts assistant
+
+- **Last report:** 2026-11-04 14:07 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-AI-005 — Fill open shifts assistant (P1, In Progress).
+- **Acceptance criteria:** Recommendations consider skills, availability, overlaps and hours; alternatives are provided; no offers are sent without manager approval.
+- **Phase:** Planning.
+- **Activity:** Reviewing the existing published open-shift offer workflow, scoped candidate eligibility and roster data before implementing a transparent rule-based suggestion list.
+- **Plan:** Reuse server-enforced candidate eligibility, scoped role tags and department-week scheduled time; explain missing availability and hidden hours. Suggestions are read-only and use no external model. Existing explicit manager send and claim confirmation remain authoritative.
+- **Progress since previous report:** BB-FORECAST-001 feature and acceptance-evidence commits were pushed and verified; issue #6 was closed. BB-AI-005 is the next independent ready P1 slice using the completed open-shift workflow.
+- **Tests and results:** No BB-AI-005 tests have run yet. BB-FORECAST-001 verification is recorded below.
+- **Failing tests:** None observed for BB-AI-005 yet; the previously observed development Fast Refresh/login reload risk remains unrelated and unresolved.
+- **Blockers requiring intervention:** None identified for rule-based suggestions. An external AI provider remains unavailable and is not required for this bounded slice.
+- **Documentation:** Pending implementation and verification.
+- **Next concrete action:** Verify data scopes and implement deterministic suggestion ranking, preserving the existing offer workflow.
+- **Latest development commit:** `47144699c04a01152af6128f89af53fa21b52cd3` (BB-FORECAST-001).
+- **Push outcome:** BB-FORECAST-001 acceptance-evidence commit `a0da0348c62f2bffd80bc1d6e36d6c8a8a74e62d` was pushed and verified; this story-start checkpoint is pending.
+
 ## BB-FORECAST-001 — Historical demand ingestion
 
 - **Last report:** 2026-11-04 14:02 AEDT (UTC+1100), observed on the operator's clock.
@@ -14,9 +32,9 @@
 - **Failing tests:** Earlier development journeys timed out or failed redirect settling during intermittent Fast Refresh reloads; the behavior also occurred on existing routes and is not claimed fixed. No production failure was observed in the completed runs.
 - **Blockers requiring intervention:** No criterion blocker for the local upload. No supported correction/deletion workflow exists for imported records. External delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
 - **Documentation:** Updated in the User Guide and owner-only contextual Help; feature is not deployed.
-- **Next concrete action:** Push completion evidence, then assess the highest-priority ready story and its prerequisites.
+- **Next concrete action:** Continue with the independent ready BB-AI-005 open-shift suggestion story.
 - **Latest development commit:** `47144699c04a01152af6128f89af53fa21b52cd3` (BB-FORECAST-001).
-- **Push outcome:** Feature commit `47144699c04a01152af6128f89af53fa21b52cd3` was pushed and verified; completion-evidence push is pending.
+- **Push outcome:** Feature commit `47144699c04a01152af6128f89af53fa21b52cd3` and completion-evidence commit `a0da0348c62f2bffd80bc1d6e36d6c8a8a74e62d` were pushed and verified.
 
 ## BB-COMMS-004 — Contextual shift conversation
 

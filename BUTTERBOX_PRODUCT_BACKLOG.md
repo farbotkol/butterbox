@@ -1053,6 +1053,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-AI-005 — Fill open shifts assistant [P1]
 
+**Status:** In Progress in isolated development. A transparent rule-based assistant is planned without an external AI provider or automatic offers; acceptance remains pending.
+
 **User story:** As a manager, I want AI to propose candidates for unfilled shifts.
 
 **Acceptance criteria**
