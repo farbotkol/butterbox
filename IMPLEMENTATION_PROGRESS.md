@@ -6,6 +6,8 @@
 
   **Implementation:** Added `src/lib/payroll-delivery-policy.ts` with a SHA-256 idempotency key derived from the immutable export batch/finalisation IDs and a deterministic, bounded exponential retry-delay function. Retry is scheduled only when the caller identifies a failure as transient; permanent/unknown failures and the attempt limit stop automatically. This module has no network or persistence behavior.
 
+  **Commit and push:** `d5c32c340801fe462d85197b3ce9c430767334a1` (`feat(PAY-DELIVERY-001): add safe retry policy foundation`) was pushed to `copilot/finish-roadmap-for-app`; `git ls-remote` verified the remote branch SHA matched.
+
   | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
   | --- | --- | --- |
   | Stable export/version key | Unit tests confirm case-normalized deterministic keys and distinct keys for different batch or finalisation identities; malformed IDs reject. | Pass for local key derivation only |
