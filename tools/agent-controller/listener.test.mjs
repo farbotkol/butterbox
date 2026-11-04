@@ -1408,6 +1408,30 @@ test('autonomous identity failure still fails the whole poll closed', async t =>
   assert.equal(value.agents.length, 0);
 });
 
+test('listener crash mid-agent: restart stops the orphan immediately even while the retry is backing off', async t => {
+  let snapshot;
+  const value = await autonomousFixture(t, { agent: async () => {
+    snapshot = await value.store.read(42);
+    throw new ControllerError('operation_cancelled');
+  } });
+  await value.controller.tick();
+  const orphan = spawn('/bin/sh', ['-c', 'sleep 60; exit 0', value.copilot], { detached: true, stdio: 'ignore' });
+  t.after(() => { try { process.kill(-orphan.pid, 'SIGKILL'); } catch { /* already stopped */ } });
+  const exited = new Promise(resolve => orphan.once('exit', resolve));
+  await value.store.save({ ...snapshot, agentPid: orphan.pid });
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec: value.exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0,
+    retryBaseMs: 3_600_000 });
+  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+  await exited;
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'interrupted');
+  assert.equal(ledger.agentPid, undefined);
+  assert.ok(Date.parse(ledger.retryAt) > Date.now());
+  const events = ledger.history.map(entry => entry.event);
+  assert.ok(events.indexOf('orphan_agent_stopped') > events.indexOf('interrupted'));
+});
+
 test('listener crash mid-agent: restart stops the orphan agent, archives partial work and resumes once', async t => {
   let calls = 0;
   let snapshot;

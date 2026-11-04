@@ -970,6 +970,13 @@ export class Controller {
           audit(value, 'legacy_reporting_error_requeued');
           await this.store.save(value);
         }
+        if (value.agentPid && value.status !== 'running') {
+          // Stop an agent orphaned by a crashed listener now, rather than letting it run until the retry is due.
+          const cli = await verifyCopilot(this.config.copilotPath, this.exec, this.signal);
+          if (await stopOrphan(value.agentPid, cli.executable)) audit(value, 'orphan_agent_stopped', String(value.agentPid));
+          delete value.agentPid;
+          await this.store.save(value);
+        }
         if (['failed', 'interrupted'].includes(value.status) && !value.final && !value.blockedReported &&
           !value.acknowledgedAt && !value.retryAt) await this.settle(value, '', this.signal);
         if (value.outbox?.length) await this.deliver(value, this.signal);

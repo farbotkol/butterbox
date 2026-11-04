@@ -302,7 +302,8 @@ Routine failures recover without owner action:
     `<folder>.attempt-<time>` and a fresh clone runs the agent again. Partial
     agent work is never reused.
   - A still-running orphaned Copilot process from a crashed listener is
-    stopped first. It is matched by PID and executable path.
+    stopped as soon as the restarted listener detects the interruption, before
+    the retry backoff. It is matched by PID and executable path.
 - **Terminal** failures block only that issue:
   - no changes, rejected paths, too many files, symlinks;
   - a Copilot timeout;
