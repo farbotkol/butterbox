@@ -1197,7 +1197,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                               )}
                               {shift.is_published && canManageDepartment(shift.department_id) && (
                                 <Link href={shiftConversationHref(workspace.business.id, workspace.venue.id, { shiftId: shift.id })}
-                                  aria-label={`Discuss ${employee.name}'s ${shift.role_title} shift on ${formatDay(date)}`}
+                                  aria-label={`Discuss shift for ${employee.name}: ${shift.role_title} on ${formatDay(date)}`}
                                   className="inline-flex min-h-11 items-center text-[11px] font-semibold text-ocean underline">
                                   Discuss shift
                                 </Link>

@@ -573,7 +573,7 @@ test("shift conversations preserve participant privacy and accessible in-app his
       "anonymous conversation redirects should settle without a login reload loop").toBeLessThan(5);
     await signIn(page, `conversation-ui-manager-${suffix}@example.test`, password);
     await page.goto(`/roster?week=2032-04-05&business=${businessId}&venue=${venueId}&department=all`);
-    await page.locator(`#roster-shift-${shiftId}`).getByRole("link", { name: /Discuss Conversation worker's Server shift/ }).click();
+    await page.locator(`#roster-shift-${shiftId}`).getByRole("link", { name: /Discuss shift for Conversation worker: Server/ }).click();
     await expect(page.getByRole("heading", { name: "Shift conversations", exact: true })).toBeVisible();
     await expect(page.getByText("No messages yet. Start the conversation below.")).toBeVisible();
     await expect(page.getByText(/No email, push or automatic notifications are sent/)).toBeVisible();
@@ -611,7 +611,7 @@ test("shift conversations preserve participant privacy and accessible in-app his
     const worker = await openRole("worker", { width: 375, height: 812 });
     await worker.page.goto(`/my-schedule?week=2032-04-05&business=${businessId}&venue=${venueId}`);
     await worker.page.getByRole("region", { name: "Weekly schedule" })
-      .getByRole("link", { name: /Discuss Server shift/ }).first().click();
+      .getByRole("link", { name: /Discuss shift for Server/ }).first().click();
     await expect(worker.page.getByText(originalMessage, { exact: true })).toBeVisible();
     await expect(worker.page.locator("section[aria-labelledby='conversation-heading'] ol img")).toHaveCount(0);
     const workerForm = worker.page.getByRole("form", { name: "Send shift message" });
@@ -7256,7 +7256,11 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await form.getByRole("button", { name: "Update draft shift" }).click();
     await expect(page.locator("#open-shifts")).toContainText("Archived draft");
 
-    await expect(page.locator("article", { hasText: "Published shift" }).getByRole("link", { name: /Edit/ })).toHaveCount(0);
+    const publishedShift = page.locator(`#roster-shift-${publishedId}`);
+    await expect(publishedShift).toBeVisible();
+    await expect(publishedShift.getByRole("link", { name: /^Discuss shift for Edit worker: Published shift/ })).toHaveCount(1);
+    await expect(publishedShift.getByRole("link", { name: /^Edit / })).toHaveCount(0);
+    await expect(publishedShift.locator('a[href*="&edit="]')).toHaveCount(0);
     await page.goto(`/roster?week=2032-03-15&venue=${sydneyId}&department=${fohId}&edit=${publishedId}`);
     await expect(page.locator('p[role="alert"]')).toContainText("unavailable or you cannot edit");
     await expect(page.getByRole("form", { name: "Edit draft shift" })).toHaveCount(0);
@@ -13165,16 +13169,30 @@ test("payroll UX: admin access, forged scopes and unauthorized roles", async ({ 
     await page.getByLabel("Payroll employee ID", { exact: true }).fill("Unauthorized-change");
     await page.getByLabel("Reason for mapping change").fill("Role changed before submission");
     await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
-    const sessionPage = await page.context().newPage();
+    const replacementContext = await browser.newContext({ baseURL: appUrl });
     try {
-      await sessionPage.goto("/");
-      await sessionPage.getByRole("button", { name: "Sign out" }).click();
+      const sessionPage = await replacementContext.newPage();
       await signIn(sessionPage, email("foh"), password);
-      await page.getByRole("button", { name: "Save payroll ID" }).click();
+      await expect(sessionPage.getByRole("heading", { name: "Butterbox AI Rostering" })).toBeVisible();
+      const authCookies = (await replacementContext.cookies(appUrl))
+        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
+      expect(authCookies.length).toBeGreaterThan(0);
+      // Shared-tab sign-out correctly removes the editor; swap only auth cookies to exercise a stale form.
+      for (const cookie of (await page.context().cookies(appUrl))
+        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name))) {
+        await page.context().clearCookies({ name: cookie.name });
+      }
+      await page.context().addCookies(authCookies);
+      await expect(page.getByRole("button", { name: "Save payroll ID" })).toBeVisible();
+      await Promise.all([
+        page.waitForResponse((response) => response.request().method() === "POST" &&
+          new URL(response.url()).pathname === `/settings/payroll/${firstEmployee}`),
+        page.getByRole("button", { name: "Save payroll ID" }).click(),
+      ]);
       await expect(page).toHaveURL(/error=permission/);
       await expect(page.getByText("Harbour-001", { exact: true })).toHaveCount(0);
     } finally {
-      await sessionPage.close();
+      await replacementContext.close();
     }
     const after = await owner.rpc("list_payroll_employee_mappings", {
       p_business_id: businessId, p_connection_id: connectionId, p_venue_id: venueId,
