@@ -291,3 +291,18 @@ Before production activation or declaring disaster recovery ready, an authorized
 ### Record provenance
 
 Recorded after explicit owner instruction: *“Finalize Butterbox DEC-005: Hosted disaster recovery rehearsal is deferred until pre-production. Recovery objectives: 15-minute RPO and 4-hour RTO. Backup retention target: 7 days PITR plus 30 days daily backups. These are targets subject to Supabase plan capability, cost and verification.”*
+
+
+---
+
+## 2026-11-04 — Owner-approved roadmap unblocking decisions
+
+**Record:** [Full implementation handoff](agent-handoffs/2026-11-04-owner-decisions.md). **Decision status:** Approved for development; no implementation/test completion asserted.
+
+- **Venue-based subscriptions:** Every tier includes every feature. Charge **per location**, based on that location's workers: Free 1–3 ($0, unlimited duration), Starter 4–15 ($15), Pro 16–30 ($25), Plus 31–60 ($45), Growth 61–100 ($69), Scale 101–200 ($99), Enterprise 201+ (custom), AUD per venue per month. Workers assigned to two venues count in both. Free live use is distinct from synthetic-data showcase. Verify treatment of zero-worker venues and counting lifecycle before enforcement.
+- **AI:** Provider-independent architecture; start manager workflows, support employee read-only assistance afterward. Local development Mac may run Ollama with Qwen3.5 9B primary and Gemma 4 12B comparison after verifying actual tags/resources/licences. Keep business rules and permission checks deterministic, benchmark on synthetic data; no production AI approval.
+- **Award Central:** MVP rules content restricted to Restaurant Industry and Hospitality Industry (General) awards, while retaining a generic reusable, versioned deterministic rule framework. Independently validate AI-suggested drafts before activation; no automatic compliance claim.
+- **Xero:** New Butterbox developer account requires owner registration/consent. Agent may implement adapter, OAuth scaffolding and mock tests now; verify Australian Payroll demo/API support before claiming integration access. Live integration remains gated.
+- **Local Supabase:** Mac Docker/local Supabase is the intended development substrate. P0: introduce separate disposable project `butterbox-agent-test` with independently verified containers, volumes, ports and fail-closed destructive-operation guards; do not modify existing development or showcase resources. Only after verified isolation may database-dependent stories resume.
+
+**Execution:** See linked handoff for complete acceptance criteria, safeguards, testing and workstream ownership. Existing `AGENTS.md` safety requirements take precedence for destructive operations and release gates.
