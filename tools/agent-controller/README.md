@@ -567,3 +567,38 @@ No real coding task was approved or executed.
 - Gate check with the real config: `--mode autonomous` without
   `AGENT_CONTROLLER_AUTONOMOUS=true` exits with `autonomous_mode_not_enabled`.
   A dry-run still lists #11 without executing it. Issue #11 was **not** executed.
+
+### Merge after green CI, close and blocked handling (4 November 2026, 23:59 AEDT)
+
+- `node --test tools/agent-controller/listener.test.mjs`: **63/63 pass**.
+  New and updated autonomous tests cover:
+  - success: waits through pending checks, squash-merges the exact tested head,
+    verifies the merge, deletes the task branch, closes the issue, no replay;
+  - `autoMerge: false` keeps draft-only, no merge or close;
+  - failing CI, a moved head, an unmergeable PR, repeated check-API errors and
+    failed post-merge verification. All block **without closing**, label
+    `agent-blocked` and let the next poll continue;
+  - a lost merge response is accepted only when GitHub confirms that exact head
+    merged;
+  - `main`, `master` and cross-workstream bases are refused;
+  - check normalisation includes every check run and commit status and rejects
+    truncated lists;
+  - an interrupted run is reported as blocked once on restart and never replayed.
+
+  ESLint, `node --check` and `git diff --check` are clean.
+- Read-only live GitHub API probes passed: commit check runs and statuses,
+  compare against the slash-named workstream branch, and pull request reads.
+- Live end-to-end run with the real config. Disposable owner issue #16:
+  - the agent created one docs file;
+  - the controller opened **non-draft** PR #17 and waited about 15 minutes on
+    CI;
+  - CI reported `verify: success` but `database: failure`, from the same 3
+    browser tests that fail on the workstream branch itself;
+  - the controller did **not** merge. It commented `blocked … ci_checks_failed`
+    with the check list and agent excerpt, added `agent-blocked` and left #16
+    open;
+  - `copilot/finish-roadmap-for-app` stayed at `178ae08`.
+
+  PR #17 was then closed unmerged, its branch deleted and #16 closed manually as
+  test clean-up. The live **merge** path is not yet exercised because the
+  workstream CI is red; the unit tests cover it.
