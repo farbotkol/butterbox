@@ -2,21 +2,21 @@
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
-- **Last report:** 2026-11-04 13:36 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 13:47 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, In Progress).
 - **Acceptance criteria:** Validate timezone, missing values and duplicates; display source provenance; never silently overwrite raw records.
 - **Phase:** Debugging.
-- **Activity:** Investigating repeated anonymous sign-in requests and a timeout in the first isolated browser journey; the implementation remains uncommitted.
+- **Activity:** Comparing intermittent anonymous login reloads under Next development Fast Refresh before production-mode validation; the implementation remains uncommitted.
 - **Plan:** Provide an owner-only bounded local sales/booking upload with explicit source and venue timezone, append-only original records, duplicate rejection, safe retries, scoped provenance and task-oriented Help. Exclude customer names/contact fields and do not call external providers or deploy to a showcase.
-- **Progress since previous report:** Authenticated concurrency tests passed, including retries, duplicate races, timezone changes and membership revocation. Protected local and public showcase login endpoints returned HTTP **200** without changes.
-- **Tests and results:** Applied-migration pgTAP passed **56/56**; concurrency passed **1/1**; demand and Help units passed **26/26**. Transactional migration preflight, TypeScript and changed-file ESLint passed.
-- **Failing tests:** First development browser journey **failed 1/1** after repeated anonymous login requests and a 240-second timeout. Browser accessibility and production-build verification remain pending.
+- **Progress since previous report:** Corrected browser selectors to match the actual contextual Help title and page alert. Three complete development browser journeys passed, including five widths, keyboard and axe. A bounded source-file watcher saw no changes during one successful run.
+- **Tests and results:** Applied-migration pgTAP passed **56/56**; concurrency passed **1/1**; demand and Help units passed **26/26**; TypeScript and changed-file ESLint passed. Three development browser journeys passed.
+- **Failing tests:** The first development journey timed out during repeated anonymous login reloads; two later runs failed the redirect-settling assertion while Next Fast Refresh was rebuilding. The intermittent cause remains under investigation; production-build verification is pending.
 - **Blockers requiring intervention:** No blocker identified for the local upload; external delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
 - **Documentation:** Drafted in the User Guide and contextual Help; pending verification against the implemented workflow.
-- **Next concrete action:** Push this status-only checkpoint, isolate the redirect failure and rerun the affected browser journey, then verify the production build.
+- **Next concrete action:** Push this status-only checkpoint, compare anonymous redirects on existing and new routes, and verify the production build and browser behavior.
 - **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
-- **Push outcome:** BB-FORECAST-001 database-test checkpoint `3861cd41019ade2e7dc056f18a8b73cca5629b37` was pushed and verified; this debugging checkpoint is pending.
+- **Push outcome:** BB-FORECAST-001 debugging checkpoint `eff916cc3d3f953fb2789e6cdc1ddf439f9cb4fe` was pushed and verified; this follow-up checkpoint is pending.
 
 ## BB-COMMS-004 — Contextual shift conversation
 
