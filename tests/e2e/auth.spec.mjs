@@ -13169,16 +13169,30 @@ test("payroll UX: admin access, forged scopes and unauthorized roles", async ({ 
     await page.getByLabel("Payroll employee ID", { exact: true }).fill("Unauthorized-change");
     await page.getByLabel("Reason for mapping change").fill("Role changed before submission");
     await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
-    const sessionPage = await page.context().newPage();
+    const replacementContext = await browser.newContext({ baseURL: appUrl });
     try {
-      await sessionPage.goto("/");
-      await sessionPage.getByRole("button", { name: "Sign out" }).click();
+      const sessionPage = await replacementContext.newPage();
       await signIn(sessionPage, email("foh"), password);
-      await page.getByRole("button", { name: "Save payroll ID" }).click();
+      await expect(sessionPage.getByRole("heading", { name: "Butterbox AI Rostering" })).toBeVisible();
+      const authCookies = (await replacementContext.cookies(appUrl))
+        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name));
+      expect(authCookies.length).toBeGreaterThan(0);
+      // Shared-tab sign-out correctly removes the editor; swap only auth cookies to exercise a stale form.
+      for (const cookie of (await page.context().cookies(appUrl))
+        .filter((cookie) => /^sb-.+-auth-token(?:\.\d+)?$/.test(cookie.name))) {
+        await page.context().clearCookies({ name: cookie.name });
+      }
+      await page.context().addCookies(authCookies);
+      await expect(page.getByRole("button", { name: "Save payroll ID" })).toBeVisible();
+      await Promise.all([
+        page.waitForResponse((response) => response.request().method() === "POST" &&
+          new URL(response.url()).pathname === `/settings/payroll/${firstEmployee}`),
+        page.getByRole("button", { name: "Save payroll ID" }).click(),
+      ]);
       await expect(page).toHaveURL(/error=permission/);
       await expect(page.getByText("Harbour-001", { exact: true })).toHaveCount(0);
     } finally {
-      await sessionPage.close();
+      await replacementContext.close();
     }
     const after = await owner.rpc("list_payroll_employee_mappings", {
       p_business_id: businessId, p_connection_id: connectionId, p_venue_id: venueId,

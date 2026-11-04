@@ -2,6 +2,19 @@
 
 ## Issue #18 — Diagnose browser authentication CI failure
 
+- **Attempt 2 final report:** 2026-11-05 08:18:11 AEDT (UTC+1100), observed on the sandbox clock. Initial checkpoint was 08:15:38 AEDT.
+- **Execution state / phase:** Finishing this isolated invocation; Blocked on browser/full-CI acceptance. No background continuation is implied.
+- **Current task / criteria:** Issue #18; establish the supplied failure, repair without weakening security assertions, run feasible targeted verification, and leave browser/full-CI acceptance open until observed.
+- **Observed progress / root cause:** Supplied CI reports **106 passed, 1 skipped, 1 failed**; only `payroll UX: admin access, forged scopes and unauthorized roles` times out at 120 seconds. Its final stale-form setup signs out in a shared browser context. `AnnounceSessionEnd` emits a storage notification and `SessionSync` intentionally replaces the other tab with `/login`, removing the editor before the test tries to click **Save payroll ID**. The excerpt does not include the timed-out action's stack or error-context contents; this setup mismatch is established from code and an actual-component mocked probe, not a local browser reproduction.
+- **Completed activity:** Authenticate FOH in a separate browser context, verify its dashboard and auth cookies, then replace only the original context's auth cookies without a shared-tab sign-out broadcast. Assert the stale admin editor remains visible and wait for its real mapping POST. Retain permission rejection, private-data absence, unchanged mapping/revision, role, forged-scope, audit and fixture checks. Production authorization/session synchronization, RLS, workflow, runner and timeouts are unchanged.
+- **Actual passing tests:** Payroll directory/mapping and auth helper units **11/11**. Changed-file ESLint, browser-file syntax and repository TypeScript passed. Mocked execution of actual `SessionSync` source **2/2**: protected-page redirect and login-page preservation, both discarding offline preparation and cleaning up handlers. Backlog parse confirms **76 Done, 13 Blocked, 43 Backlog**, with no unresolved P0/P1 Showcase Backlog stories.
+- **Failing / deferred validation:** No attempt-2 local test failed. No browser/database run or new CI outcome observed. Full Node/database/concurrency/browser suites deferred under change-focused testing and service restrictions. No production build selected: no route, configuration or server/client-boundary changes. Mocked component checks are not browser/runtime acceptance.
+- **Blockers / latest development commit:** Database/browser services and GitHub operations are unavailable/prohibited. Initial read-only Git inspection was denied access to `/Users/lukefarbotko/.gitconfig` by sandbox policy; no retry/workaround. Latest development SHA and branch/worktree state are **unknown**. No commits, pushes, branch changes, services, migrations or deployments attempted; controller delivery is pending, not verified.
+- **Documentation: updated** in `IMPLEMENTATION_PROGRESS.md` and this status. User Guide not applicable to a test-setup-only change. No feature/story status or Award Central status changed.
+- **Next concrete action:** Controller runs the repaired payroll authorization scenario in its verified disposable environment, verifies its POST, permission rejection and unchanged record, then all required Verify checks. Do not claim completion or merge readiness until every required check is green.
+
+### Attempt 1 — Historical checkpoint
+
 - **Last report:** 2026-11-05 07:38:24 AEDT (UTC+1100), observed on the sandbox clock.
 - **Execution state:** Finishing isolated CI repair attempt 1; no background continuation is implied.
 - **Current task:** Issue #18 — repair the supplied Verify browser failures for PR #17 / issue #16; existing authentication/tenant foundations and Done stories are not rebuilt.
