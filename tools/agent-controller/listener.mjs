@@ -165,6 +165,12 @@ export class GitHub {
     await this.api([`repos/${REPO}/issues/${number}/comments`, '--method', 'POST',
       '-f', `body=${message}`], signal);
   }
+  async closeCompleted(number, signal) {
+    if (!validNumber(number)) fail('invalid_issue_number');
+    const result = await this.api([`repos/${REPO}/issues/${number}`, '--method', 'PATCH',
+      '-f', 'state=closed', '-f', 'state_reason=completed'], signal);
+    if (result.state !== 'closed') fail('issue_close_unconfirmed');
+  }
 }
 
 async function privatePath(filename, directory = false) {
@@ -461,6 +467,22 @@ export class Controller {
           previous.editsReported = currentDigest;
           await this.store.save(previous);
         }
+        // Retry administrative closure only; never re-dispatch a reserved task.
+        // Only close unchanged issues after success was durably recorded.
+        if (previous.status === 'succeeded' && previous.digest === currentDigest && !previous.reportingError) {
+          try {
+            await this.github.closeCompleted(issue.number, this.signal);
+            if (previous.closeError) {
+              delete previous.closeError;
+              await this.store.save(previous);
+            }
+          } catch {
+            if (!previous.closeError) {
+              previous.closeError = 'github_issue_close_failed';
+              await this.store.save(previous);
+            }
+          }
+        }
         continue;
       }
       if (!parseTask(issue)) continue;
@@ -558,6 +580,14 @@ export class Controller {
     await this.report(value, `${value.status} #${task.number}; ${value.exitCode === 0 ? 'exit code 0' : value.error}. ` +
       'Exit status is not story acceptance. Reserved tasks never replay automatically.', null);
     if (value.status !== 'succeeded') fail(value.error);
+    // Close only after persisted success AND a successful completion comment.
+    // The local ledger remains the authoritative replay guard if closing fails.
+    try { await this.github.closeCompleted(task.number, null); }
+    catch {
+      value.closeError = 'github_issue_close_failed';
+      await this.store.save(value);
+      // A later poll can retry this administrative close; never replay execution.
+    }
   }
 }
 
