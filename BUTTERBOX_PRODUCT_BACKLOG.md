@@ -227,7 +227,7 @@ These four owner-prioritised stories form **Wave 1: list / detail / contextual e
 | BB-DEMO-002 | Guided owner, manager and employee showcase journeys | P0 | Done | BB-DEMO-001 |
 | BB-DEMO-003 | Showcase UI, navigation and mobile polish | P0 | Done | BB-BRAND-002; BB-DEMO-002 |
 | BB-DEMO-004 | Repeatable showcase acceptance and reset | P0 | Done | BB-DEMO-001; BB-DEMO-002; BB-DEMO-003 |
-| BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | In Progress | BB-DEMO-002 |
+| BB-DEMO-005 | Clearly labeled future-vision concept previews | P2 | Done | BB-DEMO-002 |
 
 ### Story acceptance requirements
 

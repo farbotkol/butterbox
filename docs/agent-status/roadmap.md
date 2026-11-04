@@ -2,21 +2,21 @@
 
 ## BB-DEMO-005 — Clearly labelled future-vision concept previews
 
-- **Last report:** 2026-11-04 12:31 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 12:33 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
-- **Current story:** BB-DEMO-005 — Clearly labelled future-vision concept previews (P2, In Progress).
+- **Current story:** BB-DEMO-005 — Clearly labelled future-vision concept previews (P2, Done in isolated development; not deployed).
 - **Acceptance criteria:** Optional AI, forecasting and Award Central concepts must be clearly nonfunctional, use illustrative data only, make no payroll or award-compliance claims, and not change production workflows.
-- **Phase:** Testing.
-- **Activity:** Reviewing the verified preview and recording acceptance evidence; no protected showcase is being redeployed.
+- **Phase:** Complete.
+- **Activity:** Recording criterion-level evidence and selecting the next eligible story; no protected showcase is being redeployed.
 - **Plan:** Add an optional static concept preview gated to the showcase or explicitly enabled isolated development, with no external service or real data; test honest labels, feature gating, accessibility, mobile layouts and existing Help integration.
-- **Progress since previous report:** Reverified the refined enabled preview in development, tested the default-off case in production, and exercised enabled showcase mode in a separate production container attached only to the disposable project network. The build had network access denied, the browser blocked other origins, and the temporary container was stopped.
+- **Progress since previous report:** Reviewed and committed the feature, reran focused units, lint, TypeScript and browser-test syntax, verified the feature push, and recorded each acceptance criterion and its test evidence.
 - **Tests and results:** Feature-gate, Help and showcase units passed **21/21**; TypeScript, changed-file ESLint, production compile and generation passed. Enabled development, unset-flag production and enabled showcase-mode production browser cases each passed **1/1**. Coverage includes owner/manager/employee, anonymous and cross-business denial, existing dashboard copy, keyboard, Help, five widths and targeted axe. The public and local showcase logins returned HTTP **200**.
 - **Failing tests:** None currently observed.
 - **Blockers requiring intervention:** Reviewed employment-rule sources and marketing-template approval/rights remain external blockers for the higher-priority stories; no BB-DEMO-005 blocker identified yet.
-- **Documentation:** User Guide, contextual Help and operator guidance updated in the uncommitted working tree; record criterion-level evidence after verification.
-- **Next concrete action:** Finish the source and secret review, rerun checks affected by the browser-test guard, commit the feature and record criterion-level completion evidence.
-- **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (BB-REPORT-003); current branch checkpoint is `2c416d369009a4c16e0fac5e7db2d9b9b8c6faae`.
-- **Push outcome:** Previous testing checkpoint `410b8154749097db1fd0bc369fdb8feaf7ed6ceb` was pushed and verified; this milestone checkpoint is pending push.
+- **Documentation:** Updated in the User Guide, contextual Help and README operator guidance; deployment and owner review remain separate.
+- **Next concrete action:** Push this completion evidence, then identify the next eligible story without deploying to a protected showcase.
+- **Latest development commit:** `88ddd917c0a51dd979ac65818cdf247e131e2a60` (BB-DEMO-005).
+- **Push outcome:** Feature commit `88ddd917c0a51dd979ac65818cdf247e131e2a60` was pushed and verified; completion-evidence push is pending.
 
 ## Owner-requested UXFIX public deployment — issue #5
 
