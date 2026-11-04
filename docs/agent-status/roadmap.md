@@ -1,5 +1,30 @@
 # Roadmap Agent — Activity Status
 
+## Local CI test environment and agent test broker
+
+- **Last report:** 2026-11-05 08:45 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state / phase:** Testing in an interactive session on branch `copilot/local-ci-test-environment`, in worktree `butterbox-local-ci`. No background continuation is implied.
+- **Goal:** Let developers and autonomous agents reproduce the GitHub Actions `database` job locally, instead of using CI as a trial-and-error loop.
+- **Delivered:**
+  - `npm run test:fast`;
+  - `npm run test:auth:focused` (`--test file:line`, `--grep`, `--repeat`);
+  - `npm run test:ci:local`;
+  - the isolated `butterbox-ci` Colima VM and disposable `butterbox-citest` project (ports 5942x, private-range egress blocked);
+  - the isolated runner container;
+  - the controller test broker, opt-in via `autonomous.testBroker`;
+  - CI: one complete run per commit, Playwright failure artifacts and a focused-browser workflow.
+- **Reproduction on `853d0b1`:**
+  - container run `2026-11-04T21-05-13-724Z-e24654`: **1 passed, 3 failed**;
+  - `:7137` failed: the broad `/Edit/` selector matched the legitimate "Discuss … Edit worker's …" link; no published Edit link or `edit=` URL exists;
+  - `:11547` and `:11667` failed with `label-content-name-mismatch` on roster and `/my-schedule`, at desktop and mobile widths;
+  - geofence `:4482` **passed** (not reproduced; it failed in 1 of 2 CI runs).
+- **Fix verification:** After equivalent fixes, run `2026-11-04T21-21-21-497Z-c727d9` passed **4/4**: `:484`, `:7137`, `:11554` and `:11674`. PR #19 merged identical label fixes, with CI green, and this branch now uses its versions.
+- **Tests:** `npm run test:fast` on Node 24: unit **336 passed / 0 failed**, controller **107/107**, ESLint and TypeScript clean.
+- **In progress:** A real end-to-end broker run, using a mock task clone, the agent helper and the container runner, repeating the geofence test 5 times.
+- **Next concrete action:** Finish the broker and geofence runs, run the complete local `database` suite, push, open a PR into `copilot/finish-roadmap-for-app` and observe full CI.
+- **Documentation:** Added `docs/LOCAL_CI_TESTING.md`; updated `README.md` and `tools/agent-controller/README.md`. User Guide not applicable: developer and agent tooling only.
+- **Latest development commit:** `aff0d59` (local, not yet pushed).
+
 ## Issue #18 — Diagnose browser authentication CI failure
 
 - **Attempt 2 final report:** 2026-11-05 08:18:11 AEDT (UTC+1100), observed on the sandbox clock. Initial checkpoint was 08:15:38 AEDT.
