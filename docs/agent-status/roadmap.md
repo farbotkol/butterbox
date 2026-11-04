@@ -2,21 +2,21 @@
 
 ## BB-FORECAST-001 — Historical demand ingestion
 
-- **Last report:** 2026-11-04 13:47 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 13:54 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-FORECAST-001 — Historical demand ingestion (P2, In Progress).
 - **Acceptance criteria:** Validate timezone, missing values and duplicates; display source provenance; never silently overwrite raw records.
-- **Phase:** Debugging.
-- **Activity:** Comparing intermittent anonymous login reloads under Next development Fast Refresh before production-mode validation; the implementation remains uncommitted.
+- **Phase:** Testing.
+- **Activity:** Adding focused import-boundary and invalid-timezone coverage before the final isolated acceptance rerun; the implementation remains uncommitted.
 - **Plan:** Provide an owner-only bounded local sales/booking upload with explicit source and venue timezone, append-only original records, duplicate rejection, safe retries, scoped provenance and task-oriented Help. Exclude customer names/contact fields and do not call external providers or deploy to a showcase.
-- **Progress since previous report:** Corrected browser selectors to match the actual contextual Help title and page alert. Three complete development browser journeys passed, including five widths, keyboard and axe. A bounded source-file watcher saw no changes during one successful run.
-- **Tests and results:** Applied-migration pgTAP passed **56/56**; concurrency passed **1/1**; demand and Help units passed **26/26**; TypeScript and changed-file ESLint passed. Three development browser journeys passed.
-- **Failing tests:** The first development journey timed out during repeated anonymous login reloads; two later runs failed the redirect-settling assertion while Next Fast Refresh was rebuilding. The intermittent cause remains under investigation; production-build verification is pending.
+- **Progress since previous report:** Isolated production compile, type checking and page generation succeeded; **2/2** production browser scenarios passed, covering the import journey and existing Hours & Labour. Diagnostics reproduced intermittent development Fast Refresh/login reloads on existing login, shift-conversation and Hours & Labour routes as well as the new route. Boundary checks and a clearer invalid-venue-timezone error are being added.
+- **Tests and results:** Applied-migration pgTAP passed **56/56**; concurrency passed **1/1**; demand and Help units passed **26/26**; TypeScript and changed-file ESLint passed; three development browser journeys and two production browser scenarios passed. Tests after the latest edits are pending.
+- **Failing tests:** Earlier development journeys timed out or failed redirect settling during intermittent Fast Refresh reloads; the behavior also occurred on existing routes and is not claimed fixed. No production failure was observed in the completed run.
 - **Blockers requiring intervention:** No blocker identified for the local upload; external delivery, AI provider and reviewed employment restrictions remain unavailable for dependent stories.
 - **Documentation:** Drafted in the User Guide and contextual Help; pending verification against the implemented workflow.
-- **Next concrete action:** Push this status-only checkpoint, compare anonymous redirects on existing and new routes, and verify the production build and browser behavior.
+- **Next concrete action:** Push this status-only checkpoint, complete targeted boundary coverage, rerun affected tests and record criterion-level evidence.
 - **Latest development commit:** `93c5ebbe944ec13d05ae85a08ca27a8a3ba22d63` (BB-COMMS-004).
-- **Push outcome:** BB-FORECAST-001 debugging checkpoint `eff916cc3d3f953fb2789e6cdc1ddf439f9cb4fe` was pushed and verified; this follow-up checkpoint is pending.
+- **Push outcome:** BB-FORECAST-001 diagnostic checkpoint `ebb2b52bc4a12dccbecba9c42f89249e1f6c4eb8` was pushed and verified; this follow-up checkpoint is pending.
 
 ## BB-COMMS-004 — Contextual shift conversation
 
