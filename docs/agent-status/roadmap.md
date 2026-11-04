@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 11:14 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 11:17 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL and update the local showcase for shared-database compatibility; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and scoped security; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts; keep the local showcase compatible.
-- **Phase:** Planning.
-- **Activity:** Preparing a separately built local showcase release and a coordinated shared-database/public cutover after owner approval.
-- **Progress since previous report:** The owner authorised the changes needed to complete deployment, including updating the local showcase on port `3137`. Reconfirmed both running apps, the existing tunnel route, the shared project's unchanged migration state and the retained private backup and public release. The prior isolated restore and nine-migration rehearsal passed.
-- **Tests and results:** Six focused pgTAP files passed **174/174** assertions. UXFIX production compile, TypeScript and generation passed; its temporary loopback server returned HTTP **200** for public-mode login and read-only readiness. At 11:03 AEDT both existing login endpoints returned HTTP **200**. Prior public synthetic owner, FOH manager and employee sign-ins passed; public blocked endpoints returned 404; mobile landing width had no horizontal overflow.
+- **Phase:** Testing.
+- **Activity:** Preparing the coordinated app stop, fresh recovery backup, reviewed migrations and restart with the existing tunnel profile.
+- **Progress since previous report:** Built the same UXFIX-only revision separately for local showcase mode. Its temporary loopback process passed login and read-only readiness checks and was stopped. Confirmed the old and new build identifiers, existing public TLS certificate and tunnel route; both original apps and the shared schema remain unchanged.
+- **Tests and results:** Six focused pgTAP files passed **174/174** assertions. Both public- and local-mode UXFIX production compile, TypeScript and generation passed; their temporary loopback processes returned HTTP **200** for login and read-only readiness. At 11:17 AEDT both existing login endpoints returned HTTP **200**. Prior public synthetic owner, FOH manager and employee sign-ins passed; public blocked endpoints returned 404; mobile landing width had no horizontal overflow.
 - **Failing tests:** Initial scratch restore failed because `pg_cron` is restricted to the test cluster's primary database; the corrected partial-platform restore passed. The requested new public UX is not deployed; post-deployment smoke tests have not run.
 - **Blockers requiring intervention:** None identified after the owner's compatibility-update approval; the security revoke must remain intact.
 - **Documentation:** `IMPLEMENTATION_PROGRESS.md` records preparation and the previous blocker; update it with the authorised cutover and actual result. User Guide not applicable unless user-facing behavior changes from the already documented UXFIX.
-- **Next concrete action:** Build and verify the local-mode UXFIX candidate, take a fresh private pre-cutover backup, and coordinate migration and app restarts using the existing tunnel profile.
+- **Next concrete action:** Reverify fixture identity, stop only the two showcase app supervisors, take a fresh private pre-migration backup, apply the rehearsed migrations and restart both apps using the existing tunnel profile.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Blocker checkpoint `822d5b8da61235a1432baf4b932962c224c98e4a` was pushed and verified; this approval checkpoint is pending push.
+- **Push outcome:** Approval checkpoint `e5acf86eee11c33df11daee1278662440e3d81f7` was pushed and verified; this pre-cutover checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 
