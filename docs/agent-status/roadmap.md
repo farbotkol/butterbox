@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## Agent controller — self-healing recovery
+
+- **Last report:** 2026-11-05 06:55 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Detached autonomous listener started from the development checkout at 06:46 AEDT. Issue #18, attempt 3/3, was observed running at 06:52 AEDT. A later state is not implied.
+- **Phase:** Complete for the controller change. Live CI-repair and merge outcomes for issue #18 are still pending.
+- **Root cause:** `run_requires_local_review` came from a stale profile clone running older code. That code halted the whole queue on issue #16's terminal ledger. No history was deleted.
+- **Delivered:**
+  - bounded retries with backoff;
+  - GitHub reconciliation before a retry;
+  - per-issue isolation;
+  - a durable outbox for GitHub comments;
+  - stale-lock and orphan recovery;
+  - Copilot CI repair;
+  - a pause on configuration faults.
+- **Tests:** controller suite **82/82** pass. ESLint is clean. Real end-to-end evidence is in `tools/agent-controller/README.md`.
+- **Documentation:** Updated in `tools/agent-controller/README.md`. User Guide not applicable: internal tooling.
+- **Latest development commit:** `0706869e1a71addd519f1818cfaeff87d78ceee8`.
+
 ## Workstream 5 — Reliable payroll-delivery foundation
 
 - **Last report:** 2026-11-04 18:35 AEDT (UTC+1100), observed on the operator's clock.
