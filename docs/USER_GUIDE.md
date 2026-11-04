@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.8 — reviewed 2026-11-04 (Core Roadmap; People, Departments, Business Permissions, Payroll Mapping and navigation workflows; other sections retain their earlier review dates).
+**Guide version:** 1.10 — reviewed 2026-11-04 (Core Roadmap; UXFIX and optional future-concept guidance; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -969,6 +969,13 @@ Butterbox's agreed product direction is customer-owned export of employment reco
   and the **Butterbox AI Copilot** panel are labelled **Concept · not yet
   available**. They show planned capabilities only; nothing in them is
   generated, connected or checked yet.
+- In an explicitly enabled, separately verified synthetic preview, open
+  **Explore future concepts** on the dashboard to see fictional examples of
+  AI rostering, forecasting and Award Central. Each is nonfunctional: no
+  venue data is used, no recommendations or forecasts are generated, and no
+  pay, entitlement or compliance determination is made. **Help with future
+  concepts** opens this existing guidance. The preview is off by default and
+  is not a production feature or permission to deploy.
 - SaaS subscription/self-service billing and full production release readiness
 
 ## Getting help and improving this guide
@@ -1014,6 +1021,7 @@ Use the following contextual links without submitting a workflow form:
 | Weekly timesheet review | Help with timesheet review | Scoped review, approval and finalisation limitations |
 | Generic payroll CSV section | Help with payroll CSV | Preparing/reconciling approved-hours CSV; only shown with the existing finalisation/export permission |
 | Payroll employee mapping | Help with payroll preparation | Mapping limitations and payroll-preparation guidance |
+| Optional future-concept preview | Help with future concepts | Nonfunctional examples and unavailable capabilities |
 
 Links retain the server-resolved business and, where a venue is selected, its
 navigation context; help does not broaden venue, department or payroll access.
@@ -1048,6 +1056,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.7 | 2026-11-04 | BB-UXFIX-004 | Isolated Payroll Mapping destination, directory, focused edit and confirmed removal workflow; protected showcases retain earlier screens |
 | 1.8 | 2026-11-04 | BB-UXFIX-005 | Isolated role-sensitive navigation, mobile menu and selected-venue context; protected showcases retain earlier navigation |
 | 1.9 | 2026-11-04 | Authorized UXFIX-001–005 showcase deployment | Public/local role smoke, five-width, keyboard and targeted accessibility checks; owner review pending |
+| 1.10 | 2026-11-04 | BB-DEMO-005 future concepts | Opt-in fictional, nonfunctional preview and unavailable-feature guidance; isolated testing only |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
@@ -1147,8 +1156,9 @@ explicit non-user-facing reason. Update this index when a story becomes Done.
 | BB-BRAND-001 | No app workflow: operational [brand inventory and release guidance](../branding/README.md); final identity unapproved |
 | BB-BRAND-002/003 | Accounts and business access — logo and icon appearance; [brand guidelines](../branding/BRAND_GUIDELINES.md) (draft, final owner visual review pending) |
 | BB-BRAND-005 | Accounts and business access — sign-in artwork; no workflow change |
-| BB-DEMO-004 | Internal synthetic showcase — operator acceptance checklist note and latest passing run (story Blocked pending the owner's review) |
+| BB-DEMO-004 | Internal synthetic showcase — owner-accepted internal delivery and operator acceptance evidence; later UX review remains separate |
 | BB-DEMO-003 | Mobile **Menu** navigation, grouped desktop navigation, owner/admin **Payroll** link and dashboard concept labels |
+| BB-DEMO-005 | Optional fictional future concepts — explicit nonfunctional labels, isolated enablement and existing Help guidance |
 | BB-DOC-001 | This guide and coverage index; no separate application operation or new Help Center |
 
 **Document ownership:** Main Roadmap feature agent maintains user-facing guidance with each completed feature. Update this guide and any relevant help UI when workflows change; indicate unavailable or blocked capabilities explicitly.

@@ -201,6 +201,16 @@ The app displays **SIMULATION ONLY**; every downloaded sample CSV row also
 contains **SIMULATION ONLY - NOT FOR PAYROLL**. The notice is not an
 authorization boundary; normal server permissions and RLS still apply.
 
+The optional **Explore future concepts** preview is off by default. An operator
+may set `BUTTERBOX_FUTURE_VISION_PREVIEW=true` for a verified synthetic
+showcase, or for a separately verified disposable local development project
+whose application and Supabase API use distinct loopback HTTP origins. A local
+origin alone does not prove that a project contains only synthetic data. The
+preview uses static fictional examples and performs no AI, forecasting, award
+or payroll calculation. An invalid flag or an attempt to enable it in an
+ordinary production configuration fails explicitly. Do not enable or deploy
+it to an existing protected showcase without separate owner approval.
+
 Stop both the local review app and any public preview **before** reset. Keep the
 backend/proxy running and explicitly confirm the destructive reset of this
 synthetic project only:

@@ -113,6 +113,166 @@ async function signIn(page, email, password) {
   ]);
 }
 
+test("future vision previews are isolated, honest and accessible", async ({ page, browser }, testInfo) => {
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const [businessId, outsideId, venueId, outsideVenueId, departmentId] =
+    Array.from({ length: 5 }, () => randomUUID());
+  const users = {};
+  const contexts = [];
+  const enabled = process.env.BUTTERBOX_FUTURE_VISION_PREVIEW === "true";
+  const destination = `/?business=${businessId}&venue=${venueId}`;
+  const selector = 'details[aria-label="Future concept previews"]';
+  const pageErrors = [];
+  const unexpectedOrigins = [];
+  const allowedOrigins = new Set([appUrl, apiUrl, mailUrl].map((url) => new URL(url).origin));
+  async function restrictBrowser(context) {
+    await context.route("**/*", (route) => {
+      const origin = new URL(route.request().url()).origin;
+      if (allowedOrigins.has(origin)) return route.continue();
+      unexpectedOrigins.push(origin);
+      return route.abort("blockedbyclient");
+    });
+  }
+  try {
+    for (const role of ["owner", "manager", "worker", "outside"]) {
+      const email = `future-${role}-${suffix}@example.test`;
+      const created = await admin.auth.admin.createUser({ email, password, email_confirm: true });
+      expect(created.error).toBeNull();
+      users[role] = { id: created.data.user.id, email };
+    }
+    expect((await admin.from("businesses").insert([
+      { id: businessId, name: `Fictional concept cafe ${suffix}` },
+      { id: outsideId, name: `Outside concept cafe ${suffix}` },
+    ])).error).toBeNull();
+    expect((await admin.from("venues").insert([
+      { id: venueId, business_id: businessId, name: "Fictional venue", timezone: "Australia/Sydney" },
+      { id: outsideVenueId, business_id: outsideId, name: "Outside venue", timezone: "Australia/Sydney" },
+    ])).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Fictional department",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users.owner.id, role: "owner" },
+      { business_id: businessId, user_id: users.manager.id, role: "foh_manager",
+        venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users.worker.id, role: "employee",
+        venue_id: venueId, department_id: departmentId },
+      { business_id: outsideId, user_id: users.outside.id, role: "owner" },
+    ])).error).toBeNull();
+
+    await restrictBrowser(page.context());
+    await page.goto(destination);
+    await expect(page).toHaveURL(/\/login/);
+    await expect(page.locator(selector)).toHaveCount(0);
+
+    let ownerText;
+    for (const role of ["owner", "manager", "worker"]) {
+      const context = role === "owner" ? page.context() : await browser.newContext();
+      if (role !== "owner") {
+        contexts.push(context);
+        await restrictBrowser(context);
+      }
+      const rolePage = role === "owner" ? page : await context.newPage();
+      rolePage.on("pageerror", (error) => pageErrors.push(error.message));
+      await rolePage.goto("/login");
+      await signIn(rolePage, users[role].email, password);
+      await rolePage.goto(destination);
+      await expect(rolePage.getByRole("heading", { name: "Butterbox AI Rostering" })).toBeVisible();
+      if (process.env.NEXT_PUBLIC_BUTTERBOX_SHOWCASE === "true") {
+        await expect(rolePage.getByRole("complementary", { name: "Synthetic showcase notice" })).toBeVisible();
+      }
+      for (const label of ["Forecast demand", "Labour optimisation", "Compliance checks"]) {
+        const card = rolePage.locator("section").filter({ has: rolePage.getByText(label, { exact: true }) });
+        await expect(card).toContainText("Not available");
+        await expect(card).toContainText("Concept · not yet available");
+      }
+      const copilot = rolePage.locator("section").filter({
+        has: rolePage.getByRole("heading", { name: "Butterbox AI Copilot", exact: true }),
+      });
+      await expect(copilot).toContainText("This link opens the existing roster; it does not use AI.");
+      const preview = rolePage.locator(selector);
+      if (!enabled) {
+        await expect(preview).toHaveCount(0);
+        if (role === "owner") {
+          await rolePage.getByRole("link", { name: "Open weekly roster" }).click();
+          await expect(rolePage.getByRole("heading", { name: "Weekly roster", exact: true })).toBeVisible();
+        }
+        continue;
+      }
+
+      await expect(preview).toBeVisible();
+      await expect(preview).not.toHaveAttribute("open", "");
+      const summary = preview.locator("summary");
+      const writes = [];
+      const recordWrite = (request) => {
+        if (!["GET", "HEAD", "OPTIONS"].includes(request.method())) writes.push(request.method());
+      };
+      rolePage.on("request", recordWrite);
+      await summary.focus();
+      await rolePage.keyboard.press("Enter");
+      await expect(preview).toHaveAttribute("open", "");
+      await expect(preview.locator("article")).toHaveCount(3);
+      for (const title of ["AI rostering assistant", "Demand forecasting", "Award Central review"]) {
+        await expect(preview.getByRole("heading", { name: title, exact: true })).toBeVisible();
+      }
+      await expect(preview.getByText("Concept · not functional", { exact: true })).toHaveCount(3);
+      await expect(preview).toContainText("These fictional examples are for internal discussion, not working features.");
+      await expect(preview).toContainText("No award interpretation, entitlement, payroll or compliance decision is made.");
+      await expect(preview.locator("form, input, button, select, textarea")).toHaveCount(0);
+      await expect(preview.getByRole("link")).toHaveCount(1);
+      const text = await preview.innerText();
+      expect(text).not.toContain(suffix);
+      if (role === "owner") ownerText = text;
+      else expect(text).toBe(ownerText);
+      await rolePage.keyboard.press("Space");
+      await expect(preview).not.toHaveAttribute("open", "");
+      await summary.focus();
+      await rolePage.keyboard.press("Enter");
+      await expect(preview).toHaveAttribute("open", "");
+      rolePage.off("request", recordWrite);
+      expect(writes).toEqual([]);
+
+      if (role === "owner") {
+        for (const width of [375, 390, 768, 1024, 1440]) {
+          await rolePage.setViewportSize({ width, height: 900 });
+          expect(await rolePage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+            `${width}px has no horizontal overflow`).toBe(true);
+          const violations = await new AxeBuilder({ page: rolePage }).include(selector)
+            .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+          expect(violations.violations.map((violation) => violation.id), `${width}px accessibility`).toEqual([]);
+          if (width === 375 || width === 1440) {
+            await rolePage.screenshot({ path: testInfo.outputPath(`future-vision-${width}.png`), fullPage: true });
+          }
+        }
+        const help = preview.getByRole("link", { name: "Help with future concepts", exact: true });
+        await expect(help).toHaveAttribute("href", `/help?business=${businessId}&contextVenue=${venueId}&topic=unavailable`);
+        await help.click();
+        await expect(rolePage.getByRole("heading", { name: "Unavailable capabilities", exact: true })).toBeVisible();
+        await expect(rolePage.getByRole("article")).toContainText("Explore future concepts");
+      }
+    }
+
+    const outsideContext = await browser.newContext();
+    contexts.push(outsideContext);
+    await restrictBrowser(outsideContext);
+    const outside = await outsideContext.newPage();
+    await outside.goto("/login");
+    await signIn(outside, users.outside.email, password);
+    await outside.goto(destination);
+    await expect(outside.getByRole("heading", { name: "Workspace unavailable" })).toBeVisible();
+    await expect(outside.locator(selector)).toHaveCount(0);
+    expect(pageErrors).toEqual([]);
+    expect(unexpectedOrigins).toEqual([]);
+  } finally {
+    for (const context of contexts) await context.close();
+    await assertBusinessFixturesPreserved(admin, [businessId, outsideId]);
+    for (const user of Object.values(users)) {
+      expect((await admin.auth.admin.deleteUser(user.id)).error).toBeNull();
+    }
+  }
+});
+
 test("scoped announcements publish immutable plain-text history with real acknowledgements and concurrent retries", async ({ page, browser }) => {
   test.setTimeout(150_000);
   const { sql } = await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);

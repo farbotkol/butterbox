@@ -14,8 +14,10 @@ import { signOutAction } from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
 import { BrandLockup } from "@/components/brand-lockup";
 import { CoastalIllustration } from "@/components/coastal-illustration";
+import { FutureVisionPreview } from "@/components/future-vision-preview";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
+import { isFutureVisionPreviewEnabled } from "@/lib/future-vision";
 import { parseOnboardingProgress } from "@/lib/onboarding";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
@@ -125,6 +127,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
     );
   }
 
+  const futureVisionPreview = isFutureVisionPreviewEnabled();
   const week = getWeekStart(params.week, workspace.venue.timezone);
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
@@ -235,16 +238,16 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <MetricCard
           icon={ChartNoAxesColumnIncreasing}
           label="Forecast demand"
-          note="Connect bookings and weather to forecast staffing needs"
-          value="Not connected"
+          note="Booking and weather forecasts are not available"
+          value="Not available"
           tone="sky"
           concept
         />
         <MetricCard
           icon={Coins}
           label="Labour optimisation"
-          note="Add wage rates to compare labour cost and savings"
-          value="Setup needed"
+          note="Automated cost optimisation and savings are not available"
+          value="Not available"
           tone="amber"
           concept
         />
@@ -258,12 +261,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <MetricCard
           icon={ShieldCheck}
           label="Compliance checks"
-          note="Configure award, break and maximum-hour rules"
-          value="Rules needed"
+          note="Award and break checks are not yet available"
+          value="Not available"
           tone="coral"
           concept
         />
       </div>
+
+      {futureVisionPreview && <FutureVisionPreview businessId={workspace.business.id} venueId={workspace.venue.id} />}
 
       <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.8fr)]">
         <section className="min-w-0 overflow-hidden rounded-lg border border-line bg-white shadow-[0_4px_18px_rgba(18,63,74,0.04)]">
@@ -345,14 +350,14 @@ export default async function HomePage({ searchParams }: HomePageProps) {
               <Coins className="mt-0.5 shrink-0 text-[#f4c36c]" size={17} aria-hidden="true" />
               <div>
                 <p className="text-sm font-semibold">Labour cost insights</p>
-                <p className="mt-1 text-xs leading-5 text-white/65">Hourly wage rates are needed to estimate savings.</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">Automated optimisation and savings are not available.</p>
               </div>
             </div>
             <div className="flex gap-3 py-3 last:pb-0">
               <ShieldCheck className="mt-0.5 shrink-0 text-[#ff9884]" size={17} aria-hidden="true" />
               <div>
                 <p className="text-sm font-semibold">Compliance review</p>
-                <p className="mt-1 text-xs leading-5 text-white/65">Add workplace rules to check breaks, hours and conflicts.</p>
+                <p className="mt-1 text-xs leading-5 text-white/65">No award, break or entitlement checks are performed here.</p>
               </div>
             </div>
           </div>
@@ -362,6 +367,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
           >
             Review open shifts <ArrowUpRight size={16} aria-hidden="true" />
           </Link>
+          <p className="relative mt-2 text-xs leading-5 text-white/80">
+            This link opens the existing roster; it does not use AI.
+          </p>
         </section>
 
         <section className="rounded-lg border border-line bg-white p-5 shadow-[0_4px_18px_rgba(18,63,74,0.04)] sm:p-6 xl:col-span-2">

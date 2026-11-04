@@ -190,6 +190,7 @@ test("core contextual help destinations and documented screen/link labels stay w
     ["src/app/settings/payroll/[employeeId]/page.tsx", "Help with payroll preparation"],
     ["src/app/settings/payroll/new/page.tsx", "Help with payroll preparation"],
     ["src/app/announcements/page.tsx", "Announcements", "Help with announcements"],
+    ["src/components/future-vision-preview.tsx", "Help with future concepts"],
   ];
   const topics = [...helpTopics(source, "owner"), ...helpTopics(source, "new_owner")];
   for (const [file, ...labels] of screens) {
