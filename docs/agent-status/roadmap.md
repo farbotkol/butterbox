@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 11:24 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Last report:** 2026-11-04 11:30 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Deployment verification complete at this checkpoint; autonomous Roadmap work is paused for owner review.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL and update the local showcase for shared-database compatibility; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and scoped security; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts; keep the local showcase compatible.
-- **Phase:** Testing.
-- **Activity:** Running post-deployment public and local workflow, role and responsive smoke tests.
-- **Progress since previous report:** Independently restored the fresh cutover archive into the disposable test cluster and compared all 81 pre-existing application tables with the live database. Row contents matched after excluding only the new profile revision and the scheduled attendance worker's advancing completion timestamp. Removed the scratch copy; retained the private recovery archives.
-- **Tests and results:** Public and local login returned HTTP **200** after restart. Public owner navigation, People and departments edit/discard, payroll setup, roster/timesheets, five responsive widths, mobile keyboard and targeted accessibility checks passed in the first smoke run. Outside-business isolation, local compatibility and gateway restrictions passed. Six pre-cutover pgTAP files passed **174/174** assertions; both UXFIX builds and TypeScript passed.
-- **Failing tests:** Four first-run assertions failed: one exact Playwright label match and three checks performed before streamed redirects settled. A focused browser diagnostic confirmed the permissions editor opened and a manager was redirected after settling; the corrected complete smoke run is in progress. Initial scratch restore had failed on the test cluster's `pg_cron` database restriction; the corrected partial-platform restore passed. Deployment acceptance is not yet claimed.
-- **Blockers requiring intervention:** None identified after the owner's compatibility-update approval; the security revoke must remain intact.
-- **Documentation:** `IMPLEMENTATION_PROGRESS.md` records preparation and the previous blocker; update it with the authorised cutover and actual result. User Guide not applicable unless user-facing behavior changes from the already documented UXFIX.
-- **Next concrete action:** Finish the corrected full public smoke rerun, inspect any remaining failures and runtime errors, then record actual results in progress and issue #5.
+- **Phase:** Complete.
+- **Activity:** Recording verified deployment evidence and handing the existing public preview to the owner.
+- **Progress since previous report:** Corrected the smoke harness's label selector and redirect timing, then passed all 14 public/local checks. Verified the owner-only simulation-labelled CSV and denied manager/employee downloads, and ran a live scoped-payroll owner/denial transaction that was rolled back. Refreshed the owner's empty shared login tab to the deployed build. Corrected the owner walkthrough's navigation wording in the source and both runtime guides.
+- **Tests and results:** Public owner, FOH/BOH manager, employee and outside-business authentication and scope checks passed. All five UXFIX surfaces, existing roster/attendance/timesheets, five responsive widths, keyboard and targeted axe checks passed; no browser runtime or HTTP 5xx errors occurred. The local UXFIX showcase and public gateway restrictions passed. The restored pre-cutover backup matched **81/81** pre-existing application tables apart from the new revision and scheduled worker timestamp. Pre-cutover pgTAP passed **174/174**; both builds and TypeScript passed. Help units passed **14/14**, and the corrected owner walkthrough was observed on both deployed applications.
+- **Failing tests:** No remaining selected failures. Four initial browser assertions reflected an overly exact selector and premature redirect checks; the corrected full rerun passed. The first restore attempt hit the test cluster's `pg_cron` restriction; the corrected partial-platform restore passed.
+- **Blockers requiring intervention:** None for deployment. Owner review remains outstanding; the temporary public preview depends on the local machine and tunnel staying online.
+- **Documentation:** Updated; `IMPLEMENTATION_PROGRESS.md` records the deployed revision, migration and criterion-level results, and the User Guide and both runtime copies now use the deployed navigation wording.
+- **Next concrete action:** Push the evidence, update issue #5 and stop autonomous backlog development for owner review.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Cutover checkpoint `cd9e34fb56c066b77448d090e8ada598a349a64b` was pushed and verified; this verification checkpoint is pending push.
+- **Push outcome:** Verification checkpoint `8f5abf6441e1842da5537d375ab8654f22511adb` was pushed and verified; this completion checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 

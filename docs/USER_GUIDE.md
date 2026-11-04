@@ -92,9 +92,10 @@ experiment, then have the operator reset before the next baseline review.
    Staff, Shift and Publish steps. Setup is already provisioned:
    `/setup` returns this existing account to its dashboard. This walkthrough
    does not register a new customer or demonstrate demo-to-paid conversion.
-2. Use **Departments** in **Main navigation**. On **Departments and roles**,
-   review FOH and BOH. Then open **People** and inspect the 14 **Employee
-   profiles**, qualifications and department links. Do not send invitations.
+2. Use **Departments & roles** under **Venue Management** in **Main navigation**.
+   On **Departments and roles**, review FOH and BOH. Then open **People** and
+   inspect the 14 **Employee profiles**, qualifications and department links.
+   Do not send invitations.
    The fictional profiles have no verified award classification/pay rules.
 3. Open **Rostering**. Use **Previous week**/**Next week**, or the seeded-week
    URL supplied by the operator, to open the roster week. With a single
