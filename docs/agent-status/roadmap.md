@@ -2,21 +2,21 @@
 
 ## BB-DEMO-005 — Clearly labelled future-vision concept previews
 
-- **Last report:** 2026-11-04 12:20 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 12:31 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active at this checkpoint only; no later execution state is implied.
 - **Current story:** BB-DEMO-005 — Clearly labelled future-vision concept previews (P2, In Progress).
 - **Acceptance criteria:** Optional AI, forecasting and Award Central concepts must be clearly nonfunctional, use illustrative data only, make no payroll or award-compliance claims, and not change production workflows.
 - **Phase:** Testing.
-- **Activity:** Verifying the opt-in preview and default-off production behavior in a separate disposable application and database; no protected showcase is being redeployed.
+- **Activity:** Reviewing the verified preview and recording acceptance evidence; no protected showcase is being redeployed.
 - **Plan:** Add an optional static concept preview gated to the showcase or explicitly enabled isolated development, with no external service or real data; test honest labels, feature gating, accessibility, mobile layouts and existing Help integration.
-- **Progress since previous report:** Implemented a static, opt-in and explicitly nonfunctional preview plus Guide and Help updates. Verified the disposable project identity and its separate API/DB ports before testing. Added a visible disclosure affordance and extra existing-dashboard regression assertions after the first browser pass; those refinements await rerun.
-- **Tests and results:** Feature-gate, Help and showcase units passed **20/20**; TypeScript and changed-file ESLint passed. The first enabled isolated browser run passed **1/1**, covering owner/manager/employee, cross-business denial, Help, keyboard, five widths and targeted axe. The public and local showcase logins returned HTTP **200**. The production build and default-off browser case have not yet run.
-- **Failing tests:** None observed so far; the latest disclosure and test refinements still need verification.
+- **Progress since previous report:** Reverified the refined enabled preview in development, tested the default-off case in production, and exercised enabled showcase mode in a separate production container attached only to the disposable project network. The build had network access denied, the browser blocked other origins, and the temporary container was stopped.
+- **Tests and results:** Feature-gate, Help and showcase units passed **21/21**; TypeScript, changed-file ESLint, production compile and generation passed. Enabled development, unset-flag production and enabled showcase-mode production browser cases each passed **1/1**. Coverage includes owner/manager/employee, anonymous and cross-business denial, existing dashboard copy, keyboard, Help, five widths and targeted axe. The public and local showcase logins returned HTTP **200**.
+- **Failing tests:** None currently observed.
 - **Blockers requiring intervention:** Reviewed employment-rule sources and marketing-template approval/rights remain external blockers for the higher-priority stories; no BB-DEMO-005 blocker identified yet.
 - **Documentation:** User Guide, contextual Help and operator guidance updated in the uncommitted working tree; record criterion-level evidence after verification.
-- **Next concrete action:** Rerun the refined enabled browser case, then run the default-off case with a production build and record actual results.
+- **Next concrete action:** Finish the source and secret review, rerun checks affected by the browser-test guard, commit the feature and record criterion-level completion evidence.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (BB-REPORT-003); current branch checkpoint is `2c416d369009a4c16e0fac5e7db2d9b9b8c6faae`.
-- **Push outcome:** Planning checkpoint `2c416d369009a4c16e0fac5e7db2d9b9b8c6faae` was pushed and verified; this testing checkpoint is pending push.
+- **Push outcome:** Previous testing checkpoint `410b8154749097db1fd0bc369fdb8feaf7ed6ceb` was pushed and verified; this milestone checkpoint is pending push.
 
 ## Owner-requested UXFIX public deployment — issue #5
 
