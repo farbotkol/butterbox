@@ -9,6 +9,7 @@ import {
   OWNER_ID, BRANCH, LABEL, parseTask, originalOwnerTask, GitHub, StateStore, Controller,
   ControllerError, execFile, safeEnvironment, approvedFiles, copilotArguments, codingHome, taskPrompt,
   autonomousSettings, autonomousArguments, autonomousEnvironment, sandboxSettings, taskBranch,
+  classifyCommandFailure, redactDiagnostics,
 } from './listener.mjs';
 
 const body = '/butterbox run\n\n```json\n{"workstream":"roadmap","task":"Synthetic owner task"}\n```';
@@ -798,7 +799,7 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     }
     throw new Error(`unexpected command ${command}`);
   };
-  const labels = []; const merges = []; const deleted = []; const checkCalls = []; const reruns = []; const logs = [];
+  const labels = []; const unlabels = []; const merges = []; const deleted = []; const checkCalls = []; const reruns = []; const logs = [];
   const head = () => sh(remote, 'rev-parse', pr.branch ?? taskBranch(parseTask(issue())));
   const remoteHead = branch => {
     const result = spawnSync('git', ['rev-parse', '--verify', '--quiet', `refs/heads/${branch}`],
@@ -816,6 +817,7 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     findComment: async (number, marker) => comments.some(text => text.includes(marker)),
     closeCompleted: async number => { closures.push(number); },
     labelBlocked: async number => { labels.push(number); },
+    unlabelBlocked: async number => { unlabels.push(number); },
     checks: async sha => { checkCalls.push(sha); return checks(sha, checkCalls.length); },
     pullRequest: async number => pullRequest(number),
     branchHead: async branch => remoteHead(branch),
@@ -832,7 +834,7 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
   const controller = new Controller({ github: githubClient, store, config, exec, mode: 'autonomous', enabled: true,
     autonomousEnabled: true, signal, checksPollMs: 1, checksGraceMs: 0, retryBaseMs });
   return { directory, remote, profile, taskRoot, store, controller, comments, closures, prs, agents, config, exec,
-    github: githubClient, task: parseTask(issue()), labels, merges, deleted, checkCalls, pr, head, reruns, logs,
+    github: githubClient, task: parseTask(issue()), labels, unlabels, merges, deleted, checkCalls, pr, head, reruns, logs,
     copilot, remoteHead };
 }
 
@@ -1102,7 +1104,11 @@ test('autonomous transient check API failure resumes from GitHub state without r
   assert.equal(value.prs.length, 1);
   assert.equal(value.merges.length, 1);
   assert.deepEqual(value.closures, [42]);
-  assert.equal((await value.store.read(42)).attempts, 2);
+  const resumed = await value.store.read(42);
+  // A delivery failure after the commit was pushed never spends an agent execution attempt.
+  assert.equal(resumed.attempts, 1);
+  assert.equal(resumed.deliveryRetries, 1);
+  assert.ok(value.comments.some(text => /resuming delivery of #42; retry 1\/5 after command_exit_1/.test(text)));
 });
 
 test('autonomous merge verification retries without merging twice', async t => {
@@ -1125,13 +1131,16 @@ test('autonomous merge verification retries without merging twice', async t => {
   assert.deepEqual(value.closures, [42]);
 });
 
-test('autonomous merge verification that never succeeds blocks after the bounded attempts', async t => {
+test('autonomous merge verification that never succeeds blocks after the bounded delivery retries', async t => {
   const value = await autonomousFixture(t, { github: { contains: async () => false } });
-  for (let i = 0; i < 3; i++) await value.controller.tick();
+  // One execution attempt plus the default 5 delivery retries; the agent and merge each run exactly once.
+  for (let i = 0; i < 6; i++) await value.controller.tick();
   const ledger = await assertBlocked(value, 'merge_verification_failed', { pushed: true, exhausted: true });
   assert.equal(value.merges.length, 1);
   assert.match(value.comments.find(text => text.includes(': blocked #')), /merged as c{40}; post-merge verification did not complete/);
-  assert.equal(ledger.attempts, 3);
+  assert.match(value.comments.find(text => text.includes(': blocked #')), /1 of 3 execution attempts, 5 of 5 delivery retries/);
+  assert.equal(ledger.attempts, 1);
+  assert.equal(ledger.deliveryRetries, 5);
 });
 
 test('autonomous merge accepts a lost merge response only when GitHub confirms that exact head merged', async t => {
@@ -1557,3 +1566,262 @@ test('listener start-up recovers a stale lock from a dead or reused PID but neve
   await (await store.acquire())();
   assert.deepEqual((await readdir(directory, { recursive: true })).filter(name => name.includes('.stale-')), []);
 });
+
+// Fails the next `git push` calls with the given stderr (undefined lets a push through), like a real rejection.
+function failPushes(value, stderrs, exec = value.controller.exec) {
+  const pushes = [];
+  const wrapped = async (command, args, options) => {
+    if (command === 'git' && args.includes('push')) {
+      pushes.push(args);
+      const stderr = stderrs.shift();
+      if (stderr !== undefined) {
+        const error = new ControllerError('command_exit_1');
+        Object.defineProperty(error, 'diagnostics', { value: { stdout: '', stderr } });
+        throw error;
+      }
+    }
+    return exec(command, args, options);
+  };
+  value.controller.exec = wrapped;
+  return { pushes, exec: wrapped };
+}
+
+test('git and gh rejections are classified, and diagnostics are redacted before being stored', () => {
+  assert.equal(classifyCommandFailure('remote: error: GH013: Repository rule violations found\nremote: - Push cannot contain secrets'),
+    'push_blocked_by_secret_scanning');
+  assert.equal(classifyCommandFailure('fatal: Authentication failed for \'https://github.com/farbotkol/butterbox.git/\''),
+    'github_credentials_rejected');
+  assert.equal(classifyCommandFailure('remote: error: GH006: Protected branch update failed'), 'push_rejected_by_repository_rules');
+  assert.equal(classifyCommandFailure('fatal: unable to access: Could not resolve host: github.com'), null);
+  assert.equal(classifyCommandFailure('error: RPC failed; HTTP 502 curl 22'), null);
+  const redacted = redactDiagnostics('https://x-access-token:ghs_abcdefghijklmnopqrstuvwxyz0123@github.com/r.git ' +
+    'ghp_abcdefghijklmnopqrstuvwxyz0123456789 Authorization: Bearer-secret');
+  assert.doesNotMatch(redacted, /ghs_|ghp_|x-access-token|Bearer-secret/);
+});
+
+test('autonomous transient push failure retries delivery with the preserved commit, never rerunning the agent', async t => {
+  const value = await autonomousFixture(t);
+  const { pushes } = failPushes(value, ['fatal: unable to access \'https://ghp_abcdefghijklmnopqrstuvwxyz0123456789@github.com/x\': ' +
+    'Could not resolve host: github.com']);
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  const failed = await value.store.read(42);
+  assert.equal(failed.status, 'failed');
+  assert.equal(failed.error, 'command_exit_1');
+  assert.equal(failed.stage, 'push');
+  assert.equal(failed.retryKind, 'delivery');
+  assert.match(failed.cause, /Could not resolve host/);
+  assert.doesNotMatch(failed.cause, /ghp_/);
+  const saved = failed.history.find(entry => entry.event === 'failure_output_saved').detail;
+  const diagnostics = await readFile(saved, 'utf8');
+  assert.match(diagnostics, /Could not resolve host/);
+  assert.doesNotMatch(diagnostics, /ghp_/);
+  assert.ok(value.comments.some(text => /delivery stopped with command_exit_1 \(stage: push\) after the agent's work was preserved/
+    .test(text)));
+  assert.deepEqual(value.labels, []);
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  const done = await value.store.read(42);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(done.commit, failed.pendingCommit);
+  assert.equal(value.head(), failed.pendingCommit);
+  assert.equal(done.attempts, 1);
+  assert.equal(done.deliveryRetries, 1);
+  assert.equal(value.agents.length, 1);
+  assert.equal(pushes.length, 2);
+  assert.equal(value.prs.length, 1);
+  assert.deepEqual(value.closures, [42]);
+});
+
+for (const [stderr, code] of [
+  ['remote: error: GH013: Repository rule violations found for refs/heads/agent/x.\nremote: - Push cannot contain secrets',
+    'push_blocked_by_secret_scanning'],
+  ['remote: Invalid username or password.\nfatal: Authentication failed for \'https://github.com/farbotkol/butterbox.git/\'',
+    'github_credentials_rejected'],
+]) {
+  test(`autonomous ${code} push rejection isolates only that issue and is never retried`, async t => {
+    const value = await autonomousFixture(t);
+    const { pushes } = failPushes(value, [stderr, stderr]);
+    await value.controller.tick();
+    const ledger = await assertBlocked(value, code);
+    assert.equal(pushes.length, 1);
+    assert.equal(value.prs.length, 0);
+    assert.ok(ledger.history.some(entry => entry.event === 'failure_classified'));
+    assert.match(value.comments.at(-1), /not safe to retry automatically/);
+  });
+}
+
+test('autonomous record blocked by the old shared attempt budget at push is requeued once and delivered', async t => {
+  const value = await autonomousFixture(t);
+  const { exec } = failPushes(value, ['fatal: unable to access: Connection reset by peer']);
+  await value.controller.tick();
+  const scheduled = await value.store.read(42);
+  // Rewrite to the shape an earlier controller left behind (as for live issue #18).
+  const legacy = { ...scheduled, attempts: 3, final: true, blockedReported: true };
+  for (const key of ['retryAt', 'retryKind', 'deliveryRetries']) delete legacy[key];
+  await value.store.save(legacy);
+  value.labels.push(42);
+  const restarted = new Controller({ github: value.github, store: value.store, config: value.config, exec,
+    mode: 'autonomous', enabled: true, autonomousEnabled: true, checksPollMs: 1, checksGraceMs: 0, retryBaseMs: 0 });
+  assert.deepEqual(await restarted.tick(), { eligible: 1, executed: 1 });
+  const done = await value.store.read(42);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(done.commit, scheduled.pendingCommit);
+  assert.equal(done.attempts, 3);
+  assert.equal(done.deliveryRetries, 1);
+  assert.ok(done.history.some(entry => entry.event === 'legacy_delivery_requeued'));
+  assert.deepEqual(value.unlabels, [42]);
+  assert.equal(value.agents.length, 1);
+  assert.deepEqual(value.closures, [42]);
+  // Requeued at most once: a second restart never resurrects a finished or re-blocked record.
+  assert.deepEqual(await restarted.tick(), { eligible: 0, executed: 0 });
+});
+
+test('autonomous legacy requeue never applies to non-retryable, acknowledged or agent-stage blocks', async t => {
+  const value = await autonomousFixture(t, { agent: async () => { throw new ControllerError('command_exit_1'); } });
+  for (let i = 0; i < 3; i++) await value.controller.tick();
+  const blocked = await value.store.read(42);
+  assert.equal(blocked.stage, 'agent');
+  assert.equal(blocked.final, true);
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  assert.equal(value.agents.length, 3);
+  assert.deepEqual(value.unlabels, []);
+  await value.store.save({ ...blocked, stage: 'push', pendingCommit: 'a'.repeat(40), acknowledgedAt: new Date().toISOString() });
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  await value.store.save({ ...blocked, stage: 'push', pendingCommit: 'a'.repeat(40), error: 'protected_path_changed' });
+  assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
+  assert.deepEqual(value.unlabels, []);
+  assert.equal(value.agents.length, 3);
+});
+
+test('autonomous CI repair whose push failed is pushed on resume instead of being regenerated', async t => {
+  const repairs = [];
+  const value = await autonomousFixture(t, {
+    agent: async (cwd, options, args) => {
+      if (/CI repair attempt/.test(args[args.indexOf('-p') + 1])) {
+        repairs.push(1);
+        await writeFile(path.join(cwd, 'fix.txt'), 'fixed\n');
+        return 'Repaired.';
+      }
+      await writeFile(path.join(cwd, 'feature.txt'), 'done\n');
+    },
+    checks: async sha => sha === value.first
+      ? [{ name: 'database', done: true, ok: false, result: 'failure', runId: 5, jobId: 9 }]
+      : [{ name: 'database', done: true, ok: true, result: 'success' }],
+  });
+  const checks = value.github.checks;
+  value.github.checks = async sha => { value.first ??= sha; return checks(sha); };
+  failPushes(value, [undefined, 'error: RPC failed; HTTP 502 curl 22 The requested URL returned error: 502']);
+  await value.controller.tick();
+  const failed = await value.store.read(42);
+  assert.equal(failed.stage, 'push');
+  assert.equal(failed.commit, value.first);
+  assert.ok(failed.pendingCommit && failed.pendingCommit !== value.first);
+  assert.equal(failed.retryKind, 'delivery');
+  await value.controller.tick();
+  const done = await value.store.read(42);
+  assert.equal(done.status, 'succeeded');
+  assert.equal(done.commit, failed.pendingCommit);
+  assert.equal(repairs.length, 1);
+  assert.equal(done.ciRepairs, 1);
+  assert.equal(done.attempts, 1);
+  assert.equal(sh(value.remote, 'show', `${taskBranch(value.task)}:fix.txt`), 'fixed');
+  assert.deepEqual(value.merges, [{ number: 77, sha: failed.pendingCommit }]);
+});
+
+test('autonomous delivery resume whose preserved commit is gone is charged a full execution attempt', async t => {
+  const value = await autonomousFixture(t, { autonomous: { maxAttempts: 2 } });
+  failPushes(value, ['fatal: unable to access: Operation timed out', 'fatal: unable to access: Operation timed out']);
+  await value.controller.tick();
+  await rm(path.join((await value.store.read(42)).taskDir, 'repo'), { recursive: true, force: true });
+  await value.controller.tick();
+  let ledger = await value.store.read(42);
+  assert.equal(value.agents.length, 2);
+  assert.equal(ledger.attempts, 2);
+  assert.ok(ledger.history.some(entry => entry.event === 'preserved_commit_unavailable'));
+  assert.equal(ledger.retryKind, 'delivery');
+  await rm(path.join(ledger.taskDir, 'repo'), { recursive: true, force: true });
+  await value.controller.tick();
+  ledger = await assertBlocked(value, 'execution_attempts_exhausted', { agents: 2 });
+  assert.equal(value.prs.length, 0);
+});
+
+// The base branch moves after the task branch was cut; GitHub then reports the pull request as conflicting.
+async function movedBaseFixture(t, { base = { 'feature.txt': 'base\n' }, resolve } = {}) {
+  const prompts = [];
+  const value = await autonomousFixture(t, {
+    agent: async (cwd, options, args) => {
+      const prompt = args[args.indexOf('-p') + 1];
+      prompts.push(prompt);
+      if (/merge-conflict resolution/.test(prompt)) return resolve?.(cwd, prompt) ?? 'Resolved.';
+      await writeFile(path.join(cwd, 'feature.txt'), 'done\n');
+      const seed = path.join(value.directory, 'seed');
+      for (const [name, text] of Object.entries(base)) await writeFile(path.join(seed, name), text);
+      sh(seed, 'add', '.'); sh(seed, 'commit', '--quiet', '-m', 'base moved');
+      sh(seed, 'push', '--quiet', value.remote, BRANCH);
+      value.baseHead = sh(seed, 'rev-parse', 'HEAD');
+    },
+  });
+  const pullRequest = value.github.pullRequest;
+  value.github.pullRequest = async number => {
+    const pull = await pullRequest(number);
+    const contains = spawnSync('git', ['merge-base', '--is-ancestor', value.baseHead, pull.head.sha], { cwd: value.remote });
+    return pull.merged || contains.status === 0 ? pull : { ...pull, mergeable: false, mergeable_state: 'dirty' };
+  };
+  return { value, prompts };
+}
+
+test('autonomous PR that conflicts with a moved base gets a Copilot-resolved merge commit, then merges after CI', async t => {
+  const { value, prompts } = await movedBaseFixture(t, {
+    resolve: cwd => writeFile(path.join(cwd, 'feature.txt'), 'base\ndone\n'),
+  });
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.baseUpdates, 1);
+  assert.equal(ledger.attempts, 1);
+  assert.equal(prompts.length, 2);
+  assert.match(prompts[1], /Edit only those files[\s\S]*\["feature.txt"\]/);
+  const branch = taskBranch(value.task);
+  assert.equal(sh(value.remote, 'show', `${branch}:feature.txt`), 'base\ndone');
+  assert.equal(sh(value.remote, 'rev-list', '--parents', '-n', '1', branch).split(' ').length, 3);
+  assert.match(sh(value.remote, 'log', '-1', '--format=%B', branch), /Merge .* into agent\/[\s\S]*Refs #42[\s\S]*Co-authored-by: Copilot/);
+  sh(value.remote, 'merge-base', '--is-ancestor', value.baseHead, branch);
+  assert.deepEqual(value.merges, [{ number: 77, sha: ledger.commit }]);
+  // CI ran again on the merge commit before merging.
+  assert.equal(value.checkCalls.at(-1), ledger.commit);
+  assert.ok(value.comments.some(text => /conflicts with the updated .* nothing is rebased or force-pushed/.test(text)));
+  assert.ok(ledger.history.some(entry => entry.event === 'base_merged'));
+  assert.deepEqual(value.closures, [42]);
+});
+
+test('autonomous PR behind a moved base without textual conflicts merges the base without running Copilot', async t => {
+  const { value, prompts } = await movedBaseFixture(t, { base: { 'other.txt': 'base\n' } });
+  await value.controller.tick();
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(prompts.length, 1);
+  assert.equal(sh(value.remote, 'show', `${taskBranch(value.task)}:other.txt`), 'base');
+  assert.deepEqual(value.merges, [{ number: 77, sha: ledger.commit }]);
+});
+
+for (const [name, resolve, code] of [
+  ['leaves conflict markers', async () => 'Could not resolve.', 'merge_conflict_unresolved'],
+  ['edits files outside the conflict', async cwd => {
+    await writeFile(path.join(cwd, 'feature.txt'), 'base\ndone\n');
+    await writeFile(path.join(cwd, 'AGENTS.md'), 'changed');
+  }, 'merge_resolution_out_of_scope'],
+  ['creates new files', async cwd => {
+    await writeFile(path.join(cwd, 'feature.txt'), 'base\ndone\n');
+    await writeFile(path.join(cwd, 'extra.txt'), 'x');
+  }, 'merge_resolution_out_of_scope'],
+]) {
+  test(`autonomous conflict resolution that ${name} is isolated and never merged`, async t => {
+    const { value } = await movedBaseFixture(t, { resolve });
+    const branch = taskBranch(value.task);
+    await value.controller.tick();
+    const before = sh(value.remote, 'rev-parse', branch);
+    await assertBlocked(value, code, { pushed: true, agents: 2 });
+    assert.deepEqual(value.merges, []);
+    assert.equal(sh(value.remote, 'rev-parse', branch), before);
+    assert.equal(sh(value.remote, 'rev-list', '--parents', '-n', '1', branch).split(' ').length, 2);
+  });
+}

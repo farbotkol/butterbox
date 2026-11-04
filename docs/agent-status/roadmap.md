@@ -2,21 +2,24 @@
 
 ## Agent controller — self-healing recovery
 
-- **Last report:** 2026-11-05 06:55 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state:** Detached autonomous listener started from the development checkout at 06:46 AEDT. Issue #18, attempt 3/3, was observed running at 06:52 AEDT. A later state is not implied.
-- **Phase:** Complete for the controller change. Live CI-repair and merge outcomes for issue #18 are still pending.
-- **Root cause:** `run_requires_local_review` came from a stale profile clone running older code. That code halted the whole queue on issue #16's terminal ledger. No history was deleted.
-- **Delivered:**
-  - bounded retries with backoff;
-  - GitHub reconciliation before a retry;
-  - per-issue isolation;
-  - a durable outbox for GitHub comments;
-  - stale-lock and orphan recovery;
-  - Copilot CI repair;
-  - a pause on configuration faults.
-- **Tests:** controller suite **82/82** pass. ESLint is clean. Real end-to-end evidence is in `tools/agent-controller/README.md`.
+- **Last report:** 2026-11-05 07:10 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Listener PID 69807 is still running the code from before this change, with an empty queue. It is being restarted on the new commit. A later state is not implied.
+- **Phase:** Testing. The live run continues for issue #18.
+- **Issue #18 so far:**
+  - Attempt 3's agent finished at 06:55 AEDT and its work was committed as `ffb08b8`.
+  - The push then failed with `command_exit_1`. Old code charged this delivery failure to the agent's last attempt and blocked the issue.
+  - Other issues continued. The real stderr was discarded, so the cause is not known.
+- **Fixes in this change:**
+  - Delivery stages now have their own budget (`maxDeliveryRetries`). Retries resume the preserved commit and never rerun the agent.
+  - Redacted command diagnostics are saved.
+  - Secret-scanning, credential and protected-branch rejections are classified as terminal.
+  - Unpushed CI-repair commits are preserved.
+  - Moved-base conflicts are resolved by a scoped merge commit.
+  - Recent shared-budget delivery blocks are requeued once.
+- **Tests:** controller suite **95/95** pass. ESLint is clean.
+- **Next concrete action:** Commit and push this change, then restart the listener. Observe #18's requeue, push, CI, repair, merge and close, and record the actual outcome.
 - **Documentation:** Updated in `tools/agent-controller/README.md`. User Guide not applicable: internal tooling.
-- **Latest development commit:** `0706869e1a71addd519f1818cfaeff87d78ceee8`.
+- **Latest development commit:** `7c24405` before this change.
 
 ## Workstream 5 — Reliable payroll-delivery foundation
 

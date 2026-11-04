@@ -269,6 +269,19 @@ run first. Then the controller:
 7. Re-reads the PR and requires it to be open, mergeable, still on the same
    base, branch and head commit. It then squash-merges with GitHub's `sha` guard,
    so a head that moved after the checks is refused.
+
+   If the workstream branch moved and GitHub reports the PR as conflicting
+   (`mergeable_state: dirty`), the controller merges the base **into** the
+   task branch. It never rebases or force-pushes. This is bounded to 3 base
+   updates per issue:
+   - Without textual conflicts, it commits the merge directly.
+   - With conflicts (at most 20 files, none in protected paths), it comments
+     on the issue. A sandboxed agent then resolves **only** those files.
+   - The controller rejects the result if any other file changed, a new file
+     appeared (`merge_resolution_out_of_scope`), or conflict markers remain
+     (`merge_conflict_unresolved`).
+   - The merge commit is pushed normally, and every check must pass again on
+     the new head before merging.
 8. Confirms that GitHub reports the PR merged with that merge commit, and that
    the workstream branch contains it. Then it deletes the task branch, posts a
    completion summary (PR, merge commit, every check result, agent summary) and
@@ -304,11 +317,43 @@ Routine failures recover without owner action:
   - A still-running orphaned Copilot process from a crashed listener is
     stopped as soon as the restarted listener detects the interruption, before
     the retry backoff. It is matched by PID and executable path.
+  - A CI-repair or merge commit whose push failed is pushed from the preserved
+    clone rather than regenerated.
+- **Delivery failures do not rerun the agent.** Once the agent's work is
+  committed, failures while pushing, opening the PR, waiting for checks,
+  merging or verifying the merge use a separate budget. That budget is
+  `maxDeliveryRetries` (default 5, range 0–10), with the same backoff.
+  - The issue gets `resuming delivery of #N; retry k/M … the agent is not
+    rerun`.
+  - Only if the preserved commit is gone does the controller fall back to a
+    new execution attempt, charged to `maxAttempts`.
+- **Command diagnostics are kept.** When a `git` or `gh` delivery command
+  fails, its output is saved privately in the task folder as
+  `failure-<stage>-<time>.txt` (mode 0600). URL credentials, GitHub tokens and
+  `authorization`/`token`/`password` values are redacted first. A one-line
+  redacted cause goes into the ledger audit and the recovery comment.
+  - Some rejections are reclassified as terminal and never retried:
+    secret-scanning push protection (`push_blocked_by_secret_scanning`),
+    rejected credentials (`github_credentials_rejected`) and protected-branch
+    rules (`push_rejected_by_repository_rules`).
+- **Legacy blocks are requeued once.** An issue blocked by older controller
+  code is requeued once on start-up if all of these hold:
+  - it failed in a delivery stage;
+  - the error was recoverable;
+  - the agent's commit was preserved;
+  - it was not acknowledged;
+  - it failed within the last 24 hours.
+
+  Such a block happened only because delivery shared the agent's attempt
+  budget. The requeue removes `agent-blocked` and records
+  `legacy_delivery_requeued`. History is never deleted.
 - **Terminal** failures block only that issue:
   - no changes, rejected paths, too many files, symlinks;
   - a Copilot timeout;
   - CI still red after repair;
   - a PR that moved, became unmergeable or was closed unmerged;
+  - a base conflict Copilot could not resolve within scope;
+  - a push rejected by secret scanning, credentials or repository rules;
   - a task branch that diverged from the ledger or disappeared;
   - an issue edited or no longer owner-authorised before a retry;
   - exhausted retries.
@@ -340,7 +385,8 @@ Routine failures recover without owner action:
   - after 30 failed attempts an item moves to `undelivered` in the ledger.
 - Each ledger keeps a capped `history` audit trail, for example
   `interrupted`, `retry_scheduled`, `reconciled_push`, `ci_failed`,
-  `repair_pushed`, `report_deferred` and `blocked`.
+  `repair_pushed`, `delivery_resumed`, `failure_classified`, `base_conflict`,
+  `base_merged`, `report_deferred` and `blocked`.
 
 The issue is never closed just because the agent finished: closing requires a
 verified merge.
@@ -396,8 +442,8 @@ mode `0600`.
 ```
 
 Only `taskRoot` is required. Defaults: 45 minutes, no credit cap, 60 files,
-`autoMerge: true`, `checksTimeoutMinutes: 90` (10–240), `maxAttempts: 3` (1–10)
-and `maxCiRepairs: 2` (0–5).
+`autoMerge: true`, `checksTimeoutMinutes: 90` (10–240), `maxAttempts: 3` (1–10),
+`maxDeliveryRetries: 5` (0–10) and `maxCiRepairs: 2` (0–5).
 `model`, `allowedHosts` and `keepSucceeded` are also accepted. Successful task folders are deleted
 unless `keepSucceeded` is `true`; failed folders are kept for review.
 
@@ -416,8 +462,9 @@ next start and resumed through the recovery rules above. A stale lock from a
 dead listener is reclaimed automatically. Terminal failures are reported
 `blocked`, labelled `agent-blocked` and left open, and other issues continue.
 Failed task folders, and archived earlier attempts, stay in
-`<taskRoot>/issue-N-*` for inspection. A blocked issue never runs again; to
-retry, create a new issue. Run the listener from this up-to-date workspace, not
+`<taskRoot>/issue-N-*` for inspection. A blocked issue never runs again
+(apart from the one-time legacy delivery requeue above); to retry, create a new
+issue. Run the listener from this up-to-date workspace, not
 from the profile clone, and keep the profile clone current with
 `git -C ~/butterbox-agent-roadmap pull --ff-only`.
 
