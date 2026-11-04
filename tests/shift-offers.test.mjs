@@ -127,6 +127,7 @@ test("incomplete or invalid candidate snapshots fail rather than offering partia
   const cases = [
     [{ data: rows, count: 1001, error: null }, { data: [rows[0]], count: 1001, error: null }],
     [{ data: rows, count: 1001, error: null }, { data: [], count: 1002, error: null }],
+    [{ data: rows, count: 1001, error: null }, { data: [], count: 1001, error: null }],
     [{ data: rows, count: null, error: null }],
     [{ data: [{ ...rows[0], ineligibility: "unknown" }], count: 1, error: null }],
     [{ data: null, count: null, error: { code: "denied", message: "Permission denied" } }],
