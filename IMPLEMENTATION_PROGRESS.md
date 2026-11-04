@@ -2,6 +2,24 @@
 
 ## Execution summary
 
+- **FCAST-BASE-001 — Venue-local demand aggregation and comparable-day backtest, 2026-11-04 18:25 AEDT: Foundation Ready (partial; linked to BB-FORECAST-003 and BB-FORECAST-005; parent stories remain Backlog).**
+
+  **Implementation:** Added `src/lib/demand-forecast.ts` and `tests/demand-forecast.test.mjs`. Aggregation is bounded and deterministic; validates daypart coverage, venue timezone and expected local dates; detects duplicates and invalid/out-of-window rows; keeps unobserved periods distinct from observed zero; and rejects unsafe aggregate totals. The baseline uses only prior same-weekday history within the configured lookback and before the strict training cutoff. Backtests retain source import IDs and baseline/aggregation versions, and report MAE/WAPE with explicit sparse-history and zero-actual handling.
+
+  | Foundation acceptance criterion | Implementation and actual verification evidence | Result |
+  | --- | --- | --- |
+  | Venue-local aggregation and data quality | Unit tests cover configured daypart boundaries, Sydney spring DST gap and repeated autumn hour, explicit zero vs unobserved, duplicate/invalid/out-of-window records, and invalid timezone/date/coverage rejection. | Pass for pure library behavior |
+  | Strict holdout and provenance | A deterministic fixture with large holdout values verifies forecasts use only five earlier matching weekdays; tested forecast source IDs exclude all holdout imports. Observed min/max and version IDs are exposed. | Pass for fixture-based separation, not real-data accuracy |
+  | Error metrics and sparse data | Tests verify insufficient history yields no numeric prediction, MAE/WAPE over a holdout, WAPE unavailable for zero actual totals and no scored periods, and negative metric inputs reject. | Pass for listed cases |
+
+  **Testing:** `node --experimental-strip-types --test tests/demand-forecast.test.mjs` passed **8/8**; repository `npx tsc --noEmit` passed; targeted ESLint passed for the new source/test files; `git diff --check` passed. No UI, database, migration, browser, production build or full application regression was applicable or run.
+
+  **Documentation: updated** in `docs/demand-forecast-foundation.md`, both parent story notes, `BACKLOG_INDEX.csv` and this evidence record. **User Guide: not applicable** — no user-facing behavior was added.
+
+  **Not delivered / limitations:** No dashboard, stored forecast, role-level staffing prediction, weather input, statistically validated confidence interval, drift monitoring, live model/provider, real venue backtest, database integration or authorization path. The min/max is only a historical observed range, not a confidence interval. No database or showcase was accessed or changed. BB-FORECAST-003 and BB-FORECAST-005 remain Backlog; do not claim forecast accuracy or employment/payroll correctness.
+
+  **Next:** Inspect the existing Award Central Draft PR #3 integration boundary without merging or duplicating it, then evaluate the next safe foundation in the authorized workstream.
+
 - **AI-GOV-001 — Typed proposal contract and offline response evaluation, 2026-11-04 18:17 AEDT: Foundation Ready (partial; linked to BB-AI-006 and BB-AI-007; parent stories remain Backlog).**
 
   **Commit and push:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd` (`feat(AI-GOV-001): add typed proposal safety foundation`) was pushed to `copilot/finish-roadmap-for-app`; the remote SHA was verified to match.

@@ -2,20 +2,20 @@
 
 ## Workstream 2 — Forecasting data and baseline
 
-- **Last report:** 2026-11-04 18:19 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 18:26 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Active in this coding session; no background continuation is implied.
-- **Current slice:** FCAST-BASE-001 — explicit venue-local period aggregation, data completeness and time-ordered holdout comparable-day baseline/backtest (Foundation Ready candidate linked to BB-FORECAST-003 and BB-FORECAST-005; parents remain Backlog).
-- **Acceptance criteria for the slice:** Aggregate existing sales/booking observations in an explicit timezone and configured dayparts; distinguish unobserved periods from zero demand; report quality/coverage; compute explainable same-weekday baselines from training dates strictly before the holdout; report MAE/WAPE with zero-demand handling and source/version provenance.
-- **Phase:** Planning.
-- **Activity:** Reviewing the immutable BB-FORECAST-001 import schema and existing parser/test patterns before implementing a pure, deterministic library.
-- **Progress since previous report:** AI-GOV-001 was completed as a model-free Foundation Ready slice and pushed. W1's DB-backed controls remain blocked; the workstream is proceeding to the next authorized priority.
-- **Tests and results:** FCAST-BASE-001 tests are not written yet. AI-GOV-001 passed 7/7 focused tests, TypeScript, targeted ESLint and diff validation.
-- **Failing tests:** None observed for FCAST-BASE-001.
-- **Blockers requiring intervention:** No verified disposable database. Do not query or migrate the SSH-forwarded database ports. The pure aggregation/backtest slice will not modify data or claim production forecast acceptance.
-- **Documentation:** Planned internal foundation record; User Guide not applicable unless a user-visible surface is added.
-- **Next concrete action:** Implement the pure aggregation, quality, comparable-day baseline and holdout metrics, then test DST, missing periods, duplicates, sparse history, zero actuals and future-data leakage.
-- **Latest development commit:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd`.
-- **Push outcome:** `cfa3fec711e1256a8256fefd12a8d5268be40ecd` is on the remote branch; its SHA was verified.
+- **Current slice:** FCAST-BASE-001 — venue-local aggregation, completeness and strict time-ordered comparable-day backtest (Foundation Ready; linked to BB-FORECAST-003 and BB-FORECAST-005; parents remain Backlog).
+- **Acceptance criteria for the slice:** Aggregate supplied sales/booking observations by explicit venue timezone and configured dayparts; distinguish unobserved from observed zero; report quality/coverage; prevent holdout leakage; report MAE/WAPE with zero-demand handling and source/version provenance.
+- **Phase:** Complete for the pure foundation slice; parent forecast stories remain incomplete.
+- **Activity:** Implemented and tested the bounded pure library; updated both parent stories with explicit partial evidence and limitations.
+- **Progress since previous report:** Added DST-aware local aggregation, duplicate/invalid/out-of-window counters, safe totals, comparable-weekday baseline, strict holdout backtest, MAE/WAPE, eight focused tests and internal documentation.
+- **Tests and results:** Forecast plus existing demand-history tests passed **17/17**; repository `npx tsc --noEmit` passed; targeted ESLint passed; backlog CSV parsing and `git diff --check` passed.
+- **Failing tests:** None in the final focused run.
+- **Blockers requiring intervention:** No verified disposable database. No database or showcase was queried or changed; no real-venue forecast accuracy or role-level staffing need is established.
+- **Documentation:** Updated in `docs/demand-forecast-foundation.md`, the backlog story criteria, `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`. User Guide not applicable because no user-visible behavior was added.
+- **Next concrete action:** Inspect the Award Central Draft PR #3 integration boundary without merging or duplicating it, then evaluate the next safe authorized foundation.
+- **Latest development commit:** `d7703005180477a2c03be7b36c78f9efa029c006` (FCAST-BASE-001 changes are prepared but not yet committed).
+- **Push outcome:** No FCAST-BASE-001 commit or push has occurred yet. The prior AI-GOV-001 commit is pushed; verify the forecast commit remotely after it is created.
 
 ## Workstream 1 — AI governance foundations
 

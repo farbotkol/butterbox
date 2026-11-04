@@ -1141,6 +1141,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 2. Test against held-out history.
 3. No unsupported precision claims.
 
+**Foundation Ready — FCAST-BASE-001:** A deterministic, offline library now aggregates explicitly supplied sales/booking history by venue-local daypart, distinguishes missing periods from observed zero, and provides a strictly time-ordered comparable-weekday baseline/backtest with MAE/WAPE and source/version provenance. Its minimum/maximum are observed bounds, not a confidence interval; it has no role-level staffing forecast, validated real-data accuracy, UI or persistence. This partial foundation does not satisfy the parent criteria; BB-FORECAST-003 remains Backlog. See `docs/demand-forecast-foundation.md`.
+
 
 ### BB-FORECAST-004 — Cost-aware roster options [P2]
 
@@ -1162,6 +1164,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 1. MAE/WAPE or suitable metrics reported by venue/daypart.
 2. Model version tracked.
 3. Drift and sparse-data limitations surfaced.
+
+**Foundation Ready — FCAST-BASE-001:** The offline backtest reports MAE/WAPE, baseline/aggregation versions, source import IDs and sparse-history/zero-total limitations. It is a library, not a dashboard, and has no persisted forecast or drift monitoring. This partial foundation does not satisfy the parent criteria; BB-FORECAST-005 remains Backlog. See `docs/demand-forecast-foundation.md`.
 
 
 ## Epic RULES — Employment safeguards and compliance (P0/P2)
