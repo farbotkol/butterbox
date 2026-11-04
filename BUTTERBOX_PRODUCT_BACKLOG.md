@@ -978,6 +978,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-COMMS-003 — Email and push delivery [P1]
 
+**Status:** Blocked pending approved delivery providers, consent and channel governance, quiet-hour/event configuration and authorized end-to-end delivery evidence; see DEC-002.
+
 **User story:** As an employee, I want important changes delivered even when I am not online.
 
 **Acceptance criteria**
@@ -989,6 +991,8 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 
 ### BB-COMMS-004 — Contextual shift conversation [P2]
+
+**Status:** In Progress in isolated development; no external delivery or showcase deployment is authorized.
 
 **User story:** As a manager and employee, I want a discussion linked to a specific shift.
 

@@ -1,5 +1,23 @@
 # Roadmap Agent — Activity Status
 
+## BB-COMMS-004 — Contextual shift conversation
+
+- **Last report:** 2026-11-04 12:37 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state:** Active at this checkpoint only; no later execution state is implied.
+- **Current story:** BB-COMMS-004 — Contextual shift conversation (P2, In Progress).
+- **Acceptance criteria:** Only authorised participants can read/write; messages are ordered and retained; notification previews never expose private details.
+- **Phase:** Planning.
+- **Activity:** Reviewing existing roster, personal schedule, permission and append-only announcement patterns before implementation.
+- **Plan:** Create per-shift, per-employee in-app discussions with server-enforced scope, ordered retained plain-text messages and safe retries; prevent a replacement employee from viewing the prior worker's thread. Add manager/employee entry points and accessible Help. Do not send external messages or create private-content notifications.
+- **Progress since previous report:** Finished and pushed BB-DEMO-005. Identified BB-COMMS-003 as blocked by DEC-002 provider, consent and delivery governance; AI stories lack the required assistant/proposal or safe replacement foundation. Selected this independent in-app story without changing protected showcases.
+- **Tests and results:** BB-DEMO-005 units **21/21**, enabled and default-off production browser cases **1/1** each, enabled development browser **1/1**, TypeScript, changed-file ESLint and production compile/generation passed. BB-COMMS-004 tests have not run.
+- **Failing tests:** None currently observed for the completed story; new-story tests are not yet written.
+- **Blockers requiring intervention:** Approved external channels and reviewed employment restrictions remain unavailable for higher-priority dependent work; no BB-COMMS-004 blocker identified.
+- **Documentation:** Pending for the new user-facing workflow.
+- **Next concrete action:** Push this planning checkpoint, then implement the scoped database and message UI with targeted tests in the disposable project.
+- **Latest development commit:** `88ddd917c0a51dd979ac65818cdf247e131e2a60` (BB-DEMO-005); completion evidence is `467f0d35b9fab03f75caf0c9a0ea33c99de3f456`.
+- **Push outcome:** Previous completion checkpoint `467f0d35b9fab03f75caf0c9a0ea33c99de3f456` was pushed and verified; this planning checkpoint is pending.
+
 ## BB-DEMO-005 — Clearly labelled future-vision concept previews
 
 - **Last report:** 2026-11-04 12:33 AEDT (UTC+1100), observed on the operator's clock.
