@@ -2,7 +2,7 @@
 
 ## BB-PAY-007 — QuickBooks discovery and adapter
 
-- **Last report:** 2026-11-04 15:08 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 15:09 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** This story's discovery and documentation work is complete; this does not imply a background agent remains active.
 - **Current story:** BB-PAY-007 — QuickBooks discovery and adapter (P2, Done for discovery only; no adapter).
 - **Acceptance criteria:** Document the destination product/workflow before build; do not mark an adapter available before integration tests.
@@ -15,7 +15,7 @@
 - **Documentation:** Updated in the role-based User Guide and `docs/quickbooks-integration-discovery.md`; `Documentation: updated`.
 - **Next concrete action:** Wait for a verifiable prerequisite or choose a source-backed, non-duplicative safe story; do not start a provider integration or Award Central duplicate based on assumptions.
 - **Latest development commit:** `68380251f5a30ff78e83c807b8601ed7ac638948` (`docs(BB-PAY-007): document QuickBooks integration limits`).
-- **Push outcome:** Pushed to `copilot/finish-roadmap-for-app`; `git ls-remote` verified the remote SHA equals `68380251f5a30ff78e83c807b8601ed7ac638948`. This status-only completion checkpoint is pending.
+- **Push outcome:** The story commit and a separate delivery-status checkpoint were pushed to `copilot/finish-roadmap-for-app`; local and remote SHAs matched at verification. These documentation commits do not deploy the feature or alter either showcase.
 
 ## BB-AI-005 — Fill open shifts assistant
 
