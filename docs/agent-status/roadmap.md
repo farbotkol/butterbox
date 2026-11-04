@@ -2,7 +2,7 @@
 
 ## BB-PAY-007 — QuickBooks discovery and adapter
 
-- **Last report:** 2026-11-04 15:07 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 15:08 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** This story's discovery and documentation work is complete; this does not imply a background agent remains active.
 - **Current story:** BB-PAY-007 — QuickBooks discovery and adapter (P2, Done for discovery only; no adapter).
 - **Acceptance criteria:** Document the destination product/workflow before build; do not mark an adapter available before integration tests.
@@ -14,8 +14,8 @@
 - **Blockers requiring intervention:** No verified Australian QuickBooks Payroll import/API path, OAuth configuration or isolated provider test company; the adapter remains unavailable. No further complete safe story was verified ready: AI/model governance, forecast source/baseline, provider access, or Award Central source/integration foundations remain missing or separately owned.
 - **Documentation:** Updated in the role-based User Guide and `docs/quickbooks-integration-discovery.md`; `Documentation: updated`.
 - **Next concrete action:** Wait for a verifiable prerequisite or choose a source-backed, non-duplicative safe story; do not start a provider integration or Award Central duplicate based on assumptions.
-- **Latest development commit:** `558ab754a412a5f8be57ba3d995cfa9c08683bf0` before this story's documentation commit.
-- **Push outcome:** The prior remote development SHA was verified; this story's changes and completion checkpoint are not yet pushed.
+- **Latest development commit:** `68380251f5a30ff78e83c807b8601ed7ac638948` (`docs(BB-PAY-007): document QuickBooks integration limits`).
+- **Push outcome:** Pushed to `copilot/finish-roadmap-for-app`; `git ls-remote` verified the remote SHA equals `68380251f5a30ff78e83c807b8601ed7ac638948`. This status-only completion checkpoint is pending.
 
 ## BB-AI-005 — Fill open shifts assistant
 

@@ -4,6 +4,8 @@
 
 - **BB-PAY-007 — QuickBooks discovery and adapter, 2026-11-04 15:07 AEDT: Done (product discovery only; no adapter).**
 
+  **Commit and push:** `68380251f5a30ff78e83c807b8601ed7ac638948` (`docs(BB-PAY-007): document QuickBooks integration limits`) is on `copilot/finish-roadmap-for-app`; the remote branch SHA was verified to match.
+
   | Acceptance criterion and identifier | Implementation and actual verification evidence | Result |
   | --- | --- | --- |
   | PAY007-01 Supported product/workflow documented before build | Added an internal discovery record and role-based User Guide guidance distinguishing Intuit's Australian QuickBooks Payroll EH Work timesheet-entry tutorial from the QuickBooks Online Accounting API `TimeActivity` reference and the separate US QuickBooks Time historical CSV help. The latter is not evidence of Australian Payroll compatibility. | Pass — documented distinction; no integration selected or represented as supported |
