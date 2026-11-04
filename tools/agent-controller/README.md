@@ -257,6 +257,8 @@ run first. Then the controller:
      a 30 KB limit;
    - the prompt forbids disabling, skipping or weakening tests or security
      checks;
+   - with the test broker enabled, the failing Playwright locations are listed as
+     `focusedTests`, and the agent reproduces and verifies them locally;
    - a repair that changes files is committed as `CI repair k` and pushed, then
      every check is awaited again on the new head;
    - if a repair makes no change, the failed Actions jobs are re-run **once per
@@ -446,6 +448,31 @@ Only `taskRoot` is required. Defaults: 45 minutes, no credit cap, 60 files,
 `maxDeliveryRetries: 5` (0–10) and `maxCiRepairs: 2` (0–5).
 `model`, `allowedHosts` and `keepSucceeded` are also accepted. Successful task folders are deleted
 unless `keepSucceeded` is `true`; failed folders are kept for review.
+
+#### Local CI test broker (optional)
+
+The agent sandbox has no Docker, localhost or database access, and that stays unchanged. To let agents run the
+CI database and browser suites anyway, set up the
+[disposable test environment](../../docs/LOCAL_CI_TESTING.md) once (`npm run test:env:up`), then enable the
+broker:
+
+```json
+"autonomous": { "taskRoot": "/Users/Shared/butterbox-agent-tasks", "testBroker": { "enabled": true, "maxRuns": 6 } }
+```
+
+While an agent runs, the controller does the following:
+
+- It copies a read-only helper to `<task>/bin/request-tests.mjs`.
+- It grants the sandbox write access to `<task>/test-requests/` only. `<task>/test-results/` stays read-only to
+  the agent.
+- It services validated requests (`auth-focused` with `--test`/`--grep`/`--repeat`, `auth`, `db`, `tenant`,
+  `database`) through `scripts/test-env.mjs` with the isolated container runner.
+
+Runs are limited to `maxRuns` (1–20, default 6) per agent invocation. Runs still queued or running when the agent
+exits are cancelled or stopped. CI repair prompts include the failing Playwright locations, and agents are told to
+reproduce a failure before fixing it. The controller refuses to start with `test_broker_unavailable` if the broker
+files are missing from this checkout. Broker runs appear in the task history as `agent_test_runs`, and their
+artifacts are kept under `/Users/Shared/butterbox-test-runs/agent/`.
 
 Start continuous autonomous mode. It polls every 60 seconds and stops with Ctrl+C:
 

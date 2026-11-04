@@ -1055,6 +1055,54 @@ test('autonomous failed CI gets a Copilot repair commit, then merges once every 
   assert.ok(ledger.history.some(entry => entry.event === 'repair_pushed'));
 });
 
+test('autonomous test broker runs only during each agent invocation and feeds focused CI failures to repairs', async t => {
+  const brokers = []; const prompts = [];
+  class FakeBroker {
+    constructor(options) { this.options = options; this.events = []; brokers.push(this); }
+    async prepare() { this.events.push('prepare'); }
+    start() { this.events.push('start'); }
+    async stop() { this.events.push('stop'); return [{ id: `r${brokers.length}`, suite: 'auth-focused', status: 'passed' }]; }
+  }
+  const value = await autonomousFixture(t, {
+    autonomous: { testBroker: { enabled: true, maxRuns: 3 } },
+    github: { failedJobLog: async () => 'Run tests\t2026-11-04T00:00:00Z   ✘   54 tests/e2e/auth.spec.mjs:7137:1 › draft shifts (21s)' },
+    agent: async (cwd, options, args) => {
+      const prompt = args[args.indexOf('-p') + 1];
+      prompts.push(prompt);
+      assert.deepEqual(brokers.at(-1).events, ['prepare', 'start']);
+      await writeFile(path.join(cwd, /CI repair attempt/.test(prompt) ? 'fix.txt' : 'feature.txt'), 'done\n');
+    },
+    checks: async sha => sha === value.pushedFirst
+      ? [{ name: 'database', done: true, ok: false, result: 'failure', runId: 5, jobId: 9 }]
+      : [{ name: 'database', done: true, ok: true, result: 'success' }],
+  });
+  value.controller.TestBroker = FakeBroker;
+  const push = value.github.checks;
+  value.github.checks = async sha => { value.pushedFirst ??= sha; return push(sha); };
+  assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
+  assert.equal(brokers.length, 2);
+  for (const broker of brokers) {
+    assert.deepEqual(broker.events, ['prepare', 'start', 'stop']);
+    assert.equal(broker.options.issue, 42);
+    assert.equal(broker.options.maxRuns, 3);
+    assert.ok(broker.options.taskDir.startsWith(value.taskRoot));
+  }
+  const helper = path.join(brokers[0].options.taskDir, 'bin', 'request-tests.mjs');
+  assert.ok(prompts[0].includes(`node ${helper} auth-focused`));
+  assert.match(prompts[1], /CI repair attempt/);
+  assert.match(prompts[1], /"focusedTests":\["tests\/e2e\/auth\.spec\.mjs:7137"\]/);
+  assert.match(prompts[1], /reproduce each failing browser or database test locally/);
+  for (const call of value.agents) {
+    const filesystem = call.settings.sandbox.userPolicy.filesystem;
+    assert.ok(filesystem.readwritePaths.includes(path.join(brokers[0].options.taskDir, 'test-requests')));
+    assert.ok(filesystem.readonlyPaths.includes(path.join(brokers[0].options.taskDir, 'test-results')));
+    assert.deepEqual(call.settings.sandbox.userPolicy.network.blockedHosts, ['localhost', '127.0.0.1', '::1']);
+  }
+  const ledger = await value.store.read(42);
+  assert.equal(ledger.status, 'succeeded');
+  assert.equal(ledger.history.filter(entry => entry.event === 'agent_test_runs').length, 2);
+});
+
 test('autonomous failing CI without a repair reruns failed jobs once, then blocks and never merges', async t => {
   const value = await autonomousFixture(t, { checks: async () => [
     { name: 'verify', done: true, ok: true, result: 'success' },

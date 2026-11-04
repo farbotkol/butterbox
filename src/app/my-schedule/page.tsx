@@ -141,7 +141,7 @@ function ShiftDetails({ shift, venue, week, acknowledgements, businessId }: {
         )
       )}
       <Link href={shiftConversationHref(businessId, venue.id, { shiftId: shift.id })}
-        aria-label={`Discuss ${shift.role_title} shift on ${formatDay(startDate)} at ${formatTime(shift.starts_at, venue.timezone)}`}
+        aria-label={`Discuss shift for ${shift.role_title} on ${formatDay(startDate)} at ${formatTime(shift.starts_at, venue.timezone)}`}
         className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Discuss shift
       </Link>
