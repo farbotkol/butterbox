@@ -8,6 +8,10 @@ PostgreSQL, Auth and Row Level Security (RLS). Server-side checks, not hidden UI
 controls, enforce tenant, venue, department and role permissions. Preserve the
 FOH/BOH delegated-management model and existing application conventions.
 
+## Approved owner decisions — 4 November 2026
+
+Before selecting subscription, AI, Award Central, Xero Payroll or local Supabase/database-isolation work, read [the 4 November owner decision and implementation handoff](docs/agent-handoffs/2026-11-04-owner-decisions.md). It records approved venue-based pricing, local open-model evaluation, two-award MVP scope, Xero developer-account responsibilities and the P0 disposable database environment. Reconcile it against current implementation and backlog evidence; it authorises ordinary safe development, not live integrations, production deployment or destructive changes to existing environments.
+
 ## Showcase-first prioritization
 
 The owner has authorized a **first internal product-review Showcase MVP**, distinct from production go-live. `BACKLOG_INDEX.csv` contains both the original `Priority` (long-term roadmap) and `Showcase_Priority` (first-review sequencing). Do not overwrite either with the other.
