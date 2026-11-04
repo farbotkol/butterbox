@@ -268,3 +268,12 @@ CLI permission validation, and any actual coding task. No continuous listener
 was left running. There is no claim of unattended voice-first completion.
 Application build/database regression is not applicable to these tooling-only
 changes; protected showcases and application data were not touched.
+
+Independent re-verification, **4 November 2026, 20:28 AEDT (UTC+11)**, at
+commit `a36a2bf` (confirmed equal to `origin/copilot/finish-roadmap-for-app`):
+`node --test tools/agent-controller/listener.test.mjs` reported 34 pass, 0 fail;
+`node --check`, targeted ESLint and Action JSON parsing passed; `gh api
+users/farbotkol` returned ID `11307166`; issue #7 shows closed, owner-authored,
+labelled, with original owner queued/running/succeeded reports; and
+`npm run agent:listener -- --once` printed `dry-run; GitHub owner verified` and
+`Poll complete: eligible=0; executed=0` (exit 0).
