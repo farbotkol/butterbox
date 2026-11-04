@@ -1,5 +1,21 @@
 # Roadmap Agent — Activity Status
 
+## Issue #18 — Diagnose browser authentication CI failure
+
+- **Last report:** 2026-11-05 06:53:40 AEDT (UTC+1100), observed on the sandbox clock.
+- **Execution state:** Finishing this isolated task invocation with an unresolved access blocker; no background continuation is implied.
+- **Current task:** Issue #18 — diagnose the failing Verify browser step for PR #17 / issue #16; related existing BB-FOUND-002/003 functionality remains Done, not rebuilt.
+- **Acceptance criteria:** Establish the failure from CI logs; repair a reproduced root cause without weakening authentication or tenant checks; verify the browser step and both Verify jobs.
+- **Phase:** Blocked; the actual failing CI step has not been diagnosed or repaired.
+- **Activity / progress:** Read backlog, implementation progress, decision log, owner handoff, workflow, browser runner and auth scenarios. The workflow invokes the production runner against fresh local Supabase; no CI failure logs were provided or found in the inspected files. Restored missing dependencies with `npm ci --no-audit --no-fund` (482 packages); no dependency manifest, workflow, application, schema or assertion changes made.
+- **Tests and results:** Focused authentication error/URL units passed **4/4** on baseline and rerun; targeted ESLint and repository TypeScript passed after dependency restoration. A subprocess check passed: without disposable opt-in, the runner exits **1** with the expected safety error before contacting services. This is not browser or tenant-isolation acceptance.
+- **Failing tests:** Initial lint invocation could not start (`eslint: command not found`); the same check passed after `npm ci`. No application test failure was reproduced locally. CI, browser and database results remain unknown.
+- **Blockers requiring intervention:** This task sandbox prohibits GitHub operations and has no database/local services or credentials, so PR #17 logs and actual browser acceptance cannot be obtained here. Read-only Git inspection failed when sandbox policy denied `/Users/lukefarbotko/.gitconfig`; no retry or workaround attempted. Git state, recent commits and other worktrees remain unverified. A controller or operator with permitted access must supply the failing step logs and execute CI.
+- **Documentation: updated** in this Roadmap-only status checkpoint and `IMPLEMENTATION_PROGRESS.md`. User Guide not applicable: no user-facing behavior changed. Backlog remains **76 Done, 13 Blocked, 43 Backlog**; no story completion or priority changed.
+- **Next concrete action:** The controller/operator must provide the failed Verify run ID/SHA and complete browser-step logs (with credentials redacted). Reproduce that failure in a verified disposable environment before selecting a fix; then rerun the unchanged authentication/security scenarios and both Verify jobs. This invocation cannot certify green CI or lifecycle completion.
+- **Latest development commit:** unknown (Git inspection blocked).
+- **Commit / push outcome:** Not attempted; explicitly prohibited in this task. Delivery is delegated to the configured controller, not claimed complete here.
+
 ## Workstream 5 — Reliable payroll-delivery foundation
 
 - **Last report:** 2026-11-04 18:35 AEDT (UTC+1100), observed on the operator's clock.
