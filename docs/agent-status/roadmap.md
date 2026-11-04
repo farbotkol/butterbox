@@ -2,20 +2,20 @@
 
 ## Owner-requested UXFIX public deployment — issue #5
 
-- **Last report:** 2026-11-04 11:30 AEDT (UTC+1100), observed on the operator's clock.
+- **Last report:** 2026-11-04 11:35 AEDT (UTC+1100), observed on the operator's clock.
 - **Execution state:** Deployment verification complete at this checkpoint; autonomous Roadmap work is paused for owner review.
 - **Current task:** Deploy BB-UXFIX-001 through BB-UXFIX-005 to the existing public OpenTunnel URL and update the local showcase for shared-database compatibility; pause other Roadmap work.
 - **Acceptance criteria:** Preserve the URL, existing synthetic users/data and scoped security; apply only safely reviewed required migrations; verify public owner/manager/employee authentication, five UXFIX surfaces, existing workflows and responsive layouts; keep the local showcase compatible.
 - **Phase:** Complete.
 - **Activity:** Recording verified deployment evidence and handing the existing public preview to the owner.
-- **Progress since previous report:** Corrected the smoke harness's label selector and redirect timing, then passed all 14 public/local checks. Verified the owner-only simulation-labelled CSV and denied manager/employee downloads, and ran a live scoped-payroll owner/denial transaction that was rolled back. Refreshed the owner's empty shared login tab to the deployed build. Corrected the owner walkthrough's navigation wording in the source and both runtime guides.
-- **Tests and results:** Public owner, FOH/BOH manager, employee and outside-business authentication and scope checks passed. All five UXFIX surfaces, existing roster/attendance/timesheets, five responsive widths, keyboard and targeted axe checks passed; no browser runtime or HTTP 5xx errors occurred. The local UXFIX showcase and public gateway restrictions passed. The restored pre-cutover backup matched **81/81** pre-existing application tables apart from the new revision and scheduled worker timestamp. Pre-cutover pgTAP passed **174/174**; both builds and TypeScript passed. Help units passed **14/14**, and the corrected owner walkthrough was observed on both deployed applications.
+- **Progress since previous report:** Posted the deployment success to issue #5. Corrected obsolete showcase-availability statements in the User Guide, backlog and progress record, and synchronized both runtime guides without changing application code.
+- **Tests and results:** Public owner, FOH/BOH manager, employee and outside-business authentication and scope checks passed. All five UXFIX surfaces, existing roster/attendance/timesheets, five responsive widths, keyboard and targeted axe checks passed; no browser runtime or HTTP 5xx errors occurred. The local UXFIX showcase and public gateway restrictions passed. The restored pre-cutover backup matched **81/81** pre-existing application tables apart from the new revision and scheduled worker timestamp. Pre-cutover pgTAP passed **174/174**; both builds and TypeScript passed. Updated Help units passed **15/15**, changed-test ESLint passed, and **12/12** owner/manager/employee Help article checks passed on the running public and local applications. Backlog CSV validation confirmed only the five UXFIX evidence fields changed; priorities and statuses were preserved.
 - **Failing tests:** No remaining selected failures. Four initial browser assertions reflected an overly exact selector and premature redirect checks; the corrected full rerun passed. The first restore attempt hit the test cluster's `pg_cron` restriction; the corrected partial-platform restore passed.
 - **Blockers requiring intervention:** None for deployment. Owner review remains outstanding; the temporary public preview depends on the local machine and tunnel staying online.
-- **Documentation:** Updated; `IMPLEMENTATION_PROGRESS.md` records the deployed revision, migration and criterion-level results, and the User Guide and both runtime copies now use the deployed navigation wording.
-- **Next concrete action:** Push the evidence, update issue #5 and stop autonomous backlog development for owner review.
+- **Documentation:** Updated; `IMPLEMENTATION_PROGRESS.md` and the backlog record deployment evidence, and the User Guide and both runtime copies describe the actual deployed UXFIX availability.
+- **Next concrete action:** Push the final documentation consistency checkpoint, verify issue #5 and stop autonomous backlog development for owner review.
 - **Latest development commit:** `984e0bb6a826939fdb783dae898a9a2e581c3171` (report exports, not selected for this paused deployment); latest UXFIX-only candidate is `5968d863b383ade37aebe3aa83c87a3cad45e490`.
-- **Push outcome:** Verification checkpoint `8f5abf6441e1842da5537d375ab8654f22511adb` was pushed and verified; this completion checkpoint is pending push.
+- **Push outcome:** Deployment evidence checkpoint `bb647d1145655157c6a757595ded6295b03354d8` was pushed and verified; this documentation consistency checkpoint is pending push.
 
 ## BB-REPORT-003 — Export Business Reports
 

@@ -209,9 +209,8 @@ roster/attendance email, SMS, push or WhatsApp channels are live.
 
 ### Delegate access and select a venue
 
-The permissions steps below describe the updated development application. The
-protected showcase retains its earlier permissions screen until the owner
-authorizes an update.
+The owner-authorized public and local showcases now use this updated permissions
+directory; other installations may differ until updated.
 
 1. As an owner, open **Permissions** (`/settings/permissions`). On **Business permissions**,
    the directory shows each existing member's identity, business role and venue/department
@@ -273,9 +272,8 @@ the current scope. Do not treat a hidden button as the security boundary.
 
 #### Departments and roles
 
-These instructions describe the updated development application. The protected
-showcase retains its earlier department screen until the owner authorizes an
-update.
+The owner-authorized public and local showcases now use this updated department
+directory; other installations may differ until updated.
 
 1. Open **Departments & roles** under **Venue Management** (`/settings/departments`). Choose **Venue**, enter
    **Search departments**, select **Status** and **Sort by**, then choose
@@ -699,9 +697,8 @@ The usual attendance screen remains available when scanning is not possible.
    unavailable until separately verified. The generic CSV contains no external
    payroll IDs; saving a destination does not alter that fact.
 
-The directory/detail workflow above is verified in isolated development. The
-protected showcase retains its earlier mapping screen until the owner
-authorizes an update.
+The owner-authorized public and local showcases now use this updated mapping
+workflow; other installations may differ until updated.
 
 **Important:** Butterbox's generic payroll records and CSV workflow do not mean Xero, MYOB, Employment Hero or QuickBooks integrations are live. Xero integration is intentionally deferred. Award Central's gross-pay interpretation is not yet independently approved for production calculations.
 
@@ -918,10 +915,9 @@ swap, confirm an open-shift claim or approve time. Use the linked task screen fo
 those decisions. Use **View your attendance history** from **Clock in / out** for
 your own historical effective clocks and correction decisions.
 
-**Navigation, mobile and keyboard use:** In the updated development
-application, **Main navigation** groups pages into **My Work**, **Team
-Management**, **Venue Management** and **Business**. Only groups and actions
-relevant to your role appear. Employees can still read **Rostering** and open
+**Navigation, mobile and keyboard use:** **Main navigation** groups pages into
+**My Work**, **Team Management**, **Venue Management** and **Business**. Only
+groups and actions relevant to your role appear. Employees can still read **Rostering** and open
 **Announcements**; owners manage **Clock kiosks** and **Venue settings**.
 **Help** is a separate utility beneath the groups. Hiding a link does not
 grant or deny access; current server permissions still apply to every page.
@@ -937,9 +933,8 @@ controls instead of requiring a drag gesture. Wait for loading and the actual
 result. If a result is uncertain, refresh and inspect history before retrying.
 No fixed response-time guarantee is implied.
 
-The protected showcase retains its older navigation labels and grouping until
-the owner authorizes an update. The guided showcase walkthrough above describes
-that older screen.
+The owner-authorized public and local showcases now use this navigation; other
+installations may differ until updated.
 
 External email, push, SMS and WhatsApp notifications are **planned optional channels**, not currently guaranteed live delivery. Recipient preferences and consent govern any future activation.
 
@@ -1052,6 +1047,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.6 | 2026-11-04 | BB-UXFIX-001/002/003 | Isolated People, Departments and owner-only Business Permissions directory/detail workflows; protected showcases retain earlier screens |
 | 1.7 | 2026-11-04 | BB-UXFIX-004 | Isolated Payroll Mapping destination, directory, focused edit and confirmed removal workflow; protected showcases retain earlier screens |
 | 1.8 | 2026-11-04 | BB-UXFIX-005 | Isolated role-sensitive navigation, mobile menu and selected-venue context; protected showcases retain earlier navigation |
+| 1.9 | 2026-11-04 | Authorized UXFIX-001–005 showcase deployment | Public/local role smoke, five-width, keyboard and targeted accessibility checks; owner review pending |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

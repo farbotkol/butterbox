@@ -31,8 +31,9 @@ test("payroll help describes the focused mapping workflow and its permissions", 
     const markdown = payroll.markdown.replace(/\s+/g, " ").toLowerCase();
     for (const phrase of [
       "Only owners/admins can manage mappings", "Edit mapping", "Confirm and remove mapping",
-      "provider adapters remain", "protected showcase retains",
+      "provider adapters remain", "public and local showcases now use this updated mapping workflow",
     ]) assert.ok(markdown.includes(phrase.toLowerCase()), `${role}: ${phrase}`);
+    assert.ok(!markdown.includes("showcase retains its earlier mapping screen"), role);
   }
 });
 
@@ -94,7 +95,7 @@ test("People help describes the directory, focused editing and lifecycle control
   assert.match(people.markdown, /public showcase does not\s+send invitations/);
 });
 
-test("department help describes scoped details, restrictions and the protected showcase limitation", () => {
+test("department help describes scoped details, restrictions and showcase availability", () => {
   const people = helpTopics(source, "foh_manager").find((topic) => topic.id === "people");
   assert.ok(people);
   assert.ok(people.anchors.includes("departments-and-roles"));
@@ -102,10 +103,11 @@ test("department help describes scoped details, restrictions and the protected s
     "Deactivate role", "Save automatic assignment", "Save manual assignment"]) {
     assert.ok(people.markdown.includes(label), label);
   }
-  assert.match(people.markdown, /protected\s+showcase retains its earlier department screen/);
+  assert.match(people.markdown, /public and local showcases now use this updated department\s+directory/);
+  assert.doesNotMatch(people.markdown, /showcase retains its earlier department screen/);
 });
 
-test("owner permissions help describes focused changes and the protected showcase limitation", () => {
+test("owner permissions help describes focused changes and showcase availability", () => {
   const permissions = helpTopics(source, "owner").find((topic) => topic.id === "permissions");
   assert.ok(permissions);
   for (const label of ["View access", "Edit permissions", "Review change",
@@ -113,7 +115,18 @@ test("owner permissions help describes focused changes and the protected showcas
     assert.ok(permissions.markdown.replace(/\s+/g, " ").includes(label), label);
   }
   assert.match(permissions.markdown, /Only owners can inspect and manage this directory/);
-  assert.match(permissions.markdown, /protected showcase retains its earlier permissions screen/);
+  assert.match(permissions.markdown, /public and local showcases now use this updated permissions\s+directory/);
+  assert.doesNotMatch(permissions.markdown, /showcase retains its earlier permissions screen/);
+});
+
+test("showcase help describes the deployed navigation and owner walkthrough", () => {
+  const owner = helpTopics(source, "owner", true).find((topic) => topic.id === "showcase-owner");
+  const employee = helpTopics(source, "employee", true).find((topic) => topic.id === "employee");
+  assert.ok(owner);
+  assert.ok(employee);
+  assert.match(owner.markdown, /\*\*Departments & roles\*\* under \*\*Venue Management\*\*/);
+  assert.match(employee.markdown, /public and local showcases now use this navigation/);
+  assert.doesNotMatch(employee.markdown, /showcase retains its older navigation/);
 });
 
 test("help links retain business scope and allow only visible real guide anchors", () => {
