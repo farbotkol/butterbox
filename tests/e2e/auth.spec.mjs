@@ -573,7 +573,7 @@ test("shift conversations preserve participant privacy and accessible in-app his
       "anonymous conversation redirects should settle without a login reload loop").toBeLessThan(5);
     await signIn(page, `conversation-ui-manager-${suffix}@example.test`, password);
     await page.goto(`/roster?week=2032-04-05&business=${businessId}&venue=${venueId}&department=all`);
-    await page.locator(`#roster-shift-${shiftId}`).getByRole("link", { name: /Discuss Conversation worker's Server shift/ }).click();
+    await page.locator(`#roster-shift-${shiftId}`).getByRole("link", { name: /Discuss shift for Conversation worker: Server/ }).click();
     await expect(page.getByRole("heading", { name: "Shift conversations", exact: true })).toBeVisible();
     await expect(page.getByText("No messages yet. Start the conversation below.")).toBeVisible();
     await expect(page.getByText(/No email, push or automatic notifications are sent/)).toBeVisible();
@@ -611,7 +611,7 @@ test("shift conversations preserve participant privacy and accessible in-app his
     const worker = await openRole("worker", { width: 375, height: 812 });
     await worker.page.goto(`/my-schedule?week=2032-04-05&business=${businessId}&venue=${venueId}`);
     await worker.page.getByRole("region", { name: "Weekly schedule" })
-      .getByRole("link", { name: /Discuss Server shift/ }).first().click();
+      .getByRole("link", { name: /Discuss shift for Server/ }).first().click();
     await expect(worker.page.getByText(originalMessage, { exact: true })).toBeVisible();
     await expect(worker.page.locator("section[aria-labelledby='conversation-heading'] ol img")).toHaveCount(0);
     const workerForm = worker.page.getByRole("form", { name: "Send shift message" });
@@ -7256,7 +7256,11 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await form.getByRole("button", { name: "Update draft shift" }).click();
     await expect(page.locator("#open-shifts")).toContainText("Archived draft");
 
-    await expect(page.locator("article", { hasText: "Published shift" }).getByRole("link", { name: /Edit/ })).toHaveCount(0);
+    const publishedShift = page.locator(`#roster-shift-${publishedId}`);
+    await expect(publishedShift).toBeVisible();
+    await expect(publishedShift.getByRole("link", { name: /^Discuss shift for Edit worker: Published shift/ })).toHaveCount(1);
+    await expect(publishedShift.getByRole("link", { name: /^Edit / })).toHaveCount(0);
+    await expect(publishedShift.locator('a[href*="&edit="]')).toHaveCount(0);
     await page.goto(`/roster?week=2032-03-15&venue=${sydneyId}&department=${fohId}&edit=${publishedId}`);
     await expect(page.locator('p[role="alert"]')).toContainText("unavailable or you cannot edit");
     await expect(page.getByRole("form", { name: "Edit draft shift" })).toHaveCount(0);

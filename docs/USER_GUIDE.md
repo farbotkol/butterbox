@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.13 — reviewed 2026-11-04 (Core Roadmap; QuickBooks workflow distinction; other sections retain their earlier review dates).
+**Guide version:** 1.14 — reviewed 2026-11-05 (Shift discussion accessible labels; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -529,7 +529,9 @@ it has not been deployed to the protected or public showcases.
 1. A manager with access to the department can choose **Discuss shift** on a
    published, assigned shift in **Weekly roster**. The assigned employee can
    choose **Discuss shift** on the same shift in **My schedule**. An active
-   linked employee account is required to send a message.
+   linked employee account is required to send a message. The link's accessible
+   name starts with **Discuss shift** and includes the role and date; the roster
+   also names the team member. This opens a conversation, not the draft editor.
 2. Read **Messages**, enter up to 2,000 characters in **Message**, then choose
    **Send message**. Messages are plain text and retained in order; they cannot
    be edited or deleted. Avoid payroll and other sensitive details. If sending
@@ -1177,6 +1179,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.11 | 2026-11-04 | BB-COMMS-004 shift conversations | Scoped in-app shift discussion and retained history; isolated development only |
 | 1.12 | 2026-11-04 | BB-FORECAST-001; BB-AI-005 partial | Owner-only historical-demand imports and scoped, rule-based open-shift suggestions; isolated development only |
 | 1.13 | 2026-11-04 | BB-PAY-007 product discovery | QuickBooks AU EH Work, accounting TimeActivity and US QuickBooks Time CSV distinction; no adapter or payroll delivery |
+| 1.14 | 2026-11-05 | Issue #18 CI repair | Discussion labels retain visible action text and shift context; source-contract verification only, browser rerun pending CI |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a
