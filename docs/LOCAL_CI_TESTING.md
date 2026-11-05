@@ -102,7 +102,11 @@ All selected tests run in **one** batch: one database reset, one production buil
 
 - The default `--runner container` runs any code, including agent-written code, in the isolated runner.
 - `--runner host` runs this trusted checkout directly on your Mac against the same disposable project. It is
-  faster and needs Node.js 24 (for example `npx node@24 scripts/test-env.mjs run …`).
+  faster (on 2026-11-05 the complete browser suite took 20 minutes) and needs Node.js 24 (for example
+  `npx node@24 scripts/test-env.mjs run …`). It runs macOS Chromium, not the Linux Chromium that CI uses. Some
+  keyboard behaviour differs: on macOS, ArrowDown on a focused `<select>` opens its menu instead of changing the
+  value. So `tests/e2e/auth.spec.mjs:1978` (quick roster changes) fails only on the host runner. If a host-only
+  failure involves platform input or rendering, confirm it with the container runner before changing code.
 - `--source <dir>` tests another working tree. It requires the container runner.
 
 ### Results and diagnostics
