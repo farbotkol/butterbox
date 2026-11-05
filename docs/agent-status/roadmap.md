@@ -2,8 +2,8 @@
 
 ## Local CI test environment and agent test broker
 
-- **Last report:** 2026-11-05 12:35 AEDT (UTC+1100), observed on the operator's clock.
-- **Execution state / phase:** Testing in an interactive session on branch `copilot/local-ci-test-environment`, with PR #20 open into `copilot/finish-roadmap-for-app`. No background continuation is implied.
+- **Last report:** 2026-11-05 13:10 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state / phase:** Complete. PR #20 was squash-merged into `copilot/finish-roadmap-for-app` as `d747b07`, and post-merge push CI passed (`verify` and `database`). The autonomous listener was restarted from `d747b07` with `autonomous.testBroker` enabled; a config backup is at `~/.butterbox-agent-controller/config.backup-before-test-broker.json`.
 - **Goal:** Let developers and autonomous agents reproduce the GitHub Actions `database` job locally, instead of using CI as a trial-and-error loop.
 - **Delivered:**
   - `npm run test:fast`;
@@ -38,9 +38,10 @@
 - **GitHub CI on PR #20:**
   - `fe0a07d`: all passed.
   - `45653e9`: `verify` passed, `database` passed (14 minutes) and `Focused browser tests` passed.
-- **Next concrete action:** Push the geofence test fix, confirm all checks pass, then merge PR #20 into `copilot/finish-roadmap-for-app`.
+- **Final CI on PR #20 (`c6d101d`):** `verify` passed, `database` passed (14 minutes, with the geofence fix) and `Focused browser tests` passed.
+- **Next concrete action:** None for this task. The next labelled agent issue will use the broker. A recommended follow-up is an allowlisting egress proxy for the runner container.
 - **Documentation:** Added `docs/LOCAL_CI_TESTING.md`; updated `README.md` and `tools/agent-controller/README.md`. User Guide not applicable: developer and agent tooling only.
-- **Latest development commit:** `45653e9` (pushed).
+- **Latest development commit:** `d747b07` (merged into `copilot/finish-roadmap-for-app`).
 
 ## Issue #18 — Diagnose browser authentication CI failure
 
