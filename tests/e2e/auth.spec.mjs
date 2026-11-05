@@ -4540,7 +4540,11 @@ test("owners configure venue geofences with protected audit and scoped access", 
     expect(firstVenue.data).toEqual({
       geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 150,
     });
+    // A repeated save keeps the same URL and status, then re-renders a fresh form with the saved values. Wait for
+    // that replacement so the next edit cannot be overwritten by a still-pending save.
+    await form.evaluate((element) => element.setAttribute("data-test-before-repeated-save", ""));
     await form.getByRole("button", { name: "Save venue location" }).click();
+    await expect(page.locator("form[data-test-before-repeated-save]")).toHaveCount(0);
     await expect(page.getByRole("status")).toHaveText("Venue location saved.");
     await form.getByLabel("Longitude").fill("");
     await form.getByRole("button", { name: "Save venue location" }).click();

@@ -2,6 +2,24 @@
 
 ## Execution summary
 
+- **Local CI test environment and agent test broker (PR #20), 2026-11-05 11:35 AEDT: Delivered. GitHub CI passed. Local reproduction established.**
+
+  This is developer and agent tooling, not a backlog story.
+  - **Commands:**
+    - `npm run test:fast`;
+    - `npm run test:auth:focused` (`--test file:line`, `--grep`, `--repeat`);
+    - `npm run test:ci:local`;
+    - `npm run test:env:{up,status,cleanup,down}`;
+    - the unchanged `BUTTERBOX_TEST_DISPOSABLE=yes npm run test:auth -- .`
+  - **Isolation:** a `butterbox-ci` Colima VM and a disposable `butterbox-citest` project on ports 5942x. The VM blocks private-range egress, and the runner container has resource and capability limits.
+  - **Agent access:** the controller's opt-in test broker accepts allowlisted request files. The agent sandbox was not weakened.
+  - **Reproduction on `853d0b1`:** `:7137`, `:11547` and `:11667` failed locally. Geofence `:4482` passed locally, including 5/5 repeats through the broker. The other fixes matched PR #19, which the branch now uses.
+  - **Geofence `:4482` fixed:** A later CI failure's uploaded artifacts showed the test race: the test cleared Longitude while a repeated save was pending, and the response then replaced the form. A temporary 3-second save delay reproduced the failure every time. The test now waits for the form to be replaced, and passed 3/3 under the delay and 5/5 on the container runner. The application and assertions are unchanged.
+  - **Tests:** `test:fast` passed with 336 unit tests, 107 controller tests, lint and types.
+  - **Full browser suite with the host runner:** 106 passed and 1 failed. The failure is a macOS-only `<select>` keyboard difference at `:1978`, which passes on Linux.
+  - **Full container run on the overloaded host:** pgTAP and tenant passed. Browser tests stopped at the time limit with 3 timeouts, each later verified passing in isolation.
+  - **GitHub CI:** `verify`, `database` and focused-browser checks passed.
+  - **Documentation:** updated `docs/LOCAL_CI_TESTING.md`, `README.md` and `tools/agent-controller/README.md`. The User Guide does not apply (developer tooling).
 - **Issue #18 — CI repair attempt 2, 2026-11-05 08:18:11 AEDT: Stale-session test setup repaired; browser/full-CI acceptance Blocked.**
 
   **Observed failure / root cause:** The supplied database-job excerpt reports **106 passed, 1 skipped, 1 failed**. The only failure is `payroll UX: admin access, forged scopes and unauthorized roles`, with a **120000 ms test timeout**; the adjacent mapping and payroll-export scenarios pass. The excerpt includes the final outside-role list/detail rejection logs but does not contain the timed-out action's stack or `error-context.md` contents. Code establishes a deterministic setup defect in the final stale-form case: it opens another page in the **same browser context**, signs out, signs in as FOH and then tries to click **Save payroll ID** in the original admin editor. Successful sign-out redirects to `/login?message=signed-out`; `AnnounceSessionEnd` broadcasts the session event and `SessionSync` intentionally replaces the original payroll page with `/login`. Its Save button no longer exists, so Playwright's locator action can wait until the whole-test timeout. This is consistent with the supplied failure, not proof of the exact timed-out line or a local browser reproduction.

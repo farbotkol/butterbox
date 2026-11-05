@@ -1,5 +1,47 @@
 # Roadmap Agent — Activity Status
 
+## Local CI test environment and agent test broker
+
+- **Last report:** 2026-11-05 12:35 AEDT (UTC+1100), observed on the operator's clock.
+- **Execution state / phase:** Testing in an interactive session on branch `copilot/local-ci-test-environment`, with PR #20 open into `copilot/finish-roadmap-for-app`. No background continuation is implied.
+- **Goal:** Let developers and autonomous agents reproduce the GitHub Actions `database` job locally, instead of using CI as a trial-and-error loop.
+- **Delivered:**
+  - `npm run test:fast`;
+  - `npm run test:auth:focused` (`--test file:line`, `--grep`, `--repeat`);
+  - `npm run test:ci:local`;
+  - the isolated `butterbox-ci` Colima VM and disposable `butterbox-citest` project (ports 5942x, private-range egress blocked);
+  - the isolated runner container;
+  - the controller test broker, opt-in via `autonomous.testBroker`;
+  - CI: one complete run per commit, Playwright failure artifacts and a focused-browser workflow.
+- **Reproduction on `853d0b1`:**
+  - container run `2026-11-04T21-05-13-724Z-e24654`: **1 passed, 3 failed**;
+  - `:7137` failed: the broad `/Edit/` selector matched the legitimate "Discuss … Edit worker's …" link; no published Edit link or `edit=` URL exists;
+  - `:11547` and `:11667` failed with `label-content-name-mismatch` on roster and `/my-schedule`, at desktop and mobile widths;
+  - geofence `:4482` **passed** (not reproduced; it failed in 1 of 2 CI runs).
+- **Fix verification:** After equivalent fixes, run `2026-11-04T21-21-21-497Z-c727d9` passed **4/4**: `:484`, `:7137`, `:11554` and `:11674`. PR #19 merged identical label fixes, with CI green, and this branch now uses its versions.
+- **Tests:** `npm run test:fast` on Node 24: unit **336 passed / 0 failed**, controller **107/107**, ESLint and TypeScript clean.
+- **Broker end-to-end:**
+  - A real broker run (mock task clone, agent helper, container runner) repeated the geofence test 5 times: **5/5 passed**, with helper exit 0 and history recorded.
+  - **Geofence `:4482` diagnosed and fixed (test race):** CI failed again on `c18b0e0` (106 passed, 1 failed). The newly uploaded failure artifacts showed Longitude restored to `151.2093` and no alert.
+    - Cause: the repeated unchanged save keeps the same URL and status. The test cleared Longitude while that save was pending, and the response then replaced the form with a fresh one holding the saved values.
+    - Local confirmation: a temporary 3-second delay on the save reproduced the exact CI failure every time. Instrumentation showed the form element was replaced (no `reset` event).
+    - Fix: the test now waits for the pre-save form to be replaced before editing again. Assertions and application code are unchanged.
+    - Verification: 3/3 passed under the induced delay (host runner), and 5/5 passed on the Linux container runner without it.
+- **Full local CI job** (`npm run test:ci:local`, container runner, `fe0a07d`): pgTAP passed and tenant isolation passed. The browser step reached its 100-minute limit after 79 of 108 tests: 76 passed and 3 timed out (`:3844`, `:5550`, `:8456`).
+  - The host load average was about 13 on 8 CPUs, and tests ran about 5× slower than in CI.
+  - In isolation, `:3844` and `:8456` passed. `:5550` failed once while the page was still loading, then passed 2/2 at load average 6.
+  - Classification: resource starvation, not defects. Timeouts were not raised.
+  - The runner now reports host load and per-failure durations, warns about timeouts, and recovers failures from the log if a run is stopped.
+- **Full browser suite, host runner** (`45653e9`, macOS Chromium, load average about 7): the complete suite finished in 20 minutes with **106 passed, 1 failed, 1 skipped**.
+  - The failure was `:1978`: macOS ArrowDown on a `<select>` opens the menu instead of changing the value.
+  - The same test passes in the Linux container run and in CI. This is a platform difference, now documented.
+- **GitHub CI on PR #20:**
+  - `fe0a07d`: all passed.
+  - `45653e9`: `verify` passed, `database` passed (14 minutes) and `Focused browser tests` passed.
+- **Next concrete action:** Push the geofence test fix, confirm all checks pass, then merge PR #20 into `copilot/finish-roadmap-for-app`.
+- **Documentation:** Added `docs/LOCAL_CI_TESTING.md`; updated `README.md` and `tools/agent-controller/README.md`. User Guide not applicable: developer and agent tooling only.
+- **Latest development commit:** `45653e9` (pushed).
+
 ## Issue #18 — Diagnose browser authentication CI failure
 
 - **Attempt 2 final report:** 2026-11-05 08:18:11 AEDT (UTC+1100), observed on the sandbox clock. Initial checkpoint was 08:15:38 AEDT.

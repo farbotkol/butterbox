@@ -1037,6 +1037,21 @@ scenarios still run and any failure remains fatal. To run a focused scenario
 instead, set `BUTTERBOX_TEST_GREP` to a Playwright test-name pattern; run the
 unfiltered suite separately for regression coverage.
 
+For a reproducible, isolated equivalent of the CI `database` job, use the dedicated
+disposable test environment instead of preparing a project by hand. It runs on its own
+Colima VM and Supabase project (`butterbox-citest`, ports 5942x), separate from the
+development and showcase stacks:
+
+```sh
+npm run test:fast                     # unit tests, lint and types: no database or browser
+npm run test:env:up                   # one-time: dedicated VM and disposable Supabase project
+npm run test:auth:focused -- --test tests/e2e/auth.spec.mjs:<line>   # or --grep "<title>"
+npm run test:ci:local                 # the complete CI database job
+```
+
+See [Local CI testing](docs/LOCAL_CI_TESTING.md) for setup, isolation guarantees,
+failure artifacts (screenshots, traces, `error-context.md`) and the agent test broker.
+
 ### Accessibility and performance checks
 
 The browser suite runs axe-core WCAG 2.0/2.1 A and AA plus WCAG 2.2 AA rules.

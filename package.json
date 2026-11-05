@@ -10,8 +10,15 @@
     "lint": "eslint",
     "test": "node --experimental-strip-types --test tests/*.test.mjs",
     "test:auth": "node scripts/test-auth.mjs",
+    "test:fast": "node scripts/test-fast.mjs",
+    "test:auth:focused": "node scripts/test-env.mjs run auth-focused",
+    "test:ci:local": "node scripts/test-env.mjs run database",
+    "test:env:up": "node scripts/test-env.mjs up",
+    "test:env:status": "node scripts/test-env.mjs status",
+    "test:env:cleanup": "node scripts/test-env.mjs cleanup",
+    "test:env:down": "node scripts/test-env.mjs down",
     "agent:listener": "node tools/agent-controller/listener.mjs",
-    "test:agent-listener": "node --test tools/agent-controller/listener.test.mjs"
+    "test:agent-listener": "node --test tools/agent-controller/listener.test.mjs tools/agent-controller/test-broker.test.mjs"
   },
   "dependencies": {
     "@js-temporal/polyfill": "0.5.1",

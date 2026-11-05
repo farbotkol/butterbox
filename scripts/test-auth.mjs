@@ -150,8 +150,20 @@ try {
   const cli = "node_modules/@playwright/test/cli.js";
   const grepArgs = process.env.BUTTERBOX_TEST_GREP
     ? ["--grep", process.env.BUTTERBOX_TEST_GREP] : [];
-  let selections = [testFile];
-  if (process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes" && !serveShowcase) {
+  const repeat = process.env.BUTTERBOX_TEST_REPEAT ?? "1";
+  if (!/^(10|[1-9])$/.test(repeat)) throw new Error("BUTTERBOX_TEST_REPEAT must be a whole number from 1 to 10.");
+  if (repeat !== "1") grepArgs.push("--repeat-each", repeat);
+  // Each batch runs in one app server and Playwright process.
+  let batches = [[testFile]];
+  if (process.env.BUTTERBOX_TEST_SELECTIONS) {
+    const selections = process.env.BUTTERBOX_TEST_SELECTIONS.split(",");
+    if (serveShowcase || selections.length > 20 || selections.some((selection) =>
+      !selection.startsWith(`${testFile}:`) || !/^\d{1,6}$/.test(selection.slice(testFile.length + 1)))) {
+      throw new Error(`BUTTERBOX_TEST_SELECTIONS must list up to 20 ${testFile}:<line> locations.`);
+    }
+    batches = [selections];
+    console.log(`Focused mode: running ${selections.join(", ")}.`);
+  } else if (process.env.BUTTERBOX_TEST_LOW_MEMORY === "yes" && !serveShowcase) {
     const listing = spawnSync(process.execPath, [cli, "test", testFile, "--list", "--reporter=json", ...grepArgs], {
       encoding: "utf8", env: testEnv,
     });
@@ -168,11 +180,11 @@ try {
     if (!specs.length || specs.some((spec) => !Number.isInteger(spec.line) || spec.file !== basename(testFile))) {
       throw new Error("Browser test discovery returned no valid test locations.");
     }
-    selections = [...new Set(specs.map((spec) => `${testFile}:${spec.line}`))];
-    console.log(`Low-memory mode: running ${selections.length} scenarios in separate app and browser processes.`);
+    batches = [...new Set(specs.map((spec) => `${testFile}:${spec.line}`))].map((selection) => [selection]);
+    console.log(`Low-memory mode: running ${batches.length} scenarios in separate app and browser processes.`);
   }
 
-  for (const selection of selections) {
+  for (const batch of batches) {
     await checkPortAvailable();
     server = useDevServer
       ? spawn(
@@ -205,7 +217,7 @@ try {
     }
     const browser = spawn(
       process.execPath,
-      [cli, "test", selection, ...grepArgs],
+      [cli, "test", ...batch, ...grepArgs],
       { stdio: "inherit", env: testEnv },
     );
     const browserExit = once(browser, "exit");
