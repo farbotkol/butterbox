@@ -1,0 +1,78 @@
+name: Focused browser tests
+
+# Manually runs selected Playwright tests against a disposable Supabase project and a production build, using the
+# same scripts/test-env.mjs command as local and agent runs. It is a diagnostic aid, not a merge gate: the complete
+# Verify workflow (ci.yml) still gates every merge. Pull requests that change the test tooling run a small default
+# selection to prove the command still works on GitHub runners.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/focused-browser.yml"
+      - "scripts/test-env.mjs"
+      - "scripts/test-auth.mjs"
+      - "playwright.config.mjs"
+  workflow_dispatch:
+    inputs:
+      tests:
+        description: "Space-separated locations, e.g. tests/e2e/auth.spec.mjs:7137 tests/e2e/auth.spec.mjs:11554"
+        required: false
+        default: ""
+      grep:
+        description: "Playwright test-name pattern"
+        required: false
+        default: ""
+      repeat:
+        description: "Run each selected test this many times (1-10)"
+        required: false
+        default: "1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: focused-browser-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - run: npm ci
+      - name: Install browser
+        run: npx playwright install --with-deps chromium
+      - name: Start disposable Supabase
+        run: node scripts/test-env.mjs up
+      - name: Run focused browser tests
+        env:
+          TESTS: ${{ inputs.tests }}
+          GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
+          REPEAT: ${{ inputs.repeat || '1' }}
+        shell: bash
+        run: |
+          set -eu
+          args=()
+          for test in $TESTS; do args+=(--test "$test"); done
+          if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
+          node scripts/test-env.mjs run auth-focused --runner host --repeat "$REPEAT" "${args[@]}" \
+            --artifacts "$RUNNER_TEMP/focused-artifacts"
+      - name: Publish summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/focused-artifacts/summary.md" ]; then
+            cat "$RUNNER_TEMP/focused-artifacts/summary.md" >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: focused-browser-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/focused-artifacts
+          retention-days: 7
+          if-no-files-found: ignore

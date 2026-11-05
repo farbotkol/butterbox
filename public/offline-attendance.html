@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en-AU">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex">
+    <meta name="theme-color" content="#123f4a">
+    <title>Offline attendance — Butterbox</title>
+    <link rel="stylesheet" href="/offline-attendance.css">
+    <script type="module" src="/offline-attendance-app.mjs"></script>
+  </head>
+  <body>
+    <main>
+      <p class="eyebrow">Butterbox</p>
+      <h1>Offline attendance</h1>
+      <p>
+        Device times are unverified claims, not confirmed clock events or payroll approval.
+        They remain on this device until you reconnect as the same account and a manager reviews them.
+      </p>
+      <p>
+        Clearing browser data or losing this device can lose unsent claims. Use a private device.
+        Access changes cannot be checked until you reconnect.
+      </p>
+      <noscript><p role="alert">JavaScript is required. Record the time separately and contact your manager.</p></noscript>
+      <p id="offline-script-warning" role="alert">
+        Offline controls are loading. If they do not appear, record the time separately and contact your manager.
+      </p>
+      <p id="offline-error" role="alert" hidden></p>
+      <form id="offline-unlock">
+        <h2>Unlock prepared attendance</h2>
+        <p>Enter the offline passphrase prepared in this tab while signed in. Your account password is not required.</p>
+        <label for="offline-passphrase">Offline passphrase</label>
+        <input id="offline-passphrase" type="password" minlength="12" maxlength="128" autocomplete="off" required>
+        <button type="submit">Unlock offline attendance</button>
+      </form>
+      <section id="offline-capture" aria-label="Offline attendance fallback" hidden>
+        <h2>Save an offline claim</h2>
+        <p id="offline-selection-label">Employee and department</p>
+        <select id="offline-selection" aria-labelledby="offline-selection-label"></select>
+        <div class="buttons">
+          <button type="button" id="offline-clock-in">Save offline clock in</button>
+          <button type="button" id="offline-clock-out">Save offline clock out</button>
+        </div>
+        <p id="offline-status" role="status">Checking pending claims on this device...</p>
+        <ul id="offline-claims" aria-label="Claims pending on this device"></ul>
+        <div class="buttons">
+          <button type="button" id="offline-reconnect">Reconnect and upload</button>
+          <button type="button" id="offline-lock">Lock this screen</button>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

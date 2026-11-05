@@ -1,0 +1,49 @@
+{
+  "name": "butterbox",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "test": "node --experimental-strip-types --test tests/*.test.mjs",
+    "test:auth": "node scripts/test-auth.mjs",
+    "test:fast": "node scripts/test-fast.mjs",
+    "test:auth:focused": "node scripts/test-env.mjs run auth-focused",
+    "test:ci:local": "node scripts/test-env.mjs run database",
+    "test:env:up": "node scripts/test-env.mjs up",
+    "test:env:status": "node scripts/test-env.mjs status",
+    "test:env:cleanup": "node scripts/test-env.mjs cleanup",
+    "test:env:down": "node scripts/test-env.mjs down",
+    "agent:listener": "node tools/agent-controller/listener.mjs",
+    "test:agent-listener": "node --test tools/agent-controller/listener.test.mjs tools/agent-controller/test-broker.test.mjs"
+  },
+  "dependencies": {
+    "@js-temporal/polyfill": "0.5.1",
+    "@supabase/ssr": "0.12.7",
+    "@supabase/supabase-js": "2.118.0",
+    "csv-parse": "7.0.3",
+    "lucide-react": "1.65.0",
+    "next": "16.4.3",
+    "qrcode.react": "4.2.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-markdown": "10.1.0",
+    "remark-gfm": "4.0.1"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "@playwright/test": "1.64.1",
+    "@tailwindcss/turbopack": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.4.3",
+    "jsqr": "1.4.0",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}

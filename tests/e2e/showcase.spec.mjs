@@ -1,0 +1,379 @@
+import { readFile } from "node:fs/promises";
+import { randomBytes, randomUUID } from "node:crypto";
+import path from "node:path";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test } from "@playwright/test";
+import { createServerClient } from "@supabase/ssr";
+import { createClient } from "@supabase/supabase-js";
+import { readEnvironment, showcaseStatus, verify } from "../../scripts/showcase-environment.mjs";
+import { SHOWCASE_AUTH_COOKIE_NAME } from "../../src/lib/showcase.ts";
+
+const workdir = process.env.BUTTERBOX_SHOWCASE_WORKDIR;
+if (!workdir || process.env.BUTTERBOX_TEST_APP_URL !== "http://127.0.0.1:3137" ||
+    process.env.NEXT_PUBLIC_BUTTERBOX_SHOWCASE !== "true") {
+  throw new Error("Showcase browser checks require the verified private local showcase configuration.");
+}
+await verify(workdir);
+readEnvironment(workdir);
+const settings = showcaseStatus(workdir);
+const state = JSON.parse(await readFile(path.join(workdir, "fixture-state.json"), "utf8"));
+if (state.phase !== "seeded" || state.simulationOnly !== true) throw new Error("Showcase fixture is not ready.");
+
+async function authenticate(context, role, account = state.accounts.find((item) => item.role === role)) {
+  if (!account) throw new Error(`Missing synthetic ${role} review account.`);
+  const cookies = [];
+  const supabase = createServerClient(settings.API_URL, settings.ANON_KEY, {
+    cookieOptions: { name: SHOWCASE_AUTH_COOKIE_NAME },
+    cookies: { getAll: () => [], setAll: (values) => cookies.push(...values) },
+  });
+  const result = await supabase.auth.signInWithPassword({ email: account.email, password: account.password });
+  if (result.error) throw new Error(`Could not sign in the synthetic ${role}: ${result.error.code}`);
+  await context.addCookies(cookies.map(({ name, value, options }) => ({
+    name, value, domain: "127.0.0.1", path: options.path ?? "/", secure: false, sameSite: "Lax",
+  })));
+  return supabase;
+}
+
+async function signIn(page, role) {
+  const account = state.accounts.find((item) => item.role === role);
+  if (!account) throw new Error(`Missing synthetic ${role} review account.`);
+  await page.goto("/login");
+  await page.getByLabel("Email address").fill(account.email);
+  await page.getByLabel(/^Password/).fill(account.password);
+  await Promise.all([
+    page.waitForURL((url) => url.pathname === "/"),
+    page.getByRole("button", { name: "Sign in", exact: true }).click(),
+  ]);
+  await expect(page.getByRole("complementary", { name: "Synthetic showcase notice" })).toBeVisible();
+}
+
+async function openMainNavigation(page) {
+  const navigation = page.getByRole("navigation", { name: "Main navigation" });
+  await expect(navigation).toBeVisible();
+  const toggle = navigation.getByRole("button", { name: "Menu", exact: true });
+  if (!await toggle.isVisible()) return;
+  // A tap before hydration is ignored, so retry until React has attached the handler.
+  await expect(async () => {
+    if (await toggle.getAttribute("aria-expanded") !== "true") await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1000 });
+  }).toPass({ timeout: 15000 });
+}
+
+async function navigate(page, label, heading) {
+  await openMainNavigation(page);
+  await page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: label, exact: true }).click();
+  await expect(page.getByRole("heading", { name: heading, exact: true })).toBeVisible();
+}
+
+async function seededWeek(page, week) {
+  const url = new URL(page.url());
+  url.searchParams.set("business", state.plan.businessId);
+  url.searchParams.set("venue", state.plan.venueId);
+  url.searchParams.set("week", week);
+  await page.goto(`${url.pathname}${url.search}`);
+}
+
+test("showcase session preserves the ordinary local workspace cookie", async ({ page, context }) => {
+  const normalCookieName = "sb-127-auth-token";
+  const showcaseCookieName = SHOWCASE_AUTH_COOKIE_NAME;
+  const sentinel = `ordinary-session-${randomUUID()}`;
+  await context.addCookies([{ name: normalCookieName, value: sentinel, url: "http://127.0.0.1:3000" }]);
+  await page.goto("/login");
+  let cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  await signIn(page, "owner");
+  cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  expect(cookies.some((cookie) => cookie.name === showcaseCookieName ||
+    cookie.name.startsWith(`${showcaseCookieName}.`))).toBe(true);
+  const identity = await page.evaluate(async (name) => {
+    const { browserSessionIdentity } = await import("/offline-attendance-shared.mjs");
+    return browserSessionIdentity(document.cookie, name);
+  }, showcaseCookieName);
+  expect(identity?.actorId).toBe(state.accounts.find((account) => account.role === "owner").userId);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  cookies = await context.cookies("http://127.0.0.1:3137");
+  expect(cookies.find((cookie) => cookie.name === normalCookieName)?.value).toBe(sentinel);
+  expect(cookies.some((cookie) => cookie.name === showcaseCookieName ||
+    cookie.name.startsWith(`${showcaseCookieName}.`))).toBe(false);
+});
+
+test("isolated showcase labels login and mobile owner report and marks every downloaded sample row", async ({ page, context, browser }) => {
+  const sessions = [];
+  const contexts = [];
+  try {
+    await page.goto("/login");
+    await expect(page.getByRole("complementary", { name: "Synthetic showcase notice" })).toContainText("SIMULATION ONLY");
+    sessions.push(await authenticate(context, "owner"));
+    const report = `/reports/hours?business=${state.plan.businessId}&week=${state.plan.week}`;
+    for (const viewport of [{ width: 1440, height: 1000 }, { width: 375, height: 812 }]) {
+      await page.setViewportSize(viewport);
+      await page.goto(report);
+      await expect(page.getByRole("heading", { name: "Hours and labour", exact: true })).toBeVisible();
+      await expect(page.getByRole("complementary", { name: "Synthetic showcase notice" })).toBeVisible();
+      await expect(page.getByRole("article", { name: "SIMULATION ONLY - Harbour Cafe / FOH", exact: true })).toBeVisible();
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+      expect(accessibility.violations).toEqual([]);
+    }
+    const download = await page.request.get(`/timesheets/payroll-export?venue=${state.plan.venueId}&batch=${state.batchId}`);
+    expect(download.status()).toBe(200);
+    expect(download.headers()["content-disposition"]).toContain("SIMULATION_ONLY-");
+    expect(download.headers()["cache-control"]).toContain("no-store");
+    const csv = await download.text();
+    expect(csv).toContain('"simulation_notice"');
+    expect(csv.split("SIMULATION ONLY - NOT FOR PAYROLL").length - 1).toBe(14);
+    for (const role of ["foh_manager", "employee"]) {
+      const scopedContext = await browser.newContext();
+      contexts.push(scopedContext);
+      sessions.push(await authenticate(scopedContext, role));
+      const scopedPage = await scopedContext.newPage();
+      await scopedPage.goto(report);
+      await expect(scopedPage.getByText("Only a business owner can view this report.")).toBeVisible();
+      const denied = await scopedContext.request.get(`/timesheets/payroll-export?venue=${state.plan.venueId}&batch=${state.batchId}`);
+      expect(denied.status()).toBe(404);
+    }
+  } finally {
+    for (const session of sessions) await session.auth.signOut();
+    for (const scopedContext of contexts) await scopedContext.close();
+  }
+});
+
+test("guided showcase owner reviews provisioned setup, people, roster and approved sample payroll through real navigation", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await signIn(page, "owner");
+  await expect(page.getByRole("heading", { name: "Get your first roster ready" })).toBeVisible();
+  await page.goto("/setup");
+  await expect(page).toHaveURL((url) => url.pathname === "/");
+  await expect(page.getByRole("heading", { name: "Set up your workspace" })).toHaveCount(0);
+  await navigate(page, "Departments", "Departments and roles");
+  for (const department of ["FOH", "BOH"]) {
+    await expect(page.getByRole("link", { name: new RegExp(`${department}.*View`) })).toBeVisible();
+  }
+  await navigate(page, "People", "Your people");
+  await expect(page.getByRole("list", { name: "People directory", exact: true }).getByRole("listitem")).toHaveCount(14);
+  await navigate(page, "Rostering", "Weekly roster");
+  await seededWeek(page, state.plan.currentWeek);
+  await expect(page.getByRole("heading", { name: "Publication history", exact: true })).toBeVisible();
+  await page.getByLabel("Department", { exact: true }).selectOption("all");
+  await page.getByRole("button", { name: "Apply filter", exact: true }).click();
+  await expect(page.locator("#open-shifts")).toContainText("2 to fill");
+  await navigate(page, "Timesheet review", "Weekly timesheet review");
+  await page.getByLabel("Week containing date").fill(state.plan.week);
+  await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+  const period = page.getByRole("region", { name: "Payroll period", exact: true });
+  await expect(period).toContainText("Finalised");
+  await page.locator("summary").filter({ hasText: "Finalised payroll records (14)" }).click();
+  await expect(page.getByRole("list", { name: "Finalised payroll records", exact: true }).getByRole("listitem")).toHaveCount(14);
+  await page.locator("summary").filter({ hasText: "Payroll export history (1)" }).click();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download payroll CSV", exact: true }).click();
+  const download = await downloaded;
+  expect(download.suggestedFilename()).toMatch(/^SIMULATION_ONLY-butterbox-hours-/);
+  expect(await download.failure()).toBeNull();
+  await navigate(page, "Clock in / out", "Clock in / out");
+  await expect(page.getByRole("heading", { name: "Attendance correction history", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+});
+
+for (const [role, department, start] of [["foh_manager", "FOH", 0], ["boh_manager", "BOH", 7]]) {
+  test(`guided showcase ${role} sees only their department and cannot finalise or export payroll`, async ({ page }) => {
+    await signIn(page, role);
+    await navigate(page, "People", "Your people");
+    const people = page.getByRole("list", { name: "People directory", exact: true });
+    await expect(people.getByRole("listitem")).toHaveCount(7);
+    for (const person of state.plan.staff.slice(start, start + 7)) {
+      await expect(people.getByRole("link", { name: `View profile for ${person.name}`, exact: true })).toBeVisible();
+    }
+    await navigate(page, "Rostering", "Weekly roster");
+    await seededWeek(page, state.plan.currentWeek);
+    await expect(page.locator("#open-shifts")).toContainText("1 to fill");
+    await navigate(page, "Timesheet review", "Weekly timesheet review");
+    await page.getByLabel("Week containing date").fill(state.plan.week);
+    await page.getByRole("button", { name: "Apply filters", exact: true }).click();
+    const groups = page.getByRole("region", { name: "Weekly planned and actual time", exact: true });
+    await expect(groups.getByRole("heading", { level: 3 })).toHaveCount(7);
+    for (const person of state.plan.staff.slice(start, start + 7)) {
+      await expect(groups.getByRole("heading", { name: `${person.name} · ${department}`, exact: true })).toBeVisible();
+    }
+    await expect(groups.getByRole("group", { name: "Department approval", exact: true })
+      .filter({ hasText: "Approved" })).toHaveCount(7);
+    await expect(page.getByRole("button", { name: "Approve time", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Download payroll CSV", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Reopen payroll period", exact: true })).toHaveCount(0);
+    const denied = await page.request.get(`/timesheets/payroll-export?venue=${state.plan.venueId}&batch=${state.batchId}`);
+    expect(denied.status()).toBe(404);
+  });
+}
+
+test("guided mobile employee follows schedule, availability and original attendance but cannot manage timesheets", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await signIn(page, "employee");
+  await navigate(page, "My schedule", "My schedule");
+  await seededWeek(page, state.plan.currentWeek);
+  await expect(page.getByRole("heading", { name: "Weekly schedule", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Next shift", exact: true })).toBeVisible();
+  await openMainNavigation(page);
+  await expect(page.getByRole("navigation", { name: "Main navigation" })
+    .getByRole("link", { name: "Timesheet review", exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+  expect(accessibility.violations).toEqual([]);
+  await navigate(page, "Availability", "Availability and leave");
+  await expect(page.getByRole("heading", { name: "Recurring availability", exact: true })).toBeVisible();
+  await navigate(page, "Clock in / out", "Clock in / out");
+  await expect(page.getByRole("button", { name: "Clock in", exact: true })).toBeVisible();
+  await page.getByRole("link", { name: "View your attendance history", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Your attendance history", exact: true })).toBeVisible();
+  await expect(page.getByRole("list", { name: "Your recorded clock and break events", exact: true })
+    .getByRole("listitem")).toHaveCount(4);
+  await page.goto(`/timesheets?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.week}`);
+  await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("error") === "permission");
+  await expect(page.getByRole("heading", { name: "Weekly timesheet review", exact: true })).toHaveCount(0);
+});
+
+test("showcase employee can prepare offline reopening with the isolated session", async ({ page }) => {
+  await signIn(page, "employee");
+  await navigate(page, "Clock in / out", "Clock in / out");
+  const section = page.getByRole("region", { name: "Offline attendance fallback" });
+  await section.getByText("Prepare this tab for offline reopening").click();
+  await section.getByLabel("Offline passphrase", { exact: true }).fill("fictional offline demo phrase");
+  await section.getByLabel("Confirm offline passphrase").fill("fictional offline demo phrase");
+  await section.getByRole("button", { name: "Prepare offline reopening" }).click();
+  await expect(section.getByRole("status")).toContainText("Offline reopening is prepared");
+  await section.getByRole("button", { name: "Remove offline preparation" }).click();
+  await expect(section.getByRole("status")).toContainText("Offline reopening was removed");
+});
+
+for (const role of ["owner", "foh_manager", "employee"]) {
+  test(`help center ${role} uses safe scoped search, keyboard navigation and real permission failures`, async ({ page }) => {
+    await page.setViewportSize(role === "employee" ? { width: 375, height: 812 } : { width: 1440, height: 1000 });
+    await page.goto("/help");
+    await expect(page).toHaveURL((url) => url.pathname === "/login");
+    await signIn(page, role);
+    await navigate(page, "Help", "Help Center");
+    const payroll = page.getByRole("navigation", { name: "Help topics", exact: true })
+      .getByRole("link", { name: "Preparing and reconciling payroll CSV", exact: true });
+    await expect(payroll).toHaveCount(role === "owner" ? 1 : 0);
+    await page.getByLabel("Search help", { exact: true }).focus();
+    await page.keyboard.press("Tab");
+    await expect(page.getByLabel("Category", { exact: true })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("button", { name: "Search", exact: true })).toBeFocused();
+    await page.getByLabel("Search help", { exact: true }).fill("absent-keyword-93725");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await expect(page.getByText("No help topics match your search.", { exact: false })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Help topics", exact: true })).toHaveCount(0);
+    await page.getByLabel("Search help", { exact: true }).fill("clock");
+    await page.getByLabel("Category", { exact: true }).selectOption("Attendance");
+    await page.getByRole("button", { name: "Search", exact: true }).click();
+    await page.getByRole("navigation", { name: "Help topics", exact: true })
+      .getByRole("link", { name: "Clocking and corrections", exact: true }).click();
+    await expect(page.getByRole("article", { name: "Clocking and corrections", exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.getByRole("link", { name: "All help topics", exact: true }).click();
+    expect(new URL(page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+    await page.goto(`/help?business=${state.plan.businessId}&q=one&q=two`);
+    await expect(page.getByRole("alert").filter({ hasText: "Enter a single search" })).toBeVisible();
+    const forbidden = await page.goto(`/help?business=${state.plan.businessId}&topic=${role === "owner" ? "missing-task" : "payroll"}&role=owner`);
+    expect(forbidden.status()).toBe(404);
+    await expect(page.getByRole("article")).toHaveCount(0);
+    await page.goto(`/help?business=${state.plan.outsideId}`);
+    await expect(page.getByRole("heading", { name: "Help unavailable", exact: true })).toBeVisible();
+    await expect(page.getByRole("navigation", { name: "Help topics", exact: true })).toHaveCount(0);
+  });
+}
+
+test("help center supports authenticated onboarding without granting business task access", async ({ page, context }) => {
+  const admin = createClient(settings.API_URL, settings.SERVICE_ROLE_KEY, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const account = {
+    email: `showcase-help-${randomUUID()}-${state.namespace}@example.test`,
+    password: `${randomBytes(24).toString("base64url")}aA1!`,
+  };
+  const created = await admin.auth.admin.createUser({ ...account, email_confirm: true });
+  expect(created.error).toBeNull();
+  let session;
+  try {
+    session = await authenticate(context, "new_owner", account);
+    await page.goto("/help?topic=onboarding");
+    await expect(page.getByRole("article", { name: "Getting started", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Preparing and reconciling payroll CSV", exact: true })).toHaveCount(0);
+    await page.getByRole("link", { name: "Back to setup", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Set up your workspace", exact: true })).toBeVisible();
+    const setupHelp = page.getByRole("link", { name: "Help with workspace setup", exact: true });
+    await setupHelp.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("article", { name: "Getting started", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Back to setup", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+    expect(accessibility.violations).toEqual([]);
+    const denied = await page.goto("/help?topic=payroll&role=owner");
+    expect(denied.status()).toBe(404);
+  } finally {
+    if (session) await session.auth.signOut();
+    const deleted = await admin.auth.admin.deleteUser(created.data.user.id);
+    expect(deleted.error).toBeNull();
+  }
+});
+
+for (const role of ["owner", "foh_manager", "boh_manager", "employee"]) {
+  test(`contextual help ${role} follows real core-workflow links without expanding permissions`, async ({ page }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    await signIn(page, role);
+    const workflows = [
+      { route: "/attendance", label: "Help with clocking and corrections", topic: "attendance", title: "Clocking and corrections" },
+      { route: "/my-schedule", label: "Help with your schedule", topic: "employee", title: "Employee self-service" },
+      ...(role !== "employee" ? [
+        { route: "/roster", label: "Help with rosters", topic: "rosters", title: "Building and publishing rosters" },
+        { route: "/timesheets", label: "Help with timesheet review", topic: "timesheets", title: "Reviewing and approving timesheets" },
+      ] : [
+        { route: "/roster", label: "Help with rosters", topic: "employee", title: "Employee self-service" },
+      ]),
+      ...(role === "owner" ? [
+        { route: "/", label: "Help with your first roster", topic: "onboarding", title: "Getting started" },
+        { route: "/settings/payroll", label: "Help with payroll preparation", topic: "payroll", title: "Preparing and reconciling payroll CSV" },
+        { route: "/timesheets", label: "Help with payroll CSV", topic: "payroll", title: "Preparing and reconciling payroll CSV", week: state.plan.week },
+      ] : []),
+    ];
+    for (const workflow of workflows) {
+      const params = new URLSearchParams({
+        business: state.plan.businessId, venue: state.plan.venueId, week: workflow.week ?? state.plan.currentWeek,
+      });
+      await page.goto(`${workflow.route}?${params}`);
+      const link = page.getByRole("link", { name: workflow.label, exact: true });
+      await expect(link).toBeVisible();
+      expect(new URL(await link.getAttribute("href"), page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+      await link.focus();
+      await page.keyboard.press("Enter");
+      await expect(page.getByRole("article", { name: workflow.title, exact: true })).toBeVisible();
+      expect(new URL(page.url()).searchParams.get("topic")).toBe(workflow.topic);
+      expect(new URL(page.url()).searchParams.get("business")).toBe(state.plan.businessId);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      const accessibility = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
+      expect(accessibility.violations).toEqual([]);
+      if (workflow.topic === "payroll") {
+        await expect(page.getByRole("article")).toContainText("this is not wage calculation");
+        await expect(page.getByRole("article")).toContainText("Xero integration is intentionally deferred");
+      }
+    }
+    if (role !== "owner") {
+      await page.goto(`/timesheets?business=${state.plan.businessId}&venue=${state.plan.venueId}&week=${state.plan.week}`);
+      await expect(page.getByRole("link", { name: "Help with payroll CSV", exact: true })).toHaveCount(0);
+      if (role === "employee") {
+        await expect(page).toHaveURL((url) => url.pathname === "/" && url.searchParams.get("error") === "permission");
+        await expect(page.getByRole("link", { name: "Help with timesheet review", exact: true })).toHaveCount(0);
+      }
+      const denied = await page.goto(`/help?business=${state.plan.businessId}&topic=payroll&role=owner`);
+      expect(denied.status()).toBe(404);
+    }
+  });
+}

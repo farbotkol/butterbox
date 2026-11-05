@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#fbf6ee">
+  <meta name="description" content="Butterbox brings rosters, attendance, timesheets and team coordination together for hospitality teams. Less admin. More good days.">
+  <title>Butterbox — Less admin. More good days.</title>
+  <style>
+    :root{--cream:#fff9ee;--white:#ffffff;--ink:#18282b;--teal:#167e82;--sea:#48a8a0;--gold:#f4c84a;--peach:#ffebca;--muted:#435d5e;--line:#dfdfd2;--round:24px}
+    *,*::before,*::after{box-sizing:border-box}
+    html{scroll-behavior:smooth}
+    body{margin:0;background:var(--cream);color:var(--ink);font-family:ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;line-height:1.55;-webkit-font-smoothing:antialiased}
+    h1,h2,h3,p{margin-top:0}
+    h1,h2,h3{letter-spacing:-.045em;line-height:1.13}
+    h1{font-size:clamp(3.4rem,6.5vw,6.5rem);font-weight:800}
+    h2{font-size:clamp(2.3rem,4.4vw,4.2rem);font-weight:750}
+    h3{font-size:1.25rem}
+    a{color:inherit;text-decoration:none}
+    img{display:block;max-width:100%}
+    .wrap{width:min(1240px,calc(100% - 48px));margin-inline:auto}
+    .skip{position:absolute;left:16px;top:-80px;background:var(--ink);color:white;padding:12px;z-index:100}
+    .skip:focus{top:12px}
+    a:focus-visible{outline:3px solid var(--gold);outline-offset:4px}
+    .notice{padding:9px 20px;text-align:center;background:#176f75;color:#ffffff;font-size:.72rem;letter-spacing:.025em}
+    .nav{display:flex;align-items:center;justify-content:space-between;gap:26px;padding:20px 0}
+    .logo{display:inline-flex;align-items:center;gap:12px;font-size:1.55rem;font-weight:800;letter-spacing:-.07em;white-space:nowrap}
+    .logo-mark{display:grid;place-items:center;width:44px;height:44px;border-radius:14px;background:linear-gradient(155deg,var(--gold) 0 44%,#faf0dc 45% 55%,var(--sea) 56%);font-size:1.7rem;line-height:1;color:var(--ink);font-weight:900}
+    .logo .logo-mark{font-family:Georgia,serif}
+    .nav-links{display:flex;gap:28px;align-items:center;font-size:.9rem;font-weight:650}
+    .nav-links a:hover,.foot-nav a:hover{text-decoration:underline;text-underline-offset:6px}
+    .pill{display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:15px 23px;border-radius:100px;background:#f4c84a;color:var(--ink);font-weight:750;font-size:.91rem;transition:transform .15s ease,background .15s ease;text-align:center}
+    .pill:hover{background:#ffd969;transform:translateY(-2px)}
+    .pill.secondary{border:2px solid #167e82;background:#fffdf8;color:#145d63}
+    .pill.secondary:hover{background:#dff6ef}
+    .menu-cta{padding:12px 20px}
+    .eyebrow{display:inline-flex;align-items:center;gap:9px;font-size:.76rem;text-transform:uppercase;letter-spacing:.17em;font-weight:800;color:#477a77}
+    .eyebrow::before{content:"";height:9px;width:9px;background:var(--gold);border-radius:50%}
+    .hero{position:relative;padding:70px 0 90px;overflow:hidden;background:#fff1cc}
+    .hero:before{content:"";position:absolute;right:-120px;top:-180px;width:520px;height:520px;border-radius:50%;background:#ffda80;filter:blur(3px);z-index:-1}
+    .hero-grid{display:grid;grid-template-columns:.93fr 1.07fr;gap:48px;align-items:center}
+    .hero h1{margin:22px 0 24px;max-width:12ch}
+    .hero h1 em{font-style:normal;color:#147b7f}
+    .intro{max-width:49ch;color:var(--muted);font-size:clamp(1rem,1.5vw,1.16rem);line-height:1.75}
+    .hero-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:34px}
+    .soft-note{font-size:.78rem;color:#657672;margin-top:24px}
+    .hero-visual{position:relative}
+    .hero-visual picture,.hero-visual img{width:100%}
+    .hero-visual img{aspect-ratio:16/12;object-fit:cover;border-radius:260px 260px 28px 28px;box-shadow:0 20px 65px rgba(45,64,55,.13)}
+    .floating{position:absolute;bottom:26px;left:-27px;border:1px solid #f0cd75;border-radius:18px;background:#ffffff;padding:15px 20px;box-shadow:0 12px 40px #263b3326;max-width:228px}
+    .floating strong{display:block;font-size:.96rem}
+    .floating span{font-size:.75rem;color:var(--muted)}
+    .floating .dot{display:inline-block;background:#7eac91;width:8px;height:8px;border-radius:50%;margin-right:6px}
+    .ribbon{border-block:1px solid #f0d68a;padding:24px 0;background:#ffe7a6}
+    .ribbon-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;text-align:center}
+    .ribbon strong{display:block;font-size:.95rem}
+    .ribbon small{display:block;color:var(--muted);font-size:.77rem;margin-top:4px}
+    .section{padding:100px 0}
+    .section-top{display:flex;justify-content:space-between;gap:40px;align-items:end;margin-bottom:36px}
+    .section-top h2{max-width:14ch;margin:17px 0 0}
+    .section-top p{max-width:42ch;color:var(--muted);margin:0}
+    .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:18px}
+    .card{padding:30px;border:1px solid #d4e6df;border-radius:24px;background:#ffffff}
+    .card .number{display:grid;place-items:center;width:44px;height:44px;margin-bottom:38px;border-radius:15px;background:#e1f0e9;color:#236b63;font-weight:800}
+    .card:nth-child(2) .number{background:#ffe0a6;color:#765012}
+    .card:nth-child(3) .number{background:#ffdace;color:#9c4334}
+    .card p{color:var(--muted);font-size:.94rem;margin-bottom:0}
+    .split{display:grid;grid-template-columns:1fr 1fr;gap:76px;align-items:center}
+    .story{background:#dff4ed}
+    .story-image img{width:100%;aspect-ratio:5/4;object-fit:cover;border-radius:26px 200px 26px 26px}
+    .section-copy h2{max-width:13ch;margin:18px 0 24px}
+    .section-copy p{color:var(--muted);max-width:48ch}
+    .ticks{list-style:none;padding:0;margin:27px 0 0;display:grid;gap:14px}
+    .ticks li{display:flex;align-items:start;gap:12px;font-weight:650}
+    .ticks li:before{content:"✓";flex:none;color:#1e6e67;background:#d7e9df;border-radius:50%;font-weight:900;width:25px;height:25px;display:grid;place-items:center}
+    .quote{background:#f4c84a;padding:74px 0}
+    .quote p{font-size:clamp(1.7rem,3.5vw,3.4rem);font-weight:760;line-height:1.3;letter-spacing:-.04em;max-width:29ch;margin:0}
+    .quote span{display:block;font-size:.77rem;text-transform:uppercase;letter-spacing:.13em;font-weight:800;margin-top:23px}
+    .flow-steps{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-top:36px}
+    .flow-step{padding-top:28px;border-top:2px solid var(--ink)}
+    .flow-step .step-n{color:#4d8b7f;font-weight:800;font-size:.79rem;letter-spacing:.14em}
+    .flow-step h3{font-size:1.35rem;margin:12px 0}
+    .flow-step p{color:var(--muted);max-width:31ch}
+    .gallery{display:grid;grid-template-columns:1.3fr 1fr;gap:20px}
+    .gallery img{width:100%;height:380px;object-fit:cover;border-radius:24px}
+    .gallery figcaption{font-size:.78rem;color:var(--muted);margin-top:10px}
+    .gallery figure{margin:0}
+    .cta{padding:84px 0 90px;background:#176f75;color:#fffdf0}
+    .cta-grid{display:grid;grid-template-columns:1.4fr 1fr;align-items:end;gap:50px}
+    .cta h2{max-width:13ch;margin:14px 0 0}
+    .cta p{color:#d1e3db}
+    .cta .pill{background:#ffd45b;color:var(--ink)}
+    .cta .pill:hover{background:#ffd27e}
+    footer{background:#114e54;color:#f2f7f1;padding:35px 0}
+    .footer-row{display:flex;justify-content:space-between;gap:28px;align-items:center}
+    .foot-nav{display:flex;gap:22px;align-items:center;font-size:.82rem}
+    .foot-note{color:#abc0b8;font-size:.76rem;margin:16px 0 0;max-width:78ch}
+    @media(max-width:930px){.hero-grid,.split,.cta-grid{grid-template-columns:1fr;gap:34px}.hero{padding-top:42px}.hero h1{max-width:13ch}.hero-visual{max-width:700px}.section{padding:76px 0}.ribbon-grid{grid-template-columns:repeat(2,1fr)}.section-top{display:block}.section-top p{margin-top:15px}.nav-links{gap:16px}.story-image img{max-height:480px}}
+    @media(max-width:650px){.wrap{width:min(100% - 34px,1240px)}.notice{font-size:.65rem}.nav{padding:16px 0}.nav-links a:not(.menu-cta){display:none}.logo{font-size:1.34rem}.logo-mark{width:35px;height:35px;border-radius:11px;font-size:1.3rem}.menu-cta{padding:10px 14px;font-size:.78rem}.hero{padding:36px 0 62px}.hero h1{font-size:clamp(3.15rem,12vw,4.7rem)}.hero-visual img{border-radius:170px 170px 22px 22px;aspect-ratio:4/5}.floating{bottom:16px;left:8px;padding:11px 14px}.cards,.flow-steps,.gallery{grid-template-columns:1fr}.card .number{margin-bottom:20px}.gallery img{height:290px}.ribbon-grid{gap:24px 12px}.section-top h2{margin-top:12px}.quote{padding:58px 0}.footer-row{align-items:start;flex-direction:column}.foot-nav{flex-wrap:wrap}.cta{padding:65px 0}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}*{transition:none!important}}
+  </style>
+</head>
+<body id="top">
+  <a class="skip" href="#main">Skip to content</a>
+  <div class="notice">INTERNAL MARKETING CONCEPT · AI-GENERATED IMAGERY · NOT A PUBLIC OR PRODUCTION WEBSITE</div>
+  <header class="wrap">
+    <nav class="nav" aria-label="Primary navigation">
+      <a class="logo" href="#top" aria-label="Butterbox home"><span class="logo-mark" aria-hidden="true">B</span>Butterbox</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#why-butterbox">Why Butterbox</a>
+        <a href="#how-it-works">How it works</a>
+        <a class="pill menu-cta" href="#explore">Explore Butterbox <span aria-hidden="true">↗</span></a>
+      </div>
+    </nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div>
+          <div class="eyebrow">Made for hospitality's everyday</div>
+          <h1 id="hero-title">Less admin.<br><em>More good days.</em></h1>
+          <p class="intro">Your team is the heart of your business. Butterbox brings rostering, time and attendance, and everyday team coordination together—so you've got more room for the good stuff.</p>
+          <div class="hero-actions">
+            <a class="pill" href="#features">Explore the platform <span aria-hidden="true">↗</span></a>
+            <a class="pill secondary" href="#how-it-works">How it works <span aria-hidden="true">↓</span></a>
+          </div>
+          <p class="soft-note">Thoughtful tools for cafés, restaurants and hospitality teams.</p>
+        </div>
+        <div class="hero-visual">
+          <picture>
+            <source media="(max-width: 650px)" srcset="cafe-concepts/butterbox-hero-portrait-296w.webp" type="image/webp">
+            <source srcset="cafe-concepts/butterbox-hero-wide-848w.webp" type="image/webp">
+            <img src="cafe-concepts/butterbox-hero-wide-848w.jpg" alt="AI-generated coastal café scene with a hospitality worker and a coffee" width="848" height="371" fetchpriority="high">
+          </picture>
+          <div class="floating" aria-label="Butterbox philosophy"><strong><span class="dot" aria-hidden="true"></span>Good teams, good days.</strong><span>More time for people, less time on paperwork.</span></div>
+        </div>
+      </div>
+    </section>
+    <div class="ribbon" aria-label="Butterbox focus areas">
+      <div class="wrap ribbon-grid">
+        <div><strong>Rostering made clearer</strong><small>Plan shifts with confidence</small></div>
+        <div><strong>Attendance made simpler</strong><small>Know who's on shift</small></div>
+        <div><strong>Timesheets kept together</strong><small>From hours to review</small></div>
+        <div><strong>One team, one place</strong><small>Less chasing, more doing</small></div>
+      </div>
+    </div>
+    <section class="section" id="features" aria-labelledby="features-title">
+      <div class="wrap">
+        <div class="section-top">
+          <div><div class="eyebrow">Everyday essentials</div><h2 id="features-title">All the moving parts. Working together.</h2></div>
+          <p>Running a busy venue means balancing people, shifts and the unexpected. Butterbox keeps the important work connected, without making things complicated.</p>
+        </div>
+        <div class="cards">
+          <article class="card"><span class="number" aria-hidden="true">01</span><h3>Rostering, your way</h3><p>Build weekly schedules, manage shifts and make changes with a clearer view of your people and venue.</p></article>
+          <article class="card"><span class="number" aria-hidden="true">02</span><h3>Know your hours</h3><p>Bring attendance and timesheets together so reviewing worked time feels less like an end-of-week scramble.</p></article>
+          <article class="card"><span class="number" aria-hidden="true">03</span><h3>Keep the team in sync</h3><p>Help managers and staff stay connected to the shifts, updates and information they need.</p></article>
+        </div>
+      </div>
+    </section>
+    <section class="section story" id="why-butterbox" aria-labelledby="why-title">
+      <div class="wrap split">
+        <div class="story-image">
+          <picture>
+            <source srcset="cafe-concepts/butterbox-team-wide-564w.webp" type="image/webp">
+            <img src="cafe-concepts/butterbox-team-wide-564w.jpg" alt="AI-generated scene of café coworkers collaborating around a laptop" width="564" height="376" loading="lazy">
+          </picture>
+        </div>
+        <div class="section-copy">
+          <div class="eyebrow">Built around people</div>
+          <h2 id="why-title">The best days start with a team that knows the plan.</h2>
+          <p>Hospitality doesn't happen behind a desk. Butterbox helps keep the day-to-day organized so managers can spend less time sorting out admin and more time supporting the people who make every shift work.</p>
+          <ul class="ticks">
+            <li>Clarity for the people managing shifts</li>
+            <li>A simpler place for your team to check in</li>
+            <li>Practical tools, without unnecessary complexity</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+    <section class="quote" aria-label="Our philosophy"><div class="wrap">
+      <p>“The little things behind the scenes make a big difference out front.”</p>
+      <span>The Butterbox approach</span>
+    </div></section>
+    <section class="section" id="how-it-works" aria-labelledby="how-title">
+      <div class="wrap">
+        <div class="eyebrow">A calmer day starts here</div>
+        <h2 id="how-title" style="max-width:16ch;margin:16px 0 0">From next week's roster to today's last shift.</h2>
+        <div class="flow-steps">
+          <article class="flow-step"><div class="step-n">STEP 01</div><h3>Make the plan</h3><p>Organize the team and put a weekly roster in place.</p></article>
+          <article class="flow-step"><div class="step-n">STEP 02</div><h3>Keep everyone connected</h3><p>Give staff and managers visibility into their shifts and changes.</p></article>
+          <article class="flow-step"><div class="step-n">STEP 03</div><h3>Close the loop</h3><p>Review attendance and timesheets in the same connected workflow.</p></article>
+        </div>
+      </div>
+    </section>
+    <section class="section" style="padding-top:0" aria-labelledby="coastal-title">
+      <div class="wrap">
+        <div class="section-top"><div><div class="eyebrow">A little coastal perspective</div><h2 id="coastal-title">Made for the rhythm of hospitality.</h2></div><p>Warm service, early starts, busy lunches and a team that makes it all happen. That's the world Butterbox is designed around.</p></div>
+        <div class="gallery">
+          <figure><picture><source srcset="cafe-concepts/butterbox-terrace-wide-480w.webp" type="image/webp"><img src="cafe-concepts/butterbox-terrace-wide-480w.jpg" alt="AI-generated seaside café terrace with sunny coastal views" width="480" height="360" loading="lazy"></picture><figcaption>Coastal atmosphere, inspired by Sydney's Northern Beaches.</figcaption></figure>
+          <figure><picture><source srcset="cafe-concepts/butterbox-operations-portrait-368w.webp" type="image/webp"><img src="cafe-concepts/butterbox-operations-portrait-368w.jpg" alt="AI-generated illustration of a barista working in a warm café" width="368" height="460" loading="lazy"></picture><figcaption>People and moments at the heart of hospitality.</figcaption></figure>
+        </div>
+      </div>
+    </section>
+    <section class="cta" id="explore" aria-labelledby="cta-title">
+      <div class="wrap cta-grid">
+        <div><div class="eyebrow" style="color:#f2c778">Butterbox Systems</div><h2 id="cta-title">More time for what matters.</h2></div>
+        <div><p>Less time switching between tools. More clarity for your managers. More good days for everyone.</p><a class="pill" href="#features">Discover the features <span aria-hidden="true">↗</span></a></div>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <div class="wrap">
+      <div class="footer-row"><a class="logo" href="#top" style="font-size:1.3rem"><span class="logo-mark" aria-hidden="true">B</span>Butterbox</a><nav class="foot-nav" aria-label="Footer navigation"><a href="#features">Features</a><a href="#why-butterbox">Our approach</a><a href="#how-it-works">How it works</a><a href="#top">Back to top ↑</a></nav></div>
+      <p class="foot-note">Marketing homepage concept for private internal review only. Illustrative AI-generated coastal imagery; not photos of the actual Butterbox café, staff or location. No public launch, live demo request, pricing or production functionality is implied. Some imagery is low-resolution and will be replaced before public use.</p>
+    </div>
+  </footer>
+</body>
+</html>

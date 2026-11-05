@@ -1,0 +1,632 @@
+{
+  "story": "BB-BRAND-004",
+  "status": "Internal AI-generated illustration review only; not approved for publication",
+  "provenance": "Owner-supplied contact sheets, reported generated with OpenAI ChatGPT image generation on 2026-11-03. Exact model version, full generation prompt and applicable account terms are unverified.",
+  "sources": {
+    "sheet-01": {
+      "file": "branding/originals/website_imagery/originals/generated_contact_sheet_01.png",
+      "width": 1536,
+      "height": 1024,
+      "sha256": "94d770bfd1e09caf4d0ff10d3a002ab16b5dbe4b2ba3ec9cddbbd76c8aa5ec24"
+    },
+    "sheet-02": {
+      "file": "branding/originals/website_imagery/originals/generated_contact_sheet_02.png",
+      "width": 1672,
+      "height": 941,
+      "sha256": "74f4fd2f054459ef2af569660b99a298a5d08a9d5919204271d3e3a86acfb1c3"
+    }
+  },
+  "sets": [
+    {
+      "id": "hero-wide",
+      "scene": "01_coastal_cafe_hero",
+      "source": "sheet-01",
+      "rect": {
+        "left": 1,
+        "top": 1,
+        "width": 859,
+        "height": 377
+      },
+      "ratio": [
+        16,
+        7
+      ],
+      "position": "centre",
+      "widths": [
+        320,
+        640,
+        848
+      ],
+      "sizes": "(max-width: 700px) 100vw, (max-width: 1100px) 52vw, 620px",
+      "alt": "AI-generated illustration of a café worker holding a coffee.",
+      "label": "Hero: seaside café"
+    },
+    {
+      "id": "hero-portrait",
+      "scene": "01_coastal_cafe_hero",
+      "source": "sheet-01",
+      "rect": {
+        "left": 1,
+        "top": 1,
+        "width": 859,
+        "height": 377
+      },
+      "ratio": [
+        4,
+        5
+      ],
+      "position": "east",
+      "widths": [
+        160,
+        240,
+        296
+      ],
+      "sizes": "296px",
+      "alt": "AI-generated illustration of a café worker holding a coffee.",
+      "label": "Hero: phone crop"
+    },
+    {
+      "id": "team-wide",
+      "scene": "02_team_roster_laptop",
+      "source": "sheet-01",
+      "rect": {
+        "left": 868,
+        "top": 1,
+        "width": 667,
+        "height": 377
+      },
+      "ratio": [
+        3,
+        2
+      ],
+      "position": "centre",
+      "widths": [
+        300,
+        450,
+        564
+      ],
+      "sizes": "(max-width: 700px) 90vw, 380px",
+      "alt": "AI-generated illustration of three café staff looking at a laptop together.",
+      "label": "Team and rostering: laptop"
+    },
+    {
+      "id": "team-square",
+      "scene": "09_tablet_team_collaboration",
+      "source": "sheet-02",
+      "rect": {
+        "left": 494,
+        "top": 1,
+        "width": 400,
+        "height": 475
+      },
+      "ratio": [
+        1,
+        1
+      ],
+      "position": "north",
+      "widths": [
+        192,
+        288,
+        384
+      ],
+      "sizes": "(max-width: 700px) 90vw, 380px",
+      "alt": "AI-generated illustration of café staff looking at a tablet together.",
+      "label": "Team collaboration: tablet"
+    },
+    {
+      "id": "operations-portrait",
+      "scene": "11_warm_coffee_bar",
+      "source": "sheet-02",
+      "rect": {
+        "left": 1296,
+        "top": 1,
+        "width": 375,
+        "height": 475
+      },
+      "ratio": [
+        4,
+        5
+      ],
+      "position": "centre",
+      "widths": [
+        184,
+        276,
+        368
+      ],
+      "sizes": "(max-width: 700px) 90vw, 368px",
+      "alt": "AI-generated illustration of a warmly lit café coffee bar with a barista.",
+      "label": "Café operations: coffee bar"
+    },
+    {
+      "id": "terrace-wide",
+      "scene": "08_seaside_cafe_seating",
+      "source": "sheet-02",
+      "rect": {
+        "left": 1,
+        "top": 1,
+        "width": 485,
+        "height": 475
+      },
+      "ratio": [
+        4,
+        3
+      ],
+      "position": "centre",
+      "widths": [
+        240,
+        360,
+        480
+      ],
+      "sizes": "(max-width: 700px) 90vw, 380px",
+      "alt": "AI-generated illustration of an open-air café terrace overlooking a coast.",
+      "label": "Supporting atmosphere: terrace"
+    },
+    {
+      "id": "service-portrait",
+      "scene": "14_barista_takeaway",
+      "source": "sheet-02",
+      "rect": {
+        "left": 902,
+        "top": 482,
+        "width": 386,
+        "height": 458
+      },
+      "ratio": [
+        4,
+        5
+      ],
+      "position": "centre",
+      "widths": [
+        180,
+        264,
+        360
+      ],
+      "sizes": "(max-width: 700px) 90vw, 360px",
+      "alt": "AI-generated illustration of a barista passing a takeaway coffee to a guest.",
+      "label": "Supporting service: takeaway coffee"
+    }
+  ],
+  "files": [
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-320w.avif",
+      "format": "avif",
+      "width": 320,
+      "height": 140,
+      "bytes": 10672,
+      "sha256": "e05b2172861a6a05336184252ce1ed90274690f4e3b1aaa68772479c5a1ad1ee"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-320w.webp",
+      "format": "webp",
+      "width": 320,
+      "height": 140,
+      "bytes": 15238,
+      "sha256": "ea59ef7bfad33ee6d9d646999892801717e865bcd816688e9345d8b8a446699d"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-640w.avif",
+      "format": "avif",
+      "width": 640,
+      "height": 280,
+      "bytes": 28722,
+      "sha256": "4e9cff2bf0db5ae8b45d58b6245a4e3a59a2a452ab0ebdd801a57c930a6b6c96"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-640w.webp",
+      "format": "webp",
+      "width": 640,
+      "height": 280,
+      "bytes": 42520,
+      "sha256": "09b5970186df86003ae68f14d532982e0396887e6c6fcffee5c536bbc061c477"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-848w.avif",
+      "format": "avif",
+      "width": 848,
+      "height": 371,
+      "bytes": 40762,
+      "sha256": "785b63b538f5b2cfab8278e554086c070776f20a1dfabe7c4ddc95aec25c8af0"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-848w.webp",
+      "format": "webp",
+      "width": 848,
+      "height": 371,
+      "bytes": 62770,
+      "sha256": "37e3432d1212d88a1274e345c7580cd4701a0eb57a37717b53a6dd3a6ec7c0c6"
+    },
+    {
+      "set": "hero-wide",
+      "file": "branding/website/cafe-concepts/butterbox-hero-wide-848w.jpg",
+      "format": "jpeg",
+      "width": 848,
+      "height": 371,
+      "bytes": 68784,
+      "sha256": "75a38f6dd52267db126eceb05ddbaeb59d167ace983c36c7a3c7641b82026ae8"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-160w.avif",
+      "format": "avif",
+      "width": 160,
+      "height": 200,
+      "bytes": 7391,
+      "sha256": "e1e06be52ddd0c227b2703ceffa860a963f776d4e6720d30fc434f52a8ba8596"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-160w.webp",
+      "format": "webp",
+      "width": 160,
+      "height": 200,
+      "bytes": 10666,
+      "sha256": "f2fcfe54ea0253def37d8582eafd9e6741bd5f64b56aa60cd5b6c7ab2085cac7"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-240w.avif",
+      "format": "avif",
+      "width": 240,
+      "height": 300,
+      "bytes": 13104,
+      "sha256": "05e0cd454a28036e5f680e72fef4227b171d779e5791ab776b783c67bf38cc13"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-240w.webp",
+      "format": "webp",
+      "width": 240,
+      "height": 300,
+      "bytes": 19768,
+      "sha256": "c3ecf6d4fa179465383856792ec37c9feb87566bd9946653d86b3c454c26d16b"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-296w.avif",
+      "format": "avif",
+      "width": 296,
+      "height": 370,
+      "bytes": 17088,
+      "sha256": "15d9f0715b978e712e8e5e4b7ce8f78a9cfbc7c41f78449334957162c62bb8bf"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-296w.webp",
+      "format": "webp",
+      "width": 296,
+      "height": 370,
+      "bytes": 26208,
+      "sha256": "31dbda4c1a1e44207235867ce2a44a4237b50be773cb25da4d82ed5c6d9bf7d6"
+    },
+    {
+      "set": "hero-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-hero-portrait-296w.jpg",
+      "format": "jpeg",
+      "width": 296,
+      "height": 370,
+      "bytes": 27486,
+      "sha256": "aea24b39b5eba964755173c25fbc9b25bac8f9c69c62c5e4185fbf021d66fae4"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-300w.avif",
+      "format": "avif",
+      "width": 300,
+      "height": 200,
+      "bytes": 8535,
+      "sha256": "407f98cb00588da780d2b7d74c556e56adcae06b4a4aaf3922d0830c3f492ea0"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-300w.webp",
+      "format": "webp",
+      "width": 300,
+      "height": 200,
+      "bytes": 12446,
+      "sha256": "c396765b1df6413f72fbb23f5a2a425bdeb9c84e8b71acdfb588c38c379348f9"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-450w.avif",
+      "format": "avif",
+      "width": 450,
+      "height": 300,
+      "bytes": 14553,
+      "sha256": "56b47d285454d70384488c73672f242a666841c23e79a430a829a113a2cdf3d0"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-450w.webp",
+      "format": "webp",
+      "width": 450,
+      "height": 300,
+      "bytes": 20542,
+      "sha256": "8ac11097c69e61c739ecd3e5fbecafe672863b471837c8a2265119c04cdbd47e"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-564w.avif",
+      "format": "avif",
+      "width": 564,
+      "height": 376,
+      "bytes": 19105,
+      "sha256": "bc54c08de75e64a53a2433770ba140d1aa379644920b090a133db731a366b2f7"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-564w.webp",
+      "format": "webp",
+      "width": 564,
+      "height": 376,
+      "bytes": 26146,
+      "sha256": "334f973bd4e7bcd6e465df431147adb4689fe952b515f76658292d3a8d94fff7"
+    },
+    {
+      "set": "team-wide",
+      "file": "branding/website/cafe-concepts/butterbox-team-wide-564w.jpg",
+      "format": "jpeg",
+      "width": 564,
+      "height": 376,
+      "bytes": 33222,
+      "sha256": "39971f6ed747af7db908edf76af165e0db3eadb33b15a6877d2c23e776509e59"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-192w.avif",
+      "format": "avif",
+      "width": 192,
+      "height": 192,
+      "bytes": 7198,
+      "sha256": "30c2fdd3c9755a4534c761835a90c849321d34e41f052855cc2204b880edeeb9"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-192w.webp",
+      "format": "webp",
+      "width": 192,
+      "height": 192,
+      "bytes": 11016,
+      "sha256": "20d13de4f2e72f54b44144e27dba8faa12c298dea499f7c53fbe9ccfa3399212"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-288w.avif",
+      "format": "avif",
+      "width": 288,
+      "height": 288,
+      "bytes": 12958,
+      "sha256": "c99e3b9b7c377150eb32c71386566ace978c7633c27c349a4277d17613c54e76"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-288w.webp",
+      "format": "webp",
+      "width": 288,
+      "height": 288,
+      "bytes": 19148,
+      "sha256": "20c25fd7f2343a9b75f95b92cf2588c3157d5b0c549fcb8854369d99961f554d"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-384w.avif",
+      "format": "avif",
+      "width": 384,
+      "height": 384,
+      "bytes": 18945,
+      "sha256": "e14bdb125d350e1ea18ef16cbc932ac8c7adf9cfa842c803c902f4977a9eea13"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-384w.webp",
+      "format": "webp",
+      "width": 384,
+      "height": 384,
+      "bytes": 27646,
+      "sha256": "b684e0e3f65a03967625868170cd24c9508f2ad78ef2046d102cdcd65a1619d6"
+    },
+    {
+      "set": "team-square",
+      "file": "branding/website/cafe-concepts/butterbox-team-square-384w.jpg",
+      "format": "jpeg",
+      "width": 384,
+      "height": 384,
+      "bytes": 30455,
+      "sha256": "ba94edf51de675ba19da06530ae7db72d29105e7e141b0e22abf6c660b222295"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-184w.avif",
+      "format": "avif",
+      "width": 184,
+      "height": 230,
+      "bytes": 10778,
+      "sha256": "140e81ea64e750092b76c50d27db8978cf61bd60e65ec53a6f2b93ee4edde266"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-184w.webp",
+      "format": "webp",
+      "width": 184,
+      "height": 230,
+      "bytes": 15786,
+      "sha256": "53cc93a5bee0ce568847bbfa1592ced49a8d19e492df93a63ec48dea98369028"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-276w.avif",
+      "format": "avif",
+      "width": 276,
+      "height": 345,
+      "bytes": 19872,
+      "sha256": "5570433a0ca5110d6ddd4248c6ef3ba4171871da7ccfbe9a30d36c984b8826fa"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-276w.webp",
+      "format": "webp",
+      "width": 276,
+      "height": 345,
+      "bytes": 29016,
+      "sha256": "0916dac75633aa6419b07db257b5806490958c00251875408d47816bf93c9271"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-368w.avif",
+      "format": "avif",
+      "width": 368,
+      "height": 460,
+      "bytes": 28088,
+      "sha256": "6cc6920715a7d44c3a6736c1202a49d2cc03acba5d30ffd3c29d078f6f9034b3"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-368w.webp",
+      "format": "webp",
+      "width": 368,
+      "height": 460,
+      "bytes": 42914,
+      "sha256": "c20edda2180029d8b8e39c1f31f6bb53b5480a0ec116ae599d4156c03118767e"
+    },
+    {
+      "set": "operations-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-operations-portrait-368w.jpg",
+      "format": "jpeg",
+      "width": 368,
+      "height": 460,
+      "bytes": 43357,
+      "sha256": "4822a03cb0d99212aeb6edd934f38ebbe6730ebfa70963fbcb078f8b59bd8caa"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-240w.avif",
+      "format": "avif",
+      "width": 240,
+      "height": 180,
+      "bytes": 7633,
+      "sha256": "8906680502adb4c4b6068b6f4c7a6976f0eb20ef442da274e7b3849f031bb73b"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-240w.webp",
+      "format": "webp",
+      "width": 240,
+      "height": 180,
+      "bytes": 11036,
+      "sha256": "1eb3190a2658936fe122a0fc0569a2342cfa255ab2aa04f2c3c1b5dbed8df498"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-360w.avif",
+      "format": "avif",
+      "width": 360,
+      "height": 270,
+      "bytes": 13097,
+      "sha256": "e00678c1e6e9e826f803780f41d7af56d8dda271aa10273b75af1ef100b7be60"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-360w.webp",
+      "format": "webp",
+      "width": 360,
+      "height": 270,
+      "bytes": 19750,
+      "sha256": "077513f73a5ba04123b992420583ad34aad6331aa00634a53976b16c8a3e1b59"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-480w.avif",
+      "format": "avif",
+      "width": 480,
+      "height": 360,
+      "bytes": 18483,
+      "sha256": "77696ce788bf272a3c27c5105b02e67b49af62bc2e25ae6a6c0493da7ce87982"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-480w.webp",
+      "format": "webp",
+      "width": 480,
+      "height": 360,
+      "bytes": 28406,
+      "sha256": "3fc3f4fae7e2b21bebc56c894860c2317f3f917ae58371288605e1d6ea6776dd"
+    },
+    {
+      "set": "terrace-wide",
+      "file": "branding/website/cafe-concepts/butterbox-terrace-wide-480w.jpg",
+      "format": "jpeg",
+      "width": 480,
+      "height": 360,
+      "bytes": 31934,
+      "sha256": "5c1aa83c321d498dd503ec5aff74971f5d90f22db81afb9c76f7cd13fccf7918"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-180w.avif",
+      "format": "avif",
+      "width": 180,
+      "height": 225,
+      "bytes": 5988,
+      "sha256": "b47a4458873c59115100d44ec83210721b92ee308211bf1f977d8cb0bed05386"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-180w.webp",
+      "format": "webp",
+      "width": 180,
+      "height": 225,
+      "bytes": 8798,
+      "sha256": "20d18b3577ea2bdc270976ec16003c74602e0719bc57c08afa0fd2257e973285"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-264w.avif",
+      "format": "avif",
+      "width": 264,
+      "height": 330,
+      "bytes": 9322,
+      "sha256": "b7389fcbd622db8fe799c26732382195f979cacdebfdab9839397ff78b023a2f"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-264w.webp",
+      "format": "webp",
+      "width": 264,
+      "height": 330,
+      "bytes": 13750,
+      "sha256": "9823f04275ea586daa14a7b8a3d971b2fd080a7d6ccfed2ce883d8ec60b3ec72"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-360w.avif",
+      "format": "avif",
+      "width": 360,
+      "height": 450,
+      "bytes": 13661,
+      "sha256": "ba3ac9f4244945dec6252e766591aef30a9ad9352bcb7abc165e0a732024fdf8"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-360w.webp",
+      "format": "webp",
+      "width": 360,
+      "height": 450,
+      "bytes": 19602,
+      "sha256": "ae43d0df515c766eb96edb9c9839ddf8d87c5b650562e069ade2533a01428f69"
+    },
+    {
+      "set": "service-portrait",
+      "file": "branding/website/cafe-concepts/butterbox-service-portrait-360w.jpg",
+      "format": "jpeg",
+      "width": 360,
+      "height": 450,
+      "bytes": 24747,
+      "sha256": "54f7e98903f8d4caf2dfb2dd870239a6c306b73d576d85e7feb61ee9ed2c9f0a"
+    }
+  ]
+}

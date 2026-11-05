@@ -1,0 +1,93 @@
+name: Verify
+
+# Task branches are verified by their pull request run; pushes run only for long-lived branches, so one complete
+# run gates each commit. Agent status checkpoints alone do not start a run. Use `npm run test:fast` and
+# `npm run test:auth:focused` locally (docs/LOCAL_CI_TESTING.md) instead of pushing to find out whether CI passes.
+on:
+  push:
+    branches: [main, copilot/finish-roadmap-for-app, feature/award-central-foundation]
+    paths-ignore: ["docs/agent-status/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer commit on the same pull request supersedes an in-progress run; branch pushes are never cancelled.
+concurrency:
+  group: verify-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+      - name: Build deployment image
+        run: docker build --tag butterbox-ci .
+      - name: Verify container health
+        shell: bash
+        run: |
+          set -eu
+          container="$(docker run --rm -d -p 127.0.0.1::3000 butterbox-ci)"
+          trap 'docker stop "$container" >/dev/null' EXIT
+          for attempt in $(seq 1 30); do
+            health="$(docker inspect --format '{{.State.Health.Status}}' "$container")"
+            if [ "$health" = healthy ]; then
+              port="$(docker port "$container" 3000/tcp | cut -d: -f2)"
+              curl --fail --silent --show-error "http://127.0.0.1:$port/api/health"
+              exit 0
+            fi
+            if [ "$health" = unhealthy ]; then
+              docker logs "$container"
+              exit 1
+            fi
+            sleep 2
+          done
+          docker logs "$container"
+          echo "Container did not become healthy" >&2
+          exit 1
+
+  database:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - run: npm ci
+      - name: Start disposable Supabase
+        shell: bash
+        run: |
+          set -eu
+          umask 077
+          if ! npx --yes supabase@2.122.0 start --exclude studio,realtime,storage-api,imgproxy,postgres-meta,edge-runtime,logflare,vector,supavisor >"$RUNNER_TEMP/supabase-start.log" 2>&1; then
+            echo "Failed to start the disposable Supabase project." >&2
+            exit 1
+          fi
+      - run: npx --yes supabase@2.122.0 test db supabase/tests/database --local
+      - name: Test authenticated tenant isolation
+        run: BUTTERBOX_TEST_DISPOSABLE=yes node scripts/test-tenant-isolation.mjs .
+      - name: Install browser for authentication tests
+        run: npx playwright install --with-deps chromium
+      - name: Test authentication in a browser
+        env:
+          BUTTERBOX_TEST_REPORT_DIR: ${{ runner.temp }}/playwright
+        run: BUTTERBOX_TEST_DISPOSABLE=yes npm run test:auth -- .
+      - name: Upload browser failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failures-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/playwright
+          retention-days: 7
+          if-no-files-found: ignore
