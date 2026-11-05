@@ -13,7 +13,8 @@
     - the unchanged `BUTTERBOX_TEST_DISPOSABLE=yes npm run test:auth -- .`
   - **Isolation:** a `butterbox-ci` Colima VM and a disposable `butterbox-citest` project on ports 5942x. The VM blocks private-range egress, and the runner container has resource and capability limits.
   - **Agent access:** the controller's opt-in test broker accepts allowlisted request files. The agent sandbox was not weakened.
-  - **Reproduction on `853d0b1`:** `:7137`, `:11547` and `:11667` failed locally. Geofence `:4482` passed, including 5/5 repeats through the broker. The fixes matched PR #19, which the branch now uses.
+  - **Reproduction on `853d0b1`:** `:7137`, `:11547` and `:11667` failed locally. Geofence `:4482` passed locally, including 5/5 repeats through the broker. The other fixes matched PR #19, which the branch now uses.
+  - **Geofence `:4482` fixed:** A later CI failure's uploaded artifacts showed the test race: the test cleared Longitude while a repeated save was pending, and the response then replaced the form. A temporary 3-second save delay reproduced the failure every time. The test now waits for the form to be replaced, and passed 3/3 under the delay and 5/5 on the container runner. The application and assertions are unchanged.
   - **Tests:** `test:fast` passed with 336 unit tests, 107 controller tests, lint and types.
   - **Full browser suite with the host runner:** 106 passed and 1 failed. The failure is a macOS-only `<select>` keyboard difference at `:1978`, which passes on Linux.
   - **Full container run on the overloaded host:** pgTAP and tenant passed. Browser tests stopped at the time limit with 3 timeouts, each later verified passing in isolation.
