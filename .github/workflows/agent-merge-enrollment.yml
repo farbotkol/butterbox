@@ -1,0 +1,63 @@
+name: Enroll Copilot PR in Agent Merge
+
+# Runs from the default branch after the regular CI workflow finishes.
+# Never checks out or executes untrusted pull request code.
+on:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  enable-self-repair:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Enable Agent Merge on eligible Copilot PRs
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AGENT_MERGE_TOKEN: ${{ secrets.AGENT_MERGE_TOKEN }}
+          REPO: ${{ github.repository }}
+          RUN_EVENT: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+
+          if [[ -z "${AGENT_MERGE_TOKEN}" ]]; then
+            echo "::error::Missing Actions secret AGENT_MERGE_TOKEN (user token with Agent tasks: write)."
+            exit 1
+          fi
+
+          # These PR identifiers come from GitHub's workflow_run event, not PR content.
+          mapfile -t numbers < <(jq -r '.[].number' <<< "${RUN_EVENT}")
+          if (( ${#numbers[@]} == 0 )); then
+            echo "::warning::The CI workflow_run event did not provide a PR number; no enrollment attempted."
+            exit 0
+          fi
+
+          for number in "${numbers[@]}"; do
+            pr="$(gh api "repos/${REPO}/pulls/${number}")"
+            if ! jq -e --arg repo "${REPO}" '
+              .state == "open"
+              and .base.ref == "copilot/Development"
+              and .head.repo.full_name == $repo
+              and (.head.ref | startswith("copilot/"))
+              and (.user.login | ascii_downcase) == "copilot"
+            ' <<< "${pr}" >/dev/null; then
+              echo "Skipping PR #${number}: not an eligible Copilot-owned Development PR."
+              continue
+            fi
+
+            echo "Enabling Agent Merge CI repair for PR #${number}"
+            # The endpoint needs a GitHub user token with an eligible Copilot plan
+            # and Agent tasks write access, not the workflow's GITHUB_TOKEN.
+            printf '%s' '{"allowed_actions":["fix_ci"]}' |
+              GH_TOKEN="${AGENT_MERGE_TOKEN}" gh api                 --method PUT                 -H "Accept: application/vnd.github+json"                 -H "X-GitHub-Api-Version: 2026-03-10"                 "agents/repos/${REPO}/pulls/${number}/agent-merge"                 --input -
+            echo "Agent Merge enrollment request succeeded for PR #${number}"
+          done
