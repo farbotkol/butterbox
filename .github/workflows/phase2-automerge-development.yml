@@ -1,0 +1,168 @@
+name: Phase 2 - autonomous Development merge
+
+# Only Development. GitHub rulesets remain authoritative.
+# Old Copilot PRs are deliberately excluded from this initial rollout.
+on:
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: "Specific Development PR number; blank scans eligible PRs"
+        required: false
+        type: string
+      dry_run:
+        description: "Report decisions without updating branches or merging"
+        type: boolean
+        default: true
+  pull_request:
+    paths:
+      - .github/workflows/phase2-automerge-development.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase2-dev-automerge
+  cancel-in-progress: false
+
+jobs:
+  merge-ready-development:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+      checks: read
+    steps:
+      - name: Check eligibility and honor existing GitHub merge gates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          EVENT_NAME: ${{ github.event_name }}
+          TARGET_PR: ${{ inputs.pull_number }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          TRIGGER_PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # pull_request events only test policy; never mutate from an unmerged workflow.
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            DRY_RUN=true
+          elif [[ "$EVENT_NAME" != "workflow_dispatch" ]]; then
+            DRY_RUN=false
+          fi
+          echo "Phase 2 event=$EVENT_NAME dry_run=$DRY_RUN"
+
+          if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$TARGET_PR" ]]; then
+            [[ "$TARGET_PR" =~ ^[0-9]+$ ]] || { echo "::error::Invalid PR number"; exit 1; }
+            numbers=("$TARGET_PR")
+          elif [[ "$EVENT_NAME" == "workflow_run" ]]; then
+            mapfile -t numbers < <(jq -r '.[].number' <<< "$TRIGGER_PRS")
+            if (( ${#numbers[@]} == 0 )); then
+              echo "workflow_run has no PR association; scheduled sweep will handle it."
+              exit 0
+            fi
+          else
+            mapfile -t numbers < <(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --jq '.[].number')
+          fi
+
+          for number in "${numbers[@]}"; do
+            pr="$(gh api "repos/$REPO/pulls/$number")"
+            if ! jq -e --arg repo "$REPO" '
+              .state == "open"
+              and .base.ref == "copilot/Development"
+              and .head.repo.full_name == $repo
+              and (.head.ref | startswith("copilot/"))
+              and (
+                (.number == 34 and .head.ref == "copilot/tokenless-agent-merge-probe")
+                or (
+                  (.user.login | ascii_downcase) == "copilot"
+                  and .created_at >= "2026-11-07T01:30:00Z"
+                )
+              )
+            ' <<< "$pr" >/dev/null; then
+              echo "PR #$number: outside the strictly scoped Phase 2 pilot."
+              continue
+            fi
+            sha="$(jq -r '.head.sha' <<< "$pr")"
+            draft="$(jq -r '.draft' <<< "$pr")"
+            echo "Evaluating PR #$number at $sha (draft=$draft)."
+
+            # Never trust check results from a previous commit or a non-Actions integration.
+            checks="$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100&filter=latest")"
+            for required in verify database; do
+              if ! jq -e --arg name "$required" '
+                [.check_runs[] |
+                  select(.name == $name
+                    and .app.slug == "github-actions"
+                    and .status == "completed"
+                    and .conclusion == "success")] | length == 1
+              ' <<< "$checks" >/dev/null; then
+                echo "PR #$number: $required is not successful on the latest HEAD; waiting."
+                continue 2
+              fi
+            done
+
+            # Strict branch protection requires all base-branch commits in the PR head.
+            base_sha="$(jq -r '.base.sha' <<< "$pr")"
+            relation="$(gh api "repos/$REPO/compare/$sha...$base_sha")"
+            behind="$(jq -r '.behind_by' <<< "$relation")"
+            # compare HEAD...BASE: behind_by counts commits present in BASE but absent from HEAD.
+            if (( behind > 0 )); then
+              echo "PR #$number: behind Development by $behind commits."
+              if [[ "$DRY_RUN" == "true" ]]; then
+                echo "DRY RUN: would update branch and dispatch Verify."
+              else
+                if gh api --method PUT "repos/$REPO/pulls/$number/update-branch" \
+                  -f expected_head_sha="$sha"; then
+                  echo "PR #$number: branch update requested; dispatching fresh Verify."
+                  # GITHUB_TOKEN-triggered commits do not cause normal pull_request CI.
+                  # Explicit workflow_dispatch is allowed and its job contexts are
+                  # associated with the new PR HEAD.
+                  new_sha="$(gh api "repos/$REPO/pulls/$number" --jq '.head.sha')"
+                  echo "Updated SHA: $new_sha"
+                  gh workflow run ci.yml --ref "$(jq -r '.head.ref' <<< "$pr")"
+                else
+                  echo "::warning::PR #$number: branch update rejected by GitHub; not merging."
+                fi
+              fi
+              continue
+            fi
+
+            # Fetch again after all gates to avoid merging an outdated SHA.
+            latest="$(gh api "repos/$REPO/pulls/$number")"
+            if [[ "$(jq -r '.head.sha' <<< "$latest")" != "$sha" ]]; then
+              echo "PR #$number: branch changed during evaluation; retry on next run."
+              continue
+            fi
+
+            if [[ "$DRY_RUN" == "true" ]]; then
+              echo "DRY RUN: would ready PR #$number and request GitHub native auto-merge."
+              continue
+            fi
+
+            if [[ "$draft" == "true" ]]; then
+              echo "PR #$number: marking draft ready for review."
+              gh pr ready "$number" --repo "$REPO" || {
+                echo "::warning::GitHub rejected ready transition for PR #$number."
+                continue
+              }
+            fi
+
+            # Native GitHub auto-merge, never a bypass or force push. GitHub
+            # enforces every branch rule, approval and required status check.
+            echo "PR #$number: enabling GitHub-native auto-merge."
+            gh pr merge "$number" --repo "$REPO" --squash --auto || {
+              echo "::warning::GitHub rejected merge for PR #$number; leaving open."
+              continue
+            }
+          done
