@@ -97,8 +97,37 @@ jobs:
             draft="$(jq -r '.draft' <<< "$pr")"
             echo "Evaluating PR #$number at $sha (draft=$draft)."
 
-            # Never trust check results from a previous commit or a non-Actions integration.
+            # Recovery for branches updated by the Phase 2 Actions bot before
+            # this fix: the token-generated merge commit does not fire normal PR CI.
+            # Only restart CI for a known bot-authored merge commit that includes
+            # the CURRENT Development tip; never rerun arbitrary failed code.
             checks="$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100&filter=latest")"
+            if ! jq -e '
+              [.check_runs[] | select(.name == "verify" or .name == "database")] | length == 2
+            ' <<< "$checks" >/dev/null; then
+              tip="$(gh api "repos/$REPO/commits/$sha")"
+              base_sha="$(jq -r '.base.sha' <<< "$pr")"
+              if jq -e --arg base "$base_sha" '
+                .author.login == "github-actions[bot]"
+                and (.commit.message | startswith("Merge branch '\''copilot/Development'\'' into "))
+                and (.parents | length == 2)
+                and .parents[1].sha == $base
+              ' <<< "$tip" >/dev/null; then
+                previous="$(gh api "repos/$REPO/actions/runs?head_sha=$sha&event=workflow_dispatch&per_page=20")"
+                if ! jq -e '[.workflow_runs[] | select(.name == "Verify")] | length > 0' <<< "$previous" >/dev/null; then
+                  if [[ "$DRY_RUN" == "true" ]]; then
+                    echo "DRY RUN: would dispatch Verify for bot-updated PR #$number."
+                  else
+                    branch="$(jq -r '.head.ref' <<< "$pr")"
+                    gh api --method POST "repos/$REPO/actions/workflows/ci.yml/dispatches" -f ref="$branch"
+                    echo "PR #$number: dispatched Verify for bot-updated head $sha."
+                  fi
+                else
+                  echo "PR #$number: Verify already dispatched on bot-updated head; waiting."
+                fi
+              fi
+            fi
+            # Never trust check results from a previous commit or a non-Actions integration.
             for required in verify database; do
               if ! jq -e --arg name "$required" '
                 [.check_runs[] |
