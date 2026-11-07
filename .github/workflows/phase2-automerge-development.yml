@@ -137,9 +137,9 @@ jobs:
 
             # Strict branch protection requires all base-branch commits in the PR head.
             base_sha="$(jq -r '.base.sha' <<< "$pr")"
-            relation="$(gh api "repos/$REPO/compare/$sha...$base_sha")"
+            relation="$(gh api "repos/$REPO/compare/$base_sha...$sha")"
             behind="$(jq -r '.behind_by' <<< "$relation")"
-            # compare HEAD...BASE: behind_by counts commits present in BASE but absent from HEAD.
+            # compare BASE...HEAD: behind_by counts base commits absent from the PR head.
             if (( behind > 0 )); then
               echo "PR #$number: behind Development by $behind commits."
               if [[ "$DRY_RUN" == "true" ]]; then
