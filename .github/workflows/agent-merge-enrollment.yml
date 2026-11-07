@@ -41,7 +41,7 @@ jobs:
     permissions:
       contents: write
       pull-requests: read
-      actions: read
+      actions: write
       copilot-requests: write
     steps:
       - name: Select eligible, latest failing Development PR
@@ -144,4 +144,9 @@ jobs:
             -f branch="$BRANCH" \
             -f sha="$blob_sha" \
             -f content="$encoded" >/dev/null
-          echo "Pushed one test-only repair to PR #$NUMBER; normal required CI must run again."
+          echo "Pushed one test-only repair to PR #$NUMBER."
+          # GITHUB_TOKEN writes do not trigger pull_request/synchronize CI.
+          # workflow_dispatch is an explicitly supported exception; verify whether
+          # this dispatch supplies the required PR check contexts before merging.
+          gh workflow run ci.yml --ref "$BRANCH"
+          echo "Dispatched Verify against repaired branch. No auto-merge attempted."
