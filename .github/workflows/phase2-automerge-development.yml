@@ -87,6 +87,7 @@ jobs:
               and (.head.ref | startswith("copilot/"))
               and (
                 (.number == 34 and .head.ref == "copilot/tokenless-agent-merge-probe")
+                or (.number == 39 and .head.ref == "copilot/phase2-scheduled-smoke-20261107")
                 or (
                   (.user.login | ascii_downcase) == "copilot"
                   and .created_at >= "2026-11-07T01:30:00Z"
