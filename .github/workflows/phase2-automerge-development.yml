@@ -124,13 +124,26 @@ jobs:
               else
                 if gh api --method PUT "repos/$REPO/pulls/$number/update-branch" \
                   -f expected_head_sha="$sha"; then
-                  echo "PR #$number: branch update requested; dispatching fresh Verify."
-                  # GITHUB_TOKEN-triggered commits do not cause normal pull_request CI.
-                  # Explicit workflow_dispatch is allowed and its job contexts are
-                  # associated with the new PR HEAD.
-                  new_sha="$(gh api "repos/$REPO/pulls/$number" --jq '.head.sha')"
-                  echo "Updated SHA: $new_sha"
-                  gh workflow run ci.yml --ref "$(jq -r '.head.ref' <<< "$pr")"
+                  echo "PR #$number: GitHub accepted branch update request."
+                  # update-branch is asynchronous: wait for a NEW head SHA before
+                  # triggering CI. Never dispatch on the old, already-green SHA.
+                  new_sha="$sha"
+                  for attempt in {1..20}; do
+                    new_sha="$(gh api "repos/$REPO/pulls/$number" --jq '.head.sha')"
+                    [[ "$new_sha" != "$sha" ]] && break
+                    sleep 3
+                  done
+                  if [[ "$new_sha" == "$sha" ]]; then
+                    echo "::warning::Branch update not visible after 60 seconds; waiting for next scheduled sweep."
+                    continue
+                  fi
+                  echo "PR #$number: updated to $new_sha; triggering fresh Verify."
+                  # Use the GitHub REST Actions dispatch API. Unlike 'gh workflow
+                  # run', 'gh api' works without a local git checkout.
+                  # A GITHUB_TOKEN workflow_dispatch is explicitly allowed.
+                  branch="$(jq -r '.head.ref' <<< "$pr")"
+                  gh api --method POST "repos/$REPO/actions/workflows/ci.yml/dispatches" -f ref="$branch"
+                  echo "PR #$number: fresh Verify dispatched for $branch."
                 else
                   echo "::warning::PR #$number: branch update rejected by GitHub; not merging."
                 fi
