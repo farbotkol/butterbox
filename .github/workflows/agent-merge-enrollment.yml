@@ -50,14 +50,14 @@ jobs:
           for number in "${numbers[@]}"; do
             [[ "$number" =~ ^[0-9]+$ ]] || exit 1
             pr="$(gh api "repos/$REPO/pulls/$number")"
-            if ! jq -e --arg repo "$REPO" '
+            if ! jq -e --arg repo "$REPO" --arg manual "$EVENT_NAME" '
               .state == "open"
               and .base.ref == "copilot/Development"
               and .head.repo.full_name == $repo
               and (.head.ref | startswith("copilot/"))
-              and ((.user.login | ascii_downcase) == "copilot")
+              and (($manual == "workflow_dispatch") or ((.user.login | ascii_downcase) == "copilot"))
             ' <<< "$pr" >/dev/null; then
-              echo "Skipping PR #$number: not an open Copilot-authored Development PR."
+              echo "Skipping PR #$number: not an eligible Development PR."
               continue
             fi
 
