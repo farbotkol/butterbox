@@ -1,63 +1,82 @@
-name: Enroll Copilot PR in Agent Merge
+name: Probe native Agent Merge enrollment
 
-# Runs from the default branch after the regular CI workflow finishes.
-# Never checks out or executes untrusted pull request code.
+# Runs on the protected default branch after a failed PR CI run.
+# This is an explicit, secret-free compatibility test, NOT proven production enrollment.
 on:
   workflow_run:
     workflows: ["Verify"]
     types: [completed]
+  workflow_dispatch:
+    inputs:
+      pull_number:
+        description: "PR number to test built-in-token enrollment (no merge)"
+        required: true
+        type: number
 
 permissions:
   contents: read
   pull-requests: read
+  copilot-requests: write
 
 jobs:
-  enable-self-repair:
+  probe-agent-merge:
     if: >-
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'failure'
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.event == 'pull_request' &&
+       github.event.workflow_run.conclusion == 'failure')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Enable Agent Merge on eligible Copilot PRs
-        shell: bash
+      - name: Attempt Agent Merge enrollment using only GITHUB_TOKEN
         env:
           GH_TOKEN: ${{ github.token }}
-          AGENT_MERGE_TOKEN: ${{ secrets.AGENT_MERGE_TOKEN }}
           REPO: ${{ github.repository }}
           RUN_EVENT: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          MANUAL_PR: ${{ inputs.pull_number }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
         run: |
           set -euo pipefail
-
-          if [[ -z "${AGENT_MERGE_TOKEN}" ]]; then
-            echo "::error::Missing Actions secret AGENT_MERGE_TOKEN (user token with Agent tasks: write)."
-            exit 1
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            numbers=("$MANUAL_PR")
+          else
+            mapfile -t numbers < <(jq -r '.[].number' <<< "$RUN_EVENT")
           fi
-
-          # These PR identifiers come from GitHub's workflow_run event, not PR content.
-          mapfile -t numbers < <(jq -r '.[].number' <<< "${RUN_EVENT}")
           if (( ${#numbers[@]} == 0 )); then
-            echo "::warning::The CI workflow_run event did not provide a PR number; no enrollment attempted."
+            echo "::warning::No PR number found in event; nothing to enroll."
             exit 0
           fi
 
           for number in "${numbers[@]}"; do
-            pr="$(gh api "repos/${REPO}/pulls/${number}")"
-            if ! jq -e --arg repo "${REPO}" '
+            [[ "$number" =~ ^[0-9]+$ ]] || exit 1
+            pr="$(gh api "repos/$REPO/pulls/$number")"
+            if ! jq -e --arg repo "$REPO" '
               .state == "open"
               and .base.ref == "copilot/Development"
               and .head.repo.full_name == $repo
               and (.head.ref | startswith("copilot/"))
-              and (.user.login | ascii_downcase) == "copilot"
-            ' <<< "${pr}" >/dev/null; then
-              echo "Skipping PR #${number}: not an eligible Copilot-owned Development PR."
+              and ((.user.login | ascii_downcase) == "copilot")
+            ' <<< "$pr" >/dev/null; then
+              echo "Skipping PR #$number: not an open Copilot-authored Development PR."
               continue
             fi
 
-            echo "Enabling Agent Merge CI repair for PR #${number}"
-            # The endpoint needs a GitHub user token with an eligible Copilot plan
-            # and Agent tasks write access, not the workflow's GITHUB_TOKEN.
-            printf '%s' '{"allowed_actions":["fix_ci"]}' |
-              GH_TOKEN="${AGENT_MERGE_TOKEN}" gh api                 --method PUT                 -H "Accept: application/vnd.github+json"                 -H "X-GitHub-Api-Version: 2026-03-10"                 "agents/repos/${REPO}/pulls/${number}/agent-merge"                 --input -
-            echo "Agent Merge enrollment request succeeded for PR #${number}"
+            echo "Testing Agent Merge enrollment for PR #$number with built-in GITHUB_TOKEN."
+            response_file="$(mktemp)"
+            http_status="$(curl --silent --show-error --output "$response_file" --write-out '%{http_code}' \
+              --request PUT \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              --header "Content-Type: application/json" \
+              --data '{"allowed_actions":["fix_ci"]}' \
+              "https://api.github.com/agents/repos/$REPO/pulls/$number/agent-merge")"
+            echo "Agent Merge enrollment HTTP status: $http_status"
+            if [[ "$http_status" == "200" || "$http_status" == "201" ]]; then
+              echo "Agent Merge enrollment accepted for PR #$number."
+            else
+              echo "::error::GitHub rejected built-in token enrollment (HTTP $http_status)."
+              jq -r '.message // .error // "No error message returned"' "$response_file" || true
+              exit 1
+            fi
           done
