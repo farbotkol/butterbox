@@ -107,7 +107,26 @@ jobs:
                     and .status == "completed"
                     and .conclusion == "success")] | length == 1
               ' <<< "$checks" >/dev/null; then
-                echo "PR #$number: $required is not successful on the latest HEAD; waiting."
+                echo "PR #$number: $required is not successful on the latest HEAD."
+                # GitHub may mark pull_request runs action_required after a bot-updated
+                # branch. Explicitly dispatch CI once, but never bypass a failed test.
+                if [[ "$DRY_RUN" != "true" ]]; then
+                  runs="$(gh api "repos/$REPO/actions/runs?head_sha=$sha&per_page=50")"
+                  if jq -e '
+                    any(.workflow_runs[]; .name == "Verify"
+                      and .event == "pull_request"
+                      and .conclusion == "action_required")
+                  ' <<< "$runs" >/dev/null &&
+                  ! jq -e '
+                    any(.workflow_runs[]; .name == "Verify"
+                      and .event == "workflow_dispatch")
+                  ' <<< "$runs" >/dev/null; then
+                    branch="$(jq -r '.head.ref' <<< "$pr")"
+                    echo "PR #$number: bot-triggered CI blocked; dispatching Verify for $branch."
+                    gh api --method POST "repos/$REPO/actions/workflows/ci.yml/dispatches" \
+                      -f ref="$branch" >/dev/null
+                  fi
+                fi
                 continue 2
               fi
             done
@@ -124,13 +143,28 @@ jobs:
               else
                 if gh api --method PUT "repos/$REPO/pulls/$number/update-branch" \
                   -f expected_head_sha="$sha"; then
-                  echo "PR #$number: branch update requested; dispatching fresh Verify."
-                  # GITHUB_TOKEN-triggered commits do not cause normal pull_request CI.
-                  # Explicit workflow_dispatch is allowed and its job contexts are
-                  # associated with the new PR HEAD.
-                  new_sha="$(gh api "repos/$REPO/pulls/$number" --jq '.head.sha')"
-                  echo "Updated SHA: $new_sha"
-                  gh workflow run ci.yml --ref "$(jq -r '.head.ref' <<< "$pr")"
+                  echo "PR #$number: branch update accepted; waiting for GitHub to apply it."
+                  # GitHub processes update-branch asynchronously. Dispatching too
+                  # early would validate the OLD SHA and leave the PR unchecked.
+                  updated_sha=""
+                  for attempt in {1..20}; do
+                    current_sha="$(gh api "repos/$REPO/pulls/$number" --jq '.head.sha')"
+                    if [[ "$current_sha" != "$sha" ]]; then
+                      updated_sha="$current_sha"
+                      break
+                    fi
+                    sleep 3
+                  done
+                  if [[ -z "$updated_sha" ]]; then
+                    echo "::error::PR #$number: update not visible after 60 seconds. No CI dispatch."
+                    exit 1
+                  fi
+                  echo "PR #$number: branch advanced from $sha to $updated_sha."
+                  # REST dispatch needs no local Git repository.
+                  branch="$(jq -r '.head.ref' <<< "$pr")"
+                  gh api --method POST "repos/$REPO/actions/workflows/ci.yml/dispatches" \
+                    -f ref="$branch" >/dev/null
+                  echo "PR #$number: dispatched Verify on updated branch $branch."
                 else
                   echo "::warning::PR #$number: branch update rejected by GitHub; not merging."
                 fi
