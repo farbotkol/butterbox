@@ -1,0 +1,152 @@
+name: Copilot CLI CI repair (no stored token)
+
+# Uses GitHub's native Copilot CLI authentication to attempt a bounded repair.
+# GitHub documents built-in-token Copilot CLI billing for eligible ORGANIZATION repos.
+# Butterbox is personally owned: auth smoke test must pass before relying on this workflow.
+on:
+  pull_request:
+    paths:
+      - .github/workflows/agent-merge-enrollment.yml
+  workflow_run:
+    workflows: ["Verify"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  cli-auth-smoke:
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 33
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: read
+      copilot-requests: write
+    steps:
+      - name: Install Copilot CLI
+        run: npm install --global @github/copilot
+      - name: Check built-in-token Copilot authentication
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          copilot -p "Respond with the single word AUTHENTICATED. Do not use tools." -s
+
+  repair-failed-test:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: read
+      actions: write
+      copilot-requests: write
+    steps:
+      - name: Select eligible, latest failing Development PR
+        id: guard
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+        run: |
+          set -euo pipefail
+          number="$(jq -r '.[0].number // empty' <<< "$PRS")"
+          if [[ ! "$number" =~ ^[0-9]+$ ]]; then
+            echo "No associated PR; exiting safely."
+            exit 0
+          fi
+          pr="$(gh api "repos/$REPO/pulls/$number")"
+          if ! jq -e --arg repo "$REPO" --arg sha "$RUN_SHA" --argjson number "$number" '
+            .number == $number
+            and .state == "open"
+            and .base.ref == "copilot/Development"
+            and .head.repo.full_name == $repo
+            and .head.sha == $sha
+            and (
+              ((.user.login | ascii_downcase) == "copilot" and (.head.ref | startswith("copilot/")))
+              or ($number == 34 and .head.ref == "copilot/tokenless-agent-merge-probe")
+            )
+          ' <<< "$pr" >/dev/null; then
+            echo "Not a current, eligible Development PR; exiting."
+            exit 0
+          fi
+          if gh api "repos/$REPO/pulls/$number/commits" --paginate --jq '.[].commit.message' |
+             grep -q "ci: Copilot CLI bounded test repair"; then
+            echo "A CLI repair was already attempted on PR #$number; no retry loop."
+            exit 0
+          fi
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
+          echo "branch=$(jq -r '.head.ref' <<< "$pr")" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout exact PR commit without persisted credentials
+        if: steps.guard.outputs.eligible == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.guard.outputs.sha }}
+          persist-credentials: false
+
+      - name: Collect failed GitHub Actions logs (no PR scripts run)
+        if: steps.guard.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: gh run view "$RUN_ID" --log-failed > .agent-failed-ci.log
+
+      - name: Install Copilot CLI
+        if: steps.guard.outputs.eligible == 'true'
+        run: npm install --global @github/copilot
+
+      - name: Ask Copilot to repair a test file only
+        if: steps.guard.outputs.eligible == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          copilot -p "This is an isolated CI self-repair proof of concept. Inspect the failures recorded in .agent-failed-ci.log and the repository tests. If the failure can be solved by correcting exactly ONE existing tests/*.test.mjs file, edit only that file. Do not change workflows, dependencies, product code, secrets, branch rules or existing unrelated tests. Do not execute code or shell commands; the runner will validate all changes separately. If a safe one-file repair is not possible, leave files unchanged and explain why." \
+            -s --allow-tool=write --deny-tool=shell --deny-tool=url
+
+      - name: Verify only one Node test file was edited and push one fix
+        if: steps.guard.outputs.eligible == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          NUMBER: ${{ steps.guard.outputs.number }}
+          BRANCH: ${{ steps.guard.outputs.branch }}
+          EXPECTED_SHA: ${{ steps.guard.outputs.sha }}
+        run: |
+          set -euo pipefail
+          mapfile -t changed < <(git diff --name-only)
+          if (( ${#changed[@]} != 1 )); then
+            echo "::error::Expected exactly one modified test file; got ${#changed[@]}. No push."
+            exit 1
+          fi
+          file="${changed[0]}"
+          if [[ ! "$file" =~ ^tests/[a-zA-Z0-9_.-]+\.test\.mjs$ ]] ||
+             [[ ! -f "$file" ]] || [[ -L "$file" ]]; then
+            echo "::error::Disallowed changed path. No push."
+            exit 1
+          fi
+          current_sha="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
+          if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+            echo "::error::PR has moved since the failing CI run. No push."
+            exit 1
+          fi
+          blob_sha="$(gh api "repos/$REPO/contents/$file?ref=$BRANCH" --jq '.sha')"
+          encoded="$(base64 -w0 < "$file")"
+          gh api --method PUT "repos/$REPO/contents/$file" \
+            -f message="ci: Copilot CLI bounded test repair (#$NUMBER)" \
+            -f branch="$BRANCH" \
+            -f sha="$blob_sha" \
+            -f content="$encoded" >/dev/null
+          echo "Pushed one test-only repair to PR #$NUMBER."
+          # GITHUB_TOKEN writes do not trigger pull_request/synchronize CI.
+          # workflow_dispatch is an explicitly supported exception; verify whether
+          # this dispatch supplies the required PR check contexts before merging.
+          gh workflow run ci.yml --ref "$BRANCH"
+          echo "Dispatched Verify against repaired branch. No auto-merge attempted."
