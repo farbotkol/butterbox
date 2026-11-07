@@ -33,7 +33,7 @@ jobs:
   merge-ready-development:
     if: >-
       github.event_name != 'workflow_run' ||
-      (github.event.workflow_run.event == 'pull_request' &&
+      (contains(fromJSON('["pull_request","workflow_dispatch"]'), github.event.workflow_run.event) &&
        github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     timeout-minutes: 12
@@ -66,10 +66,13 @@ jobs:
             [[ "$TARGET_PR" =~ ^[0-9]+$ ]] || { echo "::error::Invalid PR number"; exit 1; }
             numbers=("$TARGET_PR")
           elif [[ "$EVENT_NAME" == "workflow_run" ]]; then
-            mapfile -t numbers < <(jq -r '.[].number' <<< "$TRIGGER_PRS")
+            mapfile -t numbers < <(jq -r '(. // [])[] | .number' <<< "$TRIGGER_PRS")
             if (( ${#numbers[@]} == 0 )); then
-              echo "workflow_run has no PR association; scheduled sweep will handle it."
-              exit 0
+              # Dispatched Verify runs have no pull_requests association.
+              # Inspect open PRs instead; the exact HEAD and both checks are
+              # verified below before any state change or merge request.
+              echo "Verify finished without an associated PR; scanning eligible Development PRs."
+              mapfile -t numbers < <(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --jq '.[].number')
             fi
           else
             mapfile -t numbers < <(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" --jq '.[].number')
