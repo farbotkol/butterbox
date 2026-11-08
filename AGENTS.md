@@ -16,21 +16,27 @@ Before selecting subscription, AI, Award Central, Xero Payroll or local Supabase
 
 The owner has authorized a **first internal product-review Showcase MVP**, distinct from production go-live. `BACKLOG_INDEX.csv` contains both the original `Priority` (long-term roadmap) and `Showcase_Priority` (first-review sequencing). Do not overwrite either with the other.
 
-When choosing new work, first inspect the committed active story, dependency readiness, `Status` and `Showcase_Priority`. Safely complete or checkpoint BB-ATTEND-006 if it is still actively being developed, then select ready **P0 showcase** work ahead of later P1/P2/P3 work. Avoid rebuilding Done stories. Do not start blocked stories or violate production/security approvals. Update story evidence and documentation when completing work.
+When preparing issues for the Showcase MVP, check dependency readiness, `Status`
+and `Showcase_Priority`. Queue ready **P0 showcase** work ahead of later P1/P2/P3
+work. Keep blocked stories out of the dispatch queue and retain completed stories
+with their evidence.
 
 The DEMO epic is an **internal evaluation milestone only**. Use a separately verified isolated environment and synthetic fixtures; no production data, live payroll or real external messages. Do not claim production readiness or award-calculation correctness. Branding requires owner approval for the final logo/identity, and generated concept images are not actual UI screenshots. See `BUTTERBOX_PRODUCT_BACKLOG.md` (Epic DEMO) for exit gates and story-specific criteria.
 
-## Session recovery and story selection
+## GitHub issue intake and session recovery
 
-- Before coding, read `BACKLOG_INDEX.csv`, `IMPLEMENTATION_PROGRESS.md` and the
-  relevant stories and acceptance criteria in `BUTTERBOX_PRODUCT_BACKLOG.md`.
+- Start implementation from an open GitHub issue assigned to the agent or
+  explicitly selected by the owner or dispatcher. Before starting, check the
+  issue's dependencies, existing assignee and any linked PR. If the session
+  has no authorized issue, wait for one.
+- Use the issue for scope and acceptance criteria. When creating an issue
+  from the backlog, put the `BB-` story ID in the title and link its product
+  story and CSV row. Before coding, read the linked requirements,
+  `IMPLEMENTATION_PROGRESS.md` and any applicable owner decisions. Resolve
+  conflicting scope or approvals on the issue before implementing.
 - Inspect the active branch, Git status, recent commits, other worktrees and
-  outstanding blockers. Preserve uncommitted or concurrent work; do not
-  recreate completed functionality or overwrite existing migrations.
-- Select the highest-priority ready story, favouring partially implemented work
-  and completing prerequisites first. Resolve development, authentication,
-  tenant and people foundations before dependent rostering features. Prefer
-  reliable rostering, attendance and payroll workflows over advanced AI.
+  outstanding blockers. Preserve uncommitted or concurrent work and existing
+  migrations. Reuse completed functionality.
 
 ## Implementation and verification
 
@@ -48,8 +54,8 @@ The DEMO epic is an **internal evaluation milestone only**. Use a separately ver
   or claim runtime acceptance from inspection alone.
 - For each acceptance criterion, record its identifier, implementation
   evidence, test, actual result and Pass, Fail or Blocked status. Mark a story
-  Done only after every criterion is verified; record genuine blockers and
-  continue with independent ready work.
+  Done only after the full story is verified. Record blockers on the issue
+  and leave it open for follow-up.
 
 ## User documentation as part of Definition of Done
 
@@ -59,7 +65,7 @@ The DEMO epic is an **internal evaluation milestone only**. Use a separately ver
 - Verify route/button wording and permissions against implemented code or a supported browser walkthrough; never invent UI labels, screenshots, functionality, or legal compliance claims. Mark partially delivered or blocked work transparently.
 - When documenting features, identify whether external delivery, production data access, legal sign-off or a provider integration is not yet available. Avoid writing customer-facing procedures for capabilities only planned.
 - Include a **Documentation: updated / not applicable (reason)** line in the story's acceptance evidence and status report. Missing documentation for a changed user-facing workflow must be corrected before marking the story Done.
-- Documentation workstream stories are in the `BB-DOC` epic of `BACKLOG_INDEX.csv` and `BUTTERBOX_PRODUCT_BACKLOG.md`. Complete them as separate ready work without falsely claiming in-app contextual help is already deployed.
+- Documentation workstream stories are in the `BB-DOC` epic of `BACKLOG_INDEX.csv` and `BUTTERBOX_PRODUCT_BACKLOG.md`. Execute them through a separate GitHub issue and describe only verified in-app help.
 
 ## Risk-based, change-focused testing
 
@@ -129,20 +135,19 @@ The default is targeted verification, not a full regression after every story.
 
 ## Tracking and Git workflow
 
-- Keep `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md` consistent. Record
-  the current story, verified criteria, files, test results, decisions,
-  outstanding defects, blockers and exact next action after each story.
-- Work on `copilot/finish-roadmap-for-app`. At each verified feature or safe
-  logical checkpoint, inspect the diff for secrets, commit descriptive changes,
-  push the development branch and verify its remote SHA. Never merge into
-  `main` without approval.
-- Provide a concise update after each story with its ID, criteria, tests, files,
-  commit and push result, blockers and next story. Continue through ready
-  stories while the authorized session has capacity; stop for missing access,
-  genuine blockers or required high-risk decisions, recording recovery state.
-  Do not ask for routine development confirmation or claim work will continue
-  after the session without actual orchestration. At the end, report backlog
-  status counts, current validation and recommended next steps.
+- Track assignment and work status in GitHub Issues. Keep
+  `BUTTERBOX_PRODUCT_BACKLOG.md` for product requirements and retain story-level
+  status and evidence in `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`.
+  Add the issue URL to the matching CSV row's `Evidence` field and record
+  verified criteria, test results and blockers in the linked PR. Keep the
+  parent story status based on its full criteria when an issue covers a slice.
+- Use an issue branch and open a PR to `copilot/Development` unless the issue
+  explicitly names another approved base. Inspect the diff for secrets and
+  follow the repository's CI, review and merge gates. Production changes
+  require explicit approval.
+- Use `Closes #<issue-number>` on the Development PR that completes the issue.
+  Provide a checkpoint with the issue, story ID, PR, verification and any
+  blockers. Start another issue only when the session has authorization for it.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
