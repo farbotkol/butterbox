@@ -10,9 +10,26 @@ on:
   workflow_run:
     workflows: ["Verify"]
     types: [completed]
+  # A GITHUB_TOKEN-dispatched Verify doesn't reliably emit workflow_run.
+  # Verify explicitly dispatches us again when a repaired test still fails.
+  workflow_dispatch:
+    inputs:
+      verify_run_id:
+        description: "Failed Verify run ID to authenticate and inspect"
+        required: true
+        type: string
+      head_sha:
+        description: "Failed Verify commit SHA"
+        required: true
+        type: string
 
 permissions:
   contents: read
+
+# One repair at a time prevents two agents racing to commit to the same PR.
+concurrency:
+  group: copilot-ci-test-repair-development
+  cancel-in-progress: false
 
 jobs:
   cli-auth-smoke:
@@ -34,8 +51,9 @@ jobs:
   repair-failed-test:
     if: >-
       github.event_name == 'workflow_run' &&
-      github.event.workflow_run.event == 'pull_request' &&
-      github.event.workflow_run.conclusion == 'failure'
+      ((github.event.workflow_run.event == 'pull_request' &&
+        github.event.workflow_run.conclusion == 'failure') ||
+       github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -50,14 +68,58 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+          EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.head_sha || github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id || github.event.workflow_run.id }}
           PRS: ${{ toJSON(github.event.workflow_run.pull_requests) }}
+          # Set repository Actions variable CI_REPAIR_MAX_ATTEMPTS to 1..5.
+          # Missing variable defaults to 3; invalid values stop safely.
+          MAX_ATTEMPTS: ${{ vars.CI_REPAIR_MAX_ATTEMPTS || '3' }}
         run: |
           set -euo pipefail
-          number="$(jq -r '.[0].number // empty' <<< "$PRS")"
-          if [[ ! "$number" =~ ^[0-9]+$ ]]; then
-            echo "No associated PR; exiting safely."
+          if [[ ! "$MAX_ATTEMPTS" =~ ^[1-5]$ ]]; then
+            echo "::error::CI_REPAIR_MAX_ATTEMPTS must be 1, 2, 3, 4, or 5."
+            exit 1
+          fi
+          if [[ ! "$RUN_SHA" =~ ^[0-9a-f]{40}$ ]] || [[ ! "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid failed-run SHA or ID."
+            exit 1
+          fi
+
+          # Authenticate the event against GitHub's completed, failing Verify run.
+          # A workflow_dispatch cannot nominate an arbitrary commit or successful run.
+          failed_run="$(gh api "repos/$REPO/actions/runs/$RUN_ID")"
+          if ! jq -e --arg sha "$RUN_SHA" --arg repo "$REPO" --arg event "$EVENT_NAME" '
+            .name == "Verify"
+            and .head_sha == $sha
+            and .head_repository.full_name == $repo
+            and .status == "completed"
+            and .conclusion == "failure"
+            and (if $event == "workflow_dispatch" then .event == "workflow_dispatch"
+                 else .event == "pull_request" end)
+          ' <<< "$failed_run" >/dev/null; then
+            echo "No matching completed, failing Verify run; exiting safely."
             exit 0
+          fi
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            number=""
+          else
+            number="$(jq -r '.[0].number // empty' <<< "$PRS")"
+          fi
+
+          # Dispatched Verify runs have no pull request association. Resolve the
+          # exact current HEAD to one open PR; never infer eligibility from branch alone.
+          if [[ ! "$number" =~ ^[0-9]+$ ]]; then
+            mapfile -t matching < <(gh api --paginate "repos/$REPO/pulls?state=open&per_page=100" |
+              jq -r --arg repo "$REPO" --arg sha "$RUN_SHA" '
+                .[] | select(.head.sha == $sha
+                  and .head.repo.full_name == $repo
+                  and .base.ref == "copilot/Development") | .number')
+            if (( ${#matching[@]} != 1 )); then
+              echo "Failed Verify SHA matches ${#matching[@]} open Development PRs; exiting safely."
+              exit 0
+            fi
+            number="${matching[0]}"
           fi
           pr="$(gh api "repos/$REPO/pulls/$number")"
           if ! jq -e --arg repo "$REPO" --arg sha "$RUN_SHA" --argjson number "$number" '
@@ -74,12 +136,25 @@ jobs:
             echo "Not a current, eligible Development PR; exiting."
             exit 0
           fi
-          if gh api "repos/$REPO/pulls/$number/commits" --paginate --jq '.[].commit.message' |
-             grep -q "ci: Copilot CLI bounded test repair"; then
-            echo "A CLI repair was already attempted on PR #$number; no retry loop."
+          # Count repair commits for this PR, including legacy single-attempt
+          # commits. The count persists across workflow reruns and bot restarts.
+          # Matching only bot-authored commits avoids counting unrelated messages.
+          commits="$(gh api --paginate "repos/$REPO/pulls/$number/commits?per_page=100")"
+          attempted="$(jq --arg marker "ci: Copilot CLI bounded test repair (#$number)" '
+            [.[] | select(
+              .author.login == "github-actions[bot]"
+              and (.commit.message | startswith($marker))
+            )] | length
+          ' <<< "$commits")"
+          if (( attempted >= MAX_ATTEMPTS )); then
+            echo "::warning::PR #$number reached $attempted/$MAX_ATTEMPTS repair attempts. Stopping."
             exit 0
           fi
+          attempt=$((attempted + 1))
+          echo "PR #$number: repair attempt $attempt/$MAX_ATTEMPTS for failed Verify run $RUN_ID."
           echo "eligible=true" >> "$GITHUB_OUTPUT"
+          echo "attempt=$attempt" >> "$GITHUB_OUTPUT"
+          echo "max_attempts=$MAX_ATTEMPTS" >> "$GITHUB_OUTPUT"
           echo "number=$number" >> "$GITHUB_OUTPUT"
           echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
           echo "branch=$(jq -r '.head.ref' <<< "$pr")" >> "$GITHUB_OUTPUT"
@@ -95,7 +170,7 @@ jobs:
         if: steps.guard.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id || github.event.workflow_run.id }}
         run: gh run view "$RUN_ID" --log-failed > .agent-failed-ci.log
 
       - name: Install Copilot CLI
@@ -106,8 +181,10 @@ jobs:
         if: steps.guard.outputs.eligible == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          ATTEMPT: ${{ steps.guard.outputs.attempt }}
+          MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |
-          copilot -p "This is an isolated CI self-repair proof of concept. Inspect the failures recorded in .agent-failed-ci.log and the repository tests. If the failure can be solved by correcting exactly ONE existing tests/*.test.mjs file, edit only that file. Do not change workflows, dependencies, product code, secrets, branch rules or existing unrelated tests. Do not execute code or shell commands; the runner will validate all changes separately. If a safe one-file repair is not possible, leave files unchanged and explain why." \
+          copilot -p "This is CI self-repair attempt $ATTEMPT of $MAX_ATTEMPTS. Inspect the latest failures in .agent-failed-ci.log. This is an isolated CI self-repair proof of concept. Inspect the failures recorded in .agent-failed-ci.log and the repository tests. If the failure can be solved by correcting exactly ONE existing tests/*.test.mjs file, edit only that file. Do not change workflows, dependencies, product code, secrets, branch rules or existing unrelated tests. Do not execute code or shell commands; the runner will validate all changes separately. If a safe one-file repair is not possible, leave files unchanged and explain why." \
             -s --allow-tool=write --deny-tool=shell --deny-tool=url
 
       - name: Verify only one Node test file was edited and push one fix
@@ -119,6 +196,8 @@ jobs:
           NUMBER: ${{ steps.guard.outputs.number }}
           BRANCH: ${{ steps.guard.outputs.branch }}
           EXPECTED_SHA: ${{ steps.guard.outputs.sha }}
+          ATTEMPT: ${{ steps.guard.outputs.attempt }}
+          MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |
           set -euo pipefail
           mapfile -t changed < <(git diff --name-only)
@@ -140,7 +219,7 @@ jobs:
           blob_sha="$(gh api "repos/$REPO/contents/$file?ref=$BRANCH" --jq '.sha')"
           encoded="$(base64 -w0 < "$file")"
           gh api --method PUT "repos/$REPO/contents/$file" \
-            -f message="ci: Copilot CLI bounded test repair (#$NUMBER)" \
+            -f message="ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
             -f branch="$BRANCH" \
             -f sha="$blob_sha" \
             -f content="$encoded" >/dev/null
