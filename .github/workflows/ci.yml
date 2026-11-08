@@ -114,3 +114,29 @@ jobs:
             -f ref="copilot/Development" \
             -f 'inputs[dry_run]=false' >/dev/null
           echo "Green dispatched Verify; Phase 2 queued for current eligible Development PRs."
+
+  # Failed runs triggered by the repair bot don't reliably emit workflow_run.
+  # Dispatch the bounded repair workflow explicitly, only for a failed test job.
+  # The repair workflow authenticates this run and checks PR/HEAD/attempt guards.
+  retry-repair-after-dispatched-verify:
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && needs.verify.result == 'failure' }}
+    needs: [verify, database]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Request bounded CI repair on failed dispatched Verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$REPO/actions/workflows/agent-merge-enrollment.yml/dispatches" \
+            -f ref="copilot/Development" \
+            -f "inputs[verify_run_id]=$RUN_ID" \
+            -f "inputs[head_sha]=$HEAD_SHA" >/dev/null
+          echo "Failed dispatched Verify; queued bounded self-repair eligibility check."
