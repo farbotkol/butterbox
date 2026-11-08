@@ -140,9 +140,10 @@ jobs:
           # commits. The count persists across workflow reruns and bot restarts.
           # Matching only bot-authored commits avoids counting unrelated messages.
           # --jq is applied to each API page, so count matches across all pages.
-          attempted="$(gh api --paginate "repos/$REPO/pulls/$number/commits?per_page=100" \
-            --jq '.[] | select(.author.login == "github-actions[bot]") | .commit.message' \
-            | grep -F -c "ci: Copilot CLI bounded test repair (#$number)" || true)"
+          repair_messages="$(gh api --paginate "repos/$REPO/pulls/$number/commits?per_page=100" \
+            --jq '.[] | select(.author.login == "github-actions[bot]") | .commit.message')"
+          attempted="$(awk -v marker="ci: Copilot CLI bounded test repair (#$number)" \
+            'index($0, marker) == 1 { count++ } END { print count+0 }' <<< "$repair_messages")"
           if (( attempted >= MAX_ATTEMPTS )); then
             echo "::warning::PR #$number reached $attempted/$MAX_ATTEMPTS repair attempts. Stopping."
             exit 0
