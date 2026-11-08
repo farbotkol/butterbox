@@ -91,3 +91,26 @@ jobs:
           path: ${{ runner.temp }}/playwright
           retention-days: 7
           if-no-files-found: ignore
+
+  # GITHUB_TOKEN-dispatched Verify runs do not reliably emit a downstream
+  # workflow_run event. Explicitly resume Phase 2 only after both required
+  # checks succeed. Phase 2 revalidates the PR's latest HEAD and merge rules.
+  resume-phase2-after-dispatched-verify:
+    if: ${{ github.event_name == 'workflow_dispatch' && needs.verify.result == 'success' && needs.database.result == 'success' }}
+    needs: [verify, database]
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - name: Dispatch Phase 2 with merging enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method POST "repos/$REPO/actions/workflows/phase2-automerge-development.yml/dispatches" \
+            -f ref="copilot/Development" \
+            -f 'inputs[dry_run]=false' >/dev/null
+          echo "Green dispatched Verify; Phase 2 queued for current eligible Development PRs."
