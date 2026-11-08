@@ -139,13 +139,10 @@ jobs:
           # Count repair commits for this PR, including legacy single-attempt
           # commits. The count persists across workflow reruns and bot restarts.
           # Matching only bot-authored commits avoids counting unrelated messages.
-          commits="$(gh api --paginate "repos/$REPO/pulls/$number/commits?per_page=100")"
-          attempted="$(jq --arg marker "ci: Copilot CLI bounded test repair (#$number)" '
-            [.[] | select(
-              .author.login == "github-actions[bot]"
-              and (.commit.message | startswith($marker))
-            )] | length
-          ' <<< "$commits")"
+          # --jq is applied to each API page, so count matches across all pages.
+          attempted="$(gh api --paginate "repos/$REPO/pulls/$number/commits?per_page=100" \
+            --jq '.[] | select(.author.login == "github-actions[bot]") | .commit.message' \
+            | grep -F -c "ci: Copilot CLI bounded test repair (#$number)" || true)"
           if (( attempted >= MAX_ATTEMPTS )); then
             echo "::warning::PR #$number reached $attempted/$MAX_ATTEMPTS repair attempts. Stopping."
             exit 0
