@@ -175,17 +175,17 @@ jobs:
         if: steps.guard.outputs.eligible == 'true'
         run: npm install --global @github/copilot
 
-      - name: Ask Copilot to repair a test file only
+      - name: Ask Copilot to repair failing Node test files
         if: steps.guard.outputs.eligible == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           ATTEMPT: ${{ steps.guard.outputs.attempt }}
           MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |
-          copilot -p "This is CI self-repair attempt $ATTEMPT of $MAX_ATTEMPTS. Inspect the latest failures in .agent-failed-ci.log. This is an isolated CI self-repair proof of concept. Inspect the failures recorded in .agent-failed-ci.log and the repository tests. If the failure can be solved by correcting exactly ONE existing tests/*.test.mjs file, edit only that file. Do not change workflows, dependencies, product code, secrets, branch rules or existing unrelated tests. Do not execute code or shell commands; the runner will validate all changes separately. If a safe one-file repair is not possible, leave files unchanged and explain why." \
+          copilot -p "This is CI self-repair attempt $ATTEMPT of $MAX_ATTEMPTS. Inspect .agent-failed-ci.log and the repository tests. Correct as many clearly diagnosed failures as possible in EXISTING tests/*.test.mjs files, including MULTIPLE such files in this ONE attempt when necessary. Do not avoid a partial fix just because some failures may remain; CI will rerun and the bounded retry loop will handle remaining eligible failures. Do not modify anything outside existing tests/*.test.mjs files. Do not change workflows, dependencies, product code, secrets, branch rules or unrelated tests. Do not execute code or shell commands; the runner will validate all changes separately. If no safe eligible repair is possible, leave files unchanged and explain why." \
             -s --allow-tool=write --deny-tool=shell --deny-tool=url
 
-      - name: Verify only one Node test file was edited and push one fix
+      - name: Validate all edited Node test files and push one atomic repair
         if: steps.guard.outputs.eligible == 'true'
         shell: bash
         env:
@@ -198,32 +198,72 @@ jobs:
           MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |
           set -euo pipefail
-          mapfile -t changed < <(git diff --name-only)
-          if (( ${#changed[@]} != 1 )); then
-            echo "::error::Expected exactly one modified test file; got ${#changed[@]}. No push."
+
+          # HEAD includes staged and unstaged changes; only already tracked,
+          # existing regular Node test files may enter a repair commit.
+          mapfile -t changed < <(git diff --name-only HEAD)
+          if (( ${#changed[@]} == 0 )); then
+            echo "::error::Copilot made no tracked test changes. No push."
             exit 1
           fi
-          file="${changed[0]}"
-          if [[ ! "$file" =~ ^tests/[a-zA-Z0-9_.-]+\.test\.mjs$ ]] ||
-             [[ ! -f "$file" ]] || [[ -L "$file" ]]; then
-            echo "::error::Disallowed changed path. No push."
-            exit 1
-          fi
+          mapfile -t untracked < <(git ls-files --others --exclude-standard)
+          for path in "${untracked[@]}"; do
+            if [[ "$path" != ".agent-failed-ci.log" ]]; then
+              echo "::error::Unexpected untracked file; no push: $path"
+              exit 1
+            fi
+          done
+          for file in "${changed[@]}"; do
+            if [[ ! "$file" =~ ^tests/[a-zA-Z0-9_.-]+\.test\.mjs$ ]] ||
+               [[ ! -f "$file" ]] || [[ -L "$file" ]] ||
+               ! git ls-files --error-unmatch -- "$file" >/dev/null 2>&1; then
+              echo "::error::Disallowed modified file. No push: $file"
+              exit 1
+            fi
+          done
+
+          # Publish all approved edits as ONE Git commit via the Git Data API.
+          # This is atomic for multiple files and cannot partially publish a
+          # repair if a later file fails validation or its blob upload fails.
           current_sha="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
           if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
             echo "::error::PR has moved since the failing CI run. No push."
             exit 1
           fi
-          blob_sha="$(gh api "repos/$REPO/contents/$file?ref=$BRANCH" --jq '.sha')"
-          encoded="$(base64 -w0 < "$file")"
-          gh api --method PUT "repos/$REPO/contents/$file" \
-            -f message="ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
-            -f branch="$BRANCH" \
-            -f sha="$blob_sha" \
-            -f content="$encoded" >/dev/null
-          echo "Pushed one test-only repair to PR #$NUMBER."
-          # GITHUB_TOKEN writes do not trigger pull_request/synchronize CI.
-          # workflow_dispatch is an explicitly supported exception; verify whether
-          # this dispatch supplies the required PR check contexts before merging.
+          base_tree="$(gh api "repos/$REPO/git/commits/$EXPECTED_SHA" --jq '.tree.sha')"
+          entries="$RUNNER_TEMP/ci-repair-entries.json"
+          printf '[]\n' > "$entries"
+          for file in "${changed[@]}"; do
+            blob_sha="$(gh api --method POST "repos/$REPO/git/blobs" \
+              -f encoding=base64 \
+              -f "content=$(base64 -w0 < "$file")" --jq '.sha')"
+            jq --arg path "$file" --arg sha "$blob_sha" \
+              '. + [{path:$path, mode:"100644", type:"blob", sha:$sha}]' \
+              "$entries" > "$entries.tmp"
+            mv "$entries.tmp" "$entries"
+          done
+
+          jq -n --arg base "$base_tree" --slurpfile entries "$entries" \
+            '{base_tree:$base, tree:$entries[0]}' > "$RUNNER_TEMP/ci-repair-tree.json"
+          tree_sha="$(gh api --method POST "repos/$REPO/git/trees" \
+            --input "$RUNNER_TEMP/ci-repair-tree.json" --jq '.sha')"
+          jq -n --arg message="ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
+            --arg tree "$tree_sha" --arg parent "$EXPECTED_SHA" \
+            '{message:$message, tree:$tree, parents:[$parent]}' > "$RUNNER_TEMP/ci-repair-commit.json"
+          commit_sha="$(gh api --method POST "repos/$REPO/git/commits" \
+            --input "$RUNNER_TEMP/ci-repair-commit.json" --jq '.sha')"
+
+          # GitHub refuses non-fast-forward ref updates without force=true.
+          # Keep force disabled and refuse to overwrite concurrent PR changes.
+          current_sha="$(gh api "repos/$REPO/pulls/$NUMBER" --jq '.head.sha')"
+          if [[ "$current_sha" != "$EXPECTED_SHA" ]]; then
+            echo "::error::PR moved while preparing repair commit. No push."
+            exit 1
+          fi
+          gh api --method PATCH "repos/$REPO/git/refs/heads/$BRANCH" \
+            -f sha="$commit_sha" -F force=false >/dev/null
+          echo "Pushed one atomic repair commit covering ${#changed[@]} existing test file(s) on PR #$NUMBER."
+          # GITHUB_TOKEN commits do not trigger synchronize runs. Explicit
+          # workflow_dispatch retries the full Verify gate.
           gh workflow run ci.yml --ref "$BRANCH"
-          echo "Dispatched Verify against repaired branch. No auto-merge attempted."
+          echo "Dispatched Verify against repaired branch; no direct merge attempted."
