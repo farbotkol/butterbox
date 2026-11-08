@@ -243,39 +243,39 @@ jobs:
               -f "content=$(base64 -w0 < "$file")" \
               --template '{{.sha}}')"
             python3 - "$entries" "$file" "$blob_sha" <<'PY'
-import json
-import pathlib
-import sys
-
-path, filename, blob_sha = sys.argv[1:]
-entries = json.loads(pathlib.Path(path).read_text())
-entries.append({"path": filename, "mode": "100644", "type": "blob", "sha": blob_sha})
-pathlib.Path(path).write_text(json.dumps(entries))
-PY
+          import json
+          import pathlib
+          import sys
+          
+          path, filename, blob_sha = sys.argv[1:]
+          entries = json.loads(pathlib.Path(path).read_text())
+          entries.append({"path": filename, "mode": "100644", "type": "blob", "sha": blob_sha})
+          pathlib.Path(path).write_text(json.dumps(entries))
+          PY
           done
 
           python3 - "$base_tree" "$entries" "$RUNNER_TEMP/ci-repair-tree.json" <<'PY'
-import json
-import pathlib
-import sys
-
-base_tree, entries_file, output_file = sys.argv[1:]
-payload = {"base_tree": base_tree, "tree": json.loads(pathlib.Path(entries_file).read_text())}
-pathlib.Path(output_file).write_text(json.dumps(payload))
-PY
+          import json
+          import pathlib
+          import sys
+          
+          base_tree, entries_file, output_file = sys.argv[1:]
+          payload = {"base_tree": base_tree, "tree": json.loads(pathlib.Path(entries_file).read_text())}
+          pathlib.Path(output_file).write_text(json.dumps(payload))
+          PY
           tree_sha="$(gh api --method POST "repos/$REPO/git/trees" \
             --input "$RUNNER_TEMP/ci-repair-tree.json" \
             --template '{{.sha}}')"
           python3 - "ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
             "$tree_sha" "$EXPECTED_SHA" "$RUNNER_TEMP/ci-repair-commit.json" <<'PY'
-import json
-import pathlib
-import sys
-
-message, tree_sha, parent_sha, output_file = sys.argv[1:]
-payload = {"message": message, "tree": tree_sha, "parents": [parent_sha]}
-pathlib.Path(output_file).write_text(json.dumps(payload))
-PY
+          import json
+          import pathlib
+          import sys
+          
+          message, tree_sha, parent_sha, output_file = sys.argv[1:]
+          payload = {"message": message, "tree": tree_sha, "parents": [parent_sha]}
+          pathlib.Path(output_file).write_text(json.dumps(payload))
+          PY
           commit_sha="$(gh api --method POST "repos/$REPO/git/commits" \
             --input "$RUNNER_TEMP/ci-repair-commit.json" \
             --template '{{.sha}}')"
