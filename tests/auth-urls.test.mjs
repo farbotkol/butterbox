@@ -28,7 +28,7 @@ test("authentication callbacks use a configured secure application origin", () =
 test("authentication redirects cannot leave the request origin", () => {
   assert.equal(
     safeAuthRedirect("/roster?week=2026-10-26"),
-    "/roster?week=2026-10-27",
+    "/roster?week=2026-10-26",
   );
   for (const invalid of [
     null,
