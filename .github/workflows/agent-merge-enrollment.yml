@@ -230,28 +230,55 @@ jobs:
             echo "::error::PR has moved since the failing CI run. No push."
             exit 1
           fi
-          base_tree="$(gh api "repos/$REPO/git/commits/$EXPECTED_SHA" --jq '.tree.sha')"
+          # Build Git Data API payloads with Python JSON serialization instead
+          # of jq filters. Copilot's repair previously succeeded but the
+          # publishing job failed compiling a jq expression.
+          base_tree="$(gh api "repos/$REPO/git/commits/$EXPECTED_SHA" \
+            --template '{{.tree.sha}}')"
           entries="$RUNNER_TEMP/ci-repair-entries.json"
           printf '[]\n' > "$entries"
           for file in "${changed[@]}"; do
             blob_sha="$(gh api --method POST "repos/$REPO/git/blobs" \
               -f encoding=base64 \
-              -f "content=$(base64 -w0 < "$file")" --jq '.sha')"
-            jq --arg path "$file" --arg sha "$blob_sha" \
-              '. + [{path:$path, mode:"100644", type:"blob", sha:$sha}]' \
-              "$entries" > "$entries.tmp"
-            mv "$entries.tmp" "$entries"
+              -f "content=$(base64 -w0 < "$file")" \
+              --template '{{.sha}}')"
+            python3 - "$entries" "$file" "$blob_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+path, filename, blob_sha = sys.argv[1:]
+entries = json.loads(pathlib.Path(path).read_text())
+entries.append({"path": filename, "mode": "100644", "type": "blob", "sha": blob_sha})
+pathlib.Path(path).write_text(json.dumps(entries))
+PY
           done
 
-          jq -n --arg base "$base_tree" --slurpfile entries "$entries" \
-            '{base_tree:$base, tree:$entries[0]}' > "$RUNNER_TEMP/ci-repair-tree.json"
+          python3 - "$base_tree" "$entries" "$RUNNER_TEMP/ci-repair-tree.json" <<'PY'
+import json
+import pathlib
+import sys
+
+base_tree, entries_file, output_file = sys.argv[1:]
+payload = {"base_tree": base_tree, "tree": json.loads(pathlib.Path(entries_file).read_text())}
+pathlib.Path(output_file).write_text(json.dumps(payload))
+PY
           tree_sha="$(gh api --method POST "repos/$REPO/git/trees" \
-            --input "$RUNNER_TEMP/ci-repair-tree.json" --jq '.sha')"
-          jq -n --arg message="ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
-            --arg tree "$tree_sha" --arg parent "$EXPECTED_SHA" \
-            '{message:$message, tree:$tree, parents:[$parent]}' > "$RUNNER_TEMP/ci-repair-commit.json"
+            --input "$RUNNER_TEMP/ci-repair-tree.json" \
+            --template '{{.sha}}')"
+          python3 - "ci: Copilot CLI bounded test repair (#$NUMBER) [attempt $ATTEMPT/$MAX_ATTEMPTS]" \
+            "$tree_sha" "$EXPECTED_SHA" "$RUNNER_TEMP/ci-repair-commit.json" <<'PY'
+import json
+import pathlib
+import sys
+
+message, tree_sha, parent_sha, output_file = sys.argv[1:]
+payload = {"message": message, "tree": tree_sha, "parents": [parent_sha]}
+pathlib.Path(output_file).write_text(json.dumps(payload))
+PY
           commit_sha="$(gh api --method POST "repos/$REPO/git/commits" \
-            --input "$RUNNER_TEMP/ci-repair-commit.json" --jq '.sha')"
+            --input "$RUNNER_TEMP/ci-repair-commit.json" \
+            --template '{{.sha}}')"
 
           # GitHub refuses non-fast-forward ref updates without force=true.
           # Keep force disabled and refuse to overwrite concurrent PR changes.
