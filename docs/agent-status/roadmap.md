@@ -2,14 +2,14 @@
 
 ## Issue #61 — BB-PAY-008 payroll delivery persistence
 
-- **Last report:** 2026-11-09 02:36 UTC.
-- **Phase:** Planning; isolated database startup is in progress.
+- **Last report:** 2026-11-09 02:39 UTC.
+- **Phase:** Blocked; implementation and acceptance remain incomplete.
 - **Criteria:** Persist one scoped delivery and concurrency-safe attempts for a finalized export; bounded transient retries and distinct permanent/unknown outcomes; verify authorization, isolation, concurrency, exhaustion and export preservation with synthetic data.
-- **Activity / progress:** Reviewed the existing immutable export, payroll permission and delivery-policy foundations. The guarded `butterbox-citest` runner is starting its disposable project; no development or showcase project was found on the inspected daemon.
-- **Tests:** Existing payroll delivery and generic export unit tests passed 12/12 after installing locked dependencies. The first combined run failed because dependencies were absent; it passed after installation. Database checks have not run.
-- **Blockers:** Disposable database readiness and database acceptance remain unverified. No provider submission or production access is in scope.
-- **Next action:** Verify disposable project identity and readiness, then implement and test the scoped persistence slice.
-- **Latest development commit:** `c53a1acdc7ce010b18ad3d338f8dbb48d1a18e29`.
+- **Activity / progress:** Reviewed the existing immutable export, payroll permission and delivery-policy foundations. Started the disposable `butterbox-citest` project and checked its project label, dedicated database volume and 5942x ports; no development or showcase project was found on the inspected daemon. No delivery code was added.
+- **Tests:** Existing payroll delivery and generic export unit tests passed 12/12 after installing locked dependencies. The first combined run failed because dependencies were absent; it passed after installation. The existing generic export pgTAP file passed 65/65 on the disposable project. These are baseline tests, not verification of the requested delivery feature.
+- **Blockers:** A concurrency-safe claim and recovery implementation has not been produced or verified. Authorization, cross-tenant denial, duplicate claims, retry exhaustion and preservation tests for the new feature remain outstanding. No provider submission or production access is in scope.
+- **Next action:** Design and implement claim ownership and safe handling of abandoned or uncertain attempts, then verify every issue criterion with synthetic fixtures before considering the slice complete.
+- **Latest development commit:** `a427d6ad059f7e5432677d77e8accfbb807196b9` (status checkpoint only).
 - **Documentation:** User Guide not applicable to this backend-only slice.
 
 ## Local CI test environment and agent test broker
