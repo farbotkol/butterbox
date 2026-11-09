@@ -1,5 +1,17 @@
 # Roadmap Agent — Activity Status
 
+## Issue #61 — BB-PAY-008 payroll delivery persistence
+
+- **Last report:** 2026-11-09 02:36 UTC.
+- **Phase:** Planning; isolated database startup is in progress.
+- **Criteria:** Persist one scoped delivery and concurrency-safe attempts for a finalized export; bounded transient retries and distinct permanent/unknown outcomes; verify authorization, isolation, concurrency, exhaustion and export preservation with synthetic data.
+- **Activity / progress:** Reviewed the existing immutable export, payroll permission and delivery-policy foundations. The guarded `butterbox-citest` runner is starting its disposable project; no development or showcase project was found on the inspected daemon.
+- **Tests:** Existing payroll delivery and generic export unit tests passed 12/12 after installing locked dependencies. The first combined run failed because dependencies were absent; it passed after installation. Database checks have not run.
+- **Blockers:** Disposable database readiness and database acceptance remain unverified. No provider submission or production access is in scope.
+- **Next action:** Verify disposable project identity and readiness, then implement and test the scoped persistence slice.
+- **Latest development commit:** `c53a1acdc7ce010b18ad3d338f8dbb48d1a18e29`.
+- **Documentation:** User Guide not applicable to this backend-only slice.
+
 ## Local CI test environment and agent test broker
 
 - **Last report:** 2026-11-05 13:10 AEDT (UTC+1100), observed on the operator's clock.
