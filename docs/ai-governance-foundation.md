@@ -25,9 +25,9 @@ network, personal data or provider credentials are used.
 - Typed request and response contracts, strict allow-list parsing and offline
   mock-fixture evaluation are independently testable and classified
   **Foundation Ready**.
-- The server-side tenant/role authorization path and a persisted per-business
-  default-off switch are not implemented in this slice. They require a
-  positively verified isolated database for migration and security tests.
+- AI-GOV-001 itself has no server-side authorization. Issue #68 adds the
+  separate review boundary below; a persisted per-business default-off switch
+  and isolated database acceptance remain pending.
 - Privacy-minimal durable request logs, usage budgets, timeout enforcement and
   a deployment-safe circuit breaker are also pending. The fixture evaluator
   does not measure a model or establish model safety.
@@ -55,3 +55,66 @@ durations, and aggregate token usage (or `unavailable`); prompt text, model
 responses, adapter errors and worker details are excluded. This remains an
 offline fake-adapter control, not durable production logging, a production
 circuit breaker, or evidence of model quality or award correctness.
+
+## Issue #68: authenticated proposal review boundary
+
+`src/app/assistant/actions.ts` exports `reviewAiProposalAction(request, response)`.
+It creates the existing cookie-authenticated Supabase client on the server;
+callers cannot supply a client, user, role, membership or allow-lists.
+`src/lib/ai-proposal-review.ts` implements the independently testable service.
+The request accepts exactly `feature`, `businessId`, `venueId`, `departmentId`
+and bounded `requestText`. Scope IDs are untrusted selectors, not permissions.
+
+Before retrieving shift or employee IDs, each invocation:
+
+1. Authenticates with `auth.getUser()` and rereads that user's membership for
+   the selected business. Revocation is membership deletion in the current schema.
+2. Calls the existing `can_manage_department` RPC, which enforces owner/admin
+   access, general-manager venue scope, and FOH/BOH/department-manager assignment.
+   Employee and unknown roles cannot review assignment proposals.
+3. Resolves an active department using the complete business/venue/department
+   tuple. Even an owner cannot combine IDs from unrelated scopes.
+4. Retrieves only scheduled, unpublished shift IDs in that scope and active
+   employee IDs joined through current `employee_departments` assignments in
+   the same business and venue. Home department alone is not the eligibility rule.
+   More than 200 shifts or 500 employee links fails closed, rather than enlarging
+   the existing parser's bounds.
+5. Passes those server-retrieved allow-lists to the unchanged strict proposal
+   parser. One invalid action rejects the entire response.
+6. Repeats authentication, membership, management permission and active
+   department checks before returning; the authenticated user must be unchanged.
+
+Success is `review_required`, never execution or approval. Only validated
+proposal IDs and fixed server-authored summary/clarification text are returned.
+Prompt/model prose is neither an instruction source nor exposed as an employee
+detail or a claim that approval occurred. Unsupported tools, unknown fields,
+scope changes and IDs outside the allow-lists deny. All failures return the same
+non-revealing `denied` message, without database diagnostics or echoed input.
+No roster write, approval RPC, provider call or new schema is involved.
+
+### Observed verification and remaining limitations
+
+`node --experimental-strip-types --test tests/ai-governance.test.mjs tests/ai-proposal-review.test.mjs`
+passed **16/16** on 9 November 2026 UTC. The tests execute the real Supabase query
+builder with synthetic HTTP responses, checking scoped minimal queries, each
+manager role, employee/anonymous denials, forged scope and IDs, changed/revoked
+membership between and during calls, inactive resources, unknown actions,
+injection-style escalation/disclosure/approval attempts and safe output text.
+Targeted ESLint and repository TypeScript passed. Production build was attempted
+but blocked by Google Fonts downloads for existing Inter/Poppins fonts.
+
+These are deterministic service/transport tests, **not** PostgreSQL/RLS,
+cookie-authentication or browser runtime acceptance. No verified disposable
+database was used; authenticated integration remains a pre-rollout gate.
+Separate reads cannot promise a transactionally atomic snapshot. A review result
+is not a reusable authorization token: future display/review must invoke this
+boundary again, and any future apply workflow must reauthorize and revalidate
+latest membership, roster, worker eligibility and approval within its write
+transaction. Scope eligibility here is not availability, overlap, qualification
+or award/pay validation. Natural-language injection detection/model safety,
+an assistant UI, retrieval of employee details, audit persistence, default-off
+switches, budgets and actual model evaluation remain outside this slice.
+
+**Documentation: updated. User Guide: not applicable** — backend-only contract,
+with no user-visible assistant workflow, external delivery or provider integration.
+BB-AI-006 remains **Backlog** pending its broader runtime acceptance.

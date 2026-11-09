@@ -1070,7 +1070,7 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 ### BB-AI-006 — Safe conversational permissions [P1]
 
-**Foundation Ready:** AI-GOV-001 provides strict output-scope and allow-list validation only. It does not authenticate callers, retrieve tenant data, enforce membership or apply actions. The complete parent story remains Backlog.
+**Foundation Ready:** AI-GOV-001 provides strict output-scope and allow-list validation. [Issue #68](https://github.com/farbotkol/butterbox/issues/68) adds a cookie-session server review boundary using current membership, `can_manage_department`, active scoped department/shift/employee retrieval and a final authorization recheck. Deterministic synthetic transport tests pass; no provider, employee-detail retrieval, action execution or UI is enabled. PostgreSQL/RLS and cookie/browser integration remain unverified; see `docs/ai-governance-foundation.md` and `IMPLEMENTATION_PROGRESS.md`. The complete parent story remains Backlog.
 
 **User story:** As an owner, I want the assistant to respect venue and department access.
 

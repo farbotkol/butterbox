@@ -17,6 +17,40 @@
 - **Latest development commit:** `83b8e70bdf5fe146245b5fe5e34f645023a185aa`.
 - **Push outcome:** Verified `HEAD` and the configured upstream both equal `83b8e70bdf5fe146245b5fe5e34f645023a185aa`.
 
+## PR #72 — Merge conflict resolution checkpoint
+
+- **Last report:** 2026-11-09 03:58 UTC; phase: Complete for documentation conflict resolution.
+- **Story / criteria:** BB-AI-006 / issue #68; merge the current `copilot/Development` base without losing AI authorization evidence or the payroll checkpoint.
+- **Activity / progress:** Resolved the overlapping insertion in this file by retaining both issue #68 and issue #61 sections. Application code, tests, schema and CI protections are unchanged by the merge.
+- **Verification:** Reviewed both sides and preserved their checkpoint text; no tests, lint or build selected for this documentation-only resolution. Prior test results below are historical, not rerun in this session.
+- **Blockers:** No remaining content conflicts. Existing AI runtime/build limitations and payroll blockers below are unchanged.
+- **Next:** Finalize and publish the two-parent merge, verify the remote branch and reply to the owner.
+- **Latest development commit:** `7344731bab7e52c64f72694c3591cf62c57ccc56` (pre-merge head); merging base `2085154`.
+- **Documentation: updated**; User Guide not applicable to merge/status maintenance.
+
+## Issue #68 — BB-AI-006 scoped assistant proposal review
+
+- **Last report:** 2026-11-09 02:43 UTC; phase: Complete for implementation/synthetic verification of this focused slice; session finishing, no background continuation implied.
+- **Criteria:** Authenticate current membership; enforce business/venue/department and action/worker scope; safely deny escalation and disclosure; preserve strict review-only proposals; verify synthetic adversarial cases.
+- **Activity / progress:** Implemented server-owned cookie-session review boundary, current scoped membership/RPC checks, minimal shift/employee-link retrieval, strict unchanged parser, final authorization recheck and safe fixed text. Independent read-only code review found no significant issues. PR #72 targets `copilot/Development`; no provider, production data or database operation used.
+- **Tests:** AI guard and new synthetic Supabase transport tests **16/16 pass**; expanded AI/auth/business-selection run **25/25 pass**. Targeted ESLint, repository TypeScript, CSV and diff checks pass. Secret scan: no secrets; CodeQL: **0 alerts**. Initial positive fixtures failed because Supabase `accessToken` disabled auth access; fixture corrected and rerun successfully. Existing dependencies installed from lockfile; eight existing moderate npm advisories reported.
+- **Blockers / deferred:** Production build attempted but blocked by existing Google Fonts downloads (Inter/Poppins). Docker reachable, no running containers; no verified disposable database identified or reset. Actual cookie/PostgreSQL/RLS/browser integration and atomic snapshot guarantees remain unverified. Parent BB-AI-006 remains Backlog.
+- **Next:** Reviewer/controller to run isolated cookie/PostgreSQL/RLS integration and build when Google Fonts is reachable before rollout; no further issue selected.
+- **Documentation: updated** in governance, backlog/CSV and `IMPLEMENTATION_PROGRESS.md`; User Guide not applicable to this backend-only slice.
+- **Latest development commit:** `54b7556e13a29ab0a72d9bbb09010aee25a4ab83`; pushed and exact remote SHA verified with `git ls-remote` at 02:43 UTC. Only the expected eight files were committed; final documentation checkpoint follows.
+
+## Issue #61 — BB-PAY-008 payroll delivery persistence
+
+- **Last report:** 2026-11-09 02:39 UTC.
+- **Phase:** Blocked; implementation and acceptance remain incomplete.
+- **Criteria:** Persist one scoped delivery and concurrency-safe attempts for a finalized export; bounded transient retries and distinct permanent/unknown outcomes; verify authorization, isolation, concurrency, exhaustion and export preservation with synthetic data.
+- **Activity / progress:** Reviewed the existing immutable export, payroll permission and delivery-policy foundations. Started the disposable `butterbox-citest` project and checked its project label, dedicated database volume and 5942x ports; no development or showcase project was found on the inspected daemon. No delivery code was added.
+- **Tests:** Existing payroll delivery and generic export unit tests passed 12/12 after installing locked dependencies. The first combined run failed because dependencies were absent; it passed after installation. The existing generic export pgTAP file passed 65/65 on the disposable project. These are baseline tests, not verification of the requested delivery feature.
+- **Blockers:** A concurrency-safe claim and recovery implementation has not been produced or verified. Authorization, cross-tenant denial, duplicate claims, retry exhaustion and preservation tests for the new feature remain outstanding. No provider submission or production access is in scope.
+- **Next action:** Design and implement claim ownership and safe handling of abandoned or uncertain attempts, then verify every issue criterion with synthetic fixtures before considering the slice complete.
+- **Latest development commit:** `a427d6ad059f7e5432677d77e8accfbb807196b9` (status checkpoint only).
+- **Documentation:** User Guide not applicable to this backend-only slice.
+
 ## Local CI test environment and agent test broker
 
 - **Last report:** 2026-11-05 13:10 AEDT (UTC+1100), observed on the operator's clock.
