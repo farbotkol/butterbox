@@ -2,14 +2,14 @@
 
 ## Issue #68 — BB-AI-006 scoped assistant proposal review
 
-- **Last report:** 2026-11-09 02:36 UTC; phase: Planning, actively executing this session.
+- **Last report:** 2026-11-09 02:41 UTC; phase: Testing, actively executing this session.
 - **Criteria:** Authenticate current membership; enforce business/venue/department and action/worker scope; safely deny escalation and disclosure; preserve strict review-only proposals; verify synthetic adversarial cases.
-- **Activity / progress:** Read issue, owner AI decisions, proposal guard, workspace authentication and scoped SQL permissions. Clean issue branch; PR #72 targets `copilot/Development`. No provider, production data or database operation used.
-- **Tests:** Not yet run. Existing dependencies installed from lockfile; eight existing moderate npm advisories reported.
-- **Blockers:** No verified disposable database identified yet; database/runtime acceptance remains unverified. Parent BB-AI-006 remains Backlog.
-- **Next:** Implement session-client review boundary and deterministic tests, then targeted ESLint, TypeScript and build.
-- **Documentation:** Operational/acceptance documentation planned; User Guide not applicable to this backend-only slice.
-- **Latest development commit:** `a1e954ca279369f42dad0e9fac2eab107d9f8acb` (initial plan).
+- **Activity / progress:** Implemented server-owned cookie-session review boundary, current scoped membership/RPC checks, minimal shift/employee-link retrieval, strict unchanged parser, final authorization recheck and safe fixed text. Independent read-only code review found no significant issues. PR #72 targets `copilot/Development`; no provider, production data or database operation used.
+- **Tests:** AI guard and new synthetic Supabase transport tests **16/16 pass**; expanded AI/auth/business-selection run **25/25 pass**. Targeted ESLint, repository TypeScript, CSV and diff checks pass. Initial positive fixtures failed because Supabase `accessToken` disabled auth access; fixture corrected and rerun successfully. Existing dependencies installed from lockfile; eight existing moderate npm advisories reported.
+- **Blockers / deferred:** Production build attempted but blocked by existing Google Fonts downloads (Inter/Poppins). Docker reachable, no running containers; no verified disposable database identified or reset. Actual cookie/PostgreSQL/RLS/browser integration and atomic snapshot guarantees remain unverified. Parent BB-AI-006 remains Backlog.
+- **Next:** Complete secret scan and CodeQL; commit verified changes and record final evidence. Future isolated runtime acceptance remains required before rollout.
+- **Documentation: updated** in governance, backlog/CSV and `IMPLEMENTATION_PROGRESS.md`; User Guide not applicable to this backend-only slice.
+- **Latest development commit:** `3b10bb0` (planning/status checkpoint); implementation not yet committed at this report.
 
 ## Local CI test environment and agent test broker
 
