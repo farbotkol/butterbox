@@ -1,5 +1,23 @@
 # Implementation progress
 
+## BB-SAAS-001 — Approved per-venue pricing calculator
+
+- **Last report:** 2026-11-09 00:52:55 UTC (observed on the sandbox clock).
+- **Issue / PR:** [#60](https://github.com/farbotkol/butterbox/issues/60) / [#67](https://github.com/farbotkol/butterbox/pull/67).
+- **Phase / activity:** Testing; verifying the standalone pricing policy and updating issue evidence.
+- **Progress:** Replaced the outdated “no approved rates” blocker with the approved calculator slice. The parent story remains **Blocked**.
+- **Implementation:** `src/lib/venue-pricing.ts` contains the approved monthly AUD tiers and resolves one validated worker count per venue. A worker active at multiple venues is represented once in each venue's independent count; assignment retrieval and distinct-worker counting are outside this slice. Counts 1–3 are Free ($0), 4–15 Starter ($15), 16–30 Pro ($25), 31–60 Plus ($45), 61–100 Growth ($69), 101–200 Scale ($99), and 201+ Enterprise (custom). Zero returns `awaiting_pricing_decision`; non-safe-integer and negative counts are rejected. The resolver defines no feature entitlements and is not connected to the synthetic-data demo.
+- **Acceptance evidence:**
+  - **Pricing tiers — Pass:** One configuration has all seven approved ranges and monthly AUD prices; Enterprise is custom-priced. Focused tests cover both inclusive ends of each fixed tier and the 201-worker Enterprise threshold.
+  - **Independent venue resolution — Pass:** Separate 10-worker and 25-worker inputs resolve to $15 Starter and $25 Pro. The resolver accepts one count per venue; distinct assignment counting remains outside scope.
+  - **Empty and invalid counts — Pass:** Zero yields `awaiting_pricing_decision`; negative, fractional, non-finite, unsafe and non-numeric inputs are rejected.
+  - **Feature/demo isolation — Pass:** Tier data contains pricing only; no feature gates or synthetic-data demo integration were added.
+- **Remaining parent gates:** validated distinct active worker counts from the database, persisted entitlements, billing/provider setup and enforcement, zero-worker pricing decision, and isolated database verification remain out of scope. No billing or user-visible behavior changed; all features remain available on every tier.
+- **Tests and results:** `node --experimental-strip-types --test tests/venue-pricing.test.mjs` passed **4/4**. `git diff --check` passed. ESLint was unavailable (no `node_modules`); the global TypeScript check was attempted but could not resolve the missing Next.js module and Node type declarations. No pricing test failed.
+- **Deferred checks / blockers:** No database, browser or production build is needed for this pure policy module; routes, Next.js configuration and server/client boundaries are unchanged. Re-run lint and TypeScript in an environment with project dependencies installed.
+- **Documentation:** updated in this story record, `BUTTERBOX_PRODUCT_BACKLOG.md` and `BACKLOG_INDEX.csv`. **User Guide: not applicable** — configuration-only behavior; no user-facing workflow changed.
+- **Next action / latest development commit:** Run secret scanning and CodeQL, make any required localized fixes, repeat targeted verification, and record the commit/result. Commit SHA not yet available.
+
 ## Execution summary
 
 - **Local CI test environment and agent test broker (PR #20), 2026-11-05 11:35 AEDT: Delivered. GitHub CI passed. Local reproduction established.**
