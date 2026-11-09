@@ -2,9 +2,9 @@
 
 ## BB-AI-006 — Server-scoped assistant proposal review (issue #68 slice)
 
-- **Last report:** 2026-11-09 02:41 UTC (sandbox clock).
+- **Last report:** 2026-11-09 02:43 UTC (sandbox clock).
 - **Issue / PR:** [#68](https://github.com/farbotkol/butterbox/issues/68) / [#72](https://github.com/farbotkol/butterbox/pull/72), targeting `copilot/Development`; Closes #68 for this focused slice only.
-- **Phase / activity:** Testing; implementation, deterministic tests and independent read-only review pass; final security checks pending. Full parent remains **Backlog**, not Done.
+- **Phase / activity:** Complete for implementation/synthetic verification of this focused slice; independent review and security checks pass. Runtime/build acceptance remains limited as recorded below. Full parent remains **Backlog**, not Done.
 - **Implementation:** `src/app/assistant/actions.ts` creates the existing cookie-authenticated RLS client. `src/lib/ai-proposal-review.ts` validates untrusted request selectors, authenticates the current user, rereads membership, uses `can_manage_department`, resolves an active exact-scope department and retrieves minimal current draft-shift/active employee department-link allow-lists. The unchanged parser checks every action. Final authorization/user identity is checked again. Results are review-only with fixed prose; denials disclose no records or diagnostics. No provider, write or approval RPC, schema or CI-protection changes.
 
 | Issue criterion | Implementation evidence / test / actual result | Status |
@@ -19,8 +19,9 @@
 - **Build / remaining verification:** `npm run build` attempted because a server-action boundary was added; **Blocked** by Google Fonts network fetches for existing Inter/Poppins. No font/config workaround added. Docker is reachable with no running containers; no verified disposable project was identified or changed. No PostgreSQL/RLS, actual cookie/browser or full-repository run performed. New query filters use existing RLS/RPC infrastructure, not a replacement policy. Further authenticated isolated checks are required before rollout.
 - **Concurrency / scope limitations:** Separate reads are not an atomic authorization snapshot; no mutation or reusable approval token is returned. Future display must rerun the boundary; a future apply path must authorize/revalidate inside its own write transaction. Worker scope checks do not certify availability, overlaps, qualifications, awards or payroll. No employee-detail retrieval, UI, durable logs, feature switch or actual model validation.
 - **Documentation: updated** in the existing governance document, product backlog, CSV evidence and Roadmap status. **User Guide: not applicable** — backend-only slice, no new user workflow.
-- **Latest development commit:** `3b10bb0` (planning/status checkpoint); implementation not yet committed at this report.
-- **Next:** Complete security scans, commit verified changes and preserve the parent Backlog status.
+- **Security / delivery:** Secret scan found no secrets in all eight changed files; CodeQL found **0 JavaScript alerts**. Implementation commit `54b7556e13a29ab0a72d9bbb09010aee25a4ab83` pushed; `git ls-remote` verified the exact branch SHA at 02:43 UTC. Committed file scope and whitespace reviewed; no dependencies, build artifacts, migrations, other workstream status or CI protections changed.
+- **Latest development commit:** `54b7556e13a29ab0a72d9bbb09010aee25a4ab83`.
+- **Next:** Reviewer/controller to verify cookie/PostgreSQL/RLS integration in its explicitly verified disposable environment and retry the production build when Google Fonts is reachable before rollout. Preserve parent Backlog; no automatic continuation implied.
 
 ## BB-SAAS-001 — Approved per-venue pricing calculator
 
