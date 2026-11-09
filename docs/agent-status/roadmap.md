@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## BB-AI-007 — Offline evaluation budgets and deadlines
+
+- **Last report:** 2026-11-09 02:41 UTC, observed from the sandbox clock.
+- **Execution state:** Complete for the authorized offline slice; no background continuation is implied.
+- **Current story:** BB-AI-007 issue #62, PR #74; this is a partial offline slice and the parent story remains Backlog.
+- **Acceptance criteria:** Enforce fake-adapter request and usage budgets; enforce a configurable deadline and discard late responses; keep reports to case ID, outcome, duration and aggregate usage; preserve scoped parsing/adversarial fixtures and add focused tests.
+- **Phase:** Complete.
+- **Activity:** Added `runAiEvaluation()` with sequential provider-neutral adapter calls, request/token limits, whole-run timeout, usage-unavailable handling and privacy-limited results. The adapter receives only a case ID and request, not the expected answer or canned fixture response.
+- **Progress since previous report:** Completed source, tests and governance/backlog/status evidence. The legacy fixture evaluator and its adversarial results remain intact.
+- **Tests and results:** `node --experimental-strip-types --test tests/ai-governance.test.mjs`: **12/12 passed**. Targeted strict TypeScript check of `src/lib/ai-evaluation.ts` passed. `git diff --check` passed; `BACKLOG_INDEX.csv` parsed as 132 data rows and 11 columns. Secret scan found no secrets. CodeQL reported **0 alerts**.
+- **Failing tests:** None observed.
+- **Blockers requiring intervention:** ESLint is unavailable because this checkout has no `node_modules`; full repository regression, provider/model, network and database runs were not needed or performed.
+- **Documentation:** Updated `docs/ai-governance-foundation.md`, `IMPLEMENTATION_PROGRESS.md` and the BB-AI-007 `BACKLOG_INDEX.csv` evidence. User Guide not applicable: backend-only offline evaluation with no user-visible workflow.
+- **Next concrete action:** Owner/reviewer to review PR #74; keep the parent story Backlog until its remaining quality controls are verified.
+- **Latest development commit:** `83b8e70bdf5fe146245b5fe5e34f645023a185aa`.
+- **Push outcome:** Verified `HEAD` and the configured upstream both equal `83b8e70bdf5fe146245b5fe5e34f645023a185aa`.
+
 ## PR #72 — Merge conflict resolution checkpoint
 
 - **Last report:** 2026-11-09 03:58 UTC; phase: Complete for documentation conflict resolution.

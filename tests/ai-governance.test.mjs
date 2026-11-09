@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { evaluateAiFixtures } from "../src/lib/ai-evaluation.ts";
+import { evaluateAiFixtures, runAiEvaluation } from "../src/lib/ai-evaluation.ts";
 import { isValidAiRequestContext, parseAiProposalResponse } from "../src/lib/ai-governance.ts";
 import { aiEvaluationFixtures } from "./fixtures/ai-evaluation.mjs";
 
@@ -23,6 +23,7 @@ const proposal = {
   summary: "Propose the eligible employee for the selected shift.",
   actions: [{ kind: "assign_shift", shiftId: id(4), employeeId: id(5) }],
 };
+const responseFor = (caseId) => aiEvaluationFixtures.find((fixture) => fixture.id === caseId).response;
 
 test("valid request contexts require bounded text and structurally valid scope", () => {
   assert.equal(isValidAiRequestContext(context), true);
@@ -114,4 +115,122 @@ test("offline evaluation rejects duplicate case identifiers and invalid contexts
   assert.throws(() => evaluateAiFixtures([
     { ...aiEvaluationFixtures[0], request: { ...context, businessId: "invalid" } },
   ]), /Invalid AI evaluation fixture/);
+});
+
+test("offline adapter evaluation returns a scoped result and aggregate usage", async () => {
+  const report = await runAiEvaluation(
+    aiEvaluationFixtures.slice(0, 1),
+    async (fixture) => {
+      assert.deepEqual(Object.keys(fixture).sort(), ["id", "request"]);
+      return { response: responseFor(fixture.id), usage: { inputTokens: 2, outputTokens: 3 } };
+    },
+    { maxRequests: 1, maxTokens: 5, deadlineMs: 1000 },
+  );
+
+  assert.deepEqual(report.cases.map(({ caseId, outcome }) => [caseId, outcome]), [
+    ["valid-scoped-proposal", "passed"],
+  ]);
+  assert.ok(report.cases[0].durationMs >= 0);
+  assert.deepEqual(report.usage, { inputTokens: 2, outputTokens: 3 });
+});
+
+test("offline adapter evaluation rejects exhausted request and usage budgets before calling", async () => {
+  let requestCalls = 0;
+  const requestLimited = await runAiEvaluation(
+    aiEvaluationFixtures.slice(0, 2),
+    async (fixture) => {
+      requestCalls += 1;
+      return { response: responseFor(fixture.id), usage: { inputTokens: 1, outputTokens: 1 } };
+    },
+    { maxRequests: 1, maxTokens: 10, deadlineMs: 1000 },
+  );
+  assert.deepEqual(requestLimited.cases.map(({ outcome }) => outcome), [
+    "passed", "request_budget_exhausted",
+  ]);
+  assert.equal(requestCalls, 1);
+
+  let usageCalls = 0;
+  const usageLimited = await runAiEvaluation(
+    aiEvaluationFixtures.slice(0, 2),
+    async (fixture) => {
+      usageCalls += 1;
+      return { response: responseFor(fixture.id), usage: { inputTokens: 1, outputTokens: 2 } };
+    },
+    { maxRequests: 2, maxTokens: 3, deadlineMs: 1000 },
+  );
+  assert.deepEqual(usageLimited.cases.map(({ outcome }) => outcome), [
+    "passed", "usage_budget_exhausted",
+  ]);
+  assert.equal(usageCalls, 1);
+  assert.deepEqual(usageLimited.usage, { inputTokens: 1, outputTokens: 2 });
+});
+
+test("offline adapter evaluation marks missing usage unavailable and blocks later requests", async () => {
+  let calls = 0;
+  const report = await runAiEvaluation(
+    aiEvaluationFixtures.slice(0, 2),
+    async (fixture) => {
+      calls += 1;
+      return { response: responseFor(fixture.id) };
+    },
+    { maxRequests: 2, maxTokens: 10, deadlineMs: 1000 },
+  );
+
+  assert.deepEqual(report.cases.map(({ outcome }) => outcome), ["passed", "usage_unavailable"]);
+  assert.equal(calls, 1);
+  assert.equal(report.usage, "unavailable");
+});
+
+test("offline adapter evaluation times out and discards late responses", async () => {
+  let resolveLateResponse;
+  let signal;
+  const lateResponse = new Promise((resolve) => {
+    resolveLateResponse = resolve;
+  });
+  const report = await runAiEvaluation(
+    aiEvaluationFixtures.slice(0, 1),
+    (_fixture, options) => {
+      signal = options.signal;
+      return lateResponse;
+    },
+    { maxRequests: 1, maxTokens: 10, deadlineMs: 10 },
+  );
+
+  assert.equal(report.cases[0].outcome, "timeout");
+  assert.equal(signal.aborted, true);
+  assert.equal(report.usage, "unavailable");
+  resolveLateResponse({
+    response: { ...proposal, summary: "late private model response" },
+    usage: { inputTokens: 1, outputTokens: 1 },
+  });
+  await Promise.resolve();
+  assert.equal(report.cases[0].outcome, "timeout");
+  assert.equal(JSON.stringify(report).includes("late private model response"), false);
+});
+
+test("offline adapter reports contain only case IDs, outcomes, durations, and aggregate usage", async () => {
+  const fixture = {
+    ...aiEvaluationFixtures[0],
+    request: { ...aiEvaluationFixtures[0].request, requestText: "PRIVATE_PROMPT" },
+    response: { ...proposal, summary: "PRIVATE_MODEL_RESPONSE for PRIVATE_WORKER" },
+  };
+  const failingFixture = { ...aiEvaluationFixtures[0], id: "private-error-case" };
+  const report = await runAiEvaluation(
+    [fixture, failingFixture],
+    async (caseInput) => {
+      if (caseInput.id === "private-error-case") throw new Error("PRIVATE_ERROR_DETAILS");
+      return { response: fixture.response, usage: { inputTokens: 2, outputTokens: 3 } };
+    },
+    { maxRequests: 2, maxTokens: 10, deadlineMs: 1000 },
+  );
+  const serialized = JSON.stringify(report);
+
+  assert.deepEqual(Object.keys(report).sort(), ["cases", "usage"]);
+  assert.deepEqual(Object.keys(report.cases[0]).sort(), ["caseId", "durationMs", "outcome"]);
+  assert.equal(report.cases[1].outcome, "error");
+  assert.equal(report.usage, "unavailable");
+  assert.equal(serialized.includes("PRIVATE_PROMPT"), false);
+  assert.equal(serialized.includes("PRIVATE_MODEL_RESPONSE"), false);
+  assert.equal(serialized.includes("PRIVATE_WORKER"), false);
+  assert.equal(serialized.includes("PRIVATE_ERROR_DETAILS"), false);
 });
