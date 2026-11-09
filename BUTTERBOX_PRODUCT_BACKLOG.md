@@ -1279,13 +1279,13 @@ The CSV retains the existing `Priority` column for the full product and adds `Sh
 
 **User story:** As a customer, I want straightforward per-venue subscriptions instead of per-person charges.
 
-**Status: Blocked.** No approved Starter/Pro/Plus entitlement matrix, venue billability definition or rate/limit policy is recorded. Do not infer customer billing behavior. A database-backed implementation also requires a positively identified isolated project.
+**Status: Blocked.** The approved per-venue AUD tier matrix is implemented as a configuration-only calculator for a validated count of distinct active workers at one venue. Zero-worker venue pricing remains undecided. Database-backed worker counts, persisted entitlements, billing and enforcement remain unimplemented and require a positively identified isolated project; see `IMPLEMENTATION_PROGRESS.md`.
 
 **Acceptance criteria**
 
-1. Starter/Pro/Plus entitlements stored centrally.
-2. Venue counts billed correctly.
-3. Inactive users do not trigger per-employee fee.
+1. Approved per-venue monthly AUD tiers are configured centrally and the pure resolver covers inclusive boundaries, invalid counts, custom-priced Enterprise and the zero-worker decision state.
+2. Resolve a validated count independently for each venue; count distinct active worker assignments once per venue, including workers assigned to more than one venue.
+3. Persisted venue counts and entitlements are billed correctly; inactive users do not trigger per-employee fees.
 
 
 ### BB-SAAS-002 — Self-service subscription [P2]
