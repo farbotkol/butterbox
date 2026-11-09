@@ -2,9 +2,9 @@
 
 ## BB-SAAS-001 — Approved per-venue pricing calculator
 
-- **Last report:** 2026-11-09 00:52:55 UTC (observed on the sandbox clock).
+- **Last report:** 2026-11-09 00:56:23 UTC (observed on the sandbox clock).
 - **Issue / PR:** [#60](https://github.com/farbotkol/butterbox/issues/60) / [#67](https://github.com/farbotkol/butterbox/pull/67).
-- **Phase / activity:** Testing; verifying the standalone pricing policy and updating issue evidence.
+- **Phase / activity:** Complete for this pure calculator slice; final focused verification and issue evidence recorded.
 - **Progress:** Replaced the outdated “no approved rates” blocker with the approved calculator slice. The parent story remains **Blocked**.
 - **Implementation:** `src/lib/venue-pricing.ts` contains the approved monthly AUD tiers and resolves one validated worker count per venue. A worker active at multiple venues is represented once in each venue's independent count; assignment retrieval and distinct-worker counting are outside this slice. Counts 1–3 are Free ($0), 4–15 Starter ($15), 16–30 Pro ($25), 31–60 Plus ($45), 61–100 Growth ($69), 101–200 Scale ($99), and 201+ Enterprise (custom). Zero returns `awaiting_pricing_decision`; non-safe-integer and negative counts are rejected. The resolver defines no feature entitlements and is not connected to the synthetic-data demo.
 - **Acceptance evidence:**
@@ -13,10 +13,10 @@
   - **Empty and invalid counts — Pass:** Zero yields `awaiting_pricing_decision`; negative, fractional, non-finite, unsafe and non-numeric inputs are rejected.
   - **Feature/demo isolation — Pass:** Tier data contains pricing only; no feature gates or synthetic-data demo integration were added.
 - **Remaining parent gates:** validated distinct active worker counts from the database, persisted entitlements, billing/provider setup and enforcement, zero-worker pricing decision, and isolated database verification remain out of scope. No billing or user-visible behavior changed; all features remain available on every tier.
-- **Tests and results:** `node --experimental-strip-types --test tests/venue-pricing.test.mjs` passed **4/4**. `git diff --check` passed. ESLint was unavailable (no `node_modules`); the global TypeScript check was attempted but could not resolve the missing Next.js module and Node type declarations. No pricing test failed.
-- **Deferred checks / blockers:** No database, browser or production build is needed for this pure policy module; routes, Next.js configuration and server/client boundaries are unchanged. Re-run lint and TypeScript in an environment with project dependencies installed.
+- **Tests and results:** `node --experimental-strip-types --test tests/venue-pricing.test.mjs` passed **4/4**; changed-file ESLint and repository TypeScript checks passed after installing locked dependencies with `npm ci`; `git diff --check` and BOM-aware backlog CSV validation passed. Secret scanning found no secrets. CodeQL found **0 alerts**.
+- **Deferred checks / blockers:** No database, browser or production build is needed for this pure policy module; routes, Next.js configuration and server/client boundaries are unchanged. Parent-story gates remain as listed above. No pricing test failed.
 - **Documentation:** updated in this story record, `BUTTERBOX_PRODUCT_BACKLOG.md` and `BACKLOG_INDEX.csv`. **User Guide: not applicable** — configuration-only behavior; no user-facing workflow changed.
-- **Next action / latest development commit:** Run secret scanning and CodeQL, make any required localized fixes, repeat targeted verification, and record the commit/result. Commit SHA not yet available.
+- **Next action / latest implementation commit:** None for this slice; retain the parent Blocked pending its remaining gates. Implementation commit: `2d2fa6e`.
 
 ## Execution summary
 

@@ -113,16 +113,16 @@
 ## Workstream 4 — Subscription entitlements
 
 - **Current story:** BB-SAAS-001 — Venue-based plans (P1; calculator slice implemented; parent remains Blocked).
-- **Last report:** 2026-11-09 00:52:55 UTC (observed on the sandbox clock).
-- **Phase:** Testing for issue #60 / PR #67.
+- **Last report:** 2026-11-09 00:56:23 UTC (observed on the sandbox clock).
+- **Phase:** Complete for the calculator slice; parent story remains Blocked.
 - **Approved decision:** The 2026-11-04 owner handoff specifies all monthly AUD per-venue rates; all features remain available on every tier. Zero-worker pricing is still undecided.
 - **Slice:** `src/lib/venue-pricing.ts` holds the tiers and resolves one validated active-worker count per venue, including independent venue pricing, custom-priced Enterprise and the zero-worker decision state. It has no feature-entitlement or synthetic-demo integration.
 - **Remaining gates:** Database-backed distinct active assignment counting, persisted entitlements, billing/provider setup, enforcement, zero-worker policy decision and isolated database verification are not implemented.
-- **Progress / tests:** `node --experimental-strip-types --test tests/venue-pricing.test.mjs` passed **4/4**; `git diff --check` passed. ESLint was unavailable because dependencies are not installed. The global TypeScript check was attempted but failed to resolve the missing Next.js module and Node type declarations. No pricing test failed.
-- **Blockers:** Local ESLint and full TypeScript verification require installed project dependencies. No feature behavior, database or demo integration is being added.
+- **Progress / tests:** `node --experimental-strip-types --test tests/venue-pricing.test.mjs` passed **4/4**; changed-file ESLint, repository TypeScript, backlog CSV validation and `git diff --check` passed. Secret scanning found no secrets and CodeQL found **0 alerts**. No pricing test failed.
+- **Blockers:** No blocker remains for this configuration-only slice. Parent-story gates remain unimplemented; no feature behavior, database or demo integration is being added.
 - **Documentation:** Updated in the story, backlog index, implementation progress and this status. User Guide not applicable: no user-visible workflow changed.
-- **Next concrete action:** Run secret scanning and CodeQL, address any localized findings and repeat targeted verification; retain the parent Blocked status.
-- **Latest development commit:** `c8505a2` (implementation commit not yet recorded).
+- **Next concrete action:** None for this isolated calculator slice. Retain the parent Blocked pending its remaining gates.
+- **Latest implementation commit:** `2d2fa6e`.
 
 ## Completed Workstream 2 — Forecasting data and baseline
 
