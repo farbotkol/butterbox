@@ -1,5 +1,16 @@
 # Roadmap Agent — Activity Status
 
+## Issue #68 — BB-AI-006 scoped assistant proposal review
+
+- **Last report:** 2026-11-09 02:36 UTC; phase: Planning, actively executing this session.
+- **Criteria:** Authenticate current membership; enforce business/venue/department and action/worker scope; safely deny escalation and disclosure; preserve strict review-only proposals; verify synthetic adversarial cases.
+- **Activity / progress:** Read issue, owner AI decisions, proposal guard, workspace authentication and scoped SQL permissions. Clean issue branch; PR #72 targets `copilot/Development`. No provider, production data or database operation used.
+- **Tests:** Not yet run. Existing dependencies installed from lockfile; eight existing moderate npm advisories reported.
+- **Blockers:** No verified disposable database identified yet; database/runtime acceptance remains unverified. Parent BB-AI-006 remains Backlog.
+- **Next:** Implement session-client review boundary and deterministic tests, then targeted ESLint, TypeScript and build.
+- **Documentation:** Operational/acceptance documentation planned; User Guide not applicable to this backend-only slice.
+- **Latest development commit:** `a1e954ca279369f42dad0e9fac2eab107d9f8acb` (initial plan).
+
 ## Local CI test environment and agent test broker
 
 - **Last report:** 2026-11-05 13:10 AEDT (UTC+1100), observed on the operator's clock.
