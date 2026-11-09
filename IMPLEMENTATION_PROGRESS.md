@@ -159,6 +159,21 @@
 
   **Next:** Continue with Workstream 2's pure venue-local aggregation and leakage-safe backtest foundation using authorized historical/synthetic inputs; do not make a database change until an isolated disposable target is positively verified.
 
+- **BB-AI-007 — Offline assistant evaluation request budgets and deadlines, 2026-11-09 02:38 UTC: partial issue slice implemented; parent remains Backlog.**
+
+  **Issue / PR:** [#62](https://github.com/farbotkol/butterbox/issues/62) / [#74](https://github.com/farbotkol/butterbox/pull/74). Development commit `b896ea37ab53b14b6b06c3fee989dffcb008f082` adds the offline runner and focused tests.
+
+  | Criterion | Implementation and actual verification evidence | Result |
+  | --- | --- | --- |
+  | BB-AI-007-01 Request and usage budgets | `runAiEvaluation()` requires request and aggregate token limits; later calls are rejected before invoking the adapter when either budget is exhausted. Missing or invalid usage is reported as unavailable and blocks later calls. The adapter receives only a case ID and request, not the expected outcome or canned response; fake-adapter tests verify invocation counts. | Pass for offline request/usage enforcement |
+  | BB-AI-007-02 Configurable deadline and late response | A whole-run deadline aborts the adapter signal; responses arriving after the deadline are discarded. The late-response test verifies timeout outcome and no response leakage. The existing scoped proposal parser and adversarial fixture evaluator remain intact. | Pass for offline deadline behavior |
+  | BB-AI-007-03 Privacy-limited report | Reports expose case ID, outcome, duration and aggregate token usage (or `unavailable`), with no prompt, model response, adapter error or worker details. | Pass for report shape and synthetic privacy checks |
+  | BB-AI-007-04 Focused tests | `node --experimental-strip-types --test tests/ai-governance.test.mjs` passed **12/12**, including prior scoped/adversarial tests and new success, request/usage-limit, unavailable-usage, timeout/late-response and privacy cases. Targeted `tsc --ignoreConfig --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --allowImportingTsExtensions --lib ES2022,DOM src/lib/ai-evaluation.ts` passed. | Pass for focused verification |
+
+  **Documentation:** updated `docs/ai-governance-foundation.md`, this evidence, and BB-AI-007's `BACKLOG_INDEX.csv` row. User Guide: not applicable (backend-only offline evaluation; no user-visible assistant or settings behavior). No model, network, database, production log or roster write was used.
+
+  **Not delivered / risks:** This does not add durable production logging, a production circuit breaker, model selection or actual model-quality evaluation. It does not complete BB-AI-007's remaining parent criteria or BB-AI-006/008. ESLint was not available because dependencies are not installed in this checkout; no full repository regression was run.
+
 - **BB-PAY-007 — QuickBooks discovery and adapter, 2026-11-04 15:07 AEDT: Done (product discovery only; no adapter).**
 
   **Commit and push:** `68380251f5a30ff78e83c807b8601ed7ac638948` (`docs(BB-PAY-007): document QuickBooks integration limits`) is on `copilot/finish-roadmap-for-app`; the remote branch SHA was verified to match.

@@ -43,8 +43,10 @@ export type AiEvaluationAdapterResult = {
   usage?: AiEvaluationUsage;
 };
 
+export type AiEvaluationAdapterInput = Pick<AiEvaluationFixture, "id" | "request">;
+
 export type AiEvaluationAdapter = (
-  fixture: AiEvaluationFixture,
+  fixture: AiEvaluationAdapterInput,
   options: { signal: AbortSignal },
 ) => AiEvaluationAdapterResult | Promise<AiEvaluationAdapterResult>;
 
@@ -159,7 +161,10 @@ export async function runAiEvaluation(
         resolve({ kind: "timeout" });
       }, remainingMs);
       Promise.resolve()
-        .then(() => adapter(fixture, { signal: controller.signal }))
+        .then(() => adapter(
+          { id: fixture.id, request: fixture.request },
+          { signal: controller.signal },
+        ))
         .then(
           (value) => resolve({ kind: "response", value }),
           () => resolve({ kind: "error" }),

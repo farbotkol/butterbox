@@ -1,5 +1,22 @@
 # Roadmap Agent — Activity Status
 
+## BB-AI-007 — Offline evaluation budgets and deadlines
+
+- **Last report:** 2026-11-09 02:40 UTC, observed from the sandbox clock.
+- **Execution state:** Active at this checkpoint only; no background continuation is implied.
+- **Current story:** BB-AI-007 issue #62, PR #74; this is a partial offline slice and the parent story remains Backlog.
+- **Acceptance criteria:** Enforce fake-adapter request and usage budgets; enforce a configurable deadline and discard late responses; keep reports to case ID, outcome, duration and aggregate usage; preserve scoped parsing/adversarial fixtures and add deterministic tests.
+- **Phase:** Testing.
+- **Activity:** Added `runAiEvaluation()` with sequential provider-neutral adapter calls, request/token limits, whole-run timeout, usage-unavailable handling and privacy-limited results. The adapter receives only a case ID and request, not the expected answer or canned fixture response.
+- **Progress since previous report:** Added focused tests and updated the governance foundation, BB-AI-007 backlog evidence and implementation progress. The legacy fixture evaluator and its adversarial results remain intact.
+- **Tests and results:** `node --experimental-strip-types --test tests/ai-governance.test.mjs`: **12/12 passed**. Targeted strict TypeScript check of `src/lib/ai-evaluation.ts` passed. `git diff --check` passed. Secret scan found no secrets.
+- **Failing tests:** None observed.
+- **Blockers requiring intervention:** ESLint is unavailable because this checkout has no `node_modules`; full repository regression, provider/model, network and database runs were not needed or performed.
+- **Documentation:** Updated `docs/ai-governance-foundation.md`, `IMPLEMENTATION_PROGRESS.md` and the BB-AI-007 `BACKLOG_INDEX.csv` evidence. User Guide not applicable: backend-only offline evaluation with no user-visible workflow.
+- **Next concrete action:** Commit the verified slice, run CodeQL, then record the final commit SHA and push outcome.
+- **Latest development commit:** `b896ea37ab53b14b6b06c3fee989dffcb008f082`; the adapter-input narrowing and documentation checkpoint are pending in the worktree.
+- **Push outcome:** The initial runner and focused tests were pushed on PR #74; this checkpoint is not yet committed.
+
 ## Local CI test environment and agent test broker
 
 - **Last report:** 2026-11-05 13:10 AEDT (UTC+1100), observed on the operator's clock.

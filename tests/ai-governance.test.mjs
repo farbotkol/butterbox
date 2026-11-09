@@ -23,6 +23,7 @@ const proposal = {
   summary: "Propose the eligible employee for the selected shift.",
   actions: [{ kind: "assign_shift", shiftId: id(4), employeeId: id(5) }],
 };
+const responseFor = (caseId) => aiEvaluationFixtures.find((fixture) => fixture.id === caseId).response;
 
 test("valid request contexts require bounded text and structurally valid scope", () => {
   assert.equal(isValidAiRequestContext(context), true);
@@ -119,7 +120,10 @@ test("offline evaluation rejects duplicate case identifiers and invalid contexts
 test("offline adapter evaluation returns a scoped result and aggregate usage", async () => {
   const report = await runAiEvaluation(
     aiEvaluationFixtures.slice(0, 1),
-    async (fixture) => ({ response: fixture.response, usage: { inputTokens: 2, outputTokens: 3 } }),
+    async (fixture) => {
+      assert.deepEqual(Object.keys(fixture).sort(), ["id", "request"]);
+      return { response: responseFor(fixture.id), usage: { inputTokens: 2, outputTokens: 3 } };
+    },
     { maxRequests: 1, maxTokens: 5, deadlineMs: 1000 },
   );
 
@@ -136,7 +140,7 @@ test("offline adapter evaluation rejects exhausted request and usage budgets bef
     aiEvaluationFixtures.slice(0, 2),
     async (fixture) => {
       requestCalls += 1;
-      return { response: fixture.response, usage: { inputTokens: 1, outputTokens: 1 } };
+      return { response: responseFor(fixture.id), usage: { inputTokens: 1, outputTokens: 1 } };
     },
     { maxRequests: 1, maxTokens: 10, deadlineMs: 1000 },
   );
@@ -150,7 +154,7 @@ test("offline adapter evaluation rejects exhausted request and usage budgets bef
     aiEvaluationFixtures.slice(0, 2),
     async (fixture) => {
       usageCalls += 1;
-      return { response: fixture.response, usage: { inputTokens: 1, outputTokens: 2 } };
+      return { response: responseFor(fixture.id), usage: { inputTokens: 1, outputTokens: 2 } };
     },
     { maxRequests: 2, maxTokens: 3, deadlineMs: 1000 },
   );
@@ -167,7 +171,7 @@ test("offline adapter evaluation marks missing usage unavailable and blocks late
     aiEvaluationFixtures.slice(0, 2),
     async (fixture) => {
       calls += 1;
-      return { response: fixture.response };
+      return { response: responseFor(fixture.id) };
     },
     { maxRequests: 2, maxTokens: 10, deadlineMs: 1000 },
   );
@@ -213,9 +217,9 @@ test("offline adapter reports contain only case IDs, outcomes, durations, and ag
   const failingFixture = { ...aiEvaluationFixtures[0], id: "private-error-case" };
   const report = await runAiEvaluation(
     [fixture, failingFixture],
-    async (caseFixture) => {
-      if (caseFixture.id === "private-error-case") throw new Error("PRIVATE_ERROR_DETAILS");
-      return { response: caseFixture.response, usage: { inputTokens: 2, outputTokens: 3 } };
+    async (caseInput) => {
+      if (caseInput.id === "private-error-case") throw new Error("PRIVATE_ERROR_DETAILS");
+      return { response: fixture.response, usage: { inputTokens: 2, outputTokens: 3 } };
     },
     { maxRequests: 2, maxTokens: 10, deadlineMs: 1000 },
   );
