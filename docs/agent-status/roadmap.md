@@ -1,5 +1,16 @@
 # Roadmap Agent — Activity Status
 
+## PR #72 — Merge conflict resolution checkpoint
+
+- **Last report:** 2026-11-09 03:58 UTC; phase: Complete for documentation conflict resolution.
+- **Story / criteria:** BB-AI-006 / issue #68; merge the current `copilot/Development` base without losing AI authorization evidence or the payroll checkpoint.
+- **Activity / progress:** Resolved the overlapping insertion in this file by retaining both issue #68 and issue #61 sections. Application code, tests, schema and CI protections are unchanged by the merge.
+- **Verification:** Reviewed both sides and preserved their checkpoint text; no tests, lint or build selected for this documentation-only resolution. Prior test results below are historical, not rerun in this session.
+- **Blockers:** No remaining content conflicts. Existing AI runtime/build limitations and payroll blockers below are unchanged.
+- **Next:** Finalize and publish the two-parent merge, verify the remote branch and reply to the owner.
+- **Latest development commit:** `7344731bab7e52c64f72694c3591cf62c57ccc56` (pre-merge head); merging base `2085154`.
+- **Documentation: updated**; User Guide not applicable to merge/status maintenance.
+
 ## Issue #68 — BB-AI-006 scoped assistant proposal review
 
 - **Last report:** 2026-11-09 02:43 UTC; phase: Complete for implementation/synthetic verification of this focused slice; session finishing, no background continuation implied.
