@@ -1,0 +1,65 @@
+name: Deploy Supabase migrations - Development
+
+# Do not deploy from Copilot PR branches. Phase 2 completes after Verify,
+# but GitHub native auto-merge can be asynchronous; the schedule reconciles.
+on:
+  workflow_run:
+    workflows: ["Phase 2 - autonomous Development merge"]
+    types: [completed]
+  schedule:
+    - cron: "17,47 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-development-migrations
+  cancel-in-progress: false
+
+jobs:
+  deploy-migrations:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: butterbox-development
+    steps:
+      - name: Check out current approved Development head
+        uses: actions/checkout@v4
+        with:
+          ref: copilot/Development
+          persist-credentials: false
+
+      - name: Confirm branch and required deployment secrets
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f supabase/config.toml
+          test -d supabase/migrations
+          if [[ -z "$SUPABASE_ACCESS_TOKEN" || -z "$SUPABASE_DB_PASSWORD" ]]; then
+            echo "::error::Configure SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD in the butterbox-development GitHub environment."
+            exit 1
+          fi
+          echo "Deploying the checked-out Development commit $(git rev-parse HEAD) to the dedicated development Supabase project."
+
+      - name: Link only the Butterbox Development database
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: npx --yes supabase@2.122.0 link --project-ref crnstaknwervwjvbtabp
+
+      - name: Apply pending, versioned database migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: npx --yes supabase@2.122.0 db push --linked --yes
+
+      - name: Report deployment commit
+        run: |
+          echo "Butterbox Development Supabase migration deployment succeeded for $(git rev-parse HEAD)."
+          echo "Database target: crnstaknwervwjvbtabp (Development only)."
