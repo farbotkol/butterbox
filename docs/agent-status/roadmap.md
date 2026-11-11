@@ -2,16 +2,18 @@
 
 ## BB-SAAS-003 — Dashboard checklist completion (issue #82)
 
-- **Last report:** 2026-11-11 08:05 UTC (sandbox clock).
+- **Last report:** 2026-11-11 08:08 UTC (sandbox clock).
 - **Issue / PR:** [#82](https://github.com/farbotkol/butterbox/issues/82) / [#85](https://github.com/farbotkol/butterbox/pull/85), targeting `copilot/Development`.
 - **Acceptance criteria:** Retain 0–4/5 steps and links; remove the entire 5/5 section; refresh progress on visits; isolate business state; preserve owner-only access; cover loading/errors.
-- **Phase / activity:** Blocked for real-browser/build acceptance; implementation and focused server-render verification complete, security checks next.
+- **Phase / activity:** Blocked for real-browser/build acceptance; implementation, focused server-render verification and security checks complete.
 - **Progress:** Checklist returns no markup when complete; failed RPC data cannot count as completion. Existing real-publication and showcase browser expectations updated. No database or permission changes.
 - **Tests / actual results:** Onboarding/help Node tests **27/27 passed**, including all 31 incomplete combinations, complete output, delayed response, malformed/error data, multi-business changes and six non-owner roles. All changed JavaScript/TypeScript ESLint, repository TypeScript, both changed browser test syntax checks and diff whitespace check passed. No focused test failures observed.
 - **Blockers:** `npm run test:env:up` exited 3: required Supabase CLI 2.122.0 version unavailable. Real browser/database verification is blocked; no migrations or destructive resets ran. `npm run build` exited 1 because existing Inter/Poppins Google Fonts fetches could not connect; no unrelated font/config workaround added.
 - **Documentation:** Updated `docs/USER_GUIDE.md` with owner visibility, active-business scope, regression and error behaviour; showcase wording no longer assumes the checklist remains visible.
-- **Next concrete action:** Complete security review and push the focused slice; rerun the updated browser scenarios and build in an environment with the required CLI and font access. Parent BB-SAAS-003 remains Blocked for unrelated undelivered criteria.
-- **Latest development commit:** `84690f3b771f4c063b9e2039f3abe8971705ddb8` (implementation not yet committed).
+- **Security / review:** Secret scan clean; CodeQL JavaScript **0 alerts**; focused read-only code review found no substantive issues.
+- **Next concrete action:** Rerun the updated browser scenarios and build in an environment with the required CLI and font access. Parent BB-SAAS-003 remains Blocked for unrelated undelivered criteria.
+- **Latest development commit:** `75c1fa75baa6c453ee5a767e18d07dadea7e5976`.
+- **Push outcome:** Report-progress confirmed push; local `HEAD` and configured upstream both matched the development SHA at 08:08 UTC.
 
 ## BB-AI-007 — Offline evaluation budgets and deadlines
 
