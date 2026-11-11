@@ -19,6 +19,7 @@ export function OnboardingChecklist({ progress, venueId, businessId }: {
       href: rosterUrl, link: "Open the roster" },
   ];
   const completed = steps.filter((step) => step.done).length;
+  if (completed === steps.length) return null;
 
   return (
     <section aria-labelledby="onboarding-heading" className="mt-5 rounded-lg border border-line bg-white p-5 sm:p-6">

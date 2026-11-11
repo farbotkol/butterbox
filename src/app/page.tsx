@@ -151,7 +151,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       ? workspace.supabase.rpc("get_onboarding_progress", { p_business_id: workspace.business.id })
       : Promise.resolve(null),
   ]);
-  const onboardingProgress = onboarding ? parseOnboardingProgress(onboarding.data) : null;
+  const onboardingProgress = onboarding && !onboarding.error ? parseOnboardingProgress(onboarding.data) : null;
   if (onboarding && (onboarding.error || !onboardingProgress)) {
     console.error("Could not load onboarding progress.", {
       code: onboarding.error?.code,

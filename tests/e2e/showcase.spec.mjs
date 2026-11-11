@@ -144,7 +144,7 @@ test("isolated showcase labels login and mobile owner report and marks every dow
 test("guided showcase owner reviews provisioned setup, people, roster and approved sample payroll through real navigation", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await signIn(page, "owner");
-  await expect(page.getByRole("heading", { name: "Get your first roster ready" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Get your first roster ready" })).toHaveCount(0);
   await page.goto("/setup");
   await expect(page).toHaveURL((url) => url.pathname === "/");
   await expect(page.getByRole("heading", { name: "Set up your workspace" })).toHaveCount(0);

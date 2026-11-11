@@ -11309,8 +11309,13 @@ test("owner onboarding follows real staff, draft and publication progress withou
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toContainText("roster published");
     await page.goto("/");
-    await expect(checklist).toContainText("5 of 5 steps complete");
-    await expect(checklist.getByText("Complete", { exact: true })).toHaveCount(5);
+    await expect(checklist).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Help with your first roster" })).toHaveCount(0);
+    await page.reload();
+    await expect(checklist).toHaveCount(0);
+    expect((await admin.from("employees").update({ active: false }).eq("id", employee.data.id)).error).toBeNull();
+    await page.reload();
+    await expect(checklist).toContainText("4 of 5 steps complete");
     const publications = await admin.from("roster_publications").select("id").eq("business_id", businessId);
     expect(publications.error).toBeNull();
     expect(publications.data).toHaveLength(1);

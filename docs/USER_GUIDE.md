@@ -87,9 +87,10 @@ week. Dates move when fixtures are reseeded; never assume a hard-coded date.
 Leave forms unsubmitted unless deliberately running a separate synthetic
 experiment, then have the operator reset before the next baseline review.
 
-1. Sign in with the review **owner**. Confirm the simulation notice and
-   **Get your first roster ready** checklist. Inspect the Business, Venue,
-   Staff, Shift and Publish steps. Setup is already provisioned:
+1. Sign in with the review **owner**. Confirm the simulation notice. If
+   **Get your first roster ready** is shown, inspect the Business, Venue,
+   Staff, Shift and Publish steps; the checklist is hidden when all five are
+   complete. Setup is already provisioned:
    `/setup` returns this existing account to its dashboard. This walkthrough
    does not register a new customer or demonstrate demo-to-paid conversion.
 2. Use **Departments & roles** under **Venue Management** in **Main navigation**.
@@ -170,6 +171,15 @@ Award Central and production/legal acceptance are not implied.
 6. Create draft shifts in the weekly roster, check conflicts and publish when ready. A venue can use direct publication or an approval-based publication workflow.
 
 **Permissions:** Owners can manage the business; general managers and FOH/BOH managers have scoped responsibilities. Employees can access their own supported self-service functionality. A manager must not assume that access to one department permits access to another. Accounts with multiple business memberships can switch the active business; each request is independently authorized.
+
+Owners see **Get your first roster ready** on the dashboard while any of its
+five steps is incomplete. Progress comes from the active business's records:
+a business, a venue, an active employee, a scheduled shift and a roster
+publication. Once all five exist, the entire checklist, counter and help link
+disappear on the next dashboard visit. Switching businesses uses that
+business's own progress. If a step becomes incomplete (for example, no active
+employees remain), the checklist reappears. If progress cannot be loaded, the
+dashboard shows an error asking you to refresh, not a completed checklist.
 
 ### Accounts and business access
 

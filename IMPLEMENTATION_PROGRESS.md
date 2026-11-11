@@ -1,5 +1,25 @@
 # Implementation progress
 
+## BB-SAAS-003 — Hide completed dashboard onboarding (issue #82 slice)
+
+- **Last report:** 2026-11-11 08:05 UTC (sandbox clock).
+- **Issue / PR:** [#82](https://github.com/farbotkol/butterbox/issues/82) / [#85](https://github.com/farbotkol/butterbox/pull/85), targeting `copilot/Development`; Closes #82 subject to outstanding runtime verification below.
+- **Scope:** Two production-line changes: return `null` from the checklist when all five existing flags are complete; reject RPC data when its response has an error. Owner-only server fetch, active-business selection, RPC/RLS and completion semantics are unchanged. No dismissal state, cache or migration added.
+
+| Issue criterion | Implementation evidence / test / actual result | Status |
+| --- | --- | --- |
+| 82-AC1: 0–4/5 retains statuses and links | `tests/onboarding.test.mjs` renders all 31 incomplete boolean combinations using the actual checklist; counts, five labels and scoped navigation/help links passed. | Pass (server render) |
+| 82-AC2: Entire 5/5 section disappears | Actual React server rendering returns an empty string, including no container, margin, counter or help. Delayed dashboard response renders no completed checklist. | Pass (server render) |
+| 82-AC3: Final-step updates and repeat visits; regression | Mocked RPC dashboard renders reflect final publication, repeated visits and loss of active staff. Existing real-publication browser scenario now checks hiding, reload and staff deactivation; showcase assertion updated. | Pass (mocked server); browser Blocked |
+| 82-AC4: Independent active-business progress | Same dashboard harness switches completed A → incomplete B → completed B → regressed A, checking each exact RPC business argument and scoped links. | Pass (mocked server) |
+| 82-AC5: Role/tenant guards preserved | Owner-only branch and RPC unchanged; six non-owner roles make no progress call and expose neither checklist nor progress errors. No database authorization changes. | Pass (mocked server / inspection); live isolation deferred |
+| 82-AC6: Loading/error coverage and targeted verification | Pending RPC keeps dashboard pending; null/malformed data and errored responses (even with complete data) show the existing recovery alert. Onboarding/help tests **27/27 passed**. | Pass (server render); browser/build Blocked |
+
+- **Selected tests / actual results:** `node --experimental-strip-types --test tests/onboarding.test.mjs tests/help.test.mjs`: **27/27 passed**. ESLint on all changed code/test files, `npx tsc --noEmit`, syntax checks of both changed browser files and `git diff --check` passed. Actual component/page rendering was exercised with mocked workspace/RPC boundaries, not a live authenticated browser or database.
+- **Blocked verification:** `npm run test:env:up` exited 3 because the runner could not obtain the required Supabase CLI 2.122.0 version. The isolated project was initially stopped/unlocked; no database reset/migration ran. `npm run build` exited 1 because existing Inter/Poppins Google Fonts requests failed to connect. Updated onboarding/showcase browser scenarios were not run. Rerun those scenarios and the build with their prerequisites before claiming runtime acceptance.
+- **Intentionally deferred:** Full repository/browser/pgTAP regression; this slice changes no database objects or shared authorization. No production deployment or auto-merge performed. The parent BB-SAAS-003 remains **Blocked** for its separate incomplete criteria.
+- **Documentation: updated** — `docs/USER_GUIDE.md` explains owner-only incomplete visibility, business-scoped progress, disappearance, regression and refresh-on-error, and corrects the showcase walkthrough's always-visible assumption.
+
 ## BB-AI-006 — Server-scoped assistant proposal review (issue #68 slice)
 
 - **Last report:** 2026-11-09 02:43 UTC (sandbox clock).
