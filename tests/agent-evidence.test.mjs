@@ -17,6 +17,7 @@ import {
   referencesCanonicalIssue,
   requiredCiStatus,
   validateEvidence,
+  validateEvidenceFile,
   validateMarkdownEvidence,
   validateRepositoryEvidence,
 } from '../tools/agent-evidence/evidence.mjs';
@@ -177,6 +178,11 @@ test('versioned schema and synthetic example validate without treating it as del
     evidencePath: 'docs/agent-work/issues/issue-999999/pr-999998/attempt-01.evidence.json',
   });
   assert.deepEqual(errors, []);
+  const repositoryChecked = await validateEvidenceFile(
+    'docs/agent-work/issues/issue-999999/pr-999998/attempt-01.evidence.json',
+    { repository: 'example/butterbox' },
+  );
+  assert.deepEqual(repositoryChecked.errors, []);
   assert.equal(example.recommendation, 'partial');
   assert.equal(example.criteria[0].status, 'not-tested');
   const exampleMarkdown = await readFile(
@@ -219,6 +225,17 @@ test('evidence validator rejects tampering, mismatched identities, unsafe files 
   assert.ok(errors.some(error => error.includes('PR head')));
   assert.ok(errors.some(error => error.includes('merged PR file list')));
   assert.ok(errors.some(error => error.includes('personal contact')));
+  const criteriaErrors = validateRepositoryEvidence(evidence(), {
+    repository,
+    issueNumber,
+    pullNumber,
+    headSha,
+    mergeSha,
+    changedFiles,
+    evidencePath: attemptPath,
+    acceptanceCriteria: ['Different canonical criterion.'],
+  });
+  assert.ok(criteriaErrors.some(error => error.includes('canonical issue checklist')));
 });
 
 test('managed-file enforcement rejects feature edits and accepts only exact-head owner-audited exceptions', () => {

@@ -119,7 +119,8 @@ export function validateEvidence(evidence, {
       errors.push('issue.url does not match issue.number');
     }
   }
-  if (repository && evidence.issue?.url !== `https://github.com/${repository}/issues/${issueNumber}`) {
+  const expectedIssue = issueNumber ?? evidence.issue?.number;
+  if (repository && evidence.issue?.url !== `https://github.com/${repository}/issues/${expectedIssue}`) {
     errors.push('issue.url does not match the canonical repository and issue');
   }
 
@@ -134,7 +135,8 @@ export function validateEvidence(evidence, {
       errors.push('pullRequest.url does not match pullRequest.number');
     }
   }
-  if (repository && pr?.url !== `https://github.com/${repository}/pull/${pullNumber}`) {
+  const expectedPullNumber = pullNumber ?? pr?.number;
+  if (repository && pr?.url !== `https://github.com/${repository}/pull/${expectedPullNumber}`) {
     errors.push('pullRequest.url does not match the merged repository and PR');
   }
   requireString(pr?.baseBranch, 'pullRequest.baseBranch', errors, 200);
