@@ -15,7 +15,7 @@ import {
 const body = '/butterbox run\n\n```json\n{"workstream":"roadmap","task":"Synthetic owner task"}\n```';
 const issue = (overrides = {}) => ({
   number: 42, state: 'open', user: { login: 'farbotkol', id: OWNER_ID, type: 'User' },
-  labels: [{ name: LABEL }], body, ...overrides,
+  assignees: [{ login: 'Copilot' }], labels: [{ name: LABEL }], body, ...overrides,
 });
 const node = (overrides = {}) => ({
   number: 42, state: 'OPEN', body, lastEditedAt: null,
@@ -43,6 +43,10 @@ async function fixture(t, settings = {}) {
     task: async () => { taskCalls++; return parseTask(issue()); },
     comment: async (number, message) => { comments.push({ number, message }); },
     closeCompleted: async (number) => { closures.push(number); },
+    dependencyMerged: async () => true,
+    assertNoOpenConflicts: async () => {},
+    reservationState: async (lease, local) => local?.pushed || local?.pullRequest
+      ? { verified: true, branchExists: true } : { verified: true, safeCancellation: true },
     ...settings.github,
   };
   const exec = async (command, args, options) => {

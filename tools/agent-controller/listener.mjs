@@ -8,6 +8,10 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { REQUEST_HELPER, TEST_ENV_SCRIPT, TestBroker, failingTestLocations, testBrokerSettings } from './test-broker.mjs';
+import {
+  canReleaseLease, componentsForFiles, declaredComponents, filesWithinComponents, findOverlaps, leaseConflicts,
+  normalizeComponents,
+} from './component-coordination.mjs';
 
 export const OWNER = 'farbotkol';
 export const OWNER_ID = 11307166;
@@ -51,13 +55,21 @@ export function parseTask(issue) {
   if (!match) return null;
   let value;
   try { value = JSON.parse(match[1]); } catch { return null; }
-  if (!record(value) || Object.keys(value).sort().join(',') !== 'task,workstream' ||
+  if (!record(value) || Object.keys(value).some(key => !['components', 'dependsOn', 'task', 'workstream'].includes(key)) ||
+    !Object.hasOwn(value, 'task') || !Object.hasOwn(value, 'workstream') ||
     typeof value.workstream !== 'string' ||
     !Object.hasOwn(branches, value.workstream) || typeof value.task !== 'string' ||
     value.task.trim().length < 1 || value.task.length > 4000 ||
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value.task)) return null;
+  const components = Object.hasOwn(value, 'components') ? normalizeComponents(value.components) : ['repository-wide'];
+  const dependsOn = value.dependsOn ?? [];
+  if (!components || !Array.isArray(dependsOn) || dependsOn.length > 20 ||
+    dependsOn.some(number => !validNumber(number) || number === issue.number) ||
+    new Set(dependsOn).size !== dependsOn.length) return null;
   return {
     number: issue.number, workstream: value.workstream, task: value.task.trim(),
+    components, dependsOn: [...dependsOn].sort((a, b) => a - b),
+    assignees: Array.isArray(issue.assignees) ? issue.assignees.map(item => item?.login).filter(Boolean) : null,
     digest: hash(JSON.stringify([REPO, issue.number, issue.body])),
   };
 }
@@ -268,6 +280,114 @@ export class GitHub {
     // The list endpoint omits `merged`; reconciliation needs the full pull request.
     return matches[0] ? this.pullRequest(matches[0].number, signal) : null;
   }
+  async pullRequests(state, signal) {
+    const result = [];
+    for (let page = 1; page <= 10; page++) {
+      const rows = await this.api([`repos/${REPO}/pulls`, '--method', 'GET', '-f', `state=${state}`,
+        '-f', 'per_page=100', '-f', `page=${page}`], signal);
+      if (!Array.isArray(rows) || rows.some(row => !record(row) || !validNumber(row.number))) {
+        fail('invalid_github_response');
+      }
+      result.push(...rows);
+      if (rows.length < 100) return result;
+    }
+    return fail('pull_request_page_limit');
+  }
+  async pullRequestFiles(number, sha, signal) {
+    if (!validNumber(number) || !shaPattern.test(sha)) fail('invalid_pull_request');
+    const files = [];
+    for (let page = 1; page <= 10; page++) {
+      const rows = await this.api([`repos/${REPO}/pulls/${number}/files`, '--method', 'GET',
+        '-f', 'per_page=100', '-f', `page=${page}`], signal);
+      if (!Array.isArray(rows) || rows.some(row => typeof row?.filename !== 'string')) fail('invalid_github_response');
+      for (const row of rows) {
+        const file = { path: row.filename };
+        if (row.filename.startsWith('supabase/migrations/') && row.filename.endsWith('.sql') &&
+          row.status !== 'removed') {
+          const filePath = row.filename.split('/').map(encodeURIComponent).join('/');
+          const blob = await this.api([`repos/${REPO}/contents/${filePath}?ref=${sha}`], signal);
+          if (blob?.encoding !== 'base64' || typeof blob.content !== 'string' || blob.content.length > 3_000_000) {
+            fail('invalid_migration_content');
+          }
+          file.content = Buffer.from(blob.content.replace(/\s/g, ''), 'base64').toString('utf8');
+        }
+        files.push(file);
+      }
+      if (rows.length < 100) return files;
+    }
+    return fail('pull_request_file_page_limit');
+  }
+  async pullRequestsForIssue(number, state, signal) {
+    const rows = await this.pullRequests(state, signal);
+    const marker = new RegExp(`<!--\\s*butterbox-issue:\\s*${number}\\s*-->`, 'i');
+    const reference = new RegExp(`\\b(?:Refs|Related to)\\s+#${number}\\b`, 'i');
+    return rows.filter(pull => typeof pull.body === 'string' && (marker.test(pull.body) || reference.test(pull.body)));
+  }
+  async assertNoOpenConflicts(task, allowExistingIssue = false, signal) {
+    const branch = taskBranch({ number: task.number, digest: task.digest });
+    if (await this.branchHead(branch, signal) && !allowExistingIssue) fail('existing_task_branch');
+    const pulls = await this.pullRequests('open', signal);
+    const marker = new RegExp(`<!--\\s*butterbox-issue:\\s*${task.number}\\s*-->`, 'i');
+    const reference = new RegExp(`\\b(?:Refs|Related to)\\s+#${task.number}\\b`, 'i');
+    for (const pull of pulls) {
+      if (pull.base?.ref !== 'copilot/Development') continue;
+      if (typeof pull.body === 'string' && (marker.test(pull.body) || reference.test(pull.body))) {
+        if (allowExistingIssue) continue;
+        fail('related_open_pull_request');
+      }
+      const files = await this.pullRequestFiles(pull.number, pull.head.sha, signal);
+      const declared = declaredComponents(pull.body);
+      if (declared === null) fail('invalid_pr_component_metadata');
+      const overlap = findOverlaps(
+        { components: task.components, files: [] },
+        { components: declared, files },
+      );
+      if (overlap.conflicts) fail('component_conflict_open_pull_request');
+    }
+  }
+  async dependencyMerged(number, signal) {
+    const pulls = await this.pullRequestsForIssue(number, 'closed', signal);
+    for (const pull of pulls) {
+      const current = await this.pullRequest(pull.number, signal);
+      if (current.merged !== true || current.base?.ref !== 'copilot/Development' ||
+        !shaPattern.test(current.head?.sha ?? '')) continue;
+      const checks = await this.checks(current.head.sha, signal);
+      const required = ['verify', 'database'].map(name =>
+        checks.find(check => check.name.toLowerCase() === name && check.done)
+      );
+      if (required.every(check => check?.ok)) return true;
+    }
+    return false;
+  }
+  async reservationState(lease, local, signal) {
+    if (['reserved', 'running'].includes(local?.status)) {
+      return { verified: true, runActive: true, pullRequest: lease.pullRequest };
+    }
+    const branch = taskBranch({ number: lease.issue, digest: lease.digest });
+    const pull = await this.pullRequestForBranch(branch, signal);
+    if (pull?.state === 'open') {
+      return { verified: true, pullRequestOpen: true, pullRequest: pull.html_url };
+    }
+    if (pull?.merged === true) {
+      const checks = await this.checks(pull.head.sha, signal);
+      const required = ['verify', 'database'].map(name =>
+        checks.find(check => check.name.toLowerCase() === name && check.done)
+      );
+      return {
+        verified: required.every(check => check?.ok) && pull.base?.ref === branches[lease.workstream] &&
+          shaPattern.test(pull.merge_commit_sha ?? ''),
+        pullRequestMerged: required.every(check => check?.ok) && pull.base?.ref === branches[lease.workstream] &&
+          shaPattern.test(pull.merge_commit_sha ?? ''),
+        pullRequest: pull.html_url,
+      };
+    }
+    const head = await this.branchHead(branch, signal);
+    if (head) return { verified: true, branchExists: true, pullRequest: lease.pullRequest };
+    if (!local || !['failed', 'interrupted', 'rejected', 'succeeded'].includes(local.status)) {
+      return { verified: false };
+    }
+    return { verified: true, safeCancellation: true };
+  }
   // Failed-step log of one Actions job; untrusted text that is only ever passed to the sandboxed agent.
   async failedJobLog(jobId, signal) {
     if (!validNumber(jobId)) fail('invalid_job_id');
@@ -344,6 +464,8 @@ export class StateStore {
     if (!path.isAbsolute(directory)) fail('state_path_must_be_absolute');
     this.directory = directory;
     this.lock = path.join(directory, 'listener.lock');
+    this.coordinationFile = path.join(directory, 'coordination.json');
+    this.coordinationQueue = Promise.resolve();
   }
   async init() {
     await mkdir(this.directory, { recursive: true, mode: 0o700 });
@@ -407,12 +529,100 @@ export class StateStore {
   }
   async reserve(task, mode) {
     const handle = await open(this.filename(task.number), 'wx', 0o600);
-    const value = { issue: task.number, digest: task.digest, workstream: task.workstream, mode,
-      status: 'reserved', updatedAt: new Date().toISOString() };
+    const value = { issue: task.number, digest: task.digest, workstream: task.workstream, components: task.components,
+      dependsOn: task.dependsOn, mode, status: 'reserved', updatedAt: new Date().toISOString() };
     try { await handle.writeFile(JSON.stringify(value)); await handle.sync(); }
     finally { await handle.close(); }
     await syncDirectory(this.directory);
     return value;
+  }
+  async withCoordinationLock(operation) {
+    let unlock;
+    const previous = this.coordinationQueue;
+    this.coordinationQueue = new Promise(resolve => { unlock = resolve; });
+    await previous;
+    try { return await operation(); } finally { unlock(); }
+  }
+  async readComponentLeases() {
+    let leases;
+    try { leases = await privateJson(this.coordinationFile, { maxBytes: 512_000 }); }
+    catch (error) { if (error.code === 'ENOENT') return []; throw error; }
+    if (!Array.isArray(leases) || leases.some(lease => !record(lease) || !validNumber(lease.issue) ||
+      !digestPattern.test(lease.digest) || !normalizeComponents(lease.components) ||
+      !Object.hasOwn(branches, lease.workstream) ||
+      typeof lease.expiresAt !== 'string' || !Number.isFinite(Date.parse(lease.expiresAt)))) {
+      fail('invalid_component_reservations');
+    }
+    return leases;
+  }
+  async saveComponentLeases(leases) {
+    if (!Array.isArray(leases) || leases.length > 10_000) fail('invalid_component_reservations');
+    await this.atomic(this.coordinationFile, leases);
+  }
+  async reserveComponents(task, mode, leaseMs = 7_200_000) {
+    return this.withCoordinationLock(async () => {
+      const leases = await this.readComponentLeases();
+      const candidate = { issue: task.number, digest: task.digest, components: task.components };
+      const conflicts = leaseConflicts(leases, candidate);
+      if (conflicts.length) {
+        const error = new ControllerError('component_reservation_conflict');
+        Object.defineProperty(error, 'conflicts', { value: conflicts });
+        throw error;
+      }
+      const existing = leases.find(lease => lease.issue === task.number);
+      if (existing) {
+        existing.expiresAt = new Date(Date.now() + leaseMs).toISOString();
+        existing.updatedAt = new Date().toISOString();
+        await this.saveComponentLeases(leases);
+        return existing;
+      }
+      const now = new Date();
+      const lease = {
+        issue: task.number, digest: task.digest, mode, workstream: task.workstream, components: task.components,
+        acquiredAt: now.toISOString(), updatedAt: now.toISOString(),
+        expiresAt: new Date(now.getTime() + leaseMs).toISOString(), status: 'active',
+      };
+      leases.push(lease);
+      await this.saveComponentLeases(leases);
+      return lease;
+    });
+  }
+  async renewComponents(number, leaseMs = 7_200_000, pullRequest) {
+    return this.withCoordinationLock(async () => {
+      const leases = await this.readComponentLeases();
+      const lease = leases.find(item => item.issue === number);
+      if (!lease) fail('component_reservation_missing');
+      lease.expiresAt = new Date(Date.now() + leaseMs).toISOString();
+      lease.updatedAt = new Date().toISOString();
+      if (pullRequest) lease.pullRequest = pullRequest;
+      await this.saveComponentLeases(leases);
+      return lease;
+    });
+  }
+  async releaseComponents(number, state) {
+    return this.withCoordinationLock(async () => {
+      const leases = await this.readComponentLeases();
+      const lease = leases.find(item => item.issue === number);
+      if (!lease) return false;
+      if (!canReleaseLease(lease, state)) fail('component_reservation_release_unverified');
+      await this.saveComponentLeases(leases.filter(item => item.issue !== number));
+      return true;
+    });
+  }
+  async reconcileComponents(checkState, leaseMs = 7_200_000) {
+    const leases = await this.readComponentLeases();
+    const now = Date.now();
+    for (const lease of leases) {
+      if (Date.parse(lease.expiresAt) > now) continue;
+      let state;
+      try { state = await checkState(lease); }
+      catch { continue; }
+      if (canReleaseLease(lease, state)) {
+        await this.releaseComponents(lease.issue, state);
+      } else if (state?.verified === true && (state.runActive || state.pullRequestOpen || state.branchExists)) {
+        await this.renewComponents(lease.issue, leaseMs, state.pullRequest);
+      }
+    }
   }
   async save(value) {
     value.updatedAt = new Date().toISOString();
@@ -658,7 +868,7 @@ export function autonomousSettings(config, home = os.homedir()) {
   if (!record(value)) fail('autonomous_config_required');
   const allowed = ['taskRoot', 'timeoutMinutes', 'maxAiCredits', 'maxChangedFiles', 'model', 'keepSucceeded',
     'allowedHosts', 'autoMerge', 'checksTimeoutMinutes', 'maxAttempts', 'maxCiRepairs', 'maxDeliveryRetries',
-    'testBroker'];
+    'testBroker', 'maxConcurrentTasks'];
   if (Object.keys(value).some(key => !allowed.includes(key))) fail('invalid_autonomous_config');
   const settings = {
     taskRoot: value.taskRoot, timeoutMinutes: value.timeoutMinutes ?? 45,
@@ -667,7 +877,7 @@ export function autonomousSettings(config, home = os.homedir()) {
     allowedHosts: Object.hasOwn(value, 'allowedHosts') ? value.allowedHosts : DEFAULT_ALLOWED_HOSTS,
     autoMerge: value.autoMerge ?? true, checksTimeoutMinutes: value.checksTimeoutMinutes ?? 90,
     maxAttempts: value.maxAttempts ?? 3, maxCiRepairs: value.maxCiRepairs ?? 2,
-    maxDeliveryRetries: value.maxDeliveryRetries ?? 5,
+    maxDeliveryRetries: value.maxDeliveryRetries ?? 5, maxConcurrentTasks: value.maxConcurrentTasks ?? 2,
   };
   try { settings.testBroker = testBrokerSettings(value.testBroker); } catch { fail('invalid_autonomous_config'); }
   if (!validAllowedHosts(settings.allowedHosts)) fail('invalid_autonomous_config');
@@ -676,7 +886,8 @@ export function autonomousSettings(config, home = os.homedir()) {
     !Number.isInteger(settings.maxAttempts) || settings.maxAttempts < 1 || settings.maxAttempts > 10 ||
     !Number.isInteger(settings.maxCiRepairs) || settings.maxCiRepairs < 0 || settings.maxCiRepairs > 5 ||
     !Number.isInteger(settings.maxDeliveryRetries) || settings.maxDeliveryRetries < 0 ||
-    settings.maxDeliveryRetries > 10) {
+    settings.maxDeliveryRetries > 10 || !Number.isInteger(settings.maxConcurrentTasks) ||
+    settings.maxConcurrentTasks < 1 || settings.maxConcurrentTasks > 4) {
     fail('invalid_autonomous_config');
   }
   // Denying the whole home folder inside the sandbox also denies a working directory beneath it.
@@ -771,6 +982,7 @@ export function autonomousPrompt(task, instructions, testHelper) {
     `Butterbox ${task.workstream} autonomous agent. Fresh unattended CLI invocation in an isolated task clone.`,
     instructions,
     ...contextRules(task),
+    `Declared work areas: ${task.components.join(', ')}. Do not edit files outside these components.`,
     'You may investigate, edit any files needed for this one task, install dependencies and run tests ' +
       '(for example npm ci, npm run test:fast, npm test, npx eslint). Fix failures you introduce.',
     testingRules(testHelper),
@@ -787,6 +999,7 @@ export function repairPrompt(task, instructions, attempt, maximum, failures, tes
       `#${task.number}. Fresh unattended CLI invocation in the isolated task clone.`,
     instructions,
     ...contextRules(task),
+    `Declared work areas: ${task.components.join(', ')}. Do not edit files outside these components.`,
     'This clone is the task branch with the earlier changes for this issue already committed. GitHub Actions CI ' +
       'failed on that commit. Establish the actual root cause from the failing check logs below and the code, then ' +
       'fix it with the smallest appropriate change. Never disable, skip or weaken tests, assertions, security or ' +
@@ -915,6 +1128,7 @@ export class Controller {
     if (mode === 'autonomous' && !autonomousEnabled) fail('autonomous_mode_not_enabled');
     this.github = github; this.store = store; this.config = validateConfig(config);
     this.exec = exec; this.mode = mode; this.signal = signal;
+    this.componentLeaseMs = 7_200_000;
     if (mode === 'autonomous') {
       this.autonomous = autonomousSettings(this.config);
       taskTimeoutMs = this.autonomous.timeoutMinutes * 60_000;
@@ -928,6 +1142,7 @@ export class Controller {
     this.taskTimeoutMs = taskTimeoutMs;
     this.checksPollMs = checksPollMs; this.checksGraceMs = checksGraceMs;
     this.retryBaseMs = retryBaseMs;
+    this.coordinationNotices = new Set();
   }
   workspaces() { return Object.values(this.config.profiles).map(profile => profile.cwd); }
   async approve(number, digest, files) {
@@ -949,6 +1164,36 @@ export class Controller {
     });
   }
   autonomousRecord(value) { return this.mode === 'autonomous' && value.mode === 'autonomous'; }
+  async dispatchPreflight(task, previous) {
+    if (this.mode === 'autonomous' &&
+      (!Array.isArray(task.assignees) || !task.assignees.some(login => login.toLowerCase() === 'copilot'))) {
+      fail('issue_not_assigned_to_copilot');
+    }
+    for (const number of task.dependsOn ?? []) {
+      if (!await this.github.dependencyMerged(number, this.signal)) fail('dependency_not_merged_and_verified');
+    }
+    if (typeof this.github.assertNoOpenConflicts === 'function') {
+      await this.github.assertNoOpenConflicts(task, Boolean(previous), this.signal);
+    }
+  }
+  async releaseComponentReservation(value, reason) {
+    const lease = (await this.store.readComponentLeases()).find(item => item.issue === value.issue);
+    if (!lease) return;
+    let state;
+    if (value.mergeVerified === true) {
+      state = { verified: true, pullRequestMerged: true, pullRequest: value.pullRequest };
+    } else if (this.mode !== 'autonomous' || (!value.pushed && !value.pullRequest)) {
+      state = { verified: true, safeCancellation: true };
+    } else {
+      state = await this.github.reservationState(lease, value, this.signal);
+    }
+    if (await this.store.releaseComponents(value.issue, state)) {
+      audit(value, 'components_released', reason);
+      await this.store.save(value);
+      await this.github.comment(value.issue, `Butterbox controller released components ` +
+        `[${lease.components.join(', ')}]; ${reason}.`);
+    }
+  }
   async report(value, message, signal = this.signal) {
     // Autonomous status updates are queued durably; a GitHub outage delays them but never stops the queue.
     if (this.autonomousRecord(value)) return this.notify(value, [{ kind: 'comment', body: message }], signal);
@@ -1118,6 +1363,10 @@ export class Controller {
     const records = await this.store.recoverRuns({ autonomous });
     if (autonomous) {
       await this.recover(records);
+      await this.store.reconcileComponents(async lease => {
+        const local = await this.store.read(lease.issue);
+        return this.github.reservationState(lease, local, this.signal);
+      }, this.componentLeaseMs);
       // A Copilot configuration fault pauses all new work until its retry is due, not just one issue.
       const paused = records.find(value => value.mode === 'autonomous' && !value.final &&
         value.error === 'copilot_session_init_failed' && Date.parse(value.retryAt) > Date.now());
@@ -1128,6 +1377,38 @@ export class Controller {
       await repository(profile, this.exec, this.signal, false);
     }
     const issues = (await this.github.issues(this.signal)).sort((a, b) => a.number - b.number);
+    if (autonomous) {
+      const candidates = issues.filter(issue => parseTask(issue)).slice(0, this.autonomous.maxConcurrentTasks);
+      const results = await Promise.allSettled(candidates.map(issue => this.consider(issue)));
+      let eligible = 0;
+      let executed = 0;
+      for (let index = 0; index < results.length; index++) {
+        const result = results[index];
+        if (result.status === 'fulfilled') {
+          if (result.value) eligible++;
+          if (result.value === 'executed') executed++;
+          continue;
+        }
+        const error = result.reason;
+        if (error?.global || this.signal?.aborted) throw error;
+        const code = errorCode(error);
+        if (['component_reservation_conflict', 'component_conflict_open_pull_request',
+          'related_open_pull_request', 'existing_task_branch', 'dependency_not_merged_and_verified',
+          'issue_not_assigned_to_copilot'].includes(code)) {
+          console.log(`Issue #${candidates[index].number} queued: ${code}.`);
+          const key = `${candidates[index].number}:${code}`;
+          if (!this.coordinationNotices.has(key)) {
+            this.coordinationNotices.add(key);
+            await this.github.comment(candidates[index].number,
+              `Butterbox controller queued this issue before launch: ${code}. No agent was started; ` +
+              'readiness and GitHub state will be checked again on a later poll.');
+          }
+          continue;
+        }
+        console.error(`Issue #${candidates[index].number} skipped this poll: ${code}`);
+      }
+      return { eligible, executed };
+    }
     let eligible = 0;
     for (const issue of issues) {
       if (this.signal?.aborted) break;
@@ -1181,6 +1462,13 @@ export class Controller {
         await this.settle(previous, '', this.signal);
         return null;
       }
+      await this.dispatchPreflight(task, previous);
+      if (this.mode !== 'dry-run') {
+        await this.store.reserveComponents(task, this.mode, this.componentLeaseMs);
+        previous.components = task.components;
+        previous.dependsOn = task.dependsOn;
+        await this.store.save(previous);
+      }
       const repo = await globally(() => repository(this.config.profiles[task.workstream], this.exec, this.signal));
       const cli = await globally(() => this.autonomousCopilot());
       await this.run(task, previous, repo, undefined, cli);
@@ -1188,6 +1476,7 @@ export class Controller {
     }
     if (!parseTask(issue)) return null;
     const task = await this.github.task(issue.number, this.signal);
+    await this.dispatchPreflight(task, null);
     if (this.mode === 'dry-run') {
       console.log(`Eligible owner command #${task.number} ${task.workstream} digest=${task.digest}; no execution.`);
       return 'eligible';
@@ -1210,7 +1499,10 @@ export class Controller {
     } else if (this.mode === 'autonomous') {
       cli = await globally(() => this.autonomousCopilot());
     }
+    await this.store.reserveComponents(task, this.mode, this.componentLeaseMs);
     const value = await this.store.reserve(task, this.mode);
+    audit(value, 'components_reserved', `${task.components.join(', ')}`);
+    await this.store.save(value);
     await this.run(task, value, repo, approval, cli);
     return 'executed';
   }
@@ -1345,7 +1637,11 @@ export class Controller {
     if (await git(['rev-parse', 'HEAD']) !== head || await git(['branch', '--show-current']) !== value.branch) {
       fail('task_repository_state_changed');
     }
-    return { output, files: inspect ? await changedPaths(cwd, this.exec, signal, this.autonomous.maxChangedFiles) : [] };
+    const files = inspect ? await changedPaths(cwd, this.exec, signal, this.autonomous.maxChangedFiles) : [];
+    if (inspect && !filesWithinComponents(value.components ?? ['repository-wide'], files)) {
+      fail('changes_outside_declared_components');
+    }
+    return { output, files };
   }
   async commit(value, message, signal) {
     const git = this.taskGit(value, signal);
@@ -1373,7 +1669,6 @@ export class Controller {
     await privateTaskRoot(settings.taskRoot);
     const branch = taskBranch(task);
     const retrying = this.retrying(signal);
-    this.agentOutput = '';
     value.taskDir = path.join(settings.taskRoot, `issue-${task.number}-${task.digest.slice(0, 8)}`);
     value.branch = branch;
     value.stage = 'reconcile';
@@ -1409,12 +1704,12 @@ export class Controller {
       if (value.pendingCommit && await this.reusable(value, value.pendingCommit, signal)) {
         audit(value, 'resumed_unpushed_commit', value.pendingCommit);
       } else {
-        if (this.resumingDelivery) {
+        if (value.resumingDelivery) {
           // The preserved commit is gone, so this resume needs (and is charged) a full execution attempt.
           audit(value, 'preserved_commit_unavailable', value.pendingCommit ?? 'none');
           if (value.attempts >= settings.maxAttempts) fail('execution_attempts_exhausted');
           value.attempts++;
-          this.resumingDelivery = false;
+          value.resumingDelivery = false;
         }
         delete value.pendingCommit;
         await this.workspace(task, value, signal);
@@ -1425,7 +1720,7 @@ export class Controller {
         await this.store.save(value);
         const { output, files } = await this.runAgent(value, cli,
           autonomousPrompt(task, await readFile(agents, 'utf8'), this.testHelper(value)), signal, 'copilot-output.txt');
-        this.agentOutput = output;
+        value.agentOutput = output.slice(-8_000);
         if (!files.length) fail('no_changes_produced');
         value.changedFiles = files.length; value.files = files.slice(0, 60);
         await this.commit(value, `Agent task #${task.number}: ${this.summary(task)}`, signal);
@@ -1445,8 +1740,7 @@ export class Controller {
     const settings = this.autonomous;
     value.stage = 'pull_request';
     await this.store.save(value);
-    let output = this.agentOutput;
-    if (!output) output = await readFile(path.join(value.taskDir, 'copilot-output.txt'), 'utf8').catch(() => '');
+    const output = await readFile(path.join(value.taskDir, 'copilot-output.txt'), 'utf8').catch(() => '');
     const files = value.files ?? [];
     const delivery = settings.autoMerge
       ? `Created by the Butterbox local controller (autonomous mode). It is squash-merged into \`${profile.branch}\` ` +
@@ -1470,6 +1764,7 @@ export class Controller {
     }
     if (!pullRequestUrl.test(url)) fail('pull_request_unconfirmed');
     value.pullRequest = url;
+    await this.store.renewComponents(value.issue, this.componentLeaseMs, url);
     await this.store.save(value);
   }
   async waitForChecks(value, signal) {
@@ -1560,7 +1855,7 @@ export class Controller {
       repairPrompt(task, await readFile(agents, 'utf8'), attempt, settings.maxCiRepairs, failures,
         this.testHelper(value)),
       signal, `copilot-repair-${attempt}.txt`);
-    this.agentOutput = output;
+    value.agentOutput = output.slice(-8_000);
     if (!files.length) {
       audit(value, 'repair_no_changes', `attempt ${attempt}`);
       return false;
@@ -1606,7 +1901,7 @@ export class Controller {
       if (!stat.isFile() || stat.size > 64_000) fail('agent_instructions_too_large');
       const { output } = await this.runAgent(value, cli, conflictPrompt(task, await readFile(agents, 'utf8'), base,
         conflicts), signal, `copilot-merge-${value.baseUpdates}.txt`, false);
-      this.agentOutput = output;
+      value.agentOutput = output.slice(-8_000);
       value.stage = 'base_update';
       const touched = await list(['diff', '--name-only', '-z']);
       const untracked = await list(['ls-files', '--others', '--exclude-standard', '-z']);
@@ -1719,10 +2014,9 @@ export class Controller {
     if (this.signal?.aborted) abort.abort();
     let heartbeat;
     let heartbeatPromise = Promise.resolve();
-    this.agentOutput = '';
     const resumed = autonomous && value.attempts !== undefined;
     const delivery = resumed && value.retryKind === 'delivery';
-    this.resumingDelivery = delivery;
+    value.resumingDelivery = delivery;
     if (autonomous) {
       const previousError = value.error;
       if (delivery) value.deliveryRetries = (value.deliveryRetries ?? 0) + 1;
@@ -1773,7 +2067,10 @@ export class Controller {
           `elapsed=${Math.floor((Date.now() - Date.parse(value.startedAt)) / 1000)}s.`;
         // Autonomous heartbeats are best effort: a GitHub outage must not cancel a healthy agent run.
         heartbeatPromise = heartbeatPromise.then(() => autonomous
-          ? this.github.comment(value.issue, `Butterbox local controller: ${message}`, abort.signal).catch(() => {})
+          ? Promise.all([
+            this.github.comment(value.issue, `Butterbox local controller: ${message}`, abort.signal).catch(() => {}),
+            this.store.renewComponents(value.issue, this.componentLeaseMs, value.pullRequest),
+          ])
           : this.report(value, message, abort.signal)).catch(() => abort.abort());
       }, this.heartbeatMs);
       if (this.mode === 'synthetic') {
@@ -1828,19 +2125,25 @@ export class Controller {
       }
       if (value.status !== 'succeeded') {
         await this.store.save(value);
+        if (!value.pushed && !value.pullRequest) {
+          await this.releaseComponentReservation(value, 'agent stopped without a branch or pull request')
+            .catch(error => console.error(`Issue #${value.issue}: reservation retained (${errorCode(error)}).`));
+        }
         // Retried after reconciliation or blocked on its own issue; later polls continue with other tasks.
-        await this.settle(value, this.agentOutput ?? '', null);
+        await this.settle(value, value.agentOutput ?? '', null);
         return;
       }
       value.final = true;
       audit(value, 'succeeded', value.mergeCommit ?? value.pullRequest);
+      if (value.mergeVerified) await this.releaseComponentReservation(value, `merged as ${value.mergeCommit}`);
+      else if (!autonomous) await this.releaseComponentReservation(value, 'local run completed without remote changes');
       // Completion reports are queued in the same durable write that records success.
       if (!this.autonomous.autoMerge) {
         this.enqueue(value, [{ kind: 'comment', body: `succeeded #${task.number}; draft pull request ` +
           `${value.pullRequest} on branch ${value.branch} (${value.changedFiles} files). Not merged or deployed; ` +
           'owner review required.' }]);
       } else {
-        const excerpt = (this.agentOutput ?? '').slice(-2500).replaceAll('```', "'''");
+        const excerpt = (value.agentOutput ?? '').slice(-2500).replaceAll('```', "'''");
         this.enqueue(value, [{ kind: 'comment', body: [
           `completed #${task.number}. Pull request ${value.pullRequest} passed every CI check and was squash-merged ` +
             `into \`${this.config.profiles[task.workstream].branch}\` as ${value.mergeCommit}; GitHub confirms the ` +

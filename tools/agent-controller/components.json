@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "components": [
+    { "id": "agent-controller", "prefix": "tools/agent-controller/" },
+    { "id": "agent-evidence", "prefix": "tools/agent-evidence/" },
+    { "id": "ci", "prefix": ".github/workflows/" },
+    { "id": "database-schema", "prefix": "supabase/" },
+    { "id": "application", "prefix": "src/" },
+    { "id": "tests", "prefix": "tests/" },
+    { "id": "docs", "prefix": "docs/" },
+    { "id": "governance", "paths": ["AGENTS.md", "docs/github-issues-workflow.md"] },
+    { "id": "build", "paths": ["package.json", "package-lock.json", "tsconfig.json", "next.config.ts"] },
+    { "id": "repository-wide", "paths": [] }
+  ]
+}
