@@ -48,7 +48,7 @@ export function RosterTimelineCell({
           }`}
           style={tick.position === 100 ? undefined : { top: `${tick.position}%` }}>
           <span className={`absolute left-0 bg-white px-0.5 text-[9px] leading-3 text-muted ${
-            tick.position === 100 ? "bottom-0 translate-y-1/2" : "top-0 -translate-y-1/2"
+            tick.position === 100 ? "bottom-0 -translate-y-full" : "top-0 -translate-y-1/2"
           }`}>
             {tick.label}
           </span>
@@ -79,7 +79,7 @@ export function RosterTimelineCell({
         const starts = formatTime(shift.startsAt, timezone);
         const ends = formatTime(shift.endsAt, timezone);
         const status = shift.isPublished ? "Published" : "Draft";
-        const label = `${shift.roleTitle}, ${starts} to ${ends}${position.continuesPastMidnight ? ", continues after midnight" : ""}, ${status}`;
+        const label = `${position.continuesFromPreviousDay ? "Continued from previous day, " : ""}${shift.roleTitle}, ${starts} to ${ends}${position.continuesPastMidnight ? ", continues after midnight" : ""}, ${status}`;
         return (
           <div key={shift.id} role="img" aria-label={label} title={label}
             style={{ top: `${position.top}%`, height: `${position.height}%` }}
@@ -88,7 +88,7 @@ export function RosterTimelineCell({
                 ? "border-teal-700 bg-teal-50 text-teal-950"
                 : "border-sky-700 bg-sky-50 text-sky-950"
             }`}>
-            <span className="block font-semibold">{starts}–{ends}{position.continuesPastMidnight ? " +" : ""}</span>
+            <span className="block font-semibold">{position.continuesFromPreviousDay ? "↳ " : ""}{starts}–{ends}{position.continuesPastMidnight ? " +" : ""}</span>
             <span className="block truncate">{shift.roleTitle} · {status}</span>
           </div>
         );

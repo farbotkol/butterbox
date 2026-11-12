@@ -44,6 +44,7 @@ import {
   collapsedRosterDepartments, matchesRosterSearch, rosterCreateShiftHref, rosterSearchQuery,
   rosterViewHref as buildRosterViewHref, toggleRosterDepartment,
 } from "@/lib/roster-view";
+import { rosterDayTimeline } from "@/lib/roster-timetable";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
 import { shiftConversationHref } from "@/lib/shift-conversations";
@@ -1184,6 +1185,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                         shift.department_id === department.id &&
                         getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
                     );
+                    const dayTimeline = rosterDayTimeline(date, workspace.venue.timezone);
+                    const timelineShifts = dayTimeline ? visibleShifts.filter((shift) =>
+                      shift.employee_id === employee.id && shift.department_id === department.id &&
+                      Date.parse(shift.starts_at) < dayTimeline.endsAt &&
+                      Date.parse(shift.ends_at) > dayTimeline.startsAt,
+                    ) : employeeShifts;
                     const availability = availabilityForDate(
                       date,
                       availabilityIntervals(employee.id),
@@ -1197,7 +1204,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                         <QuickShiftDropTarget departmentId={department.id} employeeId={employee.id} date={date}
                           enabled={canCreateForEmployee}>
                           <RosterTimelineCell date={date} timezone={workspace.venue.timezone}
-                            shifts={employeeShifts.map((shift) => ({
+                            shifts={timelineShifts.map((shift) => ({
                               id: shift.id, roleTitle: shift.role_title, startsAt: shift.starts_at,
                               endsAt: shift.ends_at, isPublished: shift.is_published,
                             }))}
@@ -1336,11 +1343,17 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       shift.department_id === department.id && !shift.employee_id &&
                       getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
                     );
+                    const dayTimeline = rosterDayTimeline(date, workspace.venue.timezone);
+                    const timelineOpenShifts = dayTimeline ? visibleShifts.filter((shift) =>
+                      shift.department_id === department.id && !shift.employee_id &&
+                      Date.parse(shift.starts_at) < dayTimeline.endsAt &&
+                      Date.parse(shift.ends_at) > dayTimeline.startsAt,
+                    ) : openShifts;
                     const canCreate = canManageDepartment(department.id) && department.active;
                     return (
                       <td key={date} className={`${selectedDay ? "min-w-56" : "min-w-40"} border-r border-line/60 px-2 py-2 align-top last:border-r-0`}>
                         <RosterTimelineCell date={date} timezone={workspace.venue.timezone}
-                          shifts={openShifts.map((shift) => ({
+                          shifts={timelineOpenShifts.map((shift) => ({
                             id: shift.id, roleTitle: shift.role_title, startsAt: shift.starts_at,
                             endsAt: shift.ends_at, isPublished: shift.is_published,
                           }))}

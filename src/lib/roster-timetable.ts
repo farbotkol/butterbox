@@ -83,12 +83,14 @@ export function rosterShiftTimelinePosition(
   const shiftStart = Date.parse(startsAt);
   const shiftEnd = Date.parse(endsAt);
   if (!day || !Number.isFinite(shiftStart) || !Number.isFinite(shiftEnd) ||
-    shiftStart < day.startsAt || shiftStart >= day.endsAt || shiftEnd <= shiftStart) return null;
+    shiftEnd <= shiftStart || shiftStart >= day.endsAt || shiftEnd <= day.startsAt) return null;
 
+  const visibleStart = Math.max(shiftStart, day.startsAt);
   const visibleEnd = Math.min(shiftEnd, day.endsAt);
   return {
-    top: ((shiftStart - day.startsAt) / (day.endsAt - day.startsAt)) * 100,
-    height: ((visibleEnd - shiftStart) / (day.endsAt - day.startsAt)) * 100,
+    top: ((visibleStart - day.startsAt) / (day.endsAt - day.startsAt)) * 100,
+    height: ((visibleEnd - visibleStart) / (day.endsAt - day.startsAt)) * 100,
+    continuesFromPreviousDay: shiftStart < day.startsAt,
     continuesPastMidnight: shiftEnd > day.endsAt,
   };
 }

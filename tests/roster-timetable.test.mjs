@@ -39,7 +39,19 @@ test("timeline positions preserve repeated DST hours and clip overnight shifts a
   );
   assert.equal(overnight.top, (22 / 24) * 100);
   assert.equal(overnight.height, (2 / 24) * 100);
+  assert.equal(overnight.continuesFromPreviousDay, false);
   assert.equal(overnight.continuesPastMidnight, true);
+
+  const nextDay = rosterShiftTimelinePosition(
+    new Date(ordinaryStart + 22 * 60 * 60_000).toISOString(),
+    new Date(ordinaryStart + 30 * 60 * 60_000).toISOString(),
+    "2032-03-30",
+    "Australia/Melbourne",
+  );
+  assert.equal(nextDay.top, 0);
+  assert.equal(nextDay.height, (6 / 24) * 100);
+  assert.equal(nextDay.continuesFromPreviousDay, true);
+  assert.equal(nextDay.continuesPastMidnight, false);
 });
 
 test("a schedule slot link carries its venue-local date, time and employee", () => {
