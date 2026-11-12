@@ -47,3 +47,31 @@ This document and `AGENTS.md` change become operating guidance **only after the 
 The connected GitHub tool used for this migration can create Issues and repository PRs, but cannot directly create/configure GitHub Projects, project fields/views, repository rulesets, or a guaranteed atomic, enforced agent lock. Those are **outstanding steps**, not completed items.
 
 If important requirements were lost in transfer, compare the new issue to its historical `BB-` entry and add a traceable amendment to the issue. Do not silently rewrite historical evidence.
+
+## Native GitHub Issue Types (manual authenticated application)
+
+The native type bulk-update helper is `scripts/set-issue-types.sh`. It uses
+`gh api` with the **operator's own authenticated GitHub CLI session** because
+the ChatGPT GitHub connector does not expose the issue-type write parameter.
+It cannot run automatically from a PR or by adding an issue.
+
+Run from a trusted checkout after review:
+
+```bash
+bash scripts/set-issue-types.sh          # preview, no writes
+bash scripts/set-issue-types.sh --apply  # explicit GitHub write, verifies each result
+```
+
+The helper assigns **Epic** to #143–#161, **Feature** to legacy `BB-` product
+stories (including historical closed stories), **Bug** to three known UI defect
+issues (#82–#84), and **Task** to other stand-alone issues. It only uses issue
+types actually enabled for the repository, skips missing types rather than
+substituting a misleading one, and does not touch PRs, GitHub Projects or
+labels. Install `gh` and `jq` and ensure authenticated GitHub access has
+repository Issues write permission. Review the dry-run classification before
+using `--apply` since a number of standalone issues may be better classified
+as Feature rather than Task.
+
+**Status:** helper is committed in governance PR #141; no native Issue Type has
+been assigned via this helper during its creation. GitHub type changes require
+an operator to run it with `--apply` or a different authorised connector.
