@@ -123,31 +123,67 @@ The default is targeted verification, not a full regression after every story.
 
 ## Agent Progress Reporting and Visibility
 
-- During an actively executing agent session, update the workstream-specific status file approximately every **10 minutes of active work**. The Roadmap Agent owns `docs/agent-status/roadmap.md`; the Award Central Agent owns `docs/agent-status/award-central.md`. Never modify the other workstream's status document.
-- Commit and push the current status report approximately every **15 minutes of active work**, including when a story is incomplete. Use a separate documentation-only checkpoint from unverified development changes wherever practical. Verify the remote push and record push failures.
-- Update and push a status checkpoint **immediately** when starting a story, completing a meaningful milestone, encountering a blocker, completing testing, or finishing a story, subject to the safety exceptions below.
-- Every status report must provide: actual update timestamp and timezone; current story ID/title and acceptance criteria; current phase (Planning, Coding, Testing, Debugging, Blocked or Complete); specific activity underway; progress since the previous report; actual passing and failing tests; blockers requiring intervention; the next concrete action; and the latest development commit SHA (or explicitly `unknown`).
-- State what was observed and when. Never fabricate progress, test results, timestamps, push outcomes or active status. A last-updated timestamp is **not** proof an agent is still running. When the execution state is unverified, say so clearly.
-- Do not interrupt database operations, sensitive Git operations, or long-running tests just to meet a reporting interval. Record the deferred report and update/push immediately after it is safe.
-- Never commit secrets, credentials, unrelated files or unverified code as a consequence of status reporting. Do not launch background loops, polling services or monitoring infrastructure solely to satisfy these intervals.
-- These intervals apply **only during active execution** and are best-effort when timing cannot be reliably measured. Report at meaningful steps instead of claiming false timed updates.
-- Maintain the existing story-selection, acceptance-testing, branch-isolation, safety and delivery instructions below and above; status reporting does not replace implementation work.
+- During active work, maintain **issue/PR-specific** progress and verification
+  evidence. Checkpoints must distinguish Planning, Coding, Testing, Debugging,
+  Blocked and Complete. Include actual timestamp, issue and PR links, current
+  acceptance criteria, activity, observed test results, blockers, next action,
+  commit SHA and push/CI outcomes. Never imply an agent remains active merely
+  because an earlier checkpoint has a timestamp.
+- Post meaningful checkpoints on the canonical issue/PR, or write isolated
+  per-run evidence files where an approved agent workflow supports them. Avoid
+  multiple agents rewriting the same backlog, implementation-progress or
+  roadmap files. Workstream historical status documents remain readable,
+  but are not the dispatch or completion authority.
+- Retain any existing controller-specific operational status requirements
+  **only where they do not conflict** with these single-source rules.
+  Issue #75 is the follow-on implementation for a validated per-agent evidence
+  schema, central post-merge consolidator, and enforcement; do not claim these
+  mechanisms are already deployed.
+- Do not interrupt database operations, sensitive Git operations or tests to
+  produce a checkpoint. Report actual observed events, not fabricated timing.
 
-## Tracking and Git workflow
+## Tracking and Git workflow (Issues as authoritative work queue)
 
-- Track assignment and work status in GitHub Issues. Keep
-  `BUTTERBOX_PRODUCT_BACKLOG.md` for product requirements and retain story-level
-  status and evidence in `BACKLOG_INDEX.csv` and `IMPLEMENTATION_PROGRESS.md`.
-  Add the issue URL to the matching CSV row's `Evidence` field and record
-  verified criteria, test results and blockers in the linked PR. Keep the
-  parent story status based on its full criteria when an issue covers a slice.
-- Use an issue branch and open a PR to `copilot/Development` unless the issue
-  explicitly names another approved base. Inspect the diff for secrets and
-  follow the repository's CI, review and merge gates. Production changes
-  require explicit approval.
-- Use `Closes #<issue-number>` on the Development PR that completes the issue.
-  Provide a checkpoint with the issue, story ID, PR, verification and any
-  blockers. Start another issue only when the session has authorization for it.
+- **Effective after this governance PR merges:** GitHub Issues are the source of
+  truth for outstanding work scope, priority, readiness, dependencies, ownership,
+  status, acceptance criteria and completion evidence. GitHub PRs and checks are
+  the implementation/verification record. GitHub Projects, if configured, is a
+  view of Issues, not a second work queue.
+- `BUTTERBOX_PRODUCT_BACKLOG.md`, `BACKLOG_INDEX.csv` and
+  `IMPLEMENTATION_PROGRESS.md` are retained as **historical reference**
+  for legacy IDs, owner-approved product definitions and past test evidence.
+  Do not independently update their statuses or add new work to these archives.
+  When legacy descriptions contradict a newer owner-approved GitHub issue,
+  surface the conflict and resolve it on that issue without silently deleting
+  historical requirements. `docs/DECISION_LOG.md` and approved handoffs
+  remain authoritative for owner decisions.
+- Before creating an issue, search by backlog ID, title, affected component and
+  related PRs to avoid duplication. Maintain one canonical issue per outstanding
+  product story. Use a separate issue for a safe independently verifiable slice
+  only when needed, and link it to the parent; a partial slice never completes
+  the full parent story.
+- **Do not auto-dispatch migrated issues.** Assign an agent only after explicit
+  owner authorization, dependency checks and a conflict/ownership check against
+  active issues and open PRs. Existing direct Copilot assignments can bypass a
+  local coordinator; until mandatory dispatch enforcement is installed, an
+  owner/reviewer must do these checks manually.
+- Before coding, declare expected affected components and check for overlapping
+  active work; if a collision or unresolved dependency exists, mark it blocked
+  and ask for sequencing rather than independently editing shared files.
+  Treat a PR awaiting review as active work. Do not claim enforced locks until
+  enforcement is implemented and verified.
+- Do not let independent coding agents edit shared status/roadmap archives.
+  Prefer scoped issue/PR-specific evidence. Issue #75 covers implementing
+  automated single-writer evidence consolidation and guardrails; this governance
+  change does not imply that enforcement is already live.
+- Use an issue branch and PR to `copilot/Development`, subject to existing
+  CI, security, review and merge gates. Production changes require explicit
+  approval. Use closing keywords only when all issue acceptance criteria have
+  been verified; otherwise link the partial PR without auto-closing the issue.
+- Completion requires recorded per-criterion evidence and the actual PR merge
+  status, not just a green CI run or an agent claim. Update the issue after
+  merge and maintain auditable links; do not independently rewrite the archives.
+- See `docs/github-issues-workflow.md` for migration/cutover rules.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
