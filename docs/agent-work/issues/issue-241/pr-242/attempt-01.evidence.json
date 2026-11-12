@@ -18,7 +18,7 @@
     "agent": "copilot",
     "commitSha": "4c918d8b1a6cd8d74a2c13e9b7e5258c8d3fb728",
     "startedAt": "2026-11-12T22:05:38Z",
-    "updatedAt": "2026-11-12T22:10:23Z"
+    "updatedAt": "2026-11-12T22:12:44Z"
   },
   "scope": {
     "summary": "Partial visual roster timetable and safe slot-creation vertical slice, with limitations recorded.",
@@ -142,8 +142,8 @@
       "evidence": [
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43316628345",
-          "outcome": "Verify evidence validation failed for missing PR-body markers; database job and review were not complete at this record."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43317610073",
+          "outcome": "Latest Verify run validated issue/evidence markers, then failed because partial delivery retained the Fixes #241 auto-close keyword; database job and review were not complete at this record."
         },
         {
           "kind": "file",
@@ -201,14 +201,14 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43316628345,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43316628345"
+      "runId": 43317610073,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43317610073"
     },
     {
       "name": "database",
       "status": "pending",
-      "runId": 43316628345,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43316628345"
+      "runId": 43317610073,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43317610073"
     }
   ],
   "decisions": [
@@ -224,11 +224,11 @@
   "blockers": [
     "Supabase CLI 2.122.0 was unavailable to the isolated local browser runner.",
     "The production build could not fetch the existing Google Fonts.",
-    "PR body lacks required issue/evidence markers and still contains the auto-close keyword Fixes #241; available GitHub MCP tools provide no PR-body editing operation.",
-    "Verify failed issue-evidence validation, Database was pending, and code review remains outstanding."
+    "The PR body still contains the auto-close keyword Fixes #241; available GitHub MCP tools provide no PR-body editing operation.",
+    "Verify rejects the retained auto-close keyword for partial delivery, Database is pending, and code review remains outstanding."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
-  "markdownSha256": "638e42374aceaecd36efd6fe9502f726e98a0d9a0d7a682c112a0db7d0594468",
+  "markdownSha256": "8e9fe20b6e3af25a32c6dc024c33d9d2f89727ea471d09c209e94e6fc393c773",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

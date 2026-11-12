@@ -41,6 +41,7 @@ Documentation: **updated** — `docs/USER_GUIDE.md` describes the tested code pa
 - Secret scan — no secrets detected in changed files.
 - CodeQL JavaScript review — zero alerts.
 - PR #242 Verify run [43316628345](https://github.com/farbotkol/butterbox/actions/runs/43316628345): the `verify` job failed because the PR body did not contain `Refs #241` and the matching canonical issue marker. The `database` job remained in progress; its database and tenant-isolation steps passed, while browser authentication was still running.
+- Follow-up Verify run [43317610073](https://github.com/farbotkol/butterbox/actions/runs/43317610073): issue/evidence validation passed with the markers present; the Verify job then failed because the partial delivery still uses the PR's `Fixes #241` auto-close keyword. Database remained in progress at this record.
 - Managed-file guard — passed.
 
 ## Limitations and blockers
@@ -48,5 +49,5 @@ Documentation: **updated** — `docs/USER_GUIDE.md` describes the tested code pa
 - This is not the complete requested redesign: no resize handles were added; create shortcuts offer only 00:00, 06:00, 12:00 and 18:00; direct moves still use the existing preview/confirm workflow.
 - Mobile/day view, tablet layout, keyboard focus, touch input, concurrent edits and large-roster rendering need runtime browser verification.
 - Browser acceptance is blocked on the test runner's pinned Supabase CLI; the production build is blocked on external font fetches.
-- The PR description needs `Refs #241` and canonical issue/evidence markers. It also still contains `Fixes #241` despite this partial delivery; that auto-close keyword must be removed before merge. The available GitHub MCP tools expose PR reading but not PR-body editing.
+- The PR description now contains `Refs #241` and the canonical issue/evidence markers, but still contains `Fixes #241` despite this partial delivery; that auto-close keyword must be removed before merge. The available GitHub MCP tools expose PR reading but not PR-body editing.
 - Issue #241 remains open for owner acceptance; Verify/Database and review gates are not confirmed passing.
