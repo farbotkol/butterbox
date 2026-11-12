@@ -1,0 +1,251 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 238,
+    "url": "https://github.com/farbotkol/butterbox/issues/238"
+  },
+  "pullRequest": {
+    "number": 239,
+    "url": "https://github.com/farbotkol/butterbox/pull/239",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/dev-factory-complete-single-writer-evidence",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43177495121,
+    "agent": "copilot",
+    "commitSha": "298286c7b0040618386fb75d81c27c62b8478505",
+    "startedAt": "2026-11-12T07:44:34Z",
+    "updatedAt": "2026-11-12T08:33:37Z"
+  },
+  "scope": {
+    "summary": "Versioned per-issue delivery evidence, trusted managed-file protection and conservative scheduled reconciliation for canonical GitHub Issues.",
+    "changedFiles": [
+      ".github/workflows/agent-evidence-reconciliation.yml",
+      ".github/workflows/ci.yml",
+      ".github/workflows/managed-file-guard.yml",
+      "AGENTS.md",
+      "docs/agent-evidence-reconciliation.md",
+      "docs/agent-work/issues/issue-238/pr-239/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-238/pr-239/attempt-01.md",
+      "docs/agent-work/issues/issue-999999/pr-999998/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-999999/pr-999998/attempt-01.md",
+      "docs/github-issues-workflow.md",
+      "tests/agent-evidence.test.mjs",
+      "tools/agent-controller/README.md",
+      "tools/agent-evidence/check-managed-files.mjs",
+      "tools/agent-evidence/check-pr-evidence.mjs",
+      "tools/agent-evidence/evidence.mjs",
+      "tools/agent-evidence/evidence.schema.json",
+      "tools/agent-evidence/reconcile.mjs",
+      "tools/agent-evidence/validate-all.mjs"
+    ],
+    "implemented": [
+      "Versioned evidence schema with paired Markdown checksum, strict validation and isolated attempts.",
+      "CI validation for canonical issue criteria, changed files, managed archives/status, renamed files and audited exceptions.",
+      "Protected-branch scheduled reconciliation with verified merge/check status, canonical issue owner approval, serialization and recovery."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "New evidence schema + validator + examples and tests.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-evidence/evidence.schema.json",
+          "outcome": "Version 1 schema; strict validator and checksummed Markdown example are included."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence.test.mjs",
+          "outcome": "11 focused synthetic tests passed."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Verified scoped-file CI enforcement protects shared archives/status files.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/ci.yml",
+          "outcome": "Verify runs PR evidence and managed-file checks."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence.test.mjs",
+          "outcome": "Protected files, exact-head exceptions and renamed managed files are covered."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Deterministic GitHub Issues-first post-merge single-writer reconciliation with missed-event recovery.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/agent-evidence-reconciliation.yml",
+          "outcome": "Serialized scheduled full reconciliation runs from copilot/Development and does not cancel in-progress runs."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence.test.mjs",
+          "outcome": "Concurrent/out-of-order merges, retries and idempotent recovery are covered with synthetic API fixtures."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Full story not closed from a partial PR; merged/CI/accepted statuses distinguished.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence.test.mjs",
+          "outcome": "Partial and documentation-only evidence remains unaccepted; the writer never closes or reopens issues."
+        },
+        {
+          "kind": "file",
+          "reference": "tools/agent-evidence/evidence.mjs",
+          "outcome": "Issue comments distinguish merge, actual required CI, evidence validity and human acceptance."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Parallel merge, failure/retry, idempotency and tampering fixtures pass.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "node --test tests/agent-evidence.test.mjs",
+          "outcome": "11 passed, 0 failed; includes concurrent/out-of-order, duplicate, retry, tampering and missing-CI cases."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Confirm actual `verify` and `database` gates; never weaken branch protection.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/ci.yml",
+          "outcome": "Existing verify and database jobs remain enabled and unchanged apart from verify-side checks."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43144295088",
+          "outcome": "Merged PR #141 run reported verify and database successful; copilot/Development reports protected."
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "PR targets `copilot/Development` and reports changed files, exact tests and remaining blockers.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/pull/239",
+          "outcome": "PR targets copilot/Development and its checklist reports the exact changed files, commands and pending review/sequence blockers."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/agent-work/issues/issue-238/pr-239/attempt-01.evidence.json",
+          "outcome": "Records the exact changed-file set and verification commands/results."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "11 passed, 0 failed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- tools/agent-evidence/evidence.mjs tools/agent-evidence/reconcile.mjs tools/agent-evidence/validate-all.mjs tools/agent-evidence/check-managed-files.mjs tools/agent-evidence/check-pr-evidence.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint completed without warnings or errors.",
+      "reference": null
+    },
+    {
+      "command": "node tools/agent-evidence/validate-all.mjs",
+      "outcome": "passed",
+      "result": "Validated 2 delivery evidence files.",
+      "reference": null
+    },
+    {
+      "command": "node --check tools/agent-evidence/evidence.mjs && node --check tools/agent-evidence/reconcile.mjs && node --check tools/agent-evidence/check-managed-files.mjs && node --check tools/agent-evidence/check-pr-evidence.mjs && node --check tools/agent-evidence/validate-all.mjs",
+      "outcome": "passed",
+      "result": "Changed tool modules passed Node syntax checks.",
+      "reference": null
+    },
+    {
+      "command": "node tools/agent-evidence/validate-all.mjs",
+      "outcome": "passed",
+      "result": "Validated 2 delivery evidence files after adding this attempt pair.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "GitHub Issues remain the live work and acceptance record; historical archives are not edited.",
+    "Issue #142 component reservations and dispatch coordination remain out of scope.",
+    "Reconciliation only appends a verified audit comment and never closes or reopens an issue."
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "Preliminary Verify run occurred before the PR attempt pair and markers were added.",
+      "outcome": "Run 43182536515 failed at canonical issue metadata validation; a new run is required for the completed PR head.",
+      "runId": 43182536515
+    },
+    {
+      "attempt": 2,
+      "reason": "Verify run 43182799409 used a superseded PR head before the evidence pair was pushed.",
+      "outcome": "Cancelled after the newer commit; no CI result was accepted.",
+      "runId": 43182799409
+    },
+    {
+      "attempt": 3,
+      "reason": "Verify run 43183669946 executed before AC-7 was recorded in the evidence.",
+      "outcome": "Failed the exact issue-checklist match; AC-7 was added and must be checked on the new PR head.",
+      "runId": 43183669946
+    }
+  ],
+  "limitations": [
+    "No live GitHub issue write was performed; API behavior is covered with synthetic fixtures and the scheduled writer begins after merge.",
+    "The branch reports protected, but the exact required-check ruleset was not readable through the available repository API.",
+    "Owner approval of the canonical issue association on the exact final PR head is required before reconciliation."
+  ],
+  "blockers": [
+    "Open draft PR #85 edits managed archive/status files outside the audited governance/migration exception; resolve those edits before rollout.",
+    "Repository-owner review of the canonical issue binding on PR #239's final head and exact required-check rules remain pending."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-238/pr-239/attempt-01.md",
+  "markdownSha256": "59c488e0694233f056161d351f8668435caa6fd0dc1c91a9ea65be784566844f",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

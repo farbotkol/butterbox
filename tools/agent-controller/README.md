@@ -98,6 +98,40 @@ resume of the existing VS Code Chat sessions**. `AGENTS.md` is included in the
 prompt, and the appropriate backlog/decision/Award Central context is referenced.
 No agent may change the other workstream's status.
 
+## Issue delivery evidence and managed files
+
+For code delivered through an issue and PR, create one immutable attempt directory
+at `docs/agent-work/issues/issue-N/pr-N/attempt-NN.md` with the paired
+`attempt-NN.evidence.json`. The versioned contract is
+`tools/agent-evidence/evidence.schema.json`; validate a file with:
+
+```sh
+node tools/agent-evidence/evidence.mjs --file docs/agent-work/issues/issue-N/pr-N/attempt-NN.evidence.json --repo farbotkol/butterbox
+```
+
+Keep retries as new attempt files. Record IDs, changed files, merge/check links,
+criterion outcomes, exact tests and results, decisions, limitations and blockers.
+Do not include credentials, personal contact details or raw logs. The PR body
+must visibly reference its canonical issue with `Refs #N` and identify it with
+`<!-- butterbox-issue: N -->`, along with its JSON
+evidence with `<!-- butterbox-evidence: docs/agent-work/issues/issue-N/pr-N/attempt-NN.evidence.json -->`.
+Both attempt files must be changed in the PR and pass the schema/checksum
+validator. Use a reference-only issue link for partial or documentation-only
+delivery; CI rejects auto-close keywords unless the evidence covers every
+canonical issue criterion with a pass and no blockers.
+Before merge reconciliation, the repository owner must approve the canonical
+issue link on the exact PR head with `Canonical issue approved: #N` in the
+review text.
+
+Independent PRs cannot edit the historical archive/status files checked by CI.
+A governance exception needs the `agent-evidence-governance-exception` label,
+`Managed-file exception: #N` in the PR body, and an owner approval review on that
+exact head with `Managed-file exception approved: #N` in its review text.
+Post-merge reconciliation records a single-writer audit comment on the issue,
+checks the exact merged SHA and actual `verify`/`database` checks, and recovers
+missed events on a 30-minute sweep. It does not close or reopen issues; full-story
+acceptance remains a human decision.
+
 ## Coding: intentionally not enabled during MVP validation
 
 The installed `copilot` command was not on PATH during initial development.

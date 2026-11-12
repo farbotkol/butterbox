@@ -1,0 +1,30 @@
+name: Reconcile merged issue evidence
+
+on:
+  schedule:
+    - cron: "17,47 * * * *"
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+  checks: read
+
+concurrency:
+  group: butterbox-single-writer-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/heads/copilot/Development
+          persist-credentials: false
+      - name: Reconcile confirmed merges and recover missed events
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node tools/agent-evidence/reconcile.mjs

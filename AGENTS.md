@@ -176,6 +176,29 @@ The default is targeted verification, not a full regression after every story.
   Prefer scoped issue/PR-specific evidence. Issue #75 covers implementing
   automated single-writer evidence consolidation and guardrails; this governance
   change does not imply that enforcement is already live.
+- For each issue/PR/attempt, keep append-only Markdown and versioned JSON evidence
+  under `docs/agent-work/issues/issue-N/pr-N/attempt-NN.*`; validate it with
+  `node tools/agent-evidence/evidence.mjs --file <json> --repo farbotkol/butterbox`.
+  Record criterion-level outcomes and evidence, exact tests, CI references,
+  decisions, reruns, limitations and blockers. Do not include credentials,
+  personal contact details or raw logs.
+- Do not edit `BACKLOG_INDEX.csv`, `BUTTERBOX_PRODUCT_BACKLOG.md`,
+  `IMPLEMENTATION_PROGRESS.md` or `docs/agent-status/` in independent feature
+  PRs. CI permits an exception only with the
+  `agent-evidence-governance-exception` label, a linked issue in the PR body,
+  and the repository owner's approval review on the exact PR head. This is an
+  audited exception, not permission to restore those files as live status.
+- Merged-PR evidence reconciliation is append-only on the canonical GitHub
+  issue. Include `Refs #N` plus the exact issue/evidence markers in the PR body
+  and add both Markdown and JSON attempt files. CI checks the markers and evidence;
+  the writer requires a repository-owner approval review on the exact PR head
+  saying `Canonical issue approved: #N`, and verifies GitHub's issue-to-PR
+  cross-reference before commenting.
+  Partial and documentation-only PRs must use reference-only links. CI permits
+  auto-close keywords only when evidence exactly matches every canonical issue
+  criterion, every criterion passes, there are no blockers, and the delivery is
+  not documentation-only. The writer never closes or reopens an issue; human
+  reviewers decide full-story acceptance and closure.
 - Use an issue branch and PR to `copilot/Development`, subject to existing
   CI, security, review and merge gates. Production changes require explicit
   approval. Use closing keywords only when all issue acceptance criteria have
