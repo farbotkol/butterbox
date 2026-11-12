@@ -41,7 +41,7 @@ export function ShiftEditor({
 
   // A resolved server action otherwise resets the form even when it returns errors.
   return (
-    <form action={action} noValidate aria-label={shiftId ? "Edit draft shift" : "Add draft shift"}
+    <form id="shift-editor" action={action} noValidate aria-label={shiftId ? "Edit draft shift" : "Add draft shift"}
       onReset={(event) => event.preventDefault()}
       className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
       <input name="week" type="hidden" value={week} />

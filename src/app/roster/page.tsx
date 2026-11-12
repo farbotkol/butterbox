@@ -26,6 +26,7 @@ import { CopyRosterForm } from "@/components/copy-roster-form";
 import {
   QuickShiftDropTarget, QuickShiftHandle, RosterQuickChangeProvider, type QuickShiftWorker,
 } from "@/components/roster-quick-changes";
+import { RosterTimelineCell } from "@/components/roster-timeline";
 import { RosterReviewPanel } from "@/components/roster-review-panel";
 import { ConfirmedRosterDelete, RosterKeyboardControls } from "@/components/roster-productivity";
 import { ShiftEditor } from "@/components/shift-editor";
@@ -39,7 +40,10 @@ import { readAllPages } from "@/lib/paginated-rows";
 import { groupRosterEmployees } from "@/lib/roster-groups";
 import { rosterOverlapConflicts } from "@/lib/roster-overlap-conflicts";
 import { parseRosterPublicationMode, parseRosterReviews } from "@/lib/roster-review";
-import { collapsedRosterDepartments, matchesRosterSearch, rosterSearchQuery, rosterViewHref as buildRosterViewHref, toggleRosterDepartment } from "@/lib/roster-view";
+import {
+  collapsedRosterDepartments, matchesRosterSearch, rosterCreateShiftHref, rosterSearchQuery,
+  rosterViewHref as buildRosterViewHref, toggleRosterDepartment,
+} from "@/lib/roster-view";
 import { shiftAcknowledgements } from "@/lib/shift-acknowledgements";
 import { shiftConflicts, type ShiftConflict } from "@/lib/shift-conflicts";
 import { shiftConversationHref } from "@/lib/shift-conversations";
@@ -70,6 +74,8 @@ import {
   getWorkspace,
 } from "@/lib/workspace";
 
+const rosterSlotStarts = ["00:00", "06:00", "12:00", "18:00"];
+
 type RosterPageProps = {
   searchParams: Promise<{ business?: string;
     week?: string;
@@ -87,6 +93,10 @@ type RosterPageProps = {
     offer?: string;
     review?: string;
     q?: string | string[];
+    day?: string;
+    create_date?: string;
+    create_start?: string;
+    create_employee?: string;
   }>;
 };
 
@@ -337,6 +347,12 @@ function weekInput(date: string, hour: number) {
   return `${date}T${String(hour).padStart(2, "0")}:00`;
 }
 
+function addWallHours(value: string, hours: number) {
+  const date = new Date(`${value}:00Z`);
+  date.setUTCHours(date.getUTCHours() + hours);
+  return date.toISOString().slice(0, 16);
+}
+
 function CollapsedFields({ departments }: { departments: readonly string[] }) {
   return departments.map((departmentId) => (
     <input key={departmentId} type="hidden" name="collapsed" value={departmentId} />
@@ -390,8 +406,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
 
   const search = rosterSearchQuery(params.q);
   if (search === null) console.error("Invalid roster team-member search.");
-  const rosterViewHref = (week: string, department: string | undefined, collapsed: readonly string[], venue?: string) =>
-    buildRosterViewHref(week, department, collapsed, venue, search ?? "", workspace.business.id);
+  const rosterViewHref = (
+    week: string, department: string | undefined, collapsed: readonly string[], venue?: string, day?: string,
+  ) => buildRosterViewHref(week, department, collapsed, venue, search ?? "", workspace.business.id, day);
   const week = getWeekStart(params.week, workspace.venue.timezone);
   const weekEnd = addDays(week, 7);
   const startAt = localMidnightAsUtc(week, workspace.venue.timezone);
@@ -505,6 +522,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const visibleShifts = (shifts ?? []).filter(
     (shift) => !selectedDepartment || shift.department_id === selectedDepartment,
   );
+  const scheduleShifts = visibleShifts.filter((shift) =>
+    scheduleDays.includes(getVenueDate(shift.starts_at, workspace.venue.timezone)),
+  );
   const patternEmployees = new Set((patternResult.data ?? []).map((pattern) => pattern.employee_id));
   const employeeIntervals = new Map<string, AvailabilityInterval[]>();
   for (const interval of intervalResult.data ?? []) {
@@ -551,6 +571,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
     ...group, employees: group.employees.filter((employee) => matchesRosterSearch(employee.name, search)),
   })).filter((group) => !search || group.employees.length > 0);
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
+  const selectedDay = typeof params.day === "string" && days.includes(params.day) ? params.day : undefined;
+  const scheduleDays = selectedDay ? [selectedDay] : days;
   const canManage = isManager(workspace.membership.role);
   const canManageDepartment = (departmentId: string) => {
     const { role, venue_id: venueId, department_id: departmentIdScope } = workspace.membership;
@@ -680,11 +702,27 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const roleSuggestions = (jobRoleRows ?? []).filter(
     (role) => role.department_id === selectedDepartment,
   );
+  const requestedCreateDate = typeof params.create_date === "string" && days.includes(params.create_date)
+    ? params.create_date : undefined;
+  const requestedCreateStart = requestedCreateDate && typeof params.create_start === "string" &&
+    new RegExp(`^${requestedCreateDate}T(?:00|06|12|18):00$`).test(params.create_start)
+    ? params.create_start : undefined;
+  const createStart = canManageSelectedDepartment && selectedDepartmentActive ? requestedCreateStart : undefined;
+  const createEmployee = createStart && typeof params.create_employee === "string"
+    ? employees.find((employee) => employee.id === params.create_employee)
+    : undefined;
   const errorMessage = params.error ? errorMessages[params.error] : undefined;
   const previousWeek = addDays(week, -7);
   const nextWeek = addDays(week, 7);
   const filterDepartment = selectedDepartment ?? (params.department === "all" ? "all" : undefined);
   const collapsed = collapsedRosterDepartments(params.collapsed, departments.map((department) => department.id));
+  const createSlotsFor = (date: string, departmentId: string, employeeId?: string) =>
+    rosterSlotStarts.map((start) => ({
+      start,
+      href: rosterCreateShiftHref(
+        week, departmentId, collapsed, workspace.venue.id, workspace.business.id, date, start, employeeId,
+      ),
+    }));
   const weekLabel = `${formatDay(week)} – ${formatDay(addDays(week, 6))}`;
   const copiedCount = params.copied && /^\d+$/.test(params.copied) &&
     Number.isSafeInteger(Number(params.copied)) ? Number(params.copied) : undefined;
@@ -796,12 +834,32 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
         <div className="flex items-center gap-2 text-sm text-muted">
           <UsersRound size={17} aria-hidden="true" />
           <span>
-            {visibleShifts.filter((shift) => shift.employee_id).length} assigned
+            {scheduleShifts.filter((shift) => shift.employee_id).length} assigned
             <span className="mx-2 text-muted/40">·</span>
-            {visibleShifts.filter((shift) => !shift.employee_id).length} open
+            {scheduleShifts.filter((shift) => !shift.employee_id).length} open
           </span>
         </div>
       </div>
+
+      <form action="/roster" aria-label="Choose schedule view" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
+       <input type="hidden" name="business" value={workspace.business.id} />
+       <input type="hidden" name="venue" value={workspace.venue.id} />
+       <input type="hidden" name="week" value={week} />
+       {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
+       {search && <input type="hidden" name="q" value={search} />}
+       <CollapsedFields departments={collapsed} />
+       <div className="min-w-0 flex-1 text-sm font-medium">
+         <label htmlFor="roster-day-view">Schedule view</label>
+         <select id="roster-day-view" name="day" defaultValue={selectedDay ?? "week"}
+           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-white px-3">
+           <option value="week">Full week</option>
+           {days.map((date) => <option key={date} value={date}>{formatDay(date)}</option>)}
+         </select>
+       </div>
+       <button type="submit" className="min-h-11 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold">
+         Show schedule
+       </button>
+      </form>
 
       <form action="/roster" aria-label="Search team members" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
         <input type="hidden" name="business" value={workspace.business.id} />
@@ -915,18 +973,25 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               </button>
             </form>
           </div>
-          <ShiftEditor key={`${workspace.venue.id}:${selectedDepartment}:${week}:${editingShift ? `edit:${editingShift.id}` : `new:${params.created ?? ""}`}`}
-            week={week} venueId={workspace.venue.id} departmentId={selectedDepartment}
-            collapsed={collapsed} employees={employees} unavailableEmployee={unavailableEmployee}
-            roleSuggestions={roleSuggestions.map((role) => role.name)} shiftId={editingShift?.id}
-            cancelHref={rosterViewHref(week, selectedDepartment, collapsed, workspace.venue.id)}
-            initialValues={{
-              role: editingShift?.role_title ?? "",
-              employee: editingShift?.employee_id ?? "",
-              start: editingShift ? formatLocalDateTime(editingShift.starts_at, workspace.venue.timezone) : weekInput(week, 8),
-              end: editingShift ? formatLocalDateTime(editingShift.ends_at, workspace.venue.timezone) : weekInput(week, 16),
-              break: String(editingShift?.break_minutes ?? 30),
-            }} />
+          <details open={Boolean(editingShift || createStart)} className="mt-4 rounded-xl border border-line bg-cloud p-4">
+            <summary className="min-h-11 cursor-pointer py-2 text-sm font-semibold text-ocean focus-visible:outline-2 focus-visible:outline-ocean">
+              {editingShift ? "Edit draft shift" : createStart ? "Shift details" : "Add shift manually"}
+            </summary>
+            <ShiftEditor key={`${workspace.venue.id}:${selectedDepartment}:${week}:${editingShift ? `edit:${editingShift.id}` : `new:${createStart ?? params.created ?? ""}:${createEmployee?.id ?? ""}`}`}
+              week={week} venueId={workspace.venue.id} departmentId={selectedDepartment}
+              collapsed={collapsed} employees={employees} unavailableEmployee={unavailableEmployee}
+              roleSuggestions={roleSuggestions.map((role) => role.name)} shiftId={editingShift?.id}
+              cancelHref={rosterViewHref(week, selectedDepartment, collapsed, workspace.venue.id, selectedDay)}
+              initialValues={{
+                role: editingShift?.role_title ?? createEmployee?.role_title ?? "",
+                employee: editingShift?.employee_id ?? createEmployee?.id ?? "",
+                start: editingShift ? formatLocalDateTime(editingShift.starts_at, workspace.venue.timezone)
+                  : createStart ?? weekInput(week, 8),
+                end: editingShift ? formatLocalDateTime(editingShift.ends_at, workspace.venue.timezone)
+                  : createStart ? addWallHours(createStart, 4) : weekInput(week, 16),
+                break: String(editingShift?.break_minutes ?? 30),
+              }} />
+          </details>
         </section>
       )}
 
@@ -1033,11 +1098,13 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       <section className="mt-6 overflow-hidden rounded-lg border border-line bg-white shadow-[0_4px_18px_rgba(18,63,74,0.04)]">
         <div className="flex items-center justify-between border-b border-line bg-white px-5 py-4">
           <div>
-            <h2 className="text-base font-semibold">Team roster</h2>
+            <h2 className="text-base font-semibold">Weekly schedule</h2>
             <p className="mt-1 text-xs text-muted">
-              Shifts by team member and day · times shown in venue local time
+              People × days × time · {workspace.venue.timezone.replaceAll("_", " ")} venue time
             </p>
-            <p className="mt-1 text-xs text-muted">
+            <details className="mt-2 text-xs text-muted">
+              <summary className="min-h-11 cursor-pointer py-2 font-semibold text-ocean">Scheduling rules and move help</summary>
+              <p className="pb-2">
               {!currentVenue.block_manual_unavailability && !currentVenue.block_publish_unavailability
                 ? "Availability warnings do not block manual assignment or publication."
                 : `Manual assignment ${currentVenue.block_manual_unavailability ? "blocks" : "warns about"} unavailable workers; publication ${currentVenue.block_publish_unavailability ? "blocks" : "warns about"} unavailable workers.`}
@@ -1048,29 +1115,25 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               {" "}{currentVenue.block_publish_long_shift ? "blocks" : "warns about"} shifts longer than 24 hours.
               {currentVenue.block_publish_unavailability && " Assigned shifts longer than 24 hours cannot be verified for availability."}
               {" "}Managers can require acknowledgement for an assigned draft before publishing.
-            </p>
-            {canManage && (
-              <p className="mt-1 text-xs text-muted">
-                Drag a shift&apos;s Move or duplicate control onto a team member and day, or activate it to choose
-                a destination. Preview and confirm before applying.
               </p>
-            )}
+              {canManage && <p className="pb-2">Drag a shift&apos;s Move or duplicate control onto a team member and day, or activate it to choose a destination. Preview and confirm before applying.</p>}
+            </details>
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] border-collapse text-left">
+          <table className={`w-full ${selectedDay ? "min-w-[360px]" : "min-w-[980px]"} border-collapse text-left`}>
             <thead>
               <tr className="bg-[#eff7f6]">
-                <th className="sticky left-0 z-10 min-w-48 border-b border-r border-line bg-[#eff7f6] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ocean/75">
+                <th className={`sticky left-0 z-10 ${selectedDay ? "min-w-32" : "min-w-48"} border-b border-r border-line bg-[#eff7f6] px-4 py-3 text-xs font-semibold uppercase tracking-wide text-ocean/75`}>
                   Team member
                 </th>
-                {days.map((date) => {
+                {scheduleDays.map((date) => {
                   const dayShifts = visibleShifts.filter(
                     (shift) => getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
                   );
                   return (
-                    <th key={date} className="min-w-28 border-b border-line px-3 py-3 align-top">
+                    <th key={date} className={`${selectedDay ? "min-w-56" : "min-w-28"} border-b border-line px-3 py-3 align-top`}>
                       <span className="block text-xs font-semibold text-ink">{formatDay(date)}</span>
                       <span className="mt-1 block text-[11px] font-normal text-muted">
                         {dayShifts.length} {dayShifts.length === 1 ? "shift" : "shifts"}
@@ -1083,7 +1146,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             {matchingGroups.map(({ department, employees: groupEmployees }) => (
               <tbody key={department.id} aria-label={`Department ${department.name}`}>
                 <tr className="bg-cloud">
-                  <th colSpan={8} scope="rowgroup" className="border-b border-line px-4 py-2 text-sm font-semibold text-ocean">
+                  <th colSpan={scheduleDays.length + 1} scope="rowgroup" className="border-b border-line px-4 py-2 text-sm font-semibold text-ocean">
                     <form action="/roster">
                       <input type="hidden" name="business" value={workspace.business.id} />
                       {search && <input type="hidden" name="q" value={search} />}
@@ -1106,7 +1169,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                 {groupEmployees.map((employee) => (
                 <tr key={employee.id} id={`roster-row-${department.id}-${employee.id}`}
                   hidden={collapsed.includes(department.id)} className="border-b border-line/70 last:border-0">
-                  <th className="sticky left-0 z-10 border-r border-line bg-white px-4 py-3 align-top">
+                  <th className={`sticky left-0 z-10 ${selectedDay ? "min-w-32" : "min-w-48"} border-r border-line bg-white px-4 py-3 align-top`}>
                     <span className="block truncate text-sm font-semibold text-ink">
                       {employee.name}{!employee.active && !employee.profileUnavailable ? " (Archived)" : ""}
                     </span>
@@ -1114,7 +1177,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       {employee.role_title}
                     </span>
                   </th>
-                  {days.map((date) => {
+                  {scheduleDays.map((date) => {
                     const employeeShifts = visibleShifts.filter(
                       (shift) =>
                         shift.employee_id === employee.id &&
@@ -1127,11 +1190,18 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                       employeeExceptions.get(employee.id) ?? [],
                     );
                     const unavailable = availability.unavailable;
+                    const canCreateForEmployee = canManageDepartment(department.id) && department.active &&
+                      employee.active && !employee.profileUnavailable;
                     return (
-                      <td key={date} className="border-r border-line/60 px-2 py-2 align-top last:border-r-0">
+                      <td key={date} className={`${selectedDay ? "min-w-56" : "min-w-40"} border-r border-line/60 px-2 py-2 align-top last:border-r-0`}>
                         <QuickShiftDropTarget departmentId={department.id} employeeId={employee.id} date={date}
-                          enabled={canManageDepartment(department.id) && department.active &&
-                            employee.active && !employee.profileUnavailable}>
+                          enabled={canCreateForEmployee}>
+                          <RosterTimelineCell date={date} timezone={workspace.venue.timezone}
+                            shifts={employeeShifts.map((shift) => ({
+                              id: shift.id, roleTitle: shift.role_title, startsAt: shift.starts_at,
+                              endsAt: shift.ends_at, isPublished: shift.is_published,
+                            }))}
+                            createSlots={canCreateForEmployee ? createSlotsFor(date, department.id, employee.id) : []} />
                           {availability.pendingLeave && (
                             <span aria-label={`Pending leave ${employee.name} ${date} in ${department.name}`}
                               className="block rounded-md border border-amber-200 bg-amber-50 px-2 py-1 text-[10px] font-semibold text-amber-900">
@@ -1226,7 +1296,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                                 </span>
                                 {canManageDepartment(shift.department_id) && !shift.is_published &&
                                   departments.find((item) => item.id === shift.department_id)?.active && (
-                                  <Link href={`${rosterViewHref(week, shift.department_id, collapsed, workspace.venue.id)}&edit=${shift.id}`}
+                                  <Link href={`${rosterViewHref(week, shift.department_id, collapsed, workspace.venue.id, selectedDay)}&edit=${shift.id}`}
                                     aria-label={`Edit ${employee.name} shift`} title="Edit draft shift"
                                     className="rounded p-1 text-muted/70 hover:bg-white hover:text-ocean">
                                     <Pencil size={12} aria-hidden="true" />
@@ -1248,9 +1318,7 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                             </article>
                           ))}
                           {employeeShifts.length === 0 && unavailable?.length === 0 && (
-                            <span className="block px-2 py-3 text-center text-[11px] text-muted/50">
-                              —
-                            </span>
+                            <span className="sr-only">No assigned shift</span>
                           )}
                         </QuickShiftDropTarget>
                       </td>
@@ -1258,12 +1326,35 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
                   })}
                 </tr>
                 ))}
+                <tr hidden={collapsed.includes(department.id)} className="border-b border-line/70 bg-amber-50/50">
+                  <th scope="row" className="sticky left-0 z-10 border-r border-line bg-amber-50 px-4 py-3 align-top">
+                    <span className="block text-sm font-semibold text-amber-900">Open shifts</span>
+                    <span className="mt-1 block text-xs font-normal text-muted">Unassigned coverage</span>
+                  </th>
+                  {scheduleDays.map((date) => {
+                    const openShifts = visibleShifts.filter((shift) =>
+                      shift.department_id === department.id && !shift.employee_id &&
+                      getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
+                    );
+                    const canCreate = canManageDepartment(department.id) && department.active;
+                    return (
+                      <td key={date} className={`${selectedDay ? "min-w-56" : "min-w-40"} border-r border-line/60 px-2 py-2 align-top last:border-r-0`}>
+                        <RosterTimelineCell date={date} timezone={workspace.venue.timezone}
+                          shifts={openShifts.map((shift) => ({
+                            id: shift.id, roleTitle: shift.role_title, startsAt: shift.starts_at,
+                            endsAt: shift.ends_at, isPublished: shift.is_published,
+                          }))}
+                          createSlots={canCreate ? createSlotsFor(date, department.id) : []} />
+                      </td>
+                    );
+                  })}
+                </tr>
               </tbody>
             ))}
             {rosterGroups.length === 0 && (
               <tbody>
                 <tr>
-                  <td colSpan={8} className="px-5 py-10 text-center text-sm text-muted">
+                  <td colSpan={scheduleDays.length + 1} className="px-5 py-10 text-center text-sm text-muted">
                     Add active team members to build a weekly roster.
                   </td>
                 </tr>
