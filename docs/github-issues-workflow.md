@@ -54,8 +54,58 @@ exception requires the `agent-evidence-governance-exception` label, a linked
 issue, and owner approval on the exact PR head. This workflow does not configure
 GitHub branch protection; administrators must require `Managed file guard / guard`
 from the separate base-trusted `pull_request_target` workflow for enforcement to
-be a merge gate. No component locking or dispatch queue from #142 is implemented
-here.
+be a merge gate.
+
+## Component reservations and PR coordination
+
+The agent controller reads the explicit work-area catalogue in
+`tools/agent-controller/components.json`. New owner-authored task JSON can name
+`components` and `dependsOn`; old tasks without components reserve the
+repository-wide area. Dispatch rechecks owner provenance, current Copilot
+assignment for coding/autonomous modes, merged-and-verified dependencies,
+existing task branches, related open PRs and active component leases.
+`maxConcurrentTasks` defaults to two.
+Atomic local reservations allow disjoint tasks to run concurrently, while any
+overlap remains queued. SQL migration changes are compared by object names;
+unparseable changes conservatively reserve the shared database-schema area.
+
+Reservations live in the private controller ledger, are renewed during active
+work, and expire two hours after the last renewal. An expired lease is retained
+if the run, branch or PR may still be active. Recovery releases only after
+GitHub confirms a merged PR with successful `verify`/`database` checks or a safe
+cancellation with no remaining branch; API errors and uncertain state retain
+the lease. Queue/owner/reason/expiry, PR, merge and release details are recorded
+in the issue comments and private run ledger, not the historical archive files.
+
+The base-trusted `PR coordination / check` evaluates actual changed files and
+declared components on every Development PR, and repeats the check for merge
+groups. It includes direct/manual Copilot PRs; exact shared files and database
+objects conflict even when their PR descriptions omit component metadata.
+The existing managed-file guard remains in force and is independent of
+component overlap.
+
+**Required owner setup:** A status check alone is not a required merge gate.
+Before relying on the coordination check, the repository owner must configure a
+ruleset for `copilot/Development` that requires `PR coordination / check`,
+`verify`, `database`, and `Managed file guard / guard`, and requires GitHub's
+merge queue. The merge queue must run required checks for `merge_group`. This
+change does not mutate or enable repository rulesets. The existing Phase 2 merge
+workflow serializes its own attempts with non-cancelling concurrency, refreshes
+stale PR bases through GitHub's update-branch operation, reruns `verify` and
+`database` on the updated head, and requests GitHub-native auto-merge without
+bypassing branch rules. Until the owner configuration is verified, overlap
+checks report conflicts but cannot stop a manually authorized merge.
+
+Because `pull_request_target` runs trusted base-branch code, this workflow cannot
+execute its newly introduced version on the PR that adds it. Review that initial
+workflow and its synthetic tests manually; only after the workflow is on
+Development can later PRs and merge groups receive the trusted check.
+
+Controller reservations coordinate one private local controller state
+directory; they do not claim a cross-host distributed lock service. The PR
+check and merge-group gate provide repository-wide merge-time defense. If a
+future deployment runs multiple controller hosts, it needs a shared atomic
+reservation backend before those hosts may dispatch concurrently.
 
 ## Historical completion
 

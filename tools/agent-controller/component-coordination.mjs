@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 const manifestPath = fileURLToPath(new URL('./components.json', import.meta.url));
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 const knownComponents = new Set(manifest.components.map(component => component.id));
-const dynamicPrefixes = ['application:', 'ci:', 'database:', 'docs:', 'evidence:', 'test:'];
+const dynamicPrefixes = ['application:', 'ci:', 'database:', 'docs:', 'evidence:', 'governance:', 'test:'];
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 const databaseIdentifier = /^[a-z][a-z0-9-]{0,20}:[a-z0-9_$."()-]{1,128}$/;
 const sqlObjectPattern = /\b(?:create|alter|drop)\s+(?:or\s+replace\s+)?(?:(?:temporary|temp|unlogged)\s+)?(materialized\s+view|table|function|procedure|view|index|sequence|type|domain|trigger|policy)\s+(?:if\s+(?:not\s+)?exists\s+)?("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
@@ -30,7 +30,7 @@ function normalizedPath(value) {
   return path.posix.normalize(value);
 }
 
-function migrationComponents(file, content) {
+function migrationComponents(content) {
   const found = new Set();
   for (const match of content.matchAll(sqlObjectPattern)) {
     const [, kind, rawName] = match;
@@ -59,6 +59,27 @@ export function componentsForFiles(files) {
     const name = normalizedPath(typeof file === 'string' ? file : file?.path);
     if (!name) return ['repository-wide'];
 
+    if (name.startsWith('docs/agent-status/')) {
+      components.add('governance:status');
+      continue;
+    }
+    if (name === 'AGENTS.md') {
+      components.add('governance:agents');
+      continue;
+    }
+    if (name === 'docs/DECISION_LOG.md') {
+      components.add('governance:decisions');
+      continue;
+    }
+    if (name === 'docs/github-issues-workflow.md') {
+      components.add('governance:workflow');
+      continue;
+    }
+    if (['BACKLOG_INDEX.csv', 'BUTTERBOX_PRODUCT_BACKLOG.md', 'IMPLEMENTATION_PROGRESS.md'].includes(name)) {
+      components.add('governance:archive');
+      continue;
+    }
+
     const evidence = name.match(/^docs\/agent-work\/issues\/issue-(\d+)\//);
     if (evidence) {
       components.add(`evidence:issue-${evidence[1]}`);
@@ -68,7 +89,7 @@ export function componentsForFiles(files) {
     const migration = name.startsWith('supabase/migrations/') &&
       (typeof file === 'object' && typeof file.content === 'string');
     if (migration) {
-      for (const component of migrationComponents(name, file.content)) components.add(component);
+      for (const component of migrationComponents(file.content)) components.add(component);
       continue;
     }
     if (name.startsWith('supabase/migrations/')) {
@@ -99,7 +120,7 @@ export function componentsForFiles(files) {
     }
     if (name.startsWith('docs/')) {
       components.add(name.startsWith('docs/agent-work/issues/') ? 'agent-evidence' :
-        `docs:${name.split('/')[1] ?? 'root'}`);
+        `docs:${(name.split('/')[1] ?? 'root').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}`);
       continue;
     }
 
@@ -116,7 +137,7 @@ export function databaseObjectsForFiles(files) {
   for (const file of files) {
     const name = normalizedPath(file?.path);
     if (!name?.startsWith('supabase/migrations/')) continue;
-    for (const component of migrationComponents(name, typeof file.content === 'string' ? file.content : '')) {
+    for (const component of migrationComponents(typeof file.content === 'string' ? file.content : '')) {
       result.add(component);
     }
   }
@@ -133,7 +154,7 @@ export function declaredComponents(body) {
 export function componentOverlap(left, right) {
   const a = normalizeComponents(left);
   const b = normalizeComponents(right);
-  if (!a || !b) return true;
+  if (!a || !b) return ['invalid_component_metadata'];
   const conflicts = [];
   for (const first of a) for (const second of b) {
     if (first === 'repository-wide' || second === 'repository-wide' || first === second ||
@@ -145,6 +166,8 @@ export function componentOverlap(left, right) {
       (second === 'ci' && first.startsWith('ci:')) ||
       (first === 'tests' && second.startsWith('test:')) ||
       (second === 'tests' && first.startsWith('test:')) ||
+      (first === 'governance' && second.startsWith('governance:')) ||
+      (second === 'governance' && first.startsWith('governance:')) ||
       (first === 'docs' && second.startsWith('docs:')) ||
       (second === 'docs' && first.startsWith('docs:'))) conflicts.push(first === second ? first : `${first} / ${second}`);
   }
@@ -172,6 +195,26 @@ export function findOverlaps(candidate, other) {
   return { paths, components, database, conflicts: paths.length > 0 || components.length > 0 || database.length > 0 };
 }
 
+export function pullRequestConflicts(candidate, others) {
+  const declared = declaredComponents(candidate.body);
+  if (declared === null) return [{ pullRequest: candidate.number, reason: 'invalid_component_metadata' }];
+  const left = { components: [...declared, ...(candidate.components ?? [])], files: candidate.files ?? [] };
+  const conflicts = [];
+  for (const other of others) {
+    const otherDeclared = declaredComponents(other.body);
+    if (otherDeclared === null) {
+      conflicts.push({ pullRequest: other.number, reason: 'invalid_component_metadata' });
+      continue;
+    }
+    const overlap = findOverlaps(left, {
+      components: [...otherDeclared, ...(other.components ?? [])],
+      files: other.files ?? [],
+    });
+    if (overlap.conflicts) conflicts.push({ pullRequest: other.number, ...overlap });
+  }
+  return conflicts;
+}
+
 export function leaseConflicts(leases, candidate, now = Date.now()) {
   const conflicts = [];
   for (const lease of leases) {
@@ -181,7 +224,7 @@ export function leaseConflicts(leases, candidate, now = Date.now()) {
     }
     if (lease.issue === candidate.issue) {
       if (lease.digest !== candidate.digest) return [{ issue: lease.issue, reason: 'issue_digest_changed' }];
-      return [];
+      continue;
     }
     const overlap = componentOverlap(lease.components, candidate.components);
     if (overlap.length) conflicts.push({

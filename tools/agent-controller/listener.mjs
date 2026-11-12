@@ -9,8 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { REQUEST_HELPER, TEST_ENV_SCRIPT, TestBroker, failingTestLocations, testBrokerSettings } from './test-broker.mjs';
 import {
-  canReleaseLease, componentsForFiles, declaredComponents, filesWithinComponents, findOverlaps, leaseConflicts,
-  normalizeComponents,
+  canReleaseLease, componentOverlap, declaredComponents, filesWithinComponents,
+  findOverlaps, leaseConflicts, normalizeComponents,
 } from './component-coordination.mjs';
 
 export const OWNER = 'farbotkol';
@@ -312,6 +312,9 @@ export class GitHub {
           file.content = Buffer.from(blob.content.replace(/\s/g, ''), 'base64').toString('utf8');
         }
         files.push(file);
+        if (typeof row.previous_filename === 'string') {
+          files.push({ ...file, path: row.previous_filename });
+        }
       }
       if (rows.length < 100) return files;
     }
@@ -325,24 +328,31 @@ export class GitHub {
   }
   async assertNoOpenConflicts(task, allowExistingIssue = false, signal) {
     const branch = taskBranch({ number: task.number, digest: task.digest });
-    if (await this.branchHead(branch, signal) && !allowExistingIssue) fail('existing_task_branch');
+    if (await this.branchHead(branch, signal) && !allowExistingIssue) {
+      const error = new ControllerError('existing_task_branch');
+      Object.defineProperty(error, 'details', { value: { branch } });
+      throw error;
+    }
     const pulls = await this.pullRequests('open', signal);
     const marker = new RegExp(`<!--\\s*butterbox-issue:\\s*${task.number}\\s*-->`, 'i');
     const reference = new RegExp(`\\b(?:Refs|Related to)\\s+#${task.number}\\b`, 'i');
+    const bases = new Set([branches[task.workstream], 'copilot/Development']);
     for (const pull of pulls) {
-      if (pull.base?.ref !== 'copilot/Development') continue;
+      if (!bases.has(pull.base?.ref)) continue;
       if (typeof pull.body === 'string' && (marker.test(pull.body) || reference.test(pull.body))) {
         if (allowExistingIssue) continue;
-        fail('related_open_pull_request');
+        const error = new ControllerError('related_open_pull_request');
+        Object.defineProperty(error, 'details', { value: { pullRequest: pull.number, issue: task.number } });
+        throw error;
       }
       const files = await this.pullRequestFiles(pull.number, pull.head.sha, signal);
-      const declared = declaredComponents(pull.body);
-      if (declared === null) fail('invalid_pr_component_metadata');
-      const overlap = findOverlaps(
-        { components: task.components, files: [] },
-        { components: declared, files },
-      );
-      if (overlap.conflicts) fail('component_conflict_open_pull_request');
+      const overlap = findOverlaps({ components: task.components, files: [] },
+        { components: declaredComponents(pull.body) ?? ['repository-wide'], files });
+      if (overlap.conflicts) {
+        const error = new ControllerError('component_conflict_open_pull_request');
+        Object.defineProperty(error, 'details', { value: { pullRequest: pull.number, ...overlap } });
+        throw error;
+      }
     }
   }
   async dependencyMerged(number, signal) {
@@ -378,7 +388,7 @@ export class GitHub {
           shaPattern.test(pull.merge_commit_sha ?? ''),
         pullRequestMerged: required.every(check => check?.ok) && pull.base?.ref === branches[lease.workstream] &&
           shaPattern.test(pull.merge_commit_sha ?? ''),
-        pullRequest: pull.html_url,
+        pullRequest: pull.html_url, mergeCommit: pull.merge_commit_sha,
       };
     }
     const head = await this.branchHead(branch, signal);
@@ -550,8 +560,13 @@ export class StateStore {
     if (!Array.isArray(leases) || leases.some(lease => !record(lease) || !validNumber(lease.issue) ||
       !digestPattern.test(lease.digest) || !normalizeComponents(lease.components) ||
       !Object.hasOwn(branches, lease.workstream) ||
-      typeof lease.expiresAt !== 'string' || !Number.isFinite(Date.parse(lease.expiresAt)))) {
+      typeof lease.expiresAt !== 'string' || !Number.isFinite(Date.parse(lease.expiresAt))) ||
+      new Set(leases.map(lease => lease.issue)).size !== leases.length) {
       fail('invalid_component_reservations');
+    }
+    if (leases.some((lease, index) => leases.slice(index + 1)
+      .some(other => componentOverlap(lease.components, other.components).length > 0))) {
+      fail('overlapping_component_reservations');
     }
     return leases;
   }
@@ -578,7 +593,8 @@ export class StateStore {
       }
       const now = new Date();
       const lease = {
-        issue: task.number, digest: task.digest, mode, workstream: task.workstream, components: task.components,
+        issue: task.number, digest: task.digest, owner: OWNER, reason: 'owner-authorized issue dispatch',
+        mode, workstream: task.workstream, components: task.components,
         acquiredAt: now.toISOString(), updatedAt: now.toISOString(),
         expiresAt: new Date(now.getTime() + leaseMs).toISOString(), status: 'active',
       };
@@ -612,17 +628,26 @@ export class StateStore {
   async reconcileComponents(checkState, leaseMs = 7_200_000) {
     const leases = await this.readComponentLeases();
     const now = Date.now();
+    const events = [];
     for (const lease of leases) {
       if (Date.parse(lease.expiresAt) > now) continue;
       let state;
       try { state = await checkState(lease); }
-      catch { continue; }
+      catch {
+        events.push({ action: 'unverified', lease });
+        continue;
+      }
       if (canReleaseLease(lease, state)) {
         await this.releaseComponents(lease.issue, state);
+        events.push({ action: 'released', lease, state });
       } else if (state?.verified === true && (state.runActive || state.pullRequestOpen || state.branchExists)) {
-        await this.renewComponents(lease.issue, leaseMs, state.pullRequest);
+        const renewed = await this.renewComponents(lease.issue, leaseMs, state.pullRequest);
+        events.push({ action: 'renewed', lease: renewed, state });
+      } else {
+        events.push({ action: 'unverified', lease, state });
       }
     }
+    return events;
   }
   async save(value) {
     value.updatedAt = new Date().toISOString();
@@ -1165,12 +1190,18 @@ export class Controller {
   }
   autonomousRecord(value) { return this.mode === 'autonomous' && value.mode === 'autonomous'; }
   async dispatchPreflight(task, previous) {
-    if (this.mode === 'autonomous' &&
-      (!Array.isArray(task.assignees) || !task.assignees.some(login => login.toLowerCase() === 'copilot'))) {
-      fail('issue_not_assigned_to_copilot');
+    if (['coding', 'autonomous'].includes(this.mode)) {
+      const assignees = task.assignees?.map(login => login.toLowerCase()) ?? [];
+      if (!assignees.includes('copilot') || assignees.some(login => !['copilot', OWNER].includes(login))) {
+        fail('issue_assignment_not_ready');
+      }
     }
     for (const number of task.dependsOn ?? []) {
-      if (!await this.github.dependencyMerged(number, this.signal)) fail('dependency_not_merged_and_verified');
+      if (!await this.github.dependencyMerged(number, this.signal)) {
+        const error = new ControllerError('dependency_not_merged_and_verified');
+        Object.defineProperty(error, 'details', { value: { dependency: number } });
+        throw error;
+      }
     }
     if (typeof this.github.assertNoOpenConflicts === 'function') {
       await this.github.assertNoOpenConflicts(task, Boolean(previous), this.signal);
@@ -1363,10 +1394,32 @@ export class Controller {
     const records = await this.store.recoverRuns({ autonomous });
     if (autonomous) {
       await this.recover(records);
-      await this.store.reconcileComponents(async lease => {
+      const changes = await this.store.reconcileComponents(async lease => {
         const local = await this.store.read(lease.issue);
         return this.github.reservationState(lease, local, this.signal);
       }, this.componentLeaseMs);
+      for (const change of changes) {
+        const { lease, state, action } = change;
+        const key = `${lease.issue}:${action}:${lease.expiresAt}`;
+        if (this.coordinationNotices.has(key)) continue;
+        this.coordinationNotices.add(key);
+        const local = await this.store.read(lease.issue);
+        const reason = action === 'released'
+          ? 'expired lease released after verified merge or safe cancellation'
+          : action === 'renewed'
+            ? `active ${state.pullRequest ? `PR ${state.pullRequest}` : 'agent run or branch'} retained ownership`
+            : 'GitHub run/PR state could not be verified; lease retained';
+        if (local) {
+          audit(local, action === 'released' ? 'component_lease_recovered' : 'component_lease_retained',
+            `${reason}; components=${lease.components.join(',')}`);
+          await this.store.save(local);
+        }
+        await this.github.comment(lease.issue,
+          `Butterbox controller recovery: ${reason}. Components [${lease.components.join(', ')}]; ` +
+          `reservation expiry ${lease.expiresAt}${lease.pullRequest ? `; PR ${lease.pullRequest}` : ''}` +
+          `${state?.mergeCommit ? `; merge ${state.mergeCommit}` : ''}.`)
+          .catch(error => console.error(`Issue #${lease.issue} lease recovery report failed: ${errorCode(error)}.`));
+      }
       // A Copilot configuration fault pauses all new work until its retry is due, not just one issue.
       const paused = records.find(value => value.mode === 'autonomous' && !value.final &&
         value.error === 'copilot_session_init_failed' && Date.parse(value.retryAt) > Date.now());
@@ -1394,14 +1447,17 @@ export class Controller {
         const code = errorCode(error);
         if (['component_reservation_conflict', 'component_conflict_open_pull_request',
           'related_open_pull_request', 'existing_task_branch', 'dependency_not_merged_and_verified',
-          'issue_not_assigned_to_copilot'].includes(code)) {
+          'issue_assignment_not_ready', 'invalid_pr_component_metadata'].includes(code)) {
           console.log(`Issue #${candidates[index].number} queued: ${code}.`);
           const key = `${candidates[index].number}:${code}`;
           if (!this.coordinationNotices.has(key)) {
             this.coordinationNotices.add(key);
+            const details = JSON.stringify(error.conflicts ?? error.details ?? []).slice(0, 3_000);
             await this.github.comment(candidates[index].number,
-              `Butterbox controller queued this issue before launch: ${code}. No agent was started; ` +
-              'readiness and GitHub state will be checked again on a later poll.');
+              `Butterbox controller queued this issue before launch: ${code}. No agent was started. ` +
+              `Details: ${details || '[]'}. Readiness and GitHub state will be checked again on a later poll.`)
+              .catch(reportError => console.error(`Issue #${candidates[index].number} queue report failed: ` +
+                `${errorCode(reportError)}.`));
           }
           continue;
         }
@@ -1750,7 +1806,8 @@ export class Controller {
     try {
       url = await this.exec('gh', ['pr', 'create', '--repo', REPO, ...(settings.autoMerge ? [] : ['--draft']),
         '--base', profile.branch, '--head', value.branch, '--title', `Agent #${task.number}: ${this.summary(task)}`,
-        '--body', `Refs #${task.number}\n\n${delivery}\n\nBase: \`${value.baseCommit}\`\n\n` +
+        '--body', `Refs #${task.number}\n\n<!-- butterbox-issue: ${task.number} -->\n` +
+        `<!-- butterbox-components: ${JSON.stringify(task.components)} -->\n\n${delivery}\n\nBase: \`${value.baseCommit}\`\n\n` +
         `Changed files (${value.changedFiles ?? files.length}):\n` + files.map(file => `- \`${file}\``).join('\n') +
         `\n\nAgent summary (unverified agent output):\n\n\`\`\`\n${output.slice(-4000).replaceAll('```', "'''")}\n\`\`\``],
       { cwd: path.join(value.taskDir, 'repo'), signal, timeoutMs: 120_000 });
@@ -2039,7 +2096,13 @@ export class Controller {
       }
     }
     try {
-      if (!resumed) await this.report(value, `queued #${task.number}; mode=${this.mode}; ${task.workstream}.`);
+      if (!resumed) {
+        const lease = (await this.store.readComponentLeases()).find(item => item.issue === value.issue);
+        if (!lease) fail('component_reservation_missing');
+        await this.report(value, `queued #${task.number}; mode=${this.mode}; ${task.workstream}; components=` +
+          `[${lease.components.join(', ')}]; owner=${lease.owner}; reason=${lease.reason}; ` +
+          `lease expires ${lease.expiresAt}.`);
+      }
       await this.github.identity(this.signal);
       const fresh = await this.github.task(task.number, this.signal);
       if (fresh.digest !== task.digest) fail('task_changed_before_execution');

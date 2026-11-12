@@ -6,7 +6,7 @@ import path from 'node:path';
 import { BRANCH, LABEL, OWNER_ID, Controller, StateStore, parseTask } from '../tools/agent-controller/listener.mjs';
 import {
   canReleaseLease, componentOverlap, componentsForFiles, declaredComponents, findOverlaps, leaseConflicts,
-  normalizeComponents,
+  filesWithinComponents, normalizeComponents, pullRequestConflicts,
 } from '../tools/agent-controller/component-coordination.mjs';
 
 test('component metadata is validated and paths map to isolated work areas', () => {
@@ -32,6 +32,13 @@ test('owner tasks accept only known declared components and bounded dependencies
   assert.equal(parseTask(taskIssue(['unknown-area'])), null);
 });
 
+test('agent changes must stay inside the declared work areas', () => {
+  assert.equal(filesWithinComponents(['agent-controller'], ['tools/agent-controller/listener.mjs']), true);
+  assert.equal(filesWithinComponents(['agent-controller'], ['tests/component-coordination.test.mjs']), false);
+  assert.equal(filesWithinComponents(['repository-wide'], ['tools/agent-controller/listener.mjs']), true);
+  assert.equal(filesWithinComponents(['unknown-area'], ['tools/agent-controller/listener.mjs']), false);
+});
+
 test('declared component markers augment actual file-derived ownership', () => {
   const marker = '<!-- butterbox-components: ["agent-controller","ci:verify-yml"] -->';
   assert.deepEqual(declaredComponents(marker), ['agent-controller', 'ci:verify-yml']);
@@ -44,6 +51,19 @@ test('disjoint files and issue evidence paths can proceed concurrently', () => {
   const right = { components: ['application:reports'], files: [{ path: 'src/app/reports/page.tsx' }] };
   assert.equal(findOverlaps(left, right).conflicts, false);
   assert.deepEqual(componentOverlap(['evidence:issue-12'], ['evidence:issue-13']), []);
+  assert.deepEqual(componentsForFiles(['docs/github-issues-workflow.md']), ['governance:workflow']);
+  assert.deepEqual(componentsForFiles(['docs/agent-status/roadmap.md']), ['governance:status']);
+  assert.equal(componentOverlap(['governance:workflow'], ['governance:status']).length, 0);
+});
+
+test('oversized component declarations fail closed instead of dropping overlap results', () => {
+  const many = Array.from({ length: 21 }, (_, index) => `application:area-${index}`);
+  const overlap = findOverlaps(
+    { components: many, files: [{ path: 'src/app/roster/page.tsx' }] },
+    { components: ['application:area-0'], files: [{ path: 'src/app/reports/page.tsx' }] },
+  );
+  assert.equal(overlap.conflicts, true);
+  assert.ok(overlap.components.length > 0);
 });
 
 test('exact file edits and shared SQL objects conflict across different migrations', () => {
@@ -65,6 +85,20 @@ test('exact file edits and shared SQL objects conflict across different migratio
     { components: [], files: [{ path: 'src/app/roster/page.tsx' }] },
     { components: [], files: [{ path: 'src/app/roster/page.tsx' }] },
   ).conflicts, true);
+});
+
+test('direct Copilot PRs without controller metadata cannot bypass actual-path overlap checks', () => {
+  const manual = {
+    number: 73, user: { login: 'Copilot' }, body: '',
+    files: [{ path: 'tools/agent-controller/listener.mjs' }],
+  };
+  const active = {
+    number: 72, body: '<!-- butterbox-components: ["agent-controller"] -->',
+    files: [{ path: 'tools/agent-controller/listener.mjs' }],
+  };
+  const conflicts = pullRequestConflicts(manual, [active]);
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(conflicts[0].paths, ['tools/agent-controller/listener.mjs']);
 });
 
 test('expired reservations remain blocking until verified safe release', () => {
@@ -124,6 +158,34 @@ test('stale active PR leases are renewed; API failures never reclaim ownership',
   leases[0].expiresAt = '2026-01-01T00:01:00.000Z';
   await store.saveComponentLeases(leases);
   await store.reconcileComponents(async () => { throw new Error('GitHub unavailable'); });
+  assert.equal((await store.readComponentLeases()).length, 1);
+});
+
+test('crash recovery marks the run interrupted but does not release its active PR lease', async t => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'component-crash-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const store = new StateStore(directory);
+  await store.init();
+  const task = {
+    number: 55, digest: 'd'.repeat(64), workstream: 'roadmap', components: ['agent-controller'],
+    dependsOn: [],
+  };
+  await store.reserveComponents(task, 'autonomous');
+  await store.reserve(task, 'autonomous');
+  const local = await store.read(task.number);
+  local.status = 'running';
+  local.pullRequest = 'https://github.com/farbotkol/butterbox/pull/56';
+  await store.save(local);
+  let leases = await store.readComponentLeases();
+  leases[0].expiresAt = '2026-01-01T00:01:00.000Z';
+  await store.saveComponentLeases(leases);
+
+  await store.recoverRuns({ autonomous: true });
+  assert.equal((await store.read(task.number)).status, 'interrupted');
+  const changes = await store.reconcileComponents(async () => ({
+    verified: true, pullRequestOpen: true, pullRequest: local.pullRequest,
+  }), 60_000);
+  assert.equal(changes[0].action, 'renewed');
   assert.equal((await store.readComponentLeases()).length, 1);
 });
 

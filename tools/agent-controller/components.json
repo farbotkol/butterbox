@@ -8,7 +8,17 @@
     { "id": "application", "prefix": "src/" },
     { "id": "tests", "prefix": "tests/" },
     { "id": "docs", "prefix": "docs/" },
-    { "id": "governance", "paths": ["AGENTS.md", "docs/github-issues-workflow.md"] },
+    {
+      "id": "governance",
+      "paths": [
+        "AGENTS.md",
+        "BACKLOG_INDEX.csv",
+        "BUTTERBOX_PRODUCT_BACKLOG.md",
+        "IMPLEMENTATION_PROGRESS.md",
+        "docs/DECISION_LOG.md",
+        "docs/github-issues-workflow.md"
+      ]
+    },
     { "id": "build", "paths": ["package.json", "package-lock.json", "tsconfig.json", "next.config.ts"] },
     { "id": "repository-wide", "paths": [] }
   ]
