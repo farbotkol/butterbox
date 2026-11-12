@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/farbotkol/butterbox/blob/copilot/Development/tools/agent-evidence/evidence.schema.json",
+  "title": "Butterbox isolated delivery evidence",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "attempt",
+    "issue",
+    "pullRequest",
+    "run",
+    "scope",
+    "criteria",
+    "tests",
+    "ci",
+    "decisions",
+    "reruns",
+    "limitations",
+    "blockers",
+    "recommendation",
+    "markdownPath",
+    "markdownSha256",
+    "auditUrl"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "attempt": { "type": "integer", "minimum": 1 },
+    "issue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "url"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "format": "uri" }
+      }
+    },
+    "pullRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["number", "url", "baseBranch", "headBranch", "headSha", "mergeSha"],
+      "properties": {
+        "number": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "format": "uri" },
+        "baseBranch": { "const": "copilot/Development" },
+        "headBranch": { "type": "string", "minLength": 1 },
+        "headSha": { "type": ["string", "null"], "pattern": "^[a-f0-9]{40}$" },
+        "mergeSha": { "type": ["string", "null"], "pattern": "^[a-f0-9]{40}$" }
+      }
+    },
+    "run": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "agent", "commitSha", "startedAt", "updatedAt"],
+      "properties": {
+        "id": { "type": "integer", "minimum": 1 },
+        "agent": { "enum": ["copilot", "human", "automation"] },
+        "commitSha": { "type": "string", "pattern": "^[a-f0-9]{40}$" },
+        "startedAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["summary", "changedFiles", "implemented"],
+      "properties": {
+        "summary": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "changedFiles": { "type": "array", "items": { "type": "string", "minLength": 1 }, "uniqueItems": true },
+        "implemented": { "type": "array", "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "description", "status", "evidence"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[A-Z0-9][A-Z0-9._-]{0,39}$" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 2000 },
+          "status": { "enum": ["pass", "fail", "blocked", "not-tested"] },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["kind", "reference", "outcome"],
+              "properties": {
+                "kind": { "enum": ["test", "ci", "review", "commit", "file", "issue"] },
+                "reference": { "type": "string", "minLength": 1, "maxLength": 1000 },
+                "outcome": { "type": "string", "minLength": 1, "maxLength": 1000 }
+              }
+            }
+          }
+        }
+      }
+    },
+    "tests": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "outcome", "result", "reference"],
+        "properties": {
+          "command": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "outcome": { "enum": ["passed", "failed", "blocked", "not-run"] },
+          "result": { "type": "string", "minLength": 1, "maxLength": 1000 },
+          "reference": { "type": ["string", "null"], "maxLength": 1000 }
+        }
+      }
+    },
+    "ci": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "status", "runId", "url"],
+        "properties": {
+          "name": { "enum": ["verify", "database"] },
+          "status": { "enum": ["pending", "pass", "fail", "blocked", "not-tested"] },
+          "runId": { "type": ["integer", "null"] },
+          "url": { "type": ["string", "null"], "format": "uri" }
+        }
+      }
+    },
+    "decisions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "reruns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["attempt", "reason", "outcome"],
+        "properties": {
+          "attempt": { "type": "integer", "minimum": 1 },
+          "reason": { "type": "string", "minLength": 1 },
+          "outcome": { "type": "string", "minLength": 1 },
+          "runId": { "type": ["integer", "null"] }
+        }
+      }
+    },
+    "limitations": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "blockers": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+    "recommendation": { "enum": ["complete", "partial", "blocked"] },
+    "markdownPath": { "type": "string", "pattern": "^docs/agent-work/issues/issue-[0-9]+/pr-[0-9]+/attempt-[0-9]{2}\\.md$" },
+    "markdownSha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "auditUrl": { "type": "string", "format": "uri" }
+  }
+}

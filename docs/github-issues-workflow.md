@@ -34,7 +34,28 @@ The migrated Issues are **intake only, with no new Copilot assignment**. A legac
 
 Use **issue/PR-specific reporting**, not common files edited by every agent. Record per-criterion outcomes, commit/test evidence, CI run, and outstanding blockers directly with the issue and PR.
 
-Issue [#75](https://github.com/farbotkol/butterbox/issues/75) is the existing implementation backlog for single-writer reporting, per-agent evidence, enforcement and post-merge reconciliation. Adapt its design to Issues being the source of truth instead of rebuilding a second CSV status authority. Introduce work-area reservation/lease checks, PR overlap validation and a serialized merge queue with separate authorized implementation work. Do not claim these mechanisms are operational until tested.
+Issue [#75](https://github.com/farbotkol/butterbox/issues/75) tracks isolated per-issue/PR/attempt evidence, managed-file protection and serialized post-merge issue reconciliation. It does not make the legacy files a second status authority. Component-level reservations, dispatch queues and PR-overlap coordination are the separate follow-on scope in issue #142; do not treat them as delivered by evidence reconciliation.
+
+Evidence uses `docs/agent-work/issues/issue-N/pr-N/attempt-NN.md` and the paired
+`.evidence.json`, validated against
+`tools/agent-evidence/evidence.schema.json` with the repository's built-in Node
+validator. Merged PRs that identify their canonical issue and evidence path are
+reconciled by the `Reconcile merged issue evidence` workflow. The writer confirms
+the target branch, merge SHA, PR file list and the actual `verify` and `database`
+check runs before appending an audit comment. A 30-minute schedule and manual
+dispatch recover missed merge events; a workflow failure remains visible and is
+retried by a later sweep. The writer never closes or reopens issues; a merged PR,
+passing CI or agent recommendation is not full-story acceptance.
+
+The `Verify / verify` job includes evidence-schema validation and changed-file
+protection for `BACKLOG_INDEX.csv`, `BUTTERBOX_PRODUCT_BACKLOG.md`,
+`IMPLEMENTATION_PROGRESS.md` and `docs/agent-status/`. A narrowly audited
+exception requires the `agent-evidence-governance-exception` label, a linked
+issue, and owner approval on the exact PR head. This workflow does not configure
+GitHub branch protection; administrators must require `Managed file guard / guard`
+from the separate base-trusted `pull_request_target` workflow for enforcement to
+be a merge gate. No component locking or dispatch queue from #142 is implemented
+here.
 
 ## Historical completion
 

@@ -8,6 +8,7 @@ on:
     branches: [main, copilot/finish-roadmap-for-app, feature/award-central-foundation]
     paths-ignore: ["docs/agent-status/**"]
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled]
   workflow_dispatch:
 
 permissions:
@@ -21,8 +22,18 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v4
+      - name: Validate isolated delivery evidence
+        run: node tools/agent-evidence/validate-all.mjs
+      - name: Protect centrally managed archives and status
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/agent-evidence/check-managed-files.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: "24.11.1"

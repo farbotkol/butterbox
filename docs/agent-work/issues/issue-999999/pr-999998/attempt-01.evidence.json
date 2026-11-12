@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 999999,
+    "url": "https://github.com/example/butterbox/issues/999999"
+  },
+  "pullRequest": {
+    "number": 999998,
+    "url": "https://github.com/example/butterbox/pull/999998",
+    "baseBranch": "copilot/Development",
+    "headBranch": "example/evidence-only",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 1,
+    "agent": "copilot",
+    "commitSha": "0123456789abcdef0123456789abcdef01234567",
+    "startedAt": "2026-11-12T00:00:00Z",
+    "updatedAt": "2026-11-12T00:01:00Z"
+  },
+  "scope": {
+    "summary": "Synthetic example only; not a Butterbox delivery.",
+    "changedFiles": [
+      "docs/agent-work/issues/issue-999999/pr-999998/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-999999/pr-999998/attempt-01.md"
+    ],
+    "implemented": [
+      "Demonstrates the required evidence shape without claiming any product change."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Synthetic example criterion; not acceptance evidence.",
+      "status": "not-tested",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "This example",
+          "outcome": "Schema illustration only."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node tools/agent-evidence/evidence.mjs --file <example>",
+      "outcome": "not-run",
+      "result": "Placeholder only; no test result is asserted.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "not-tested",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "not-tested",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Synthetic example only; PR and issue numbers are reserved placeholders."
+  ],
+  "reruns": [],
+  "limitations": [
+    "This file is an example, not a real issue, PR, merge or test result."
+  ],
+  "blockers": [],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-999999/pr-999998/attempt-01.md",
+  "markdownSha256": "354bbfb175f596c9f13a0b32eb9e5fff998dcef4b755666ef894fd476a4b1a04",
+  "auditUrl": "https://github.com/example/butterbox"
+}
