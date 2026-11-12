@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 142,
+    "url": "https://github.com/farbotkol/butterbox/issues/142"
+  },
+  "pullRequest": {
+    "number": 240,
+    "url": "https://github.com/farbotkol/butterbox/pull/240",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/dev-factory-enforce-conflict-aware-dispatch",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43197820354,
+    "agent": "copilot",
+    "commitSha": "d38d4bba239d9f574baca4e218f0ed475f562c2d",
+    "startedAt": "2026-11-12T09:39:26Z",
+    "updatedAt": "2026-11-12T10:11:47Z"
+  },
+  "scope": {
+    "summary": "Component-scoped autonomous dispatch reservations, conservative overlap checks for active PRs and merge groups, safe lease recovery, targeted tests and operating guidance.",
+    "changedFiles": [
+      ".github/workflows/pr-coordination.yml",
+      "docs/agent-work/issues/issue-142/pr-240/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-142/pr-240/attempt-01.md",
+      "docs/github-issues-workflow.md",
+      "tests/component-coordination.test.mjs",
+      "tools/agent-controller/README.md",
+      "tools/agent-controller/REQUIREMENTS.md",
+      "tools/agent-controller/check-pr-coordination.mjs",
+      "tools/agent-controller/component-coordination.mjs",
+      "tools/agent-controller/components.json",
+      "tools/agent-controller/config.example.json",
+      "tools/agent-controller/listener.mjs",
+      "tools/agent-controller/listener.test.mjs"
+    ],
+    "implemented": [
+      "Component-aware and atomically serialized expiring reservations with bounded concurrent dispatch, conflict preflight, renewal and verified stale-lease recovery.",
+      "Trusted-base pull_request_target and merge_group conflict checks based on declared ownership, changed paths and shared SQL objects.",
+      "Focused concurrency, migration overlap, direct PR, stale lease and crash-recovery tests; operator guidance for owner-only ruleset rollout."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Two disjoint issues can run concurrently without sharing work areas.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Disjoint paths and issue evidence reservations coexist; the autonomous queue runs disjoint eligible issues concurrently within its configured bound."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Two overlapping issues cannot be dispatched concurrently even under racing requests.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Concurrent reservation writes serialize; a conflicting candidate loses while disjoint areas remain available."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Existing active PR retains ownership and blocks conflicting new work until integrated or safely abandoned.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "An expired active-PR lease is renewed, and GitHub API failures never reclaim its ownership."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Direct/manual Copilot PRs cannot bypass required coordination at merge time.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Trusted PR and merge-group checks are implemented; enforcement requires owner-approved required-check ruleset configuration, which was not changed."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Shared-file conflicting edits are rejected except for the approved single-writer path.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Same-file conflicts and direct PR overlaps are detected; existing managed-file and single-writer evidence controls were preserved."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Failed/expired agent run recovery cannot release a still-active PR.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Crash recovery marks the run interrupted but retains the active PR lease; unverified or failed API recovery retains ownership."
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "CI and merge queue handle competing updates without losing work or unsafe force pushes.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Merge-group coordination is implemented, but required merge-queue and ruleset configuration remains owner-only and pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "Targeted tests cover concurrency, crashes, stale leases, overlaps, shared migrations and direct assignment bypass.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "node --experimental-strip-types --test tests/component-coordination.test.mjs tests/agent-evidence.test.mjs",
+          "outcome": "24 passed, 0 failed; includes reservation races, disjoint concurrency, crash/stale lease recovery, shared SQL objects, direct PR overlap and component bounds."
+        },
+        {
+          "kind": "test",
+          "reference": "node --test --test-name-pattern='pre-dispatch PR scan rejects|autonomous preflight requires' tools/agent-controller/listener.test.mjs",
+          "outcome": "2 passed, 0 failed; covers direct PR preflight and Copilot assignment/dependency readiness."
+        }
+      ]
+    },
+    {
+      "id": "AC-9",
+      "description": "User-facing operation and recovery documented.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/README.md",
+          "outcome": "Documents reservation handling, safe recovery, direct PR coordination and owner-only ruleset/merge-queue rollout."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/github-issues-workflow.md",
+          "outcome": "Documents the trusted coordination check, conflict response and required owner configuration."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --experimental-strip-types --test tests/component-coordination.test.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "24 passed, 0 failed.",
+      "reference": null
+    },
+    {
+      "command": "node --test --test-name-pattern='pre-dispatch PR scan rejects|autonomous preflight requires' tools/agent-controller/listener.test.mjs",
+      "outcome": "passed",
+      "result": "2 passed, 0 failed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- tools/agent-controller/listener.mjs tools/agent-controller/component-coordination.mjs tools/agent-controller/check-pr-coordination.mjs tools/agent-controller/listener.test.mjs tests/component-coordination.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint completed without warnings or errors.",
+      "reference": null
+    },
+    {
+      "command": "node --check tools/agent-controller/listener.mjs && node --check tools/agent-controller/component-coordination.mjs && node --check tools/agent-controller/check-pr-coordination.mjs && git diff --check",
+      "outcome": "passed",
+      "result": "Changed controller modules passed Node syntax checks and the diff had no whitespace errors.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43197820354,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43197820354"
+    },
+    {
+      "name": "database",
+      "status": "blocked",
+      "runId": 43197820354,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43197820354"
+    }
+  ],
+  "decisions": [
+    "GitHub Issues remain the sole active work queue; no historical backlog or status archive was edited.",
+    "No repository settings, required checks, merge queue, production deployment or unattended dispatch were enabled.",
+    "Keep the PR partial and the issue open while owner-only coordination enforcement and PR-body blockers remain."
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "The Verify workflow evaluated PR #240 before its canonical issue and attempt-evidence markers were added.",
+      "outcome": "Run 43197820354 failed at metadata validation; the database job was cancelled before its database tests. A fresh check is required for the evidence-bearing head.",
+      "runId": 43197820354
+    }
+  ],
+  "limitations": [
+    "Reservations are serialized within the existing listener process and protected by its account-wide local lock; they are not a cross-host distributed lock.",
+    "The first pull_request_target workflow version cannot be evaluated from the PR that introduces it; trusted base-branch checks begin after merge.",
+    "Full controller suite was not rerun because an earlier attempt encountered sandbox safe.bareRepository=explicit and a platform-specific mac_only_controller test; focused relevant tests passed."
+  ],
+  "blockers": [
+    "Owner approval and configuration are required before making the PR coordination check and merge queue mandatory.",
+    "The PR automation appends Fixes #142; the available PR tools cannot remove it. Partial evidence must not auto-close the issue, so a fresh verify is expected to reject the closing keyword until an authorized PR-body edit removes it."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-142/pr-240/attempt-01.md",
+  "markdownSha256": "4f5c62708ae9a90b692054a64d56e670a16c0004b080dcf2421e6dc1c140c141",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

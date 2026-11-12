@@ -16,6 +16,7 @@
     "timeoutMinutes": 45,
     "maxAiCredits": 300,
     "maxChangedFiles": 60,
+    "maxConcurrentTasks": 2,
     "allowedHosts": ["registry.npmjs.org"]
   }
 }

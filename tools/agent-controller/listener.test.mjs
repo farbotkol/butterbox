@@ -15,7 +15,7 @@ import {
 const body = '/butterbox run\n\n```json\n{"workstream":"roadmap","task":"Synthetic owner task"}\n```';
 const issue = (overrides = {}) => ({
   number: 42, state: 'open', user: { login: 'farbotkol', id: OWNER_ID, type: 'User' },
-  labels: [{ name: LABEL }], body, ...overrides,
+  assignees: [{ login: 'Copilot' }], labels: [{ name: LABEL }], body, ...overrides,
 });
 const node = (overrides = {}) => ({
   number: 42, state: 'OPEN', body, lastEditedAt: null,
@@ -43,6 +43,10 @@ async function fixture(t, settings = {}) {
     task: async () => { taskCalls++; return parseTask(issue()); },
     comment: async (number, message) => { comments.push({ number, message }); },
     closeCompleted: async (number) => { closures.push(number); },
+    dependencyMerged: async () => true,
+    assertNoOpenConflicts: async () => {},
+    reservationState: async (lease, local) => local?.pushed || local?.pullRequest
+      ? { verified: true, branchExists: true } : { verified: true, safeCancellation: true },
     ...settings.github,
   };
   const exec = async (command, args, options) => {
@@ -127,6 +131,38 @@ test('GitHub polling paginates without executing a truncated queue', async () =>
   const github = new GitHub(async () => { calls++; return JSON.stringify(Array(100).fill(issue())); });
   await rejects(github.issues(), 'issue_queue_page_limit');
   assert.equal(calls, 10);
+});
+
+test('pre-dispatch PR scan rejects an overlapping direct PR and permits a disjoint area', async () => {
+  let changedPath = 'src/app/roster/page.tsx';
+  const github = new GitHub(async (_command, args) => {
+    const endpoint = args[3];
+    if (endpoint.startsWith('repos/farbotkol/butterbox/git/matching-refs/')) return '[]';
+    if (endpoint === 'repos/farbotkol/butterbox/pulls') return JSON.stringify([{
+      number: 73, state: 'open', base: { ref: 'copilot/Development' },
+      head: { sha: 'b'.repeat(40), ref: 'copilot/manual-assignment', repo: { full_name: 'farbotkol/butterbox' } },
+      user: { login: 'Copilot' }, body: '',
+    }]);
+    if (endpoint.startsWith('repos/farbotkol/butterbox/pulls/73/files')) {
+      return JSON.stringify([{ filename: changedPath }]);
+    }
+    return '[]';
+  });
+  const task = { number: 42, digest: 'a'.repeat(64), components: ['application:roster'] };
+  await rejects(github.assertNoOpenConflicts(task), 'component_conflict_open_pull_request');
+  changedPath = 'src/app/reports/page.tsx';
+  await github.assertNoOpenConflicts(task);
+});
+
+test('autonomous preflight requires current Copilot assignment and verified dependencies', async t => {
+  const { controller } = await fixture(t, { github: { dependencyMerged: async number => number === 19 } });
+  controller.mode = 'autonomous';
+  const task = parseTask(issue());
+  await controller.dispatchPreflight({ ...task, dependsOn: [19] }, null);
+  await rejects(controller.dispatchPreflight({ ...task, dependsOn: [20] }, null),
+    'dependency_not_merged_and_verified');
+  await rejects(controller.dispatchPreflight({ ...task, assignees: ['farbotkol'] }, null),
+    'issue_assignment_not_ready');
 });
 
 test('private ledger is durable, contains no prompt and cannot be replayed after a crash', async t => {
@@ -848,10 +884,13 @@ test('autonomous mode needs both execution gates and a task root outside the hom
   for (const autonomous of [{ taskRoot: path.join(os.homedir(), 'tasks') }, { taskRoot: os.homedir() },
     { taskRoot: '/' }, { taskRoot: '/Users/Shared' }, { taskRoot: 'relative' }, { taskRoot: '/x/../y' },
     { taskRoot: '/Users/Shared/t', timeoutMinutes: 1 }, { taskRoot: '/Users/Shared/t', maxAiCredits: 5 },
+    { taskRoot: '/Users/Shared/t', maxConcurrentTasks: 0 },
+    { taskRoot: '/Users/Shared/t', maxConcurrentTasks: 5 },
     { taskRoot: '/Users/Shared/t', model: 'bad model' }, { taskRoot: '/Users/Shared/t', allowAll: true }]) {
     assert.throws(() => autonomousSettings({ autonomous }), error => error.code === 'invalid_autonomous_config');
   }
   assert.equal(autonomousSettings({ autonomous: { taskRoot: '/Users/Shared/t' } }).timeoutMinutes, 45);
+  assert.equal(autonomousSettings({ autonomous: { taskRoot: '/Users/Shared/t' } }).maxConcurrentTasks, 2);
 });
 
 test('autonomous invocation is sandboxed, credential-free and never grants all paths or URLs', () => {

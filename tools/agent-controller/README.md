@@ -49,6 +49,63 @@ numeric ID, not just the creator login of a mutable REST issue. Create a new
 issue for a revised task. A reserved issue never executes twice. Later changes
 are ignored and reported, not adopted as new instructions.
 
+## Component ownership, reservations, and PR coordination
+
+New owner task envelopes may include declared `components` and `dependsOn`:
+
+````text
+/butterbox run
+
+```json
+{"workstream":"roadmap","task":"Implement the scoped change","components":["agent-controller","ci:pr-coordination-yml"],"dependsOn":[238]}
+```
+````
+
+The canonical work-area list and path mapping are in
+[`components.json`](./components.json) and
+[`component-coordination.mjs`](./component-coordination.mjs). Component names
+are case-sensitive. Use the narrowest applicable areas; omitted components are
+treated as `repository-wide`, so legacy requests serialize rather than assuming
+disjoint ownership. SQL migrations are compared by named database objects;
+unparseable or unavailable migration text falls back to the shared
+`database-schema` area.
+
+Coding and autonomous dispatch require the issue to remain owner-authored and
+unedited, open, labelled, and assigned to Copilot (the owner may also remain assigned).
+Every declared dependency must have a merged Development PR with successful
+`verify` and `database` checks. Before launch, the controller checks existing
+issue PRs, open PRs on the task workstream or Development branch, task branches
+and active reservations.
+`maxConcurrentTasks` defaults to 2 (maximum 4); only non-overlapping declared
+areas can run in parallel. Work outside the declared components fails closed.
+No issue creation or assignment alone starts work; the explicit task envelope,
+owner provenance and existing opt-in controller settings remain required.
+
+The private controller ledger stores atomic issue/component reservations in
+`coordination.json`. Leases expire two hours after their last renewal and are
+renewed during active work. A lease is not released just because it expired:
+recovery verifies the run ledger, exact task branch and PR. An active PR, branch,
+or run keeps ownership; a verified merge with successful required checks or a
+safe cancellation releases it. API failures and ambiguous state keep the lease.
+Queue, lease, PR, recovery and release decisions are recorded in the private
+ledger and issue comments. For a closed-unmerged PR, delete its task branch only
+after confirming the agent is stopped; a later reconciliation can then release
+the lease. Never edit `coordination.json` by hand.
+
+`PR coordination / check` runs trusted base-branch code on
+`pull_request_target` and `merge_group`. It compares declared areas, actual
+changed paths and database objects across all open Development PRs, including
+manually created Copilot PRs. The existing managed-file guard remains separate;
+its narrowly approved single-writer exception does not waive overlap checks.
+
+The workflow is not a substitute for repository rulesets. The owner must
+explicitly require **`PR coordination / check`**, `verify`, `database` and the
+managed-file guard in the `copilot/Development` ruleset, and require GitHub's
+merge queue so the check is repeated against the current merge group. No
+ruleset, required-check setting or unattended dispatch was changed by this PR.
+Until that owner-only setup is applied and verified, direct/manual PR overlap
+is detected by the check but is not an enforceable merge block.
+
 ## Synthetic validation first
 
 Synthetic mode uses the same GitHub owner, original-body, branch, clean-tree,
