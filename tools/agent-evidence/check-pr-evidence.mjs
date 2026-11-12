@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import {
   canonicalIssueNumber,
   getEvidencePathFromPullRequest,
+  hasCanonicalIssueApproval,
   hasAutoCloseKeyword,
   evidenceIsComplete,
   referencesCanonicalIssue,
@@ -69,6 +70,14 @@ async function main() {
   if (hasAutoCloseKeyword(pullRequest.body)) {
     if (!evidenceIsComplete(evidence, changedFiles, acceptanceCriteria)) {
       throw new Error('Partial or incomplete issue delivery must not use GitHub auto-close keywords');
+    }
+    const reviews = JSON.parse(runGh([
+      'api', '--hostname', 'github.com', '--paginate', '--slurp',
+      `repos/${repository}/pulls/${pullRequest.number}/reviews?per_page=100`,
+    ])).flat();
+    const ownerLogin = repository.split('/')[0];
+    if (!hasCanonicalIssueApproval(reviews, pullRequest.head.sha, issueNumber, ownerLogin)) {
+      throw new Error(`Repository owner must approve the canonical issue #${issueNumber} on this exact PR head before issue auto-closure`);
     }
   }
   console.log(`Validated attempt ${evidence.attempt} evidence for issue #${issueNumber}, PR #${pullRequest.number}.`);

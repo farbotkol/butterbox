@@ -62,8 +62,9 @@ checks the visible reference, both attempt files, JSON schema/checksum, and the
 exact changed-file list. Agent PRs use reference-only issue links, never
 auto-close keywords for partial or documentation-only delivery. CI allows
 auto-close only when evidence matches every canonical issue criterion, all pass,
-there are no blockers, and the PR changes code. Issue closure remains subject to
-human review. Before writing, it additionally requires an approval by
+there are no blockers, the PR changes code, and the repository owner approves
+the canonical issue association on the exact head; re-run Verify after that
+review. Issue closure remains subject to human review. Before writing, it additionally requires an approval by
 the repository owner on the exact PR head containing
 `Canonical issue approved: #N`, then verifies GitHub's issue timeline
 cross-reference. A PR-controlled marker alone cannot redirect comments to an
