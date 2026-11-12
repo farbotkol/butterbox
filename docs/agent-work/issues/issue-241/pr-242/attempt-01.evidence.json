@@ -1,0 +1,234 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 241,
+    "url": "https://github.com/farbotkol/butterbox/issues/241"
+  },
+  "pullRequest": {
+    "number": 242,
+    "url": "https://github.com/farbotkol/butterbox/pull/242",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/replace-form-heavy-rostering",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43316628345,
+    "agent": "copilot",
+    "commitSha": "4c918d8b1a6cd8d74a2c13e9b7e5258c8d3fb728",
+    "startedAt": "2026-11-12T22:05:38Z",
+    "updatedAt": "2026-11-12T22:10:23Z"
+  },
+  "scope": {
+    "summary": "Partial visual roster timetable and safe slot-creation vertical slice, with limitations recorded.",
+    "changedFiles": [
+      "docs/USER_GUIDE.md",
+      "src/app/roster/page.tsx",
+      "src/components/roster-timeline.tsx",
+      "src/components/shift-editor.tsx",
+      "src/lib/roster-timetable.ts",
+      "src/lib/roster-view.ts",
+      "tests/e2e/auth.spec.mjs",
+      "tests/roster-timetable.test.mjs",
+      "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
+      "docs/agent-work/issues/issue-241/pr-242/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Venue-local time-scaled assigned/open-shift timetable with DST and overnight calculations.",
+      "Accessible empty-slot links that prefill the existing scoped shift editor, plus a one-day schedule view.",
+      "Focused timeline tests, a manager walkthrough test source, and updated user guidance."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Weekly schedule clearly shows staff assignments and time-based shift blocks; visually understandable without reading extensive instructions.",
+      "status": "not-tested",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/components/roster-timeline.tsx",
+          "outcome": "Time-scaled draft/published shift blocks implemented; route not browser-verified."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "A manager can create a draft shift by interacting with an empty schedule area, with selected staff/date/time pre-populated and a reliable keyboard/touch alternative.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/lib/roster-view.ts",
+          "outcome": "Slot URL carries date/time/employee values to prefill the existing form."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs",
+          "outcome": "Walkthrough source exists; Playwright runner stopped before the test began."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Manager can reassign/move and edit a draft shift using direct visual controls, with preview, validation, clear error state and no silent mutation of published work.",
+      "status": "not-tested",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/app/roster/page.tsx",
+          "outcome": "Existing draft edit and preview/confirm move flows preserved; direct resizing was not added."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Clear, prominent draft/review/publish status and primary next action; existing safety/permission gates preserved.",
+      "status": "not-tested",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/components/roster-timeline.tsx",
+          "outcome": "Draft/published labels implemented; server-side permission paths were not browser-tested."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Desktop, tablet and phone usage works, with tested keyboard and touch equivalents; accessible labels and focus handling.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/app/roster/page.tsx",
+          "outcome": "One-day view and keyboard-focusable slot links implemented; browser viewport and touch behavior remain unverified."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Existing roster-related regression tests pass, plus new targeted interaction tests for add/move/edit, timezones/DST, overlaps, permissions, stale edits, overnight shifts, and large schedules.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/roster-timetable.test.mjs",
+          "outcome": "29 focused roster unit/policy tests passed; the broader authenticated interaction/security matrix did not run."
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "Include at least one documented *first-time manager* acceptance walkthrough: create shift, assign person, correct time, publish; record steps/screenshots or verifiable Playwright evidence and any unresolved usability limitations.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/USER_GUIDE.md",
+          "outcome": "Walkthrough and limitations documented; no successful browser run or screenshot exists."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs",
+          "outcome": "Test source exists but execution was blocked before test start."
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "No production deployment or database changes without separate authorisation; PR targets `copilot/Development`, passing required Verify/Database checks and code review.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43316628345",
+          "outcome": "Verify evidence validation failed for missing PR-body markers; database job and review were not complete at this record."
+        },
+        {
+          "kind": "file",
+          "reference": "supabase/migrations",
+          "outcome": "No database changes were made."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --experimental-strip-types --test tests/roster-timetable.test.mjs tests/roster-view.test.mjs tests/roster-overlap-conflicts.test.mjs tests/roster-quick-changes.test.mjs tests/roster-review.test.mjs tests/roster-planning.test.mjs tests/roster-groups.test.mjs tests/roster-copy.test.mjs",
+      "outcome": "passed",
+      "result": "29 passed, 0 failed.",
+      "reference": "Focused roster unit/policy test run."
+    },
+    {
+      "command": "npx eslint src/app/roster/page.tsx src/components/shift-editor.tsx src/components/roster-timeline.tsx src/lib/roster-timetable.ts src/lib/roster-view.ts tests/roster-timetable.test.mjs tests/e2e/auth.spec.mjs",
+      "outcome": "passed",
+      "result": "No lint errors.",
+      "reference": null
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "outcome": "passed",
+      "result": "TypeScript check passed.",
+      "reference": null
+    },
+    {
+      "command": "npm run test:auth:focused",
+      "outcome": "blocked",
+      "result": "Stopped before browser test execution because Supabase CLI 2.122.0 could not be resolved.",
+      "reference": "butterbox-citest isolated project remained stopped at API port 59421 and database port 59422."
+    },
+    {
+      "command": "npm run build",
+      "outcome": "blocked",
+      "result": "Next.js could not fetch the pre-existing Inter and Poppins fonts from Google Fonts.",
+      "reference": null
+    },
+    {
+      "command": "Secret scan on modified files",
+      "outcome": "passed",
+      "result": "No secrets detected.",
+      "reference": null
+    },
+    {
+      "command": "CodeQL JavaScript review",
+      "outcome": "passed",
+      "result": "Zero alerts.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43316628345,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43316628345"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43316628345,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43316628345"
+    }
+  ],
+  "decisions": [
+    "Keep the scope partial and leave Issue #241 open.",
+    "Reuse existing scoped server actions and permission gates; do not make database or production changes."
+  ],
+  "reruns": [],
+  "limitations": [
+    "No direct time resizing; slot shortcuts are coarse 00:00, 06:00, 12:00 and 18:00 presets.",
+    "Tablet, touch, accessible focus and large-roster runtime behavior remain unverified.",
+    "The authored manager walkthrough has not completed in a browser."
+  ],
+  "blockers": [
+    "Supabase CLI 2.122.0 was unavailable to the isolated local browser runner.",
+    "The production build could not fetch the existing Google Fonts.",
+    "PR body lacks required issue/evidence markers and still contains the auto-close keyword Fixes #241; available GitHub MCP tools provide no PR-body editing operation.",
+    "Verify failed issue-evidence validation, Database was pending, and code review remains outstanding."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
+  "markdownSha256": "638e42374aceaecd36efd6fe9502f726e98a0d9a0d7a682c112a0db7d0594468",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
