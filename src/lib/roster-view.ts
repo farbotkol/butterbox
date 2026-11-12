@@ -20,6 +20,7 @@ export function rosterViewHref(
   venue?: string,
   query?: string,
   business?: string,
+  day?: string,
 ): string {
   const params = new URLSearchParams({ week });
   if (venue) params.set("venue", venue);
@@ -27,7 +28,25 @@ export function rosterViewHref(
   for (const id of collapsed) params.append("collapsed", id);
   if (query) params.set("q", query);
   if (business) params.set("business", business);
+  if (day) params.set("day", day);
   return `/roster?${params.toString()}`;
+}
+
+export function rosterCreateShiftHref(
+  week: string,
+  department: string,
+  collapsed: readonly string[],
+  venue: string,
+  business: string,
+  date: string,
+  start: string,
+  employeeId?: string,
+): string {
+  const params = new URL(rosterViewHref(week, department, collapsed, venue, undefined, business, date), "https://butterbox.invalid").searchParams;
+  params.set("create_date", date);
+  params.set("create_start", `${date}T${start}`);
+  if (employeeId) params.set("create_employee", employeeId);
+  return `/roster?${params.toString()}#shift-editor`;
 }
 
 export function rosterSearchQuery(value: string | string[] | undefined): string | null {
