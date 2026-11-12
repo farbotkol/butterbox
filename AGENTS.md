@@ -188,6 +188,21 @@ The default is targeted verification, not a full regression after every story.
   `agent-evidence-governance-exception` label, a linked issue in the PR body,
   and the repository owner's approval review on the exact PR head. This is an
   audited exception, not permission to restore those files as live status.
+## Mandatory Copilot pull request description contract
+
+When creating or updating **any** PR, follow `tools/agent-evidence/check-pr-evidence.mjs` and the repository PR template. GitHub's automatic Copilot `Fixes #N` suffix is **not sufficient** and will fail `Verify / verify`.
+
+- Create or identify the canonical GitHub Issue first. After the PR number is known, use the *same* issue number `N` in the PR body reference and the two markers below; use the actual PR number `M` and evidence attempt `XX`.
+- Include these exact plain-text lines **outside a fenced code block** in every PR body:
+  ```text
+  Refs #N
+  <!-- butterbox-issue: N -->
+  <!-- butterbox-evidence: docs/agent-work/issues/issue-N/pr-M/attempt-XX.evidence.json -->
+  ```
+- Add **both** matching files `docs/agent-work/issues/issue-N/pr-M/attempt-XX.evidence.json` and `docs/agent-work/issues/issue-N/pr-M/attempt-XX.md` to that PR, with per-criterion status and validated evidence. A marker alone cannot satisfy CI.
+- Remove auto-generated `Fixes #N`, `Closes #N` or `Resolves #N` for draft, partial or incompletely accepted work. Do not close a canonical story from a partial slice. Auto-close may only be considered once full acceptance and exact-head owner approval are verified.
+- Before marking ready for review, verify that the PR body, issue ID, PR ID, evidence paths and JSON/Markdown validation match. Check the actual `verify` and `database` results. Never silence the validator to compensate for a missing reference.
+
 - Merged-PR evidence reconciliation is append-only on the canonical GitHub
   issue. Include `Refs #N` plus the exact issue/evidence markers in the PR body
   and add both Markdown and JSON attempt files. CI checks the markers and evidence;

@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 243,
+    "url": "https://github.com/farbotkol/butterbox/issues/243"
+  },
+  "pullRequest": {
+    "number": 244,
+    "url": "https://github.com/farbotkol/butterbox/pull/244",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/copilot-pr-evidence-template",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43318775805,
+    "agent": "human",
+    "commitSha": "8805fa50edcd848f7129c6c6da63ca16be760f08",
+    "startedAt": "2026-11-12T22:19:18Z",
+    "updatedAt": "2026-11-12T22:19:18Z"
+  },
+  "scope": {
+    "summary": "Developer guidance and PR template preventing incomplete Copilot PR evidence references.",
+    "changedFiles": [
+      ".github/pull_request_template.md",
+      "AGENTS.md",
+      "docs/agent-work/issues/issue-243/pr-244/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-243/pr-244/attempt-01.md"
+    ],
+    "implemented": [
+      "Document canonical issue markers and paired evidence paths in agent instructions.",
+      "Provide a default PR template with explicit no-auto-close rule for incomplete work."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Repository contributor/Copilot instructions explicitly require `Refs #N`, `<!-- butterbox-issue: N -->` and `<!-- butterbox-evidence: docs/agent-work/issues/issue-N/pr-M/attempt-XX.evidence.json -->` in each PR description, with matching JSON and Markdown files.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "AGENTS.md",
+          "outcome": "Instructions present for canonical references and evidence markers; automated CI still pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "A repository PR template provides exact copyable examples and instructs removal of `Fixes/Closes/Resolves` until all canonical acceptance criteria pass and owner approval is given.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/pull_request_template.md",
+          "outcome": "Instructions present for canonical references and evidence markers; automated CI still pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Guidance states to validate the exact PR number and evidence paths after creating the PR; preserve draft state and avoid auto-close on partial slices.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "AGENTS.md",
+          "outcome": "Instructions present for canonical references and evidence markers; automated CI still pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "New documentation is reviewed via a PR targeting `copilot/Development`; no CI gates weakened or production changes.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "AGENTS.md",
+          "outcome": "Draft PR submitted; review and CI acceptance remain pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "Documentation review against tools/agent-evidence/check-pr-evidence.mjs",
+      "outcome": "passed",
+      "result": "Compared new copyable marker examples with the required validator expressions; no runtime test executed."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": 43318775805,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43318775805"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43318775805,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43318775805"
+    }
+  ],
+  "decisions": [
+    "No changes to CI rules, product code, historical status files, production resources or repository branch protection."
+  ],
+  "reruns": [],
+  "limitations": [
+    "PR template and AGENTS instructions require future agents to obey them; direct programmatic PR creation may still bypass the default template.",
+    "No end-to-end exercise of subsequent Copilot PR creation has yet been verified."
+  ],
+  "blockers": [
+    "Required PR checks and owner review are pending."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-243/pr-244/attempt-01.md",
+  "markdownSha256": "c9829c4c9cf9ca663cdbb16b834ba188a074a8744b43e3c864244c98ae4c3e77",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
