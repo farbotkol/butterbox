@@ -10,10 +10,12 @@ ran against commit
 The PR head will include this evidence pair; the reconciler records its final
 head and merge SHA after merge.
 
-Recommendation: **complete for implementation**, pending the current PR's
-`verify` and `database` checks and the repository-owner review required before
-automatic task-issue closure. No production service, database, or live GitHub
-issue write was exercised.
+Recommendation: **partial**. The implementation and focused verification are
+complete, but rollout is blocked on the current draft PR #85 editing centrally
+managed archive/status files and on repository-owner review of this PR's
+canonical issue binding. The repository branch is protected; exact required
+check rules are not exposed by the available read API. No production service,
+database, or live GitHub issue write was exercised.
 
 ## Acceptance evidence
 
@@ -25,6 +27,7 @@ issue write was exercised.
 | AC-4: Full story not closed from a partial PR; merged/CI/accepted statuses distinguished. | Pass | Partial/documentation-only fixtures remain unaccepted; the writer never closes or reopens issues. |
 | AC-5: Parallel merge, failure/retry, idempotency and tampering fixtures pass. | Pass | `node --test tests/agent-evidence.test.mjs`: 11 passed, 0 failed. |
 | AC-6: Confirm actual `verify` and `database` gates; never weaken branch protection. | Pass | `.github/workflows/ci.yml` retains both jobs; merged PR #141 run [43144295088](https://github.com/farbotkol/butterbox/actions/runs/43144295088) passed `verify` and `database`; GitHub reports `copilot/Development` protected. No protection settings were changed. |
+| AC-7: PR targets `copilot/Development` and reports changed files, exact tests and remaining blockers. | Pass | PR #239 targets `copilot/Development`; its checklist will list the exact changed files, test commands and pending owner/PR sequencing blockers. |
 
 The exact required-check ruleset was not readable through the available
 repository API; administrators should verify the required check names before

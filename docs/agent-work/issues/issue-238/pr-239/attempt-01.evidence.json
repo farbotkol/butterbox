@@ -18,7 +18,7 @@
     "agent": "copilot",
     "commitSha": "298286c7b0040618386fb75d81c27c62b8478505",
     "startedAt": "2026-11-12T07:44:34Z",
-    "updatedAt": "2026-11-12T08:30:24Z"
+    "updatedAt": "2026-11-12T08:33:37Z"
   },
   "scope": {
     "summary": "Versioned per-issue delivery evidence, trusted managed-file protection and conservative scheduled reconciliation for canonical GitHub Issues.",
@@ -145,6 +145,23 @@
           "outcome": "Merged PR #141 run reported verify and database successful; copilot/Development reports protected."
         }
       ]
+    },
+    {
+      "id": "AC-7",
+      "description": "PR targets `copilot/Development` and reports changed files, exact tests and remaining blockers.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/pull/239",
+          "outcome": "PR targets copilot/Development and its checklist reports the exact changed files, commands and pending review/sequence blockers."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/agent-work/issues/issue-238/pr-239/attempt-01.evidence.json",
+          "outcome": "Records the exact changed-file set and verification commands/results."
+        }
+      ]
     }
   ],
   "tests": [
@@ -210,6 +227,12 @@
       "reason": "Verify run 43182799409 used a superseded PR head before the evidence pair was pushed.",
       "outcome": "Cancelled after the newer commit; no CI result was accepted.",
       "runId": 43182799409
+    },
+    {
+      "attempt": 3,
+      "reason": "Verify run 43183669946 executed before AC-7 was recorded in the evidence.",
+      "outcome": "Failed the exact issue-checklist match; AC-7 was added and must be checked on the new PR head.",
+      "runId": 43183669946
     }
   ],
   "limitations": [
@@ -217,9 +240,12 @@
     "The branch reports protected, but the exact required-check ruleset was not readable through the available repository API.",
     "Owner approval of the canonical issue association on the exact final PR head is required before reconciliation."
   ],
-  "blockers": [],
-  "recommendation": "complete",
+  "blockers": [
+    "Open draft PR #85 edits managed archive/status files outside the audited governance/migration exception; resolve those edits before rollout.",
+    "Repository-owner review of the canonical issue binding on PR #239's final head and exact required-check rules remain pending."
+  ],
+  "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-238/pr-239/attempt-01.md",
-  "markdownSha256": "cbaed6549e0892d312ce4087be586e6e58bb98461c796c679ab690ceb02e6945",
+  "markdownSha256": "59c488e0694233f056161d351f8668435caa6fd0dc1c91a9ea65be784566844f",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
