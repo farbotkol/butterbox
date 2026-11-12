@@ -3,11 +3,12 @@
 ## Migration checkpoint (12 November 2026)
 
 The legacy `BACKLOG_INDEX.csv` contains **132 product stories**:
-- **76 Done**, retained in their original historical sources with supporting evidence. Not bulk-converted into redundant closed Issues.
+- **76 Done**, now represented by closed, explicitly **historical** GitHub Issues; 75 were newly imported as #162–#236, while existing closed issue #6 represents `BB-FORECAST-001`. The original sources remain intact and are not superseded as verification evidence.
 - **43 Backlog** and **13 Blocked** (56 outstanding), now represented by canonical GitHub Issues.
 - Four existing Issues already represented outstanding stories: `BB-PAY-008` (#61), `BB-AI-006` (#68), `BB-AI-007` (#62) and `BB-SAAS-001` (#60). These are **partial slices**, so verify their parent-story scope before closing any full story.
 - **52 new product backlog Issues** were imported on 12 November 2026. They retain the legacy story ID, epic, user story, acceptance criteria, historical status, priorities, dependencies and prior evidence.
 - One duplicate import of `BB-PAYRULES-005` (#118) was closed as duplicate. **#117 is canonical.**
+- **19 product epic issues** (#143–#161) now contain explicit links to all 132 stories and their historical/open states. They are navigable epic indexes, **not native GitHub Projects boards or GitHub sub-issue hierarchies**.
 - Existing standalone UX, demo, agent-tooling and other Issues remain valid; do not deduplicate unrelated scopes automatically.
 
 The migrated Issues are **intake only, with no new Copilot assignment**. A legacy story marked Blocked is not ready for dispatch until its blocker is explicitly resolved. Old CSV status is historical, not automatically an accurate live project status.
@@ -37,7 +38,7 @@ Issue [#75](https://github.com/farbotkol/butterbox/issues/75) is the existing im
 
 ## Historical completion
 
-For the 76 legacy Done rows, keep the legacy index and product backlog frozen as audit/reference material. Do **not** create 76 closed Issues by default: it duplicates PR history and may misrepresent evidence. If traceability requires an individual historical Issue, create it after checking for an existing Issue/PR, link original evidence and mark it clearly as **historical import**, not newly completed or newly tested.
+For the 76 legacy Done rows, preserve their original CSV/backlog/implementation evidence and the 76 corresponding closed historical Issues (#162–#236 and #6). These imported records are **not newly tested or delivered**, and must not cause automatic dispatch or newly claim runtime acceptance. Future historical backfills must first search existing Issues by exact `BB-` identifier and link PR evidence rather than creating duplicates. Completed work with later known gaps needs an explicit follow-up Issue, not retroactive changes to historical acceptance claims.
 
 ## Cutover and rollback
 
