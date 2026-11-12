@@ -2,9 +2,9 @@
 
 ## Status and boundaries
 
-This is repository code and policy; it does not configure branch protection,
-enable agent dispatch, modify production systems or change any database. It is
-the evidence and post-merge reconciliation slice for issue #75, separate from
+This is repository code and policy; until merged it is not operational and it
+does not configure branch protection, enable agent dispatch, modify production
+systems or change any database. It is the evidence and post-merge reconciliation slice for issue #75, separate from
 issue #142's component reservations, dispatch queue and PR-overlap controls.
 GitHub Issues remain the live work and acceptance record. The CSV/Markdown
 backlog and shared status files remain historical references.
@@ -22,12 +22,17 @@ on the exact head SHA whose review text says `Managed-file exception approved:
 check after adding the owner approval; changed commits invalidate the approval.
 
 The post-merge workflow has only `contents: read`, `pull-requests: read`,
-`checks: read` and `issues: write`. It listens for merges into
-`copilot/Development`, uses a non-cancelling concurrency group, and scans closed
-merged PRs every 30 minutes plus on manual dispatch. The scan is append-only and
+`checks: read` and `issues: write`. It does not execute a PR-close workflow with
+a write-capable token. Its scheduled writer checks out the repository's
+protected default branch, `copilot/Development`. Manual recovery reruns a failed
+scheduled workflow rather than dispatching a workflow definition from an
+arbitrary branch. It uses a non-cancelling concurrency group and scans closed
+merged PRs every 30 minutes. The scan is append-only and
 idempotent by `(PR number, merge SHA)`. A failed run remains failed and appears
 in Actions; a later scheduled/manual sweep retries unfinished work. It does
-not push commits, edit archives, add labels or close/reopen issues.
+not push commits, edit archives, add labels or close/reopen issues. A merge is
+picked up within 30 minutes; missed event deliveries require no special repair
+because the writer reconciles merged PRs from GitHub state on every sweep.
 
 ## Evidence format and PR markers
 
@@ -42,14 +47,27 @@ docs/agent-work/issues/issue-N/pr-N/attempt-NN.evidence.json
 `tools/agent-evidence/evidence.mjs` validates version, IDs, SHA references,
 changed-file lists, criterion statuses and links; rejects unknown fields,
 secret-like values and personal email addresses; and pairs Markdown with JSON.
+Criterion descriptions must match the canonical issue's acceptance checklist
+one-for-one; omitted or substituted criteria prevent a complete recommendation.
 The validator has no third-party dependency:
 
 ```sh
 node tools/agent-evidence/evidence.mjs --file docs/agent-work/issues/issue-N/pr-N/attempt-NN.evidence.json --repo farbotkol/butterbox
 ```
 
-Every PR participating in reconciliation must include these exact HTML markers
-in its body, substituting the canonical issue and attempt path:
+Every PR participating in reconciliation must visibly reference its canonical
+issue with `Refs #N` and include these exact HTML markers in its body,
+substituting the canonical issue and attempt path. The `Verify / verify` job
+checks the visible reference, both attempt files, JSON schema/checksum, and the
+exact changed-file list. Agent PRs use reference-only issue links, never
+auto-close keywords for partial or documentation-only delivery. CI allows
+auto-close only when evidence matches every canonical issue criterion, all pass,
+there are no blockers, and the PR changes code. Issue closure remains subject to
+human review. Before writing, it additionally requires an approval by
+the repository owner on the exact PR head containing
+`Canonical issue approved: #N`, then verifies GitHub's issue timeline
+cross-reference. A PR-controlled marker alone cannot redirect comments to an
+unrelated issue.
 
 ```text
 <!-- butterbox-issue: N -->
@@ -57,10 +75,13 @@ in its body, substituting the canonical issue and attempt path:
 ```
 
 The JSON stores attempt-level head SHA and may leave `mergeSha` null because that
-SHA is not known before the merge. The reconciler obtains the merge SHA from
-GitHub, verifies the evidence at that exact commit, confirms the PR file list
-and check runs at the PR head, then records the merge SHA and gate results in an
-append-only canonical issue comment. Evidence is not edited after merge.
+SHA is not known before the merge. `run.commitSha` identifies the commit tested
+by the attempt; the post-merge issue comment records the verified PR head and
+merge SHA. The reconciler obtains the merge SHA from GitHub, verifies the
+evidence at that exact commit, confirms the PR file list and check runs at the
+PR head, then records the merge SHA and gate results in an append-only canonical
+issue comment. Evidence is not edited after merge. Compute `markdownSha256` over
+the exact UTF-8 bytes of the paired Markdown file before validating.
 
 Status distinctions in each comment are: merge confirmed; `verify` and
 `database` pass/fail/missing; evidence valid/missing/invalid; criterion-level
@@ -92,8 +113,10 @@ all issue acceptance criteria.
 
 ## Verification evidence
 
-The current `.github/workflows/ci.yml` defines required job names `verify` and
-`database`. The most recent completed successful Verify run on merged governance
+The current `.github/workflows/ci.yml` defines job names `verify` and
+`database`. The repository default branch is `copilot/Development`, so the
+scheduled recovery workflow will run from the target branch after merge. The
+most recent completed successful Verify run on merged governance
 PR #141 reported both jobs successful (run
 [43144295088](https://github.com/farbotkol/butterbox/actions/runs/43144295088)).
 The failure inspected during this task was unrelated PR #85: its database job

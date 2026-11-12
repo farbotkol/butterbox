@@ -189,8 +189,16 @@ The default is targeted verification, not a full regression after every story.
   and the repository owner's approval review on the exact PR head. This is an
   audited exception, not permission to restore those files as live status.
 - Merged-PR evidence reconciliation is append-only on the canonical GitHub
-  issue; it records merge and required-check status but never closes or reopens
-  an issue. Human reviewers decide full-story acceptance and closure.
+  issue. Include `Refs #N` plus the exact issue/evidence markers in the PR body
+  and add both Markdown and JSON attempt files. CI checks the markers and evidence;
+  the writer requires a repository-owner approval review on the exact PR head
+  saying `Canonical issue approved: #N`, and verifies GitHub's issue-to-PR
+  cross-reference before commenting.
+  Partial and documentation-only PRs must use reference-only links. CI permits
+  auto-close keywords only when evidence exactly matches every canonical issue
+  criterion, every criterion passes, there are no blockers, and the delivery is
+  not documentation-only. The writer never closes or reopens an issue; human
+  reviewers decide full-story acceptance and closure.
 - Use an issue branch and PR to `copilot/Development`, subject to existing
   CI, security, review and merge gates. Production changes require explicit
   approval. Use closing keywords only when all issue acceptance criteria have

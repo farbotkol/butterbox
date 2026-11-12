@@ -32,7 +32,7 @@ async function main() {
     'api', '--hostname', 'github.com', '--paginate', '--slurp',
     `repos/${repository}/pulls/${pullRequest.number}/reviews?per_page=100`,
   ])).flat();
-  const result = checkManagedFiles(pages.map(file => file.filename), {
+  const result = checkManagedFiles(pages, {
     labels: pullRequest.labels ?? [],
     pullRequestBody: pullRequest.body ?? '',
     reviews,

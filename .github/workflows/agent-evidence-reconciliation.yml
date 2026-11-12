@@ -1,12 +1,8 @@
 name: Reconcile merged issue evidence
 
 on:
-  pull_request:
-    types: [closed]
-    branches: [copilot/Development]
   schedule:
     - cron: "17,47 * * * *"
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -20,16 +16,15 @@ concurrency:
 
 jobs:
   reconcile:
-    if: ${{ github.event_name != 'pull_request' || github.event.pull_request.merged == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/heads/copilot/Development
           persist-credentials: false
       - name: Reconcile confirmed merges and recover missed events
         env:
           GH_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_EVENT_PATH: ${{ github.event_path }}
         run: node tools/agent-evidence/reconcile.mjs

@@ -112,8 +112,16 @@ node tools/agent-evidence/evidence.mjs --file docs/agent-work/issues/issue-N/pr-
 Keep retries as new attempt files. Record IDs, changed files, merge/check links,
 criterion outcomes, exact tests and results, decisions, limitations and blockers.
 Do not include credentials, personal contact details or raw logs. The PR body
-must identify its canonical issue with `<!-- butterbox-issue: N -->` and its JSON
+must visibly reference its canonical issue with `Refs #N` and identify it with
+`<!-- butterbox-issue: N -->`, along with its JSON
 evidence with `<!-- butterbox-evidence: docs/agent-work/issues/issue-N/pr-N/attempt-NN.evidence.json -->`.
+Both attempt files must be changed in the PR and pass the schema/checksum
+validator. Use a reference-only issue link for partial or documentation-only
+delivery; CI rejects auto-close keywords unless the evidence covers every
+canonical issue criterion with a pass and no blockers.
+Before merge reconciliation, the repository owner must approve the canonical
+issue link on the exact PR head with `Canonical issue approved: #N` in the
+review text.
 
 Independent PRs cannot edit the historical archive/status files checked by CI.
 A governance exception needs the `agent-evidence-governance-exception` label,

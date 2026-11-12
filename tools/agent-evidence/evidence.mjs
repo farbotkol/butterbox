@@ -80,6 +80,7 @@ export function validateEvidence(evidence, {
   mergeSha,
   changedFiles,
   evidencePath,
+  acceptanceCriteria,
 } = {}) {
   const errors = [];
   if (!isObject(evidence)) return ['evidence must be a JSON object'];
@@ -162,6 +163,7 @@ export function validateEvidence(evidence, {
   if (!isObject(evidence.scope)) errors.push('scope must be an object');
   requireString(evidence.scope?.summary, 'scope.summary', errors, 2000);
   const files = requireArray(evidence.scope?.changedFiles, 'scope.changedFiles', errors);
+  if (files.length === 0) errors.push('scope.changedFiles must not be empty');
   if (files.some(file => !nonEmptyString(file) || file.startsWith('/') || file.split('/').includes('..'))) {
     errors.push('scope.changedFiles must contain safe repository-relative paths');
   }
@@ -183,6 +185,18 @@ export function validateEvidence(evidence, {
   else evidence.scope.implemented.forEach((item, index) => requireString(item, `scope.implemented[${index}]`, errors));
 
   const criteria = Array.isArray(evidence.criteria) ? evidence.criteria : [];
+  if (acceptanceCriteria) {
+    if (criteria.length !== acceptanceCriteria.length) {
+      errors.push('criteria count does not match the canonical issue acceptance checklist');
+    } else {
+      criteria.forEach((criterion, index) => {
+        if (criterion.description.trim() !== acceptanceCriteria[index]) {
+          errors.push(`criteria[${index}].description does not match the canonical issue checklist`);
+        }
+      });
+    }
+  }
+  if (criteria.length === 0) errors.push('criteria must include at least one acceptance criterion');
   const criterionIds = new Set();
   criteria.forEach((criterion, index) => {
     const label = `criteria[${index}]`;
@@ -227,6 +241,9 @@ export function validateEvidence(evidence, {
     if (result.url !== null && result.url !== undefined && !/^https:\/\/github\.com\/[^/]+\/[^/]+\/actions\/runs\/\d+(?:\/job\/\d+)?$/.test(result.url)) {
       errors.push(`ci[${index}].url must be a GitHub Actions run URL or null`);
     }
+  }
+  for (const requiredName of ['verify', 'database']) {
+    if (!ciNames.has(requiredName)) errors.push(`ci must include ${requiredName}`);
   }
 
   const tests = Array.isArray(evidence.tests) ? evidence.tests : [];
@@ -283,9 +300,10 @@ export function validateRepositoryEvidence(evidence, {
   mergeSha,
   changedFiles,
   evidencePath,
+  acceptanceCriteria,
 } = {}) {
   const errors = validateEvidence(evidence, {
-    repository, issueNumber, pullNumber, headSha, mergeSha, changedFiles, evidencePath,
+    repository, issueNumber, pullNumber, headSha, mergeSha, changedFiles, evidencePath, acceptanceCriteria,
   });
   if (repository && evidence?.auditUrl !== `https://github.com/${repository}`) {
     errors.push('auditUrl does not match the repository');
@@ -293,13 +311,16 @@ export function validateRepositoryEvidence(evidence, {
   return [...new Set(errors)];
 }
 
-export function checkManagedFiles(files, {
+export function checkManagedFiles(changes, {
   labels = [],
   pullRequestBody = '',
   reviews = [],
   headSha,
   ownerLogin = 'farbotkol',
 } = {}) {
+  const files = changes.flatMap(change => typeof change === 'string'
+    ? [change]
+    : [change?.filename, change?.previous_filename].filter(Boolean));
   const managed = [...new Set(files.filter(isManagedFile))].sort();
   if (!managed.length) return { allowed: true, managedFiles: [], exception: null };
   const exception = pullRequestBody.match(/Managed-file exception:\s*#(\d+)\b/);
@@ -325,8 +346,57 @@ export function getEvidencePathFromPullRequest(body, issueNumber, pullNumber) {
   return identity?.issueNumber === issueNumber && identity.pullNumber === pullNumber ? evidencePath : null;
 }
 
+export function canonicalIssueNumber(body) {
+  const match = /<!--\s*butterbox-issue:\s*(\d+)\s*-->/.exec(body ?? '');
+  return match ? Number(match[1]) : null;
+}
+
+export function referencesCanonicalIssue(body, issueNumber) {
+  return new RegExp(`\\b(?:Refs|Related to)\\s+#${issueNumber}\\b`, 'i').test(body ?? '');
+}
+
+export function hasCanonicalIssueApproval(reviews, headSha, issueNumber, ownerLogin) {
+  const approval = new RegExp(`Canonical issue approved:\\s*#${issueNumber}\\b`);
+  return reviews.some(review =>
+    review?.user?.login?.toLowerCase() === ownerLogin.toLowerCase() &&
+    review.state === 'APPROVED' &&
+    review.commit_id === headSha &&
+    approval.test(review.body ?? ''));
+}
+
+export function hasAutoCloseKeyword(body) {
+  return /\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:(?:[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+)?#)\d+\b/i.test(body ?? '');
+}
+
+export function parseAcceptanceCriteria(body) {
+  const lines = String(body ?? '').split(/\r?\n/);
+  const heading = lines.findIndex(line => /^#{1,6}\s+Acceptance criteria\s*$/i.test(line.trim()));
+  if (heading < 0) return [];
+  const criteria = [];
+  for (const line of lines.slice(heading + 1)) {
+    if (/^#{1,6}\s+/.test(line.trim())) break;
+    const match = /^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
+    if (match) criteria.push({ checked: match[1].toLowerCase() === 'x', description: match[2] });
+  }
+  return criteria;
+}
+
 export function isDocumentationOnly(files) {
   return files.length > 0 && files.every(file => file.startsWith('docs/') || file.endsWith('.md'));
+}
+
+export function evidenceIsComplete(evidence, changedFiles, acceptanceCriteria) {
+  return Boolean(evidence) &&
+    evidence.recommendation === 'complete' &&
+    Array.isArray(evidence.criteria) &&
+    evidence.criteria.length > 0 &&
+    evidence.criteria.every(item => item.status === 'pass') &&
+    Array.isArray(acceptanceCriteria) &&
+    acceptanceCriteria.length === evidence.criteria.length &&
+    evidence.criteria.every((item, index) => item.description.trim() === acceptanceCriteria[index]) &&
+    Array.isArray(evidence.blockers) &&
+    evidence.blockers.length === 0 &&
+    !isDocumentationOnly(changedFiles);
 }
 
 export function requiredCiStatus(checkRuns) {
@@ -358,18 +428,22 @@ export function buildReconciliationComment({
   evidence,
   errors = [],
   changedFiles = [],
+  evidencePath,
+  acceptanceCriteria,
 }) {
   const key = `<!-- butterbox-reconciliation:v1:pr-${pullNumber}:${mergeSha} -->`;
   const ciPassed = ci.verify.status === 'pass' && ci.database.status === 'pass';
   const criteria = Array.isArray(evidence?.criteria) ? evidence.criteria : [];
-  const criteriaPassed = criteria.length > 0 && criteria.every(item => item.status === 'pass');
   const docsOnly = isDocumentationOnly(changedFiles);
-  const evidenceComplete = errors.length === 0 && evidence && ciPassed &&
-    evidence.recommendation === 'complete' && criteriaPassed && !docsOnly;
+  const evidenceComplete = errors.length === 0 && ciPassed &&
+    evidenceIsComplete(evidence, changedFiles, acceptanceCriteria);
   const gateLine = ['verify', 'database'].map(name =>
     `${name}: ${ci[name].status}${ci[name].url ? ` ([run](${ci[name].url}))` : ''}`).join(' · ');
   const criterionLines = criteria.length
-    ? criteria.map(item => `- \`${item.id}\`: **${item.status}**`).join('\n')
+    ? criteria.map(item => {
+        const status = EVIDENCE_STATUSES.has(item.status) ? item.status : 'invalid';
+        return `- \`${safeMarkdownText(item.id)}\`: **${status}**`;
+      }).join('\n')
     : '- No valid per-criterion evidence supplied.';
   const problemLines = errors.length ? errors.map(error => `- ${safeMarkdownText(error)}`).join('\n') : '- None';
   const acceptance = evidenceComplete
@@ -377,13 +451,21 @@ export function buildReconciliationComment({
     : docsOnly
       ? 'Documentation-only delivery; full-story acceptance remains pending.'
       : 'Full-story acceptance remains pending; this merge records only the delivered slice.';
+  const evidenceLink = EVIDENCE_PATH.test(evidencePath ?? '')
+    ? `- Evidence: [JSON](https://github.com/${repository}/blob/${mergeSha}/${evidencePath})` +
+      (evidenceMarkdownPath(evidencePath) === evidence?.markdownPath
+        ? ` · [Markdown](https://github.com/${repository}/blob/${mergeSha}/${evidence.markdownPath})`
+        : '')
+    : '- Evidence: missing or invalid attempt path.';
   return [
     key,
     '### Post-merge delivery reconciliation',
+    `- Canonical issue: [#${issueNumber}](https://github.com/${repository}/issues/${issueNumber}).`,
     `- PR: [#${pullNumber}](https://github.com/${repository}/pull/${pullNumber}) — merged to \`copilot/Development\`.`,
     `- PR head SHA: \`${headSha}\`.`,
     `- Merge SHA: \`${mergeSha}\`.`,
     `- Required CI: ${gateLine}.`,
+    evidenceLink,
     `- Evidence status: ${errors.length ? 'invalid or missing' : evidence ? 'schema-validated' : 'missing'}.`,
     `- Acceptance state: **${acceptance}**`,
     '- Per-criterion evidence:',

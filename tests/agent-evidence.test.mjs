@@ -4,13 +4,20 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import {
   buildReconciliationComment,
+  canonicalIssueNumber,
   checkManagedFiles,
+  evidenceIsComplete,
   evidenceMarkdownPath,
   getEvidencePathFromPullRequest,
+  hasCanonicalIssueApproval,
+  parseAcceptanceCriteria,
+  hasAutoCloseKeyword,
   isDocumentationOnly,
   isManagedFile,
+  referencesCanonicalIssue,
   requiredCiStatus,
   validateEvidence,
+  validateMarkdownEvidence,
   validateRepositoryEvidence,
 } from '../tools/agent-evidence/evidence.mjs';
 import { reconcileCandidates, reconcilePullRequest } from '../tools/agent-evidence/reconcile.mjs';
@@ -102,6 +109,7 @@ function pullRequest({
     merged_at: mergedAt,
     merge_commit_sha: merge,
     body: body ?? [
+      `Refs #${issue}`,
       `<!-- butterbox-issue: ${issue} -->`,
       `<!-- butterbox-evidence: ${jsonPath} -->`,
     ].join('\n'),
@@ -123,10 +131,24 @@ function fakeApi({ evidenceByPr = new Map(), checks = successfulChecks(), failPo
   const written = [];
   let shouldFailPost = failPost;
   const api = {
-    getIssue: async number => ({ number, state: 'open' }),
+    getIssue: async number => ({
+      number,
+      state: 'open',
+      body: '## Acceptance criteria\n- [ ] Synthetic acceptance criterion.',
+    }),
+    getPullRequestReviews: async number => {
+      const linkedIssue = number === 901 ? 902 : number === 903 ? 904 : issueNumber;
+      return [{
+        user: { login: repository.split('/')[0] },
+        state: 'APPROVED',
+        commit_id: headSha,
+        body: `Canonical issue approved: #${linkedIssue}`,
+      }];
+    },
+    isIssueLinkedToPullRequest: async () => true,
     getFiles: async number => (evidenceByPr.get(number)?.files ?? changedFiles).map(filename => ({ filename })),
     getCheckRuns: async () => checks,
-    getEvidence: async (filePath, _sha) => {
+    getEvidence: async filePath => {
       const pr = Number(filePath.match(/pr-(\d+)/)?.[1]);
       return evidenceByPr.get(pr)?.json ?? evidence();
     },
@@ -157,6 +179,12 @@ test('versioned schema and synthetic example validate without treating it as del
   assert.deepEqual(errors, []);
   assert.equal(example.recommendation, 'partial');
   assert.equal(example.criteria[0].status, 'not-tested');
+  const exampleMarkdown = await readFile(
+    new URL('docs/agent-work/issues/issue-999999/pr-999998/attempt-01.md', root),
+    'utf8',
+  );
+  assert.deepEqual(validateMarkdownEvidence(example, exampleMarkdown), []);
+  assert.match(validateMarkdownEvidence(example, `${exampleMarkdown}tampered`)[0], /SHA-256/);
 });
 
 test('evidence validator rejects tampering, mismatched identities, unsafe files and unknown fields', () => {
@@ -199,6 +227,12 @@ test('managed-file enforcement rejects feature edits and accepts only exact-head
   assert.equal(isManagedFile('src/feature.ts'), false);
   const files = ['src/feature.ts', 'BACKLOG_INDEX.csv', 'docs/agent-status/roadmap.md'];
   assert.equal(checkManagedFiles(files).allowed, false);
+  const renamed = checkManagedFiles([{
+    filename: 'docs/archives/backlog-index.csv',
+    previous_filename: 'BACKLOG_INDEX.csv',
+  }]);
+  assert.equal(renamed.allowed, false);
+  assert.deepEqual(renamed.managedFiles, ['BACKLOG_INDEX.csv']);
 
   const exception = checkManagedFiles(files, {
     labels: ['agent-evidence-governance-exception'],
@@ -254,6 +288,15 @@ test('partial and documentation-only deliveries never become full-story acceptan
 
   const docsFiles = ['docs/guide.md', attemptPath, evidenceMarkdownPath(attemptPath)];
   assert.equal(isDocumentationOnly(docsFiles), true);
+  assert.equal(evidenceIsComplete(evidence(), docsFiles), false);
+  assert.equal(evidenceIsComplete(evidence({ recommendation: 'partial' }), changedFiles), false);
+  const expected = ['Synthetic acceptance criterion.'];
+  assert.equal(evidenceIsComplete(evidence(), changedFiles, expected), true);
+  assert.equal(evidenceIsComplete(evidence({ blockers: ['Still blocked.'] }), changedFiles, expected), false);
+  assert.equal(evidenceIsComplete(evidence(), changedFiles, ['Different criterion.']), false);
+  assert.deepEqual(parseAcceptanceCriteria(
+    '## Acceptance criteria\n- [ ] First\n- [x] Second\n## Notes\n- [ ] Not a criterion',
+  ), [{ checked: false, description: 'First' }, { checked: true, description: 'Second' }]);
   const docs = buildReconciliationComment({
     repository, issueNumber, pullNumber, mergeSha, ci, evidence: evidence(), changedFiles: docsFiles,
   });
@@ -269,6 +312,7 @@ test('merged PR reconciliation is idempotent and verifies issue, evidence, file 
   assert.equal(comments.length, 1);
   assert.match(comments[0].body, new RegExp(mergeSha));
   assert.match(comments[0].body, /verify: pass/);
+  assert.match(comments[0].body, /\[JSON\]\(https:\/\/github.com\/example\/butterbox\/blob\//);
 
   const duplicate = await reconcilePullRequest({ repository, pullRequest: pr, api });
   assert.equal(duplicate.status, 'already-reconciled');
@@ -280,6 +324,25 @@ test('merged PR reconciliation is idempotent and verifies issue, evidence, file 
   });
   assert.equal(unverified.status, 'merged-unverified');
   assert.match(missingCi.comments[0].body, /database: not-tested/);
+  await assert.rejects(
+    reconcileCandidates({ repository, pullRequests: [pr], api: missingCi.api }),
+    /Reconciliation unresolved/,
+  );
+  await assert.rejects(
+    reconcileCandidates({ repository, pullRequests: [pr], api: missingCi.api }),
+    /Reconciliation unresolved/,
+  );
+  assert.equal(missingCi.comments.length, 1);
+
+  const partial = fakeApi({
+    evidenceByPr: new Map([[pullNumber, {
+      json: evidence({ recommendation: 'partial' }),
+      files: changedFiles,
+    }]]),
+  });
+  const partialResult = await reconcilePullRequest({ repository, pullRequest: pr, api: partial.api });
+  assert.equal(partialResult.status, 'merged-unverified');
+  assert.match(partial.comments[0].body, /full-story acceptance remains pending/i);
 
   const modified = fakeApi({
     evidenceByPr: new Map([[pullNumber, {
@@ -290,12 +353,55 @@ test('merged PR reconciliation is idempotent and verifies issue, evidence, file 
   const tampered = await reconcilePullRequest({ repository, pullRequest: pr, api: modified.api });
   assert.equal(tampered.status, 'merged-unverified');
   assert.match(modified.comments[0].body, /does not match the merged PR file list/);
+
+  const invalidJson = fakeApi({
+    evidenceByPr: new Map([[pullNumber, { json: { _invalidEvidenceJson: true }, files: changedFiles }]]),
+  });
+  const rejected = await reconcilePullRequest({ repository, pullRequest: pr, api: invalidJson.api });
+  assert.equal(rejected.status, 'merged-unverified');
+  assert.match(invalidJson.comments[0].body, /invalid or missing/);
+});
+
+test('unmerged and wrong-base PR events do not update a canonical issue', async () => {
+  const { api, comments } = fakeApi();
+  const pending = pullRequest();
+  pending.merged = false;
+  assert.equal((await reconcilePullRequest({ repository, pullRequest: pending, api })).status, 'skipped');
+  const wrongBase = pullRequest();
+  wrongBase.base.ref = 'main';
+  assert.equal((await reconcilePullRequest({ repository, pullRequest: wrongBase, api })).status, 'skipped');
+  assert.equal(comments.length, 0);
 });
 
 test('serialized recovery retains concurrent and out-of-order merges without duplicating audit comments', async () => {
   const firstPr = pullRequest({ number: 901, issue: 902, merge: 'd'.repeat(40), mergedAt: '2026-11-12T00:00:00Z' });
+  firstPr.merged = undefined;
+  firstPr.state = 'closed';
   const secondPr = pullRequest({ number: 903, issue: 904, merge: 'e'.repeat(40), mergedAt: '2026-11-12T00:01:00Z' });
-  const { api, written } = fakeApi();
+  const details = (pr, issue) => {
+    const jsonPath = `docs/agent-work/issues/issue-${issue}/pr-${pr}/attempt-01.evidence.json`;
+    const markdownPath = evidenceMarkdownPath(jsonPath);
+    const files = [jsonPath, markdownPath, 'src/example.ts'];
+    return {
+      files,
+      json: evidence({
+        issue: { number: issue, url: `https://github.com/${repository}/issues/${issue}` },
+        pullRequest: {
+          number: pr,
+          url: `https://github.com/${repository}/pull/${pr}`,
+          baseBranch: 'copilot/Development',
+          headBranch: 'feature/example',
+          headSha: null,
+          mergeSha: null,
+        },
+        scope: { summary: 'Synthetic evidence fixture.', changedFiles: files, implemented: ['Slice.'] },
+        markdownPath,
+      }),
+    };
+  };
+  const { api, written } = fakeApi({
+    evidenceByPr: new Map([[901, details(901, 902)], [903, details(903, 904)]]),
+  });
   const results = await reconcileCandidates({
     repository,
     pullRequests: [secondPr, firstPr],
@@ -313,11 +419,13 @@ test('failed writes are visible and a retry recovers; workflow serializes withou
   const workflow = await readFile(new URL('.github/workflows/agent-evidence-reconciliation.yml', root), 'utf8');
   assert.match(workflow, /cancel-in-progress:\s*false/);
   assert.match(workflow, /schedule:/);
-  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /ref: refs\/heads\/copilot\/Development/);
+  assert.doesNotMatch(workflow, /pull_request_target:/);
+  assert.doesNotMatch(workflow, /workflow_dispatch:/);
   const { api, comments } = fakeApi({ failPost: true });
   await assert.rejects(
     reconcileCandidates({ repository, pullRequests: [pullRequest()], api }),
-    /Reconciliation failed/,
+    /Reconciliation unresolved/,
   );
   assert.equal(comments.length, 0);
   const recovered = await reconcileCandidates({ repository, pullRequests: [pullRequest()], api });
@@ -326,14 +434,50 @@ test('failed writes are visible and a retry recovers; workflow serializes withou
 });
 
 test('PR markers must bind the evidence path to the canonical issue and PR IDs', () => {
+  const body = `Refs #${issueNumber}\n<!-- butterbox-issue: ${issueNumber} -->\n<!-- butterbox-evidence: ${attemptPath} -->`;
+  assert.equal(canonicalIssueNumber(body), issueNumber);
+  assert.equal(referencesCanonicalIssue(body, issueNumber), true);
   assert.equal(getEvidencePathFromPullRequest(
-    `<!-- butterbox-evidence: ${attemptPath} -->`,
+    body,
     issueNumber,
     pullNumber,
   ), attemptPath);
   assert.equal(getEvidencePathFromPullRequest(
-    `<!-- butterbox-evidence: ${attemptPath} -->`,
+    body,
     issueNumber + 1,
     pullNumber,
   ), null);
+  assert.equal(hasAutoCloseKeyword('Refs #99'), false);
+  assert.equal(hasAutoCloseKeyword('Fixes #99'), true);
+  const review = [{
+    user: { login: 'example' },
+    state: 'APPROVED',
+    commit_id: headSha,
+    body: `Canonical issue approved: #${issueNumber}`,
+  }];
+  assert.equal(hasCanonicalIssueApproval(review, headSha, issueNumber, 'example'), true);
+  assert.equal(hasCanonicalIssueApproval(review, 'c'.repeat(40), issueNumber, 'example'), false);
+});
+
+test('reconciliation will not write to an unrelated issue based only on PR-controlled markers', async () => {
+  const { api, comments } = fakeApi();
+  api.isIssueLinkedToPullRequest = async () => false;
+  const result = await reconcilePullRequest({ repository, pullRequest: pullRequest(), api });
+  assert.equal(result.status, 'blocked');
+  assert.match(result.reason, /no verified cross-reference/);
+  assert.equal(comments.length, 0);
+
+  api.isIssueLinkedToPullRequest = async () => true;
+  api.getPullRequestReviews = async () => [{
+    user: { login: 'example' }, state: 'APPROVED', commit_id: headSha,
+    body: `Canonical issue approved: #${issueNumber + 1}`,
+  }];
+  const redirected = await reconcilePullRequest({ repository, pullRequest: pullRequest(), api });
+  assert.equal(redirected.status, 'blocked');
+  assert.match(redirected.reason, /owner must approve/);
+  assert.equal(comments.length, 0);
+
+  const noReference = pullRequest({ body: `<!-- butterbox-issue: ${issueNumber} -->` });
+  const missingRef = await reconcilePullRequest({ repository, pullRequest: noReference, api });
+  assert.match(missingRef.reason, /visibly reference/);
 });
