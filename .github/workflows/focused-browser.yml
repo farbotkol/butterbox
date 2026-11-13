@@ -55,7 +55,7 @@ jobs:
         run: node scripts/test-env.mjs up
       - name: Run focused browser tests
         env:
-          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:5214 tests/e2e/auth.spec.mjs:5395 tests/e2e/auth.spec.mjs:6843 tests/e2e/auth.spec.mjs:7271 tests/e2e/auth.spec.mjs:12029 tests/e2e/auth.spec.mjs:7099' || inputs.tests }}
+          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:7099' || inputs.tests }}
           GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
