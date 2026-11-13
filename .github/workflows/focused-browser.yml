@@ -54,7 +54,7 @@ jobs:
         run: node scripts/test-env.mjs up
       - name: Run focused browser tests
         env:
-          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2062 tests/e2e/auth.spec.mjs:4876 tests/e2e/auth.spec.mjs:11639 tests/e2e/auth.spec.mjs:11759 tests/e2e/auth.spec.mjs:3445 tests/e2e/auth.spec.mjs:3447 tests/e2e/auth.spec.mjs:3449 tests/e2e/auth.spec.mjs:3453 tests/e2e/auth.spec.mjs:5365 tests/e2e/auth.spec.mjs:5189 tests/e2e/auth.spec.mjs:11977 tests/e2e/auth.spec.mjs:6237 tests/e2e/auth.spec.mjs:6379 tests/e2e/auth.spec.mjs:6799 tests/e2e/auth.spec.mjs:7225 tests/e2e/auth.spec.mjs:7632 tests/e2e/auth.spec.mjs:7813 tests/e2e/auth.spec.mjs:8318 tests/e2e/auth.spec.mjs:11300 tests/e2e/auth.spec.mjs:5495 tests/e2e/auth.spec.mjs:5995 tests/e2e/auth.spec.mjs:6095 tests/e2e/auth.spec.mjs:7054' || inputs.tests }}
+          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2062 tests/e2e/auth.spec.mjs:4878 tests/e2e/auth.spec.mjs:11649 tests/e2e/auth.spec.mjs:11769 tests/e2e/auth.spec.mjs:3447 tests/e2e/auth.spec.mjs:3449 tests/e2e/auth.spec.mjs:3451 tests/e2e/auth.spec.mjs:3455 tests/e2e/auth.spec.mjs:5371 tests/e2e/auth.spec.mjs:5191 tests/e2e/auth.spec.mjs:11987 tests/e2e/auth.spec.mjs:6247 tests/e2e/auth.spec.mjs:6389 tests/e2e/auth.spec.mjs:6809 tests/e2e/auth.spec.mjs:7235 tests/e2e/auth.spec.mjs:7642 tests/e2e/auth.spec.mjs:7823 tests/e2e/auth.spec.mjs:8328 tests/e2e/auth.spec.mjs:11310 tests/e2e/auth.spec.mjs:5504 tests/e2e/auth.spec.mjs:6005 tests/e2e/auth.spec.mjs:6105 tests/e2e/auth.spec.mjs:7064' || inputs.tests }}
           GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
