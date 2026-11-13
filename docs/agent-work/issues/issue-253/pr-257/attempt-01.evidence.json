@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 253,
+    "url": "https://github.com/farbotkol/butterbox/issues/253"
+  },
+  "pullRequest": {
+    "number": 257,
+    "url": "https://github.com/farbotkol/butterbox/pull/257",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/issue-253-roster-ui-test-refresh",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43512021449,
+    "agent": "copilot",
+    "commitSha": "261b9f35465f982f46c51bfd740d1a4d39d7569c",
+    "startedAt": "2026-11-13T21:07:00Z",
+    "updatedAt": "2026-11-13T21:26:45Z"
+  },
+  "scope": {
+    "summary": "Restore the original 23 roster browser regression scenarios for the current UI without weakening security or accessibility assertions.",
+    "changedFiles": [
+      ".github/workflows/focused-browser.yml",
+      "src/components/roster-timeline.tsx",
+      "tests/e2e/auth.spec.mjs",
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.md",
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Corrected timeline add-shift accessible name",
+      "Updated roster browser tests for disclosures, navigation and venue switching",
+      "Retained 20-test batching while removing temporary branch triggers"
+    ]
+  },
+  "criteria": [
+    {
+      "id": "C1",
+      "description": "Shared root causes documented with relevant Playwright traces",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43497114926",
+          "outcome": "Trace-backed obsolete disclosure and heading selectors identified and documented in issue #253 comments"
+        }
+      ]
+    },
+    {
+      "id": "C2",
+      "description": "All 23 previously failing browser tests pass reliably at exact commit",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43501880692",
+          "outcome": "All 23 selected cases passed together at dff7449ccfce41ca3be4967b85947d2c81ba1b10"
+        }
+      ]
+    },
+    {
+      "id": "C3",
+      "description": "Other 85 passing browser tests remain green in full suite",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43512021449",
+          "outcome": "Full browser regression finished with 107 passed, 1 skipped, 0 failed on commit 261b9f35"
+        }
+      ]
+    },
+    {
+      "id": "C4",
+      "description": "Required database, pgTAP, tenant isolation and `verify` pass",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43512021449",
+          "outcome": "Required Verify and database jobs succeeded, including pgTAP, tenant isolation and full browser tests on commit 261b9f35"
+        }
+      ]
+    },
+    {
+      "id": "C5",
+      "description": "Accessibility and permission coverage not weakened",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43501880692",
+          "outcome": "WCAG, keyboard and permission-transition scenarios passed; assertions and timeouts retained"
+        }
+      ]
+    },
+    {
+      "id": "C6",
+      "description": "PR #252 can be evaluated without bypassing merge protection",
+      "status": "blocked",
+      "evidence": []
+    }
+  ],
+  "tests": [
+    {
+      "command": "Focused browser tests: 23 Playwright locations, batched 20+3",
+      "outcome": "passed",
+      "result": "23 passed, 0 failed in GitHub Actions run 43501880692",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43501880692"
+    },
+    {
+      "command": "Full database and browser regression on PR commit 261b9f35",
+      "outcome": "passed",
+      "result": "Full browser suite 107 passed, 1 skipped; database and Verify jobs succeeded",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43512021449"
+    },
+    {
+      "command": "Legacy timetable scenario alone after selector correction",
+      "outcome": "passed",
+      "result": "Single corrected test passed",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43511436789"
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pass",
+      "runId": 43512021449,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43512021449"
+    },
+    {
+      "name": "database",
+      "status": "pass",
+      "runId": 43512021449,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43512021449"
+    }
+  ],
+  "decisions": [
+    "Used isolated stabilization branch; no merge or deploy",
+    "Kept all permission, conflict and accessibility assertions; did not increase Playwright timeouts",
+    "Removed temporary push triggers after the combined run",
+    "Kept PR #257 as draft because separate coordination check remains failed"
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "Focus on previous 23 browser failures after stale UI selectors were identified",
+      "outcome": "23 of 23 passed in final combined focused run",
+      "runId": 43501880692
+    }
+  ],
+  "limitations": [
+    "Evidence-only follow-up commit has not itself been verified by a completed full regression",
+    "Issue #253 closure and PR #257 merge await owner review and coordination check"
+  ],
+  "blockers": [
+    "PR coordination check 43512014824 conflicts with draft PR #256 (invalid_component_metadata); #256 was not altered"
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-253/pr-257/attempt-01.md",
+  "markdownSha256": "b0872f4c8ae00bfbaaba8ba8363e8a660f5010f04f6880c46062f959b396fa96",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

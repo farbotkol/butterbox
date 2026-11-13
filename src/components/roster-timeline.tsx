@@ -61,7 +61,7 @@ export function RosterTimelineCell({
         if (!tick || !nextTick) return null;
         return (
           <Link key={slot.start} href={slot.href} prefetch={false}
-            aria-label={`Add a shift on ${date} at ${slot.start}`}
+            aria-label={`Add at ${slot.start}, add a shift on ${date}`}
             style={{
               top: `${tick.position}%`,
               height: `${nextTick.position - tick.position}%`,

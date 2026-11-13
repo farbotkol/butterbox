@@ -36,7 +36,7 @@ concurrency:
 jobs:
   focused:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -56,11 +56,26 @@ jobs:
         shell: bash
         run: |
           set -eu
-          args=()
-          for test in $TESTS; do args+=(--test "$test"); done
-          if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
-          node scripts/test-env.mjs run auth-focused --runner host --repeat "$REPEAT" "${args[@]}" \
-            --artifacts "$RUNNER_TEMP/focused-artifacts"
+          # Keep the test broker limit (20 locations per invocation).
+          # Run all requested locations in batches and preserve an aggregated failure exit code.
+          read -r -a locations <<< "$TESTS"
+          if [ "${#locations[@]}" -eq 0 ]; then
+            locations=("")
+          fi
+          failed=0
+          for ((start=0, batch=1; start<${#locations[@]}; start+=20, batch++)); do
+            args=()
+            for test in "${locations[@]:start:20}"; do
+              if [ -n "$test" ]; then args+=(--test "$test"); fi
+            done
+            if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
+            echo "Running focused batch $batch (${#args[@]} arguments)"
+            if ! node scripts/test-env.mjs run auth-focused --runner host --repeat "$REPEAT" "${args[@]}" \
+              --artifacts "$RUNNER_TEMP/focused-artifacts/batch-$batch"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
       - name: Publish summary
         if: always()
         shell: bash
