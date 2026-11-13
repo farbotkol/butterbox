@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 246,
+    "url": "https://github.com/farbotkol/butterbox/issues/246"
+  },
+  "pullRequest": {
+    "number": 248,
+    "url": "https://github.com/farbotkol/butterbox/pull/248",
+    "baseBranch": "copilot/Development",
+    "headBranch": "hotfix/coordination-gh-api-arguments",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43385256979,
+    "agent": "human",
+    "commitSha": "faeed62163f4ac558817051e53391d64314669ca",
+    "startedAt": "2026-11-13T08:29:00Z",
+    "updatedAt": "2026-11-13T08:29:00Z"
+  },
+  "scope": {
+    "summary": "Minimal trusted coordination script hotfix: correct gh api endpoint argument array; no workflow or validation bypass.",
+    "changedFiles": [
+      "tools/agent-controller/check-pr-coordination.mjs",
+      "docs/agent-work/issues/issue-246/pr-248/attempt-01.md",
+      "docs/agent-work/issues/issue-246/pr-248/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Changed exactly one code expression in the trusted coordination CLI wrapper: runGh(endpoint) to runGh([endpoint])."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Restore the coordination script, `component-coordination.mjs` and `components.json` on affected PR branch or synchronize safely with development, with no bypass of checks.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Partial scope; required integration checks, review or issue-level completion remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Verify the coordination workflow can execute and assess conflicts from PR #242 without MODULE_NOT_FOUND.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Partial scope; required integration checks, review or issue-level completion remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Address the roster SSR temporal-dead-zone initialization error as part of issue #241 / PR #242 and run targeted authenticated browser tests first.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Partial scope; required integration checks, review or issue-level completion remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Determine the real browser failure count from full CI logs rather than relying solely on summary screenshots; rerun required database and Verify jobs.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Partial scope; required integration checks, review or issue-level completion remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Design a follow-up CI workflow hardening change to source trusted policy tooling from the correct revision, preventing stale-branch breakage while retaining trustworthy code execution. Review security before changes to pull_request_target checkout policy.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Narrow API argument repair provided; broader checkout adjustment is in separate PR #247 and requires security review."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Capture PR evidence and require review; no production deployment or automatic merge.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Partial scope; required integration checks, review or issue-level completion remain pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "Static review: runGh argument spread and api(endpoint) invocation",
+      "outcome": "not-run",
+      "result": "Reviewed source and corrected the string/array mismatch; no local runtime tests claimed."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Use protected PR route; direct write to Development rejected by branch rules and was not applied.",
+    "Keep coordination fail-closed; no policy bypass.",
+    "Separate narrowly scoped API correction from PR #247 workflow checkout changes."
+  ],
+  "reruns": [],
+  "limitations": [
+    "PR coordination will continue to run the old trusted base script until approved fix reaches Development."
+  ],
+  "blockers": [
+    "Required CI and independent reviewer approval pending.",
+    "Other acceptance criteria in issue #246 remain outstanding."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-246/pr-248/attempt-01.md",
+  "markdownSha256": "afec8a1e45ad8753810fcde70de37404c9380a83705214ddf7d94784ec172eb1",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
