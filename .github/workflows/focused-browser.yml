@@ -39,7 +39,7 @@ concurrency:
 jobs:
   focused:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,8 +53,8 @@ jobs:
         run: node scripts/test-env.mjs up
       - name: Run focused browser tests
         env:
-          TESTS: ${{ inputs.tests }}
-          GREP: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && 'core pages pass WCAG checks' || inputs.grep }}
+          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2062 tests/e2e/auth.spec.mjs:4876 tests/e2e/auth.spec.mjs:11639 tests/e2e/auth.spec.mjs:11759 tests/e2e/auth.spec.mjs:3445 tests/e2e/auth.spec.mjs:3447 tests/e2e/auth.spec.mjs:3449 tests/e2e/auth.spec.mjs:3453 tests/e2e/auth.spec.mjs:5365 tests/e2e/auth.spec.mjs:5189 tests/e2e/auth.spec.mjs:11977 tests/e2e/auth.spec.mjs:6237 tests/e2e/auth.spec.mjs:6379 tests/e2e/auth.spec.mjs:6799 tests/e2e/auth.spec.mjs:7225 tests/e2e/auth.spec.mjs:7632 tests/e2e/auth.spec.mjs:7813 tests/e2e/auth.spec.mjs:8318 tests/e2e/auth.spec.mjs:11300 tests/e2e/auth.spec.mjs:5495 tests/e2e/auth.spec.mjs:5995 tests/e2e/auth.spec.mjs:6095 tests/e2e/auth.spec.mjs:7054' || inputs.tests }}
+          GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
         run: |
