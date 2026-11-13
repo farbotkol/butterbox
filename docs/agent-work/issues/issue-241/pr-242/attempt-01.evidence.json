@@ -24,6 +24,8 @@
     "summary": "Partial visual roster timetable and safe slot-creation vertical slice, with limitations recorded.",
     "changedFiles": [
       "docs/USER_GUIDE.md",
+      "docs/agent-work/issues/issue-241/pr-242/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
       "src/app/roster/page.tsx",
       "src/components/roster-timeline.tsx",
       "src/components/shift-editor.tsx",
@@ -31,13 +33,16 @@
       "src/lib/roster-view.ts",
       "tests/e2e/auth.spec.mjs",
       "tests/roster-timetable.test.mjs",
-      "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
-      "docs/agent-work/issues/issue-241/pr-242/attempt-01.evidence.json"
+      "tools/agent-controller/check-pr-coordination.mjs",
+      "tools/agent-controller/component-coordination.mjs",
+      "tools/agent-controller/components.json"
     ],
     "implemented": [
       "Venue-local time-scaled assigned/open-shift timetable with DST and overnight calculations.",
       "Accessible empty-slot links that prefill the existing scoped shift editor, plus a one-day schedule view.",
-      "Focused timeline tests, a manager walkthrough test source, and updated user guidance."
+      "Focused timeline tests, a manager walkthrough test source, and updated user guidance.",
+      "Restored three coordination policy/support files from the development branch so the stale roster PR branch has the CI-required script and dependencies.",
+      "Moved derived schedule-shift filtering after the schedule-day declaration to address the roster SSR initialization ordering defect."
     ]
   },
   "criteria": [
@@ -213,7 +218,8 @@
   ],
   "decisions": [
     "Keep the scope partial and leave Issue #241 open.",
-    "Reuse existing scoped server actions and permission gates; do not make database or production changes."
+    "Reuse existing scoped server actions and permission gates; do not make database or production changes.",
+    "Follow-up fixes are part of this existing PR; issue #246 tracks cross-PR CI reliability. Exact full-suite validation is still outstanding."
   ],
   "reruns": [],
   "limitations": [
@@ -225,7 +231,8 @@
     "Supabase CLI 2.122.0 was unavailable to the isolated local browser runner.",
     "The production build could not fetch the existing Google Fonts.",
     "The PR body still contains the auto-close keyword Fixes #241; available GitHub MCP tools provide no PR-body editing operation.",
-    "Verify rejects the retained auto-close keyword for partial delivery, Database is pending, and code review remains outstanding."
+    "Verify rejects the retained auto-close keyword for partial delivery, Database is pending, and code review remains outstanding.",
+    "Follow-up CI verification of coordination and SSR repairs is required before accepting this PR."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-241/pr-242/attempt-01.md",
