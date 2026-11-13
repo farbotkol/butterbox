@@ -1,18 +1,20 @@
 # Issue #253 / PR #257: roster browser stabilization evidence
 
 ## Scope
-- Updated the roster timeline add-shift accessible name to include its visible text.
-- Aligned Playwright roster tests with the current collapsible manual editor, separate scheduling guidance disclosure, venue switching, and roster headings.
-- Preserved assertions for permissions, availability, conflict policy, keyboard accessibility, mobile behavior and publication outcomes.
-- Retained focused runner batching for up to 20 test locations per invocation; removed temporary push triggers and hard-coded test selections.
+- Corrected the roster timeline add-shift accessible name and aligned Playwright selectors with the current roster UI, including manual editor and scheduling guidance disclosures.
+- Preserved permission, availability, conflict, accessibility, keyboard, mobile, and publication assertions.
+- Retained reusable focused runner batching; removed temporary push hooks and hard-coded test selections.
 
 ## Verification
-- GitHub Actions focused run 43501880692 passed all 23 originally failing browser scenarios (20 + 3) on commit dff7449ccfce41ca3be4967b85947d2c81ba1b10.
-- Earlier single-scenario run 43500888986 passed the final weekly roster scenario.
+- All 23 originally failing scenarios passed in focused run 43501880692 on commit dff7449ccfce41ca3be4967b85947d2c81ba1b10.
+- The additional outdated timetable selector was corrected and passed individually in run 43511436789.
+- Full Verify run 43512021449 passed, including `verify` and `database` jobs, on commit 261b9f35465f982f46c51bfd740d1a4d39d7569c.
+- Required full browser suite, pgTAP, and tenant isolation passed as part of the database job.
+- Focused browser workflow 43512021451 passed on the same commit.
 - No assertion was removed and no timeout was increased.
-- The complete regression suite (including the 85 previously passing browser scenarios), required database verification, and required Verify checks remain pending against the PR head.
 
-## Decision and limitations
-- This is a partial delivery pending full CI and repository owner review.
-- Do not close issue #253 or merge until complete acceptance criteria are met.
-- This evidence reflects observed results, not an assertion of production deployment or completion.
+## Outstanding coordination
+- PR coordination check 43512014824 failed because draft PR #256 overlaps this stabilization work and reports `invalid_component_metadata`.
+- PR #256 has no changed files; no action was taken to close or alter it.
+- PR #257 remains draft, unmerged, and undeployed pending coordination and repository owner review.
+- No claim is made that the evidence-only follow-up commit has completed another full regression.
