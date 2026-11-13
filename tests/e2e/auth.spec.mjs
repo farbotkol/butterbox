@@ -88,6 +88,17 @@ async function followEmailLink(page, link, next) {
   await page.goto(next);
 }
 
+// The roster's manual editor is a disclosure. Reopening by clicking unconditionally
+// can close it after a successful save, when the route opens it automatically.
+async function ensureManualRosterEditorOpen(page) {
+  const disclosure = page.locator("details").filter({ has: page.locator("form#shift-editor") }).last();
+  await expect(disclosure).toHaveCount(1);
+  if (!(await disclosure.evaluate((element) => element.open))) {
+    await disclosure.locator("summary").first().click();
+  }
+  await expect(disclosure).toHaveAttribute("open", "");
+}
+
 async function openMainNavigation(page) {
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   await expect(navigation).toBeVisible();
@@ -3428,7 +3439,7 @@ async function verifyLivePermissionChange(page, browser, initialRole, role) {
         await targetPage.locator("#department-filter").selectOption(departmentIds[role === "general_manager" ? 2 : role === "boh_manager" ? 1 : 0]);
         await targetPage.getByRole("button", { name: "Apply filter" }).click();
         // The current roster keeps the manual editor collapsed until explicitly opened.
-        await targetPage.getByText("Add shift manually", { exact: true }).click();
+        await ensureManualRosterEditorOpen(targetPage);
         await expect(targetPage.getByRole("button", { name: "Save draft shift" })).toBeVisible();
       }
     } finally {
@@ -5255,13 +5266,14 @@ test("configured conflict rules block assignments and publication until warnings
     await page.goto(roster);
     const history = page.getByRole("region", { name: "Publication history" });
     await expect(history).toContainText("No recorded publications for this department and week.");
+    await ensureManualRosterEditorOpen(page);
     await expect(page.getByText("Manual assignment blocks unavailable workers", { exact: false })).toBeVisible();
     await expect(page.locator("article", { hasText: "Unavailable legacy" }).getByRole("note"))
       .toContainText("Outside submitted availability");
     await expect(page.locator("#open-shifts").getByRole("note", { name: /Long open coverage/ }))
       .toContainText("Shift exceeds 24 hours");
     // Open the current roster's collapsible manual editor before interacting with its form.
-    await page.getByText("Add shift manually", { exact: true }).click();
+    await ensureManualRosterEditorOpen(page);
     const create = page.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Rejected unavailable assignment");
     await create.getByLabel("Team member").selectOption(employeeId);
@@ -5338,7 +5350,7 @@ test("configured conflict rules block assignments and publication until warnings
     await expect(history.getByRole("listitem")).toHaveCount(1);
 
     // Saving/publishing navigates and the manual editor returns to its collapsed state.
-    await page.getByText("Add shift manually", { exact: true }).click();
+    await ensureManualRosterEditorOpen(page);
     await create.getByLabel("Role").fill("Later open shift");
     await create.getByLabel("Team member").selectOption("");
     await create.getByLabel("Starts").fill("2032-03-19T09:00");
@@ -5421,7 +5433,7 @@ test("automatic assignment respects availability while manual warnings remain ad
 
     await signIn(page, `auto-availability-owner-${suffix}@example.test`, password);
     await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
-    await page.getByText("Add shift manually", { exact: true }).click();
+    await ensureManualRosterEditorOpen(page);
     const form = page.getByRole("form", { name: "Add draft shift" });
     await expect(form).toContainText("Automatic selection checks qualifications, overlaps, submitted availability");
     await form.getByLabel("Role").fill("First auto availability");
@@ -5443,7 +5455,7 @@ test("automatic assignment respects availability while manual warnings remain ad
     expect((await ownerApi.rpc("review_leave_request", {
       p_business_id: businessId, p_venue_id: venueId, p_exception_id: leave.data, p_status: "approved",
     })).error).toBeNull();
-    await page.getByText("Add shift manually", { exact: true }).click();
+    await ensureManualRosterEditorOpen(page);
     await form.getByLabel("Role").fill("Second auto availability");
     await form.getByLabel("Team member").selectOption("auto");
     await form.getByLabel("Starts").fill("2032-03-15T11:00");
@@ -5467,7 +5479,7 @@ test("automatic assignment respects availability while manual warnings remain ad
       p_starts_on: "2032-03-15", p_ends_on: "2032-03-15", p_exception_type: "unavailable",
     });
     expect(blocked.error).toBeNull();
-    await page.getByText("Add shift manually", { exact: true }).click();
+    await ensureManualRosterEditorOpen(page);
     await form.getByLabel("Role").fill("No automatic candidate");
     await form.getByLabel("Team member").selectOption("auto");
     await form.getByLabel("Starts").fill("2032-03-15T13:00");
@@ -5567,7 +5579,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
           name: "Event worker", role_title: "Event host",
         })).error).toBeNull();
         await page.goto(`/roster?department=${eventsId}`);
-        await page.getByText("Add shift manually", { exact: true }).click();
+        await ensureManualRosterEditorOpen(page);
         await expect(page.locator("#role-suggestions option[value='Event host']")).toHaveCount(1);
         await page.locator('input[name="role_title"]').fill("Event host");
         await page.locator('select[name="employee_id"]').selectOption({ label: "Event worker · Event host" });
@@ -6290,6 +6302,7 @@ test("manual role restrictions protect open shifts without changing automatic-on
 
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
     await page.goto(roster);
+    await ensureManualRosterEditorOpen(page);
     const add = page.getByRole("form", { name: "Add draft shift" });
     await add.getByLabel("Role").fill("Barista");
     await add.getByLabel("Team member").selectOption(unqualifiedId);
@@ -6417,6 +6430,7 @@ test("new open shifts load their saved values when edited", async ({ page }) => 
 
     await signIn(page, `new-open-owner-${suffix}@example.test`, password);
     await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    await ensureManualRosterEditorOpen(page);
     const add = page.getByRole("form", { name: "Add draft shift" });
     await add.getByLabel("Role").fill("New open");
     await add.getByLabel("Starts").fill("2032-03-16T09:00");
@@ -6936,6 +6950,7 @@ test("date blocks and approved leave override recurring availability", async ({ 
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 00:00–09:00");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 17:00–24:00");
+    await ensureManualRosterEditorOpen(page);
     await expect(page.getByText("Availability warnings do not block", { exact: false })).toBeVisible();
     await expect(page.locator("article", { hasText: "Blocked shift" }).getByRole("note")).toContainText("Date blocked");
     await expect(page.locator("article", { hasText: "Outside hours" }).getByRole("note")).toContainText("Outside submitted availability");
@@ -7363,6 +7378,7 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await expect(page.locator('p[role="alert"]')).toContainText("unavailable or you cannot edit");
     await expect(page.getByRole("form", { name: "Edit draft shift" })).toHaveCount(0);
 
+    await ensureManualRosterEditorOpen(page);
     const create = page.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("New Friday shift");
     await create.getByLabel("Team member").selectOption(workerId);
@@ -7733,6 +7749,7 @@ test("published roster updates reach the right employees once and retain pending
     await expect(workerPage.getByRole("status")).toHaveText("Notification marked as read.");
     await expect(firstNotice.getByText("Read", { exact: true })).toBeVisible();
 
+    await ensureManualRosterEditorOpen(page);
     const create = page.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Later worker shift");
     await create.getByLabel("Team member").selectOption(workerId);
@@ -7916,6 +7933,7 @@ test("required shift acknowledgements stay scoped and survive later publications
     await page.reload();
     await expect(card).toContainText("Acknowledged");
 
+    await ensureManualRosterEditorOpen(page);
     const create = page.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Later required service");
     await create.getByLabel("Team member").selectOption(workerId);
@@ -11387,6 +11405,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
     await checklist.getByRole("link", { name: "Create a shift" }).click();
     await expect(page).toHaveURL(/\/roster/);
     await page.goto(`/roster?week=2032-03-29&venue=${venueId}&department=${departmentId}`);
+    await ensureManualRosterEditorOpen(page);
     const draft = page.getByRole("form", { name: "Add draft shift" });
     await draft.getByLabel("Role").fill("Server");
     await draft.getByLabel("Team member").selectOption(employee.data.id);
