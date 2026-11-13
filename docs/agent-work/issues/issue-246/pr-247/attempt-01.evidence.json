@@ -21,14 +21,16 @@
     "updatedAt": "2026-11-13T06:00:00Z"
   },
   "scope": {
-    "summary": "Fix pull_request_target coordination checkout to use trusted current Development rather than an event-pinned stale base SHA.",
+    "summary": "Restore trusted coordination checkout and correct argument passing in the GitHub API wrapper.",
     "changedFiles": [
       ".github/workflows/pr-coordination.yml",
+      "docs/agent-work/issues/issue-246/pr-247/attempt-01.evidence.json",
       "docs/agent-work/issues/issue-246/pr-247/attempt-01.md",
-      "docs/agent-work/issues/issue-246/pr-247/attempt-01.evidence.json"
+      "tools/agent-controller/check-pr-coordination.mjs"
     ],
     "implemented": [
-      "Updated trusted checkout ref in coordination workflow while keeping existing check and read-only permissions."
+      "Updated trusted checkout ref in coordination workflow while keeping existing check and read-only permissions.",
+      "Corrected check-pr-coordination.mjs api() to pass the endpoint as a single argument to gh api, instead of spreading its characters."
     ]
   },
   "criteria": [
@@ -128,7 +130,8 @@
   ],
   "decisions": [
     "Keep code execution on trusted Development, never the untrusted PR head.",
-    "Shared CI fix delivered separately from PR #242's roster UI changes."
+    "Shared CI fix delivered separately from PR #242's roster UI changes.",
+    "The prior coordination run exited with gh: accepts 1 arg(s), received 35; change preserves fail-closed validation."
   ],
   "reruns": [],
   "limitations": [
@@ -136,7 +139,8 @@
   ],
   "blockers": [
     "Required CI and owner security review pending.",
-    "Remaining issue #246 browser acceptance is not in this PR."
+    "Remaining issue #246 browser acceptance is not in this PR.",
+    "Verify corrected coordination call in a new run; follow-up tests and security review remain pending."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-246/pr-247/attempt-01.md",
