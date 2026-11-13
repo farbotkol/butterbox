@@ -15,6 +15,7 @@ on:
     branches:
       - fix/issue-253-roster-browser-stabilization
       - fix/issue-253-test-compatibility
+      - fix/issue-253-roster-ui-test-refresh
   workflow_dispatch:
     inputs:
       tests:
@@ -54,7 +55,7 @@ jobs:
         run: node scripts/test-env.mjs up
       - name: Run focused browser tests
         env:
-          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2073 tests/e2e/auth.spec.mjs:4889 tests/e2e/auth.spec.mjs:11668 tests/e2e/auth.spec.mjs:11788 tests/e2e/auth.spec.mjs:3458 tests/e2e/auth.spec.mjs:3460 tests/e2e/auth.spec.mjs:3462 tests/e2e/auth.spec.mjs:3466 tests/e2e/auth.spec.mjs:5383 tests/e2e/auth.spec.mjs:5202 tests/e2e/auth.spec.mjs:12006 tests/e2e/auth.spec.mjs:6259 tests/e2e/auth.spec.mjs:6402 tests/e2e/auth.spec.mjs:6823 tests/e2e/auth.spec.mjs:7250 tests/e2e/auth.spec.mjs:7658 tests/e2e/auth.spec.mjs:7840 tests/e2e/auth.spec.mjs:8346 tests/e2e/auth.spec.mjs:11328 tests/e2e/auth.spec.mjs:5516 tests/e2e/auth.spec.mjs:6017 tests/e2e/auth.spec.mjs:6117 tests/e2e/auth.spec.mjs:7079' || inputs.tests }}
+          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2073 tests/e2e/auth.spec.mjs:4889 tests/e2e/auth.spec.mjs:11677 tests/e2e/auth.spec.mjs:11797 tests/e2e/auth.spec.mjs:3458 tests/e2e/auth.spec.mjs:3460 tests/e2e/auth.spec.mjs:3462 tests/e2e/auth.spec.mjs:3466 tests/e2e/auth.spec.mjs:5383 tests/e2e/auth.spec.mjs:5202 tests/e2e/auth.spec.mjs:12015 tests/e2e/auth.spec.mjs:6264 tests/e2e/auth.spec.mjs:6409 tests/e2e/auth.spec.mjs:6830 tests/e2e/auth.spec.mjs:7258 tests/e2e/auth.spec.mjs:7666 tests/e2e/auth.spec.mjs:7848 tests/e2e/auth.spec.mjs:8354 tests/e2e/auth.spec.mjs:11337 tests/e2e/auth.spec.mjs:5516 tests/e2e/auth.spec.mjs:6017 tests/e2e/auth.spec.mjs:6119 tests/e2e/auth.spec.mjs:7086' || inputs.tests }}
           GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
