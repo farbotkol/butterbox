@@ -1,0 +1,146 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 246,
+    "url": "https://github.com/farbotkol/butterbox/issues/246"
+  },
+  "pullRequest": {
+    "number": 251,
+    "url": "https://github.com/farbotkol/butterbox/pull/251",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/coordination-test-spec-component-ids",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43407894271,
+    "agent": "human",
+    "commitSha": "47b015bcab58254833e786fb8aed2633957010f9",
+    "startedAt": "2026-11-13T10:16:00Z",
+    "updatedAt": "2026-11-13T10:16:00Z"
+  },
+  "scope": {
+    "summary": "Fix false coordination failures from Playwright spec files through component ID sanitization.",
+    "changedFiles": [
+      "tools/agent-controller/component-coordination.mjs",
+      "tests/component-coordination.test.mjs",
+      "docs/agent-work/issues/issue-246/pr-251/attempt-01.md",
+      "docs/agent-work/issues/issue-246/pr-251/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Normalize spec and test file basenames to valid component identifiers.",
+      "Add regression coverage for .spec.mjs files in disjoint work areas."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Restore the coordination script, `component-coordination.mjs` and `components.json` on affected PR branch or synchronize safely with development, with no bypass of checks.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Verify the coordination workflow can execute and assess conflicts from PR #242 without MODULE_NOT_FOUND.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Address the roster SSR temporal-dead-zone initialization error as part of issue #241 / PR #242 and run targeted authenticated browser tests first.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Determine the real browser failure count from full CI logs rather than relying solely on summary screenshots; rerun required database and Verify jobs.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Design a follow-up CI workflow hardening change to source trusted policy tooling from the correct revision, preventing stale-branch breakage while retaining trustworthy code execution. Review security before changes to pull_request_target checkout policy.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Capture PR evidence and require review; no production deployment or automatic merge.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Targeted validator repair under issue #246; unrelated issue-level gates or CI verification remain pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/component-coordination.test.mjs",
+      "outcome": "not-run",
+      "result": "New regression tests authored; CI execution pending."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Fix identifier normalization rather than excluding PR #85 or bypassing conflict checks."
+  ],
+  "reruns": [],
+  "limitations": [
+    "Bootstrap workflow continues executing trusted Development parser until this fix lands."
+  ],
+  "blockers": [
+    "CI and review/merge pending.",
+    "Remaining issue #246 scope not addressed by this narrow fix."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-246/pr-251/attempt-01.md",
+  "markdownSha256": "d7eebabf01d99073d5e55414b53edc2883bbe17135ef0fab27c6c934df435016",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
