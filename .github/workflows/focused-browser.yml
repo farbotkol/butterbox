@@ -11,6 +11,9 @@ on:
       - "scripts/test-env.mjs"
       - "scripts/test-auth.mjs"
       - "playwright.config.mjs"
+  push:
+    branches:
+      - fix/issue-253-final-selector-validation
   workflow_dispatch:
     inputs:
       tests:
@@ -50,7 +53,7 @@ jobs:
         run: node scripts/test-env.mjs up
       - name: Run focused browser tests
         env:
-          TESTS: ${{ inputs.tests }}
+          TESTS: ${{ github.event_name == 'push' && 'tests/e2e/auth.spec.mjs:2001' || inputs.tests }}
           GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
