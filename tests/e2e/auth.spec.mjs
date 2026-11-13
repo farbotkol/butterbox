@@ -3427,6 +3427,8 @@ async function verifyLivePermissionChange(page, browser, initialRole, role) {
       } else {
         await targetPage.locator("#department-filter").selectOption(departmentIds[role === "general_manager" ? 2 : role === "boh_manager" ? 1 : 0]);
         await targetPage.getByRole("button", { name: "Apply filter" }).click();
+        // The current roster keeps the manual editor collapsed until explicitly opened.
+        await targetPage.getByText("Add shift manually", { exact: true }).click();
         await expect(targetPage.getByRole("button", { name: "Save draft shift" })).toBeVisible();
       }
     } finally {
@@ -5258,6 +5260,8 @@ test("configured conflict rules block assignments and publication until warnings
       .toContainText("Outside submitted availability");
     await expect(page.locator("#open-shifts").getByRole("note", { name: /Long open coverage/ }))
       .toContainText("Shift exceeds 24 hours");
+    // Open the current roster's collapsible manual editor before interacting with its form.
+    await page.getByText("Add shift manually", { exact: true }).click();
     const create = page.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Rejected unavailable assignment");
     await create.getByLabel("Team member").selectOption(employeeId);
@@ -5333,6 +5337,8 @@ test("configured conflict rules block assignments and publication until warnings
     await expect(page.getByRole("status")).toHaveText("There are no draft shifts to publish.");
     await expect(history.getByRole("listitem")).toHaveCount(1);
 
+    // Saving/publishing navigates and the manual editor returns to its collapsed state.
+    await page.getByText("Add shift manually", { exact: true }).click();
     await create.getByLabel("Role").fill("Later open shift");
     await create.getByLabel("Team member").selectOption("");
     await create.getByLabel("Starts").fill("2032-03-19T09:00");
@@ -5415,6 +5421,7 @@ test("automatic assignment respects availability while manual warnings remain ad
 
     await signIn(page, `auto-availability-owner-${suffix}@example.test`, password);
     await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    await page.getByText("Add shift manually", { exact: true }).click();
     const form = page.getByRole("form", { name: "Add draft shift" });
     await expect(form).toContainText("Automatic selection checks qualifications, overlaps, submitted availability");
     await form.getByLabel("Role").fill("First auto availability");
@@ -5436,6 +5443,7 @@ test("automatic assignment respects availability while manual warnings remain ad
     expect((await ownerApi.rpc("review_leave_request", {
       p_business_id: businessId, p_venue_id: venueId, p_exception_id: leave.data, p_status: "approved",
     })).error).toBeNull();
+    await page.getByText("Add shift manually", { exact: true }).click();
     await form.getByLabel("Role").fill("Second auto availability");
     await form.getByLabel("Team member").selectOption("auto");
     await form.getByLabel("Starts").fill("2032-03-15T11:00");
@@ -5459,6 +5467,7 @@ test("automatic assignment respects availability while manual warnings remain ad
       p_starts_on: "2032-03-15", p_ends_on: "2032-03-15", p_exception_type: "unavailable",
     });
     expect(blocked.error).toBeNull();
+    await page.getByText("Add shift manually", { exact: true }).click();
     await form.getByLabel("Role").fill("No automatic candidate");
     await form.getByLabel("Team member").selectOption("auto");
     await form.getByLabel("Starts").fill("2032-03-15T13:00");
@@ -5558,6 +5567,7 @@ test("departments and job roles can be created, deactivated and keep shift histo
           name: "Event worker", role_title: "Event host",
         })).error).toBeNull();
         await page.goto(`/roster?department=${eventsId}`);
+        await page.getByText("Add shift manually", { exact: true }).click();
         await expect(page.locator("#role-suggestions option[value='Event host']")).toHaveCount(1);
         await page.locator('input[name="role_title"]').fill("Event host");
         await page.locator('select[name="employee_id"]').selectOption({ label: "Event worker · Event host" });
