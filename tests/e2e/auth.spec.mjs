@@ -7174,6 +7174,7 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await page.locator("#department-filter").selectOption(fohId);
     await page.getByRole("button", { name: "Apply filter" }).click();
     await expect(page.getByRole("button", { name: "Expand Front of House" })).toBeVisible();
+    await ensureManualRosterEditorOpen(page);
     await page.locator('input[name="role_title"]').fill("Extra open");
     await page.getByRole("button", { name: "Save draft shift" }).click();
     await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
