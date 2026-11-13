@@ -99,6 +99,18 @@ async function ensureManualRosterEditorOpen(page) {
   await expect(disclosure).toHaveAttribute("open", "");
 }
 
+// Rule guidance belongs to a separate disclosure in the weekly schedule header.
+async function ensureRosterRuleGuidanceOpen(page) {
+  const disclosure = page.locator("details").filter({
+    has: page.getByText("Scheduling rules and move help", { exact: true }),
+  });
+  await expect(disclosure).toHaveCount(1);
+  if (!(await disclosure.evaluate((element) => element.open))) {
+    await disclosure.locator("summary").click();
+  }
+  await expect(disclosure).toHaveAttribute("open", "");
+}
+
 async function openMainNavigation(page) {
   const navigation = page.getByRole("navigation", { name: "Main navigation" });
   await expect(navigation).toBeVisible();
@@ -5266,7 +5278,7 @@ test("configured conflict rules block assignments and publication until warnings
     await page.goto(roster);
     const history = page.getByRole("region", { name: "Publication history" });
     await expect(history).toContainText("No recorded publications for this department and week.");
-    await ensureManualRosterEditorOpen(page);
+    await ensureRosterRuleGuidanceOpen(page);
     await expect(page.getByText("Manual assignment blocks unavailable workers", { exact: false })).toBeVisible();
     await expect(page.locator("article", { hasText: "Unavailable legacy" }).getByRole("note"))
       .toContainText("Outside submitted availability");
@@ -5505,6 +5517,7 @@ test("automatic assignment respects availability while manual warnings remain ad
     await expect(page.getByRole("status")).toHaveText("Shift saved to the draft roster.");
     await expect(page.locator("article", { hasText: "Manual availability warning" }).getByRole("note"))
       .toContainText("Outside submitted availability");
+    await ensureRosterRuleGuidanceOpen(page);
     await expect(page.getByText("Availability warnings do not block manual assignment or publication", { exact: false })).toBeVisible();
   } finally {
     expect((await admin.from("shifts").delete().eq("business_id", businessId)).error).toBeNull();
@@ -6957,7 +6970,7 @@ test("date blocks and approved leave override recurring availability", async ({ 
     await expect(page.getByLabel("Approved leave Exception worker 2032-03-16")).toHaveCount(0);
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 00:00–09:00");
     await expect(page.getByLabel("Unavailable Exception worker 2032-03-16")).toContainText("Unavailable 17:00–24:00");
-    await ensureManualRosterEditorOpen(page);
+    await ensureRosterRuleGuidanceOpen(page);
     await expect(page.getByText("Availability warnings do not block", { exact: false })).toBeVisible();
     await expect(page.locator("article", { hasText: "Blocked shift" }).getByRole("note")).toContainText("Date blocked");
     await expect(page.locator("article", { hasText: "Outside hours" }).getByRole("note")).toContainText("Outside submitted availability");
@@ -7187,7 +7200,7 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await expect(fohShared).toBeVisible();
     await page.setViewportSize({ width: 375, height: 812 });
     const scroller = page.locator("section").filter({
-      has: page.getByRole("heading", { name: "Team roster" }),
+      has: page.getByRole("heading", { name: "Weekly schedule" }),
     }).locator("div.overflow-x-auto");
     expect(await scroller.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true);
     expect(await scroller.evaluate((element) => {
@@ -7407,6 +7420,7 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await page.getByRole("button", { name: "Switch venue" }).click();
     await expect(page.locator("#department-filter option")).toHaveText(["Perth service"]);
     await expect(page.getByText(/Perth venue · Perth service/)).toBeVisible();
+    await ensureManualRosterEditorOpen(page);
     await create.getByLabel("Role").fill("Remote cover");
     await create.getByLabel("Starts").fill("2032-03-15T09:00");
     await create.getByLabel("Ends").fill("2032-03-15T12:00");
@@ -12066,7 +12080,7 @@ test("loading, failure and missing-page states are announced and recoverable", a
     const loading = page.getByRole("status").filter({ hasText: "Loading…" });
     await expect(loading).toBeVisible();
     releaseNavigation();
-    await expect(page.getByRole("heading", { name: "Team roster" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Weekly roster" })).toBeVisible();
     await expect(loading).toHaveCount(0);
     await page.unroute("**/roster**");
 
