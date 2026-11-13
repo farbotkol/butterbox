@@ -59,8 +59,26 @@ jobs:
         shell: bash
         run: |
           set -eu
-          # Keep the test broker limit (20 locations per invocation).\n          # Run all requested locations in batches and preserve an aggregated failure exit code.\n          read -r -a locations <<< "$TESTS"\n          if [ "${#locations[@]}" -eq 0 ]; then\n            locations=("")\n          fi\n          failed=0\n          for ((start=0, batch=1; start<${#locations[@]}; start+=20, batch++)); do\n            args=()\n            for test in "${locations[@]:start:20}"; do\n              if [ -n "$test" ]; then args+=(--test "$test"); fi\n            done\n            if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi\n            echo "Running focused batch $batch (${#args[@]} arguments)"\n            if ! node scripts/test-env.mjs run auth-focused --runner host --repeat "$REPEAT" "${args[@]}" \
-              --artifacts "$RUNNER_TEMP/focused-artifacts/batch-$batch"; then\n              failed=1\n            fi\n          done\n          exit "$failed"
+          # Keep the test broker limit (20 locations per invocation).
+          # Run all requested locations in batches and preserve an aggregated failure exit code.
+          read -r -a locations <<< "$TESTS"
+          if [ "${#locations[@]}" -eq 0 ]; then
+            locations=("")
+          fi
+          failed=0
+          for ((start=0, batch=1; start<${#locations[@]}; start+=20, batch++)); do
+            args=()
+            for test in "${locations[@]:start:20}"; do
+              if [ -n "$test" ]; then args+=(--test "$test"); fi
+            done
+            if [ -n "$GREP" ]; then args+=(--grep "$GREP"); fi
+            echo "Running focused batch $batch (${#args[@]} arguments)"
+            if ! node scripts/test-env.mjs run auth-focused --runner host --repeat "$REPEAT" "${args[@]}" \
+              --artifacts "$RUNNER_TEMP/focused-artifacts/batch-$batch"; then
+              failed=1
+            fi
+          done
+          exit "$failed"
       - name: Publish summary
         if: always()
         shell: bash
