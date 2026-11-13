@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 254,
+    "url": "https://github.com/farbotkol/butterbox/issues/254"
+  },
+  "pullRequest": {
+    "number": 255,
+    "url": "https://github.com/farbotkol/butterbox/pull/255",
+    "baseBranch": "copilot/Development",
+    "headBranch": "docs/butterbox-app-wiki",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": null,
+    "agent": "human",
+    "commitSha": "02edb1758e7d5e2cb755044c176e120020a52f8d",
+    "startedAt": "2026-11-13T11:55:00Z",
+    "updatedAt": "2026-11-13T11:55:00Z"
+  },
+  "scope": {
+    "summary": "Create a navigable source-grounded Butterbox application wiki as documentation only.",
+    "changedFiles": [
+      "docs/wiki/Home.md",
+      "docs/wiki/Product-Overview.md",
+      "docs/wiki/Roles-and-Access.md",
+      "docs/wiki/Venue-Operations.md",
+      "docs/wiki/Employee-Experience.md",
+      "docs/wiki/Time-and-Payroll.md",
+      "docs/wiki/Architecture-and-Security.md",
+      "docs/wiki/Testing-and-Release.md",
+      "docs/wiki/Status-and-Roadmap.md",
+      "docs/agent-work/issues/issue-254/pr-255/attempt-01.md",
+      "docs/agent-work/issues/issue-254/pr-255/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Nine linked wiki pages with Home navigation.",
+      "Document roles, app journey, controls, architecture, security, testing and roadmap caveats.",
+      "Link back to authoritative guides and active issues."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Wiki Home with working relative navigation",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/wiki/Home.md",
+          "outcome": "All nine expected filenames linked; renderer verification pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Detailed pages for workflows, roles, architecture, testing and boundaries",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/wiki/Architecture-and-Security.md",
+          "outcome": "Pages authored; reviewer acceptance pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Status qualifiers and authoritative links",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/wiki/Status-and-Roadmap.md",
+          "outcome": "Explicit caveats; review pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "PR targets Development and guide remains canonical",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/wiki/Home.md",
+          "outcome": "Separate draft PR; CI pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "Review page names and relative navigation",
+      "outcome": "passed",
+      "result": "Nine intended wiki filenames and crosslinks authored; no published-renderer test."
+    },
+    {
+      "command": "GitHub CI",
+      "outcome": "not-run",
+      "result": "Automated checks not yet confirmed."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Preserve canonical User Guide, README and Decision Log.",
+    "No product, database, workflow or branch protection changes."
+  ],
+  "reruns": [],
+  "limitations": [
+    "GitHub Wiki feature itself is separate: this is a wiki-style repository documentation tree.",
+    "No production feature validation claimed."
+  ],
+  "blockers": [
+    "Review and CI pending."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-254/pr-255/attempt-01.md",
+  "markdownSha256": "922fbca3668e1b7575ed6095c419c5c3c060ee5dd097d5349d3cb99c475ca9df",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
