@@ -14,7 +14,7 @@ function runGh(args) {
 }
 
 function api(endpoint) {
-  try { return JSON.parse(runGh(endpoint)); }
+  try { return JSON.parse(runGh([endpoint])); }
   catch { throw new Error('GitHub API response was unavailable or invalid; coordination fails closed.'); }
 }
 
