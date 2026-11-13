@@ -7228,6 +7228,7 @@ test("weekly roster groups staff by department and preserves local dates on mobi
     await expect(managerPage.getByRole("button", { name: "Save draft shift" })).toHaveCount(0);
     await expect(managerPage.getByRole("button", { name: "Publish this department" })).toHaveCount(0);
     await managerPage.goto(`/roster?week=2032-03-15&department=${fohId}`);
+    await ensureManualRosterEditorOpen(managerPage);
     await expect(managerPage.getByRole("button", { name: "Save draft shift" })).toBeVisible();
     await expect(managerPage.locator("article", { hasText: "FOH overlap" }).getByRole("note"))
       .toContainText("Overlaps another shift");
