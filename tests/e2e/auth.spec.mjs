@@ -6073,6 +6073,7 @@ test("departmental managers keep separate rosters for shared staff with an owner
         const boh = await managerPage("boh");
         await boh.goto("/roster");
         expect(await boh.locator("#department-filter option").allTextContents()).toEqual(["Back of House"]);
+        await ensureManualRosterEditorOpen(boh);
         await boh.locator('input[name="role_title"]').fill("Prep");
         await boh.locator('select[name="employee_id"]').selectOption({ label: "Shared worker · Server" });
         await boh.getByRole("button", { name: "Save draft shift" }).click();
@@ -6087,6 +6088,7 @@ test("departmental managers keep separate rosters for shared staff with an owner
         const foh = await managerPage("foh");
         await foh.goto(`/roster?department=${bohId}`);
         expect(await foh.locator("#department-filter option").allTextContents()).toEqual(["Front of House"]);
+        await ensureManualRosterEditorOpen(foh);
         await foh.locator('input[name="role_title"]').fill("Host");
         await foh.getByRole("button", { name: "Save draft shift" }).click();
         await expect(foh.getByRole("status")).toHaveText("Shift saved to the draft roster.");
@@ -6160,6 +6162,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     expect(restriction.data.restrict_auto_assignment).toBe(true);
 
     await page.goto(`/roster?department=${departmentId}`);
+    await ensureManualRosterEditorOpen(page);
     await page.locator('input[name="role_title"]').fill("Barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await expect(page.getByText("Automatic selection checks qualifications, overlaps, submitted availability, date blocks and approved leave. Unsubmitted availability is unknown.")).toBeVisible();
@@ -6201,6 +6204,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await expect(page.getByRole("link", { name: "View profile for A Unqualified" })).toHaveCount(0);
 
     await page.goto(`/roster?department=${departmentId}`);
+    await ensureManualRosterEditorOpen(page);
     await page.locator('input[name="role_title"]').fill("barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await page.getByRole("button", { name: "Save draft shift" }).click();
@@ -6208,6 +6212,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     const shift = await admin.from("shifts").select("employee_id, role_title").eq("business_id", businessId).single();
     expect(shift.error).toBeNull();
     expect(shift.data).toEqual({ employee_id: qualifiedId, role_title: "barista" });
+    await ensureManualRosterEditorOpen(page);
     await page.locator('input[name="role_title"]').fill("Barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await page.getByRole("button", { name: "Save draft shift" }).click();
@@ -6328,6 +6333,7 @@ test("manual role restrictions protect open shifts without changing automatic-on
     expect(restriction.data).toEqual({ restrict_auto_assignment: false, restrict_manual_assignment: true });
 
     await page.goto(roster);
+    await ensureManualRosterEditorOpen(page);
     await add.getByLabel("Role").fill("barista");
     await add.getByLabel("Team member").selectOption(unqualifiedId);
     await add.getByLabel("Starts").fill("2032-03-16T08:00");
@@ -6382,6 +6388,7 @@ test("manual role restrictions protect open shifts without changing automatic-on
     await edit.getByRole("button", { name: "Update draft shift" }).click();
     await expect(page.getByRole("status")).toHaveText("Draft shift updated.");
 
+    await ensureManualRosterEditorOpen(page);
     await add.getByLabel("Role").fill("Barista");
     await add.getByLabel("Team member").selectOption("auto");
     await add.getByLabel("Starts").fill("2032-03-17T08:00");
@@ -8452,6 +8459,7 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     await expect(managerPage.getByRole("region", { name: "Shared staff across venues" })).toHaveCount(0);
     await expect(managerPage.getByRole("button", { name: "Manage shared profiles" })).toHaveCount(0);
     await managerPage.goto(roster);
+    await ensureManualRosterEditorOpen(managerPage);
     const create = managerPage.getByRole("form", { name: "Add draft shift" });
     await create.getByLabel("Role").fill("Automatic shared-worker check");
     await create.getByLabel("Team member").selectOption("auto");
