@@ -24,7 +24,9 @@ jobs:
       - name: Check out trusted Development policy
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          # Always use the current trusted Development revision, not an old PR event base SHA.
+          # Never execute code from the untrusted PR head in pull_request_target.
+          ref: copilot/Development
           persist-credentials: false
       - name: Check declared work areas, changed files, and shared SQL objects
         env:
