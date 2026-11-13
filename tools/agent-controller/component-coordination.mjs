@@ -115,7 +115,7 @@ export function componentsForFiles(files) {
     }
     if (name.startsWith('tests/')) {
       components.add(name.startsWith('tests/helpers/') ? 'tests' :
-        `test:${path.posix.basename(name).replace(/\.test\.[^.]+$/, '').toLowerCase()}`);
+        `test:${path.posix.basename(name).replace(/\.(?:test|spec)\.[^.]+$/, '').replace(/[^a-z0-9-]/gi, '-').toLowerCase()}`);
       continue;
     }
     if (name.startsWith('docs/')) {
