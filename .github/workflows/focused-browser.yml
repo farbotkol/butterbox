@@ -11,6 +11,9 @@ on:
       - "scripts/test-env.mjs"
       - "scripts/test-auth.mjs"
       - "playwright.config.mjs"
+  push:
+    branches:
+      - fix/issue-253-roster-browser-stabilization
   workflow_dispatch:
     inputs:
       tests:
@@ -51,7 +54,7 @@ jobs:
       - name: Run focused browser tests
         env:
           TESTS: ${{ inputs.tests }}
-          GREP: ${{ github.event_name == 'pull_request' && 'core pages pass WCAG checks' || inputs.grep }}
+          GREP: ${{ (github.event_name == 'push' || github.event_name == 'pull_request') && 'core pages pass WCAG checks' || inputs.grep }}
           REPEAT: ${{ inputs.repeat || '1' }}
         shell: bash
         run: |
