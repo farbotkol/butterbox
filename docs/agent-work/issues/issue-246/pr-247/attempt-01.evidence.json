@@ -1,0 +1,145 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 246,
+    "url": "https://github.com/farbotkol/butterbox/issues/246"
+  },
+  "pullRequest": {
+    "number": 247,
+    "url": "https://github.com/farbotkol/butterbox/pull/247",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/pr-coordination-trusted-current-base",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43383357105,
+    "agent": "human",
+    "commitSha": "a44726909b2983f93723762ffbd8aa7f4f3a5555",
+    "startedAt": "2026-11-13T06:00:00Z",
+    "updatedAt": "2026-11-13T06:00:00Z"
+  },
+  "scope": {
+    "summary": "Fix pull_request_target coordination checkout to use trusted current Development rather than an event-pinned stale base SHA.",
+    "changedFiles": [
+      ".github/workflows/pr-coordination.yml",
+      "docs/agent-work/issues/issue-246/pr-247/attempt-01.md",
+      "docs/agent-work/issues/issue-246/pr-247/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Updated trusted checkout ref in coordination workflow while keeping existing check and read-only permissions."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Restore the coordination script, `component-coordination.mjs` and `components.json` on affected PR branch or synchronize safely with development, with no bypass of checks.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Partial change in this PR; additional issue-level acceptance remains pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Verify the coordination workflow can execute and assess conflicts from PR #242 without MODULE_NOT_FOUND.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Partial change in this PR; additional issue-level acceptance remains pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Address the roster SSR temporal-dead-zone initialization error as part of issue #241 / PR #242 and run targeted authenticated browser tests first.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Partial change in this PR; additional issue-level acceptance remains pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Determine the real browser failure count from full CI logs rather than relying solely on summary screenshots; rerun required database and Verify jobs.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Partial change in this PR; additional issue-level acceptance remains pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Design a follow-up CI workflow hardening change to source trusted policy tooling from the correct revision, preventing stale-branch breakage while retaining trustworthy code execution. Review security before changes to pull_request_target checkout policy.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Workflow fix authored; security review and CI pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Capture PR evidence and require review; no production deployment or automatic merge.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Partial change in this PR; additional issue-level acceptance remains pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "Review coordination workflow ref and pull_request_target execution context",
+      "outcome": "not-run",
+      "result": "Manual configuration inspection completed; live CI and independent security review not yet verified."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Keep code execution on trusted Development, never the untrusted PR head.",
+    "Shared CI fix delivered separately from PR #242's roster UI changes."
+  ],
+  "reruns": [],
+  "limitations": [
+    "Validation depends on review/merge of PR #247 before PR #242 can receive revised workflow behavior."
+  ],
+  "blockers": [
+    "Required CI and owner security review pending.",
+    "Remaining issue #246 browser acceptance is not in this PR."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-246/pr-247/attempt-01.md",
+  "markdownSha256": "748492de2f108f730d7fdf35d964205f0afc09ab447e4381ea13f8c630107ba5",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
