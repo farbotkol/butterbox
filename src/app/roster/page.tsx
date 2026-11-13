@@ -523,9 +523,6 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const visibleShifts = (shifts ?? []).filter(
     (shift) => !selectedDepartment || shift.department_id === selectedDepartment,
   );
-  const scheduleShifts = visibleShifts.filter((shift) =>
-    scheduleDays.includes(getVenueDate(shift.starts_at, workspace.venue.timezone)),
-  );
   const patternEmployees = new Set((patternResult.data ?? []).map((pattern) => pattern.employee_id));
   const employeeIntervals = new Map<string, AvailabilityInterval[]>();
   for (const interval of intervalResult.data ?? []) {
@@ -574,6 +571,9 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const selectedDay = typeof params.day === "string" && days.includes(params.day) ? params.day : undefined;
   const scheduleDays = selectedDay ? [selectedDay] : days;
+  const scheduleShifts = visibleShifts.filter((shift) =>
+    scheduleDays.includes(getVenueDate(shift.starts_at, workspace.venue.timezone)),
+  );
   const canManage = isManager(workspace.membership.role);
   const canManageDepartment = (departmentId: string) => {
     const { role, venue_id: venueId, department_id: departmentIdScope } = workspace.membership;
