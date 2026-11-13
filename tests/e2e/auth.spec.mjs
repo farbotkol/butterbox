@@ -2040,7 +2040,7 @@ test("roster timetable supports slot creation, time correction, publication and 
     await page.getByRole("button", { name: "Show schedule", exact: true }).click();
     await expect(page.locator("thead tr th")).toHaveCount(2);
     const employeeRow = page.locator(`#roster-row-${departmentId}-${employeeId}`);
-    const addSlot = employeeRow.getByRole("link", { name: "Add a shift on 2032-03-29 at 06:00", exact: true });
+    const addSlot = employeeRow.getByRole("link", { name: "Add at 06:00, add a shift on 2032-03-29", exact: true });
     await expect(addSlot).toBeVisible();
     await addSlot.focus();
     await page.keyboard.press("Enter");
