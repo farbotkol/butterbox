@@ -394,11 +394,31 @@ accounts are provisioned by the operator.
 
 ### Rostering
 
-- The weekly people-by-day roster groups shifts by department and supports week navigation, venue filters and responsive layouts.
+- The weekly people-by-day schedule groups assigned and open shifts by department. Shift blocks use venue-local time; choose a day in **Schedule view** to narrow the timetable on a small screen.
 - Create, edit or copy draft shifts, including unassigned shifts. The roster checks overlaps, availability and other configured conflicts.
 - Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. Published shifts and review snapshots have separate integrity controls.
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
 - If roster approval is enabled, a distinct authorized reviewer can approve or reject a submitted roster snapshot. Rejection requires a reason, and approval rechecks current blockers.
+
+#### First shift: from an empty time slot to published
+
+1. Open **Rostering**, select the department and choose a day in **Schedule view**
+   if you want a narrower timetable. In an eligible team-member lane, choose an
+   empty **Add at 00:00**, **Add at 06:00**, **Add at 12:00** or **Add at 18:00**
+   slot. The date, time and team member are prefilled. The suggested end is four
+   hours later.
+2. Review **Role**, **Team member**, **Starts**, **Ends** and **Break (mins)**.
+   Change **Ends** to correct the time, then choose **Save draft shift**. The
+   shift remains private while it is a draft. The slot shortcuts are coarse
+   six-hour intervals and are hidden where they overlap a shift already shown
+   in that lane. For another start time, an open shift or an overnight shift,
+   expand **Add shift manually** and enter the date and times there.
+3. Check the draft block and any conflict warnings. For a further correction,
+   choose the draft's edit control and **Update draft shift**. Choose
+   **Publish this department** to publish directly, or follow **Submit for
+   review** and the separate authorized-reviewer process when approval is
+   enabled. Publishing is explicit; ordinary editing does not move or resize
+   published shifts.
 
 #### Find a team member and use optional shortcuts
 
@@ -436,10 +456,16 @@ trying again.
 1. Open **Rostering** (`/roster`), select the venue, operational week and
    department. Use **Collapse**/**Expand** for department rows; filters do not
    grant access to other departments.
-2. In **Add a shift**, choose role, team member (or leave unassigned), **Starts**,
-   **Ends** and **Break (mins)**, then **Save draft shift**. To edit an existing
-   draft use **Update draft shift**. A draft is not employee-visible; a planned
-   break is not a recorded paid/unpaid break.
+2. From the timetable, choose a free **Add at 00:00**, **Add at 06:00**,
+   **Add at 12:00** or **Add at 18:00** slot in a team-member/day lane. The
+   selected date, time and team member are prefilled; the suggested end is
+   four hours later. Review **Role**, **Team member**, **Starts**, **Ends** and
+   **Break (mins)**, then choose **Save draft shift**. These six-hour slot
+   shortcuts are hidden where they overlap a shift already shown in that lane.
+   Use **Add shift manually** for another time, an open shift or an overnight
+   shift. On a small screen, use **Schedule view** to show one day. To edit a
+   draft, choose its edit control and **Update draft shift**. A draft is not
+   employee-visible; a planned break is not a recorded paid/unpaid break.
 3. **Copy a previous week** and **Copy into this week** create private editable
    drafts in the selected department. Review each new shift for current
    eligibility and conflicts before publication. This is week copying, not a

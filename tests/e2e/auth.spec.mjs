@@ -1975,6 +1975,90 @@ test("operational probes report database readiness and protect process metrics",
   expect(JSON.stringify(body)).not.toContain(token);
 });
 
+test("roster timetable supports slot creation, time correction, publication and mobile day view", async ({ page }) => {
+  test.setTimeout(240_000);
+  await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
+  const suffix = randomUUID();
+  const password = `${randomBytes(18).toString("base64url")}aA1!`;
+  const users = [];
+  const [businessId, venueId, departmentId, employeeId] = Array.from({ length: 4 }, () => randomUUID());
+  const roster = `/roster?business=${businessId}&venue=${venueId}&department=${departmentId}&week=2032-03-29`;
+
+  try {
+    for (const role of ["manager", "worker"]) {
+      const created = await admin.auth.admin.createUser({
+        email: `roster-timetable-${role}-${suffix}@example.test`, password, email_confirm: true,
+      });
+      expect(created.error).toBeNull();
+      users.push(created.data.user.id);
+    }
+    expect((await admin.from("businesses").insert({
+      id: businessId, name: "Timetable interaction cafe",
+    })).error).toBeNull();
+    expect((await admin.from("venues").insert({
+      id: venueId, business_id: businessId, name: "Timetable venue", timezone: "UTC",
+    })).error).toBeNull();
+    expect((await admin.from("departments").insert({
+      id: departmentId, business_id: businessId, venue_id: venueId, name: "Front of House",
+    })).error).toBeNull();
+    expect((await admin.from("business_memberships").insert([
+      { business_id: businessId, user_id: users[0], role: "foh_manager", venue_id: venueId, department_id: departmentId },
+      { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
+    ])).error).toBeNull();
+    expect((await admin.from("employees").insert({
+      id: employeeId, business_id: businessId, venue_id: venueId, department_id: departmentId,
+      auth_user_id: users[1], name: "Jamie Timetable", role_title: "Server",
+    })).error).toBeNull();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await signIn(page, `roster-timetable-manager-${suffix}@example.test`, password);
+    await page.goto(roster);
+    await page.getByLabel("Schedule view", { exact: true }).selectOption("2032-03-29");
+    await page.getByRole("button", { name: "Show schedule", exact: true }).click();
+    await expect(page.locator("thead tr th")).toHaveCount(2);
+    const employeeRow = page.locator(`#roster-row-${departmentId}-${employeeId}`);
+    const addSlot = employeeRow.getByRole("link", { name: "Add a shift on 2032-03-29 at 06:00", exact: true });
+    await expect(addSlot).toBeVisible();
+    await addSlot.focus();
+    await page.keyboard.press("Enter");
+    await expect(page).toHaveURL((url) =>
+      url.searchParams.get("create_date") === "2032-03-29" &&
+      url.searchParams.get("create_start") === "2032-03-29T06:00" &&
+      url.searchParams.get("create_employee") === employeeId && url.hash === "#shift-editor");
+    await expect(page.getByLabel("Team member", { exact: true })).toHaveValue(employeeId);
+    await expect(page.getByLabel("Role", { exact: true })).toHaveValue("Server");
+    await expect(page.getByLabel("Starts", { exact: true })).toHaveValue("2032-03-29T06:00");
+    const ends = page.getByLabel("Ends", { exact: true });
+    await expect(ends).toHaveValue("2032-03-29T10:00");
+    await ends.fill("2032-03-29T11:00");
+    await page.getByRole("button", { name: "Save draft shift", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Shift saved to the draft roster.");
+    const createdResult = await admin.from("shifts").select("id, employee_id, starts_at, ends_at, is_published")
+      .eq("venue_id", venueId).eq("starts_at", "2032-03-29T06:00:00+00:00").single();
+    expect(createdResult.error).toBeNull();
+    const createdShift = createdResult.data;
+    expect(createdShift).toMatchObject({
+      employee_id: employeeId, ends_at: "2032-03-29T11:00:00+00:00", is_published: false,
+    });
+
+    await page.locator(`#roster-shift-${createdShift.id}`)
+      .getByRole("link", { name: "Edit Jamie Timetable shift", exact: true }).click();
+    await expect(page.getByLabel("Ends", { exact: true })).toHaveValue("2032-03-29T11:00");
+    await page.getByLabel("Ends", { exact: true }).fill("2032-03-29T12:00");
+    await page.getByRole("button", { name: "Update draft shift", exact: true }).click();
+    await expect(page.getByRole("status")).toContainText("Draft shift updated.");
+    await page.getByRole("button", { name: "Publish this department", exact: true }).click();
+    await expect(page.locator(`#roster-shift-${createdShift.id}`).getByText("Published", { exact: true })).toBeVisible();
+    expect((await admin.from("shifts").select("employee_id, ends_at, is_published")
+      .eq("id", createdShift.id).single()).data).toMatchObject({
+      employee_id: employeeId, ends_at: "2032-03-29T12:00:00+00:00", is_published: true,
+    });
+  } finally {
+    await assertBusinessFixturesPreserved(admin, businessId);
+    for (const user of users) expect((await admin.auth.admin.deleteUser(user)).error).toBeNull();
+  }
+});
+
 test("quick roster changes preview drag targets, support keyboard and undo on mobile", async ({ page, browser }) => {
   test.setTimeout(240_000);
   await disposableDatabase(process.env.BUTTERBOX_TEST_DB_CONTAINER, apiUrl);
