@@ -19,6 +19,16 @@ test('component metadata is validated and paths map to isolated work areas', () 
     ['evidence:issue-12']);
 });
 
+test('Playwright spec filenames produce valid, disjoint component identifiers', () => {
+  assert.deepEqual(componentsForFiles(['tests/e2e/auth.spec.mjs']), ['test:auth']);
+  assert.deepEqual(componentsForFiles(['tests/e2e/showcase.spec.mjs']), ['test:showcase']);
+  assert.deepEqual(componentsForFiles(['tests/onboarding.test.mjs']), ['test:onboarding']);
+  assert.deepEqual(componentsForFiles(['tests/helpers/e2e-shared.mjs']), ['tests']);
+  assert.deepEqual(componentOverlap(['ci:pr-coordination-yml'], componentsForFiles([
+    'tests/e2e/auth.spec.mjs', 'tests/e2e/showcase.spec.mjs', 'tests/onboarding.test.mjs',
+  ])), []);
+});
+
 test('owner tasks accept only known declared components and bounded dependencies', () => {
   const taskIssue = components => ({
     number: 31, state: 'open', user: { login: 'farbotkol', id: OWNER_ID, type: 'User' },
