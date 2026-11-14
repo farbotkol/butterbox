@@ -1,0 +1,125 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 249,
+    "url": "https://github.com/farbotkol/butterbox/issues/249"
+  },
+  "pullRequest": {
+    "number": 258,
+    "url": "https://github.com/farbotkol/butterbox/pull/258",
+    "baseBranch": "copilot/Development",
+    "headBranch": "feature/249-change-aware-validation",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43551248387,
+    "agent": "human",
+    "commitSha": "2ca5f5261feb1a305691ad2fc6f48624e8005ce3",
+    "startedAt": "2026-11-14T03:21:00Z",
+    "updatedAt": "2026-11-14T03:21:00Z"
+  },
+  "scope": {
+    "summary": "Stage C advisory change-aware validation with conservative full-browser fallback; required checks remain unchanged.",
+    "changedFiles": [
+      ".github/workflows/change-aware-browser.yml",
+      "scripts/select-change-aware-tests.mjs",
+      "tests/change-aware-selection.test.mjs",
+      "docs/agent-work/issues/issue-249/pr-258/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-249/pr-258/attempt-01.md"
+    ],
+    "implemented": [
+      "Advisory change-aware browser workflow.",
+      "Changed-file test selector with conservative fallback.",
+      "Selector unit tests."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Required PR checks finish substantially faster (target 3–8 minutes for Fast CI, 5–15 minutes for targeted where feasible); capture measured p50/p95.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-2",
+      "description": "Every PR still enforces evidence/governance, unit/lint/build, database migration/SQL integrity, authentication/authorization and tenant isolation requirements.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-3",
+      "description": "Changes touching relevant sensitive areas trigger corresponding targeted browser/integration coverage; no untrusted opt-out.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-4",
+      "description": "Nightly full regression runs once daily with an explicit time-zone strategy, artifacts and clear failure notifications.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-5",
+      "description": "A manual/full release-candidate regression verifies the exact commit before Beta release.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-6",
+      "description": "Required status checks, branch protection, merge queue and automatic merge/agent dispatch rules are updated atomically, with no merge-gate gap.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-7",
+      "description": "Existing full PR checks remain in place until replacement fast and full workflows are proven; rollback is documented.",
+      "status": "blocked",
+      "evidence": []
+    },
+    {
+      "id": "AC-8",
+      "description": "Measured post-change validation shows no material loss of critical safety coverage and useful failure diagnostics.",
+      "status": "blocked",
+      "evidence": []
+    }
+  ],
+  "tests": [
+    {
+      "command": "Validate change-aware selector and PR CI",
+      "outcome": "not-run",
+      "result": "Fresh GitHub validation is pending after evidence correction."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Keep required verify and database checks unchanged.",
+    "This is an advisory trial only, with no merge or release authorization."
+  ],
+  "reruns": [],
+  "limitations": [
+    "Targeted browser test coverage and CI duration not yet verified.",
+    "Issue #249 remains incomplete."
+  ],
+  "blockers": [
+    "CI validation and required security review pending."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-249/pr-258/attempt-01.md",
+  "markdownSha256": "cc0d7852f4cce14d760224d65741627492c0d8773fdd60ddd384e6034dc76ffd",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
