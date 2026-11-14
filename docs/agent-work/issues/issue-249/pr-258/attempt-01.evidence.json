@@ -113,7 +113,8 @@
   "reruns": [],
   "limitations": [
     "Targeted browser test coverage and CI duration not yet verified.",
-    "Issue #249 remains incomplete."
+    "Issue #249 remains incomplete.",
+    "The first automated rerun raced PR description updates and was not valid evidence of a code failure."
   ],
   "blockers": [
     "CI validation and required security review pending."
