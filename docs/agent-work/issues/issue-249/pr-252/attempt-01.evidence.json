@@ -21,13 +21,18 @@
     "updatedAt": "2026-11-13T10:30:00Z"
   },
   "scope": {
-    "summary": "Stage CI optimization safely with a nightly full regression and an independent non-gating fast PR candidate.",
+    "summary": "Stage CI optimization safely with a nightly full regression and an independent non-gating fast PR candidate. The GitHub PR file comparison also includes five roster/test/evidence files inherited from already-merged PR #257 after synchronizing Development; these are not new CI optimization work.",
     "changedFiles": [
       ".github/workflows/fast-database-candidate.yml",
+      ".github/workflows/focused-browser.yml",
       ".github/workflows/full-regression.yml",
       "docs/CI_TEST_STRATEGY.md",
+      "docs/agent-work/issues/issue-249/pr-252/attempt-01.evidence.json",
       "docs/agent-work/issues/issue-249/pr-252/attempt-01.md",
-      "docs/agent-work/issues/issue-249/pr-252/attempt-01.evidence.json"
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.md",
+      "src/components/roster-timeline.tsx",
+      "tests/e2e/auth.spec.mjs"
     ],
     "implemented": [
       "Added nightly full regression with manual exact release-SHA testing.",
