@@ -180,7 +180,7 @@ export function EmployeeForm({ employee, departments, context, employment, creat
           This profile label is not an award classification. Changing it for an existing profile records a basis effective today.
         </p>
       </div>
-      <SaveButton className="min-h-11 rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
+      <SaveButton className="col-span-full min-h-11 w-fit justify-self-end self-start rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">
         {employee ? "Save employee" : "Add employee"}
       </SaveButton>
     </form>

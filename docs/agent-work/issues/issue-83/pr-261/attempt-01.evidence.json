@@ -1,0 +1,220 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 83,
+    "url": "https://github.com/farbotkol/butterbox/issues/83"
+  },
+  "pullRequest": {
+    "number": 261,
+    "url": "https://github.com/farbotkol/butterbox/pull/261",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/fix-oversized-add-employee-button",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43594509863,
+    "agent": "copilot",
+    "commitSha": "9963a8f4ce720dbc3679b11fef4eef61789dd8f3",
+    "startedAt": "2026-11-14T12:22:36Z",
+    "updatedAt": "2026-11-14T12:39:31Z"
+  },
+  "scope": {
+    "summary": "Correct the Add person form grid action sizing, add responsive layout regression coverage, and document the verified action placement.",
+    "changedFiles": [
+      "src/app/people/people-forms.tsx",
+      "tests/e2e/auth.spec.mjs",
+      "docs/USER_GUIDE.md",
+      "docs/agent-work/issues/issue-83/pr-261/attempt-01.md",
+      "docs/agent-work/issues/issue-83/pr-261/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "The EmployeeForm primary action uses a content-sized, 44px-minimum grid footer row and aligns to the form's right edge.",
+      "Responsive browser assertions cover button height, placement, Cancel visibility, horizontal overflow, keyboard focus, and the unchanged employee submit flow at four viewport widths.",
+      "The role-based user guide documents the compact action and Cancel placement."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Add employee button uses a compact, consistent height rather than stretching to match the adjacent form row.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs:3859",
+          "outcome": "The employee profile browser case passed with button height asserted at 44–48px at 375, 768, 1024, and 1440px."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Button is correctly placed and aligned with Cancel on desktop and mobile layouts.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs:3859",
+          "outcome": "At all four widths the action's right edge matched the form's right edge; Cancel remained visible below the action without overlap."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "No awkward empty button space or oversized dark block remains.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs:3859",
+          "outcome": "The browser case passed content-sized width and compact-height assertions at all four viewports."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Accessible focus, disabled, loading and submit behavior continue working.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs:3859",
+          "outcome": "The button received focus and the existing double-submit creation flow passed."
+        },
+        {
+          "kind": "test",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509863/job/132446045505",
+          "outcome": "People loading and failed-save recovery passed in the full browser fallback; the shared SaveButton implementation was unchanged."
+        },
+        {
+          "kind": "file",
+          "reference": "src/components/inline-editor.tsx:6-10",
+          "outcome": "SaveButton still uses useFormStatus to disable pending submissions and display its saving label."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Visual regression or component tests cover desktop and mobile layouts.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509863/job/132446045505",
+          "outcome": "The full fallback passed 108 browser cases with 1 skipped and 0 failed or flaky; the responsive employee profile case passed."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Relevant checks pass and PR targets `copilot/Development`; do not auto-merge or deploy.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059416",
+          "outcome": "Required database check passed."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059759",
+          "outcome": "Required verify check failed before application checks because the PR body lacks canonical issue and evidence references."
+        },
+        {
+          "kind": "review",
+          "reference": "https://github.com/farbotkol/butterbox/pull/261",
+          "outcome": "PR targets copilot/Development and remains draft; no merge or deployment was performed."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "npm run lint -- src/app/people/people-forms.tsx tests/e2e/auth.spec.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed on both changed source and browser test files.",
+      "reference": null
+    },
+    {
+      "command": "npx tsc --noEmit --incremental false",
+      "outcome": "passed",
+      "result": "TypeScript check passed.",
+      "reference": null
+    },
+    {
+      "command": "npm test",
+      "outcome": "passed",
+      "result": "391 passed, 36 skipped, 0 failed (427 total).",
+      "reference": null
+    },
+    {
+      "command": "Change-aware selector, UI-only source commit 91ee210",
+      "outcome": "passed",
+      "result": "Mode focused; 58 auth.spec.mjs cases matched, 57 passed and 1 skipped; selected browser step 553s; full fallback skipped.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43593230024/job/132442265472"
+    },
+    {
+      "command": "Change-aware selector, test-inclusive commit 9963a8f",
+      "outcome": "passed",
+      "result": "Mode full because tests/e2e/auth.spec.mjs is a conservative high-risk path; full fallback ran 108 passed, 1 skipped, 0 failed or flaky in 892s.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509863/job/132446045505"
+    },
+    {
+      "command": "Verify workflow database job",
+      "outcome": "passed",
+      "result": "Database tests, tenant isolation, and authenticated browser tests completed successfully.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059416"
+    },
+    {
+      "command": "Verify workflow verify job",
+      "outcome": "failed",
+      "result": "Stopped at PR-body evidence validation: missing Refs #83 and canonical issue marker; application steps were not reached.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059759"
+    },
+    {
+      "command": "npm run build",
+      "outcome": "not-run",
+      "result": "Deferred: no route, Next.js configuration, or server/client boundary changed; Verify stopped earlier at PR evidence validation.",
+      "reference": null
+    },
+    {
+      "command": "node tools/agent-evidence/evidence.mjs --file docs/agent-work/issues/issue-83/pr-261/attempt-01.evidence.json --repo farbotkol/butterbox",
+      "outcome": "passed",
+      "result": "The paired JSON and Markdown evidence validated against the repository schema and attempt path.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43594509885,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059759"
+    },
+    {
+      "name": "database",
+      "status": "pass",
+      "runId": 43594509885,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43594509885/job/132446059416"
+    }
+  ],
+  "decisions": [
+    "Keep the shared SaveButton, submit action, validation, and permissions unchanged.",
+    "Keep the PR draft; do not merge or deploy."
+  ],
+  "reruns": [],
+  "limitations": [
+    "Verify could not reach npm test, lint, build, or container steps because PR-body validation failed before those steps.",
+    "The source-only focused trial did not cover responsive geometry; the later full fallback did, and its employee profile case passed.",
+    "CodeQL classified the changes as trivial and skipped analysis."
+  ],
+  "blockers": [
+    "PR #261 body needs exact Refs #83 and attempt-specific issue/evidence markers.",
+    "Remove the generated auto-close wording because this PR is still draft and issue acceptance is blocked."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-83/pr-261/attempt-01.md",
+  "markdownSha256": "1aed94f6012a5635bf04160d9a34eaafd52c013db3e88a9f8c1dbc43edf9c021",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
