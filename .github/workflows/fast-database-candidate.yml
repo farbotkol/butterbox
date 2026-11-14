@@ -1,0 +1,61 @@
+name: Fast database candidate
+
+# Shadow validation only. The existing Verify / database job remains the required
+# full PR gate until this candidate is benchmarked and the ruleset is reviewed.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fast-db-candidate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  database-smoke:
+    name: database-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - run: npm ci
+      - name: Start isolated disposable Supabase
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          if ! npx --yes supabase@2.122.0 start --exclude studio,realtime,storage-api,imgproxy,postgres-meta,edge-runtime,logflare,vector,supavisor >"$RUNNER_TEMP/supabase-start.log" 2>&1; then
+            echo "::error::Disposable Supabase startup failed."
+            tail -n 80 "$RUNNER_TEMP/supabase-start.log" || true
+            exit 1
+          fi
+      - name: Database migration and pgTAP validation
+        run: npx --yes supabase@2.122.0 test db supabase/tests/database --local
+      - name: Authenticated cross-tenant isolation
+        run: BUTTERBOX_TEST_DISPOSABLE=yes node scripts/test-tenant-isolation.mjs .
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Critical authenticated browser smoke
+        env:
+          BUTTERBOX_TEST_REPORT_DIR: ${{ runner.temp }}/playwright
+          # Fixed, reviewable coverage, not controlled by PR metadata.
+          # Auth and multi-tenant session, roster, time capture and approved-hours export.
+          BUTTERBOX_TEST_GREP: "verified signup, resumable setup, cross-tab logout and recovery|roster timetable supports slot creation, time correction, publication and mobile day view|employees clock in and out with scoped immutable cross-venue events|generic payroll CSV downloads approved hours and reconciles amended exports"
+        run: BUTTERBOX_TEST_DISPOSABLE=yes npm run test:auth -- .
+      - name: Upload browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: database-smoke-failures-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/playwright
+          retention-days: 7
+          if-no-files-found: ignore

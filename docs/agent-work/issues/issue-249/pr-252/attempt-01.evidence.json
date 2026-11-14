@@ -1,0 +1,187 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 249,
+    "url": "https://github.com/farbotkol/butterbox/issues/249"
+  },
+  "pullRequest": {
+    "number": 252,
+    "url": "https://github.com/farbotkol/butterbox/pull/252",
+    "baseBranch": "copilot/Development",
+    "headBranch": "ci/issue-249-staged-fast-nightly",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43409235643,
+    "agent": "human",
+    "commitSha": "27659818b3cdf2ce41730674809ec329050be71c",
+    "startedAt": "2026-11-13T10:30:00Z",
+    "updatedAt": "2026-11-13T10:30:00Z"
+  },
+  "scope": {
+    "summary": "Stage CI optimization safely with a nightly full regression and an independent non-gating fast PR candidate. The GitHub PR file comparison also includes five roster/test/evidence files inherited from already-merged PR #257 after synchronizing Development; these are not new CI optimization work.",
+    "changedFiles": [
+      ".github/workflows/fast-database-candidate.yml",
+      ".github/workflows/focused-browser.yml",
+      ".github/workflows/full-regression.yml",
+      "docs/CI_TEST_STRATEGY.md",
+      "docs/agent-work/issues/issue-249/pr-252/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-249/pr-252/attempt-01.md",
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-253/pr-257/attempt-01.md",
+      "src/components/roster-timeline.tsx",
+      "tests/e2e/auth.spec.mjs"
+    ],
+    "implemented": [
+      "Added nightly full regression with manual exact release-SHA testing.",
+      "Added non-gating fast database, tenant isolation and curated authenticated browser smoke candidate.",
+      "Documented phased migration, no-gap merge gate and rollback procedure while retaining existing required checks."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Required PR checks finish substantially faster (target 3–8 minutes for Fast CI, 5–15 minutes for targeted where feasible); capture measured p50/p95.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Every PR still enforces evidence/governance, unit/lint/build, database migration/SQL integrity, authentication/authorization and tenant isolation requirements.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Changes touching relevant sensitive areas trigger corresponding targeted browser/integration coverage; no untrusted opt-out.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Nightly full regression runs once daily with an explicit time-zone strategy, artifacts and clear failure notifications.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/full-regression.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "A manual/full release-candidate regression verifies the exact commit before Beta release.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "Required status checks, branch protection, merge queue and automatic merge/agent dispatch rules are updated atomically, with no merge-gate gap.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-7",
+      "description": "Existing full PR checks remain in place until replacement fast and full workflows are proven; rollback is documented.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/CI_TEST_STRATEGY.md",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-8",
+      "description": "Measured post-change validation shows no material loss of critical safety coverage and useful failure diagnostics.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/fast-database-candidate.yml",
+          "outcome": "Stage A implemented; benchmark, full activation, secure cutover and remaining issue-level acceptance are pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "Verify existing browser test names match fixed smoke grep patterns",
+      "outcome": "passed",
+      "result": "All four exact titles found by static matching in tests/e2e/auth.spec.mjs.",
+      "reference": "tests/e2e/auth.spec.mjs"
+    },
+    {
+      "command": "Run Fast database candidate and Nightly full regression on GitHub Actions",
+      "outcome": "not-run",
+      "result": "New workflow execution and CI measurements pending GitHub Actions."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Keep existing required Verify/database, merge queue and Phase 2 rules unchanged in Stage A.",
+    "Nightly at fixed 15:00 UTC (02:00 AEDT or 01:00 AEST).",
+    "No migration to a fast required gate until benchmark and protected atomic cutover review."
+  ],
+  "reruns": [],
+  "limitations": [
+    "Change-aware targeted test classification and nightly alerts not implemented in Stage A.",
+    "Fast duration target not yet benchmarked.",
+    "Manual release candidate exact-SHA regression not yet exercised."
+  ],
+  "blockers": [
+    "GitHub Actions and security review pending.",
+    "Follow-up activation, monitoring and branch protection update required to complete issue #249."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-249/pr-252/attempt-01.md",
+  "markdownSha256": "73958e9c755e45d014733cae99f47f616f6776e60a6f4ea3d60b8ff916291806",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
