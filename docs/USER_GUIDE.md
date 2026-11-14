@@ -333,6 +333,8 @@ accounts are provisioned by the operator.
    then **Add employee**. The new profile opens with a confirmation. Existing
    profiles open read-only: choose **Edit overview**, make changes and **Save
    employee**, or **Cancel** and confirm **Discard changes** if prompted.
+   The compact primary action is right-aligned in the form footer on desktop and
+   mobile; **Cancel** remains below the form.
    Wait while a save is pending. If a connection is interrupted, reload and
    check the directory or profile before starting a new request.
    Reload and review the current details if another person changed the profile
