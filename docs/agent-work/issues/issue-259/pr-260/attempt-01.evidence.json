@@ -1,0 +1,161 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 259,
+    "url": "https://github.com/farbotkol/butterbox/issues/259"
+  },
+  "pullRequest": {
+    "number": 260,
+    "url": "https://github.com/farbotkol/butterbox/pull/260",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/reproduce-roster-accessibility-mismatch",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43560856737,
+    "agent": "copilot",
+    "commitSha": "14dac849f3c8411412b7242b48e6198da3463f37",
+    "startedAt": "2026-11-14T05:18:03Z",
+    "updatedAt": "2026-11-14T05:35:50Z"
+  },
+  "scope": {
+    "summary": "Controlled baseline reproduction found the roster accessible-name mismatch already fixed; this attempt records evidence only and changes no product code.",
+    "changedFiles": [
+      "docs/agent-work/issues/issue-259/pr-260/attempt-01.md",
+      "docs/agent-work/issues/issue-259/pr-260/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Recorded current-baseline browser results, change-aware selection mode and duration, verification status, and a future roster test opportunity.",
+      "Made no source, test, workflow, database, or tenant-isolation changes."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Reproduction outcome recorded on current development baseline",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43560856737",
+          "outcome": "The current-source full browser suite passed 108 tests; all four cited locations passed, with 1 unrelated skipped test."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Genuine accessibility defect fixed with regression coverage, if still present",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/components/roster-timeline.tsx:63-73; tests/e2e/auth.spec.mjs:2001-2083",
+          "outcome": "The existing correction includes the visible slot text in its accessible name; the current timetable regression passed without additional changes."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "New change-aware selector coverage and timings reported if PR exists",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/change-aware-selection.test.mjs",
+          "outcome": "5 selector tests passed in 415 ms; current PR selected full mode with a nonempty grep and the fallback passed in 14.1 minutes."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43560856698",
+          "outcome": "No changed files caused the expected conservative full-suite fallback; the focused grep step was skipped."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Required verification, database and tenant-isolation protections unchanged",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43560856737",
+          "outcome": "No required-gate configuration changed; database/pgTAP, authenticated tenant-isolation and browser tests passed. Verify stopped at missing PR issue/evidence markers before code validation."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Human review before merge",
+      "status": "blocked",
+      "evidence": []
+    }
+  ],
+  "tests": [
+    {
+      "command": "Current-baseline Verify/database browser suite",
+      "outcome": "passed",
+      "result": "Database job passed pgTAP, tenant isolation and full browser coverage: 108 passed, 0 failed, 0 flaky, 1 skipped; all four cited locations passed.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43560856737"
+    },
+    {
+      "command": "Advisory change-aware browser run",
+      "outcome": "passed",
+      "result": "Mode full; selected grep was nonempty; zero changed files triggered the full fallback, which passed 108 browser tests in 14.1 minutes.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43560856698"
+    },
+    {
+      "command": "node --test tests/change-aware-selection.test.mjs",
+      "outcome": "passed",
+      "result": "5 passed in 415 ms.",
+      "reference": "tests/change-aware-selection.test.mjs"
+    },
+    {
+      "command": "Focused local reproduction at tests/e2e/auth.spec.mjs:2062, :4876, :11639 and :11759",
+      "outcome": "blocked",
+      "result": "The isolated database reset succeeded, but the local build stopped before Playwright because Google Fonts could not be fetched; no local browser result is claimed.",
+      "reference": "Local run 2026-11-14T05-31-39-893Z-3f6e9a; artifact remained outside the repository."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43560856737,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43560856737/job/132343981580"
+    },
+    {
+      "name": "database",
+      "status": "pass",
+      "runId": 43560856737,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43560856737/job/132343981820"
+    }
+  ],
+  "decisions": [
+    "Did not modify source or tests because the accessible-name mismatch was already corrected and current browser tests passed.",
+    "Did not weaken or modify Verify, database, pgTAP, tenant-isolation, or accessibility assertions.",
+    "Kept the automatically created PR #260 in draft and did not merge or deploy."
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "Reproduce the four referenced browser locations on the unchanged development source baseline and inspect advisory selection.",
+      "outcome": "All four references passed in both current-source full browser runs; the local focused attempt was blocked before Playwright by Google Fonts network access.",
+      "runId": 43560856737
+    }
+  ],
+  "limitations": [
+    "The PR's required Verify job did not reach npm test, lint, or build because its body lacks canonical issue/evidence markers.",
+    "The local focused run did not execute Playwright; current baseline reproduction is established by the isolated GitHub Actions full-suite runs.",
+    "No failure trace was produced because the CI browser runs passed; CI logs are linked above."
+  ],
+  "blockers": [
+    "PR #260 is a no-code draft whose body lacks the required Refs #259 and evidence markers and contains an auto-close reference. Do not merge; owner/reviewer action is needed to correct the PR body or close the draft.",
+    "Human review remains pending."
+  ],
+  "recommendation": "blocked",
+  "markdownPath": "docs/agent-work/issues/issue-259/pr-260/attempt-01.md",
+  "markdownSha256": "30b369a497a84034f167288d42f271841df4d2de8da425b5a0e06bb012c9d0e1",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
