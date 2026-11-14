@@ -1,0 +1,57 @@
+name: Change-aware browser validation (advisory)
+# Stage C candidate for #249. NOT a required check; current Verify/database gates remain unchanged.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: change-aware-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  targeted:
+    runs-on: ubuntu-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24.11.1"
+          cache: npm
+      - name: Select tests from actual Git changes
+        id: selection
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/select-change-aware-tests.mjs
+      - name: Install dependencies
+        if: steps.selection.outputs.mode != 'none'
+        run: npm ci
+      - name: Install Chromium
+        if: steps.selection.outputs.mode != 'none'
+        run: npx playwright install --with-deps chromium
+      - name: Start isolated Supabase
+        if: steps.selection.outputs.mode != 'none'
+        run: node scripts/test-env.mjs up
+      - name: Run selected browser tests
+        if: steps.selection.outputs.mode == 'focused'
+        env:
+          GREP: ${{ steps.selection.outputs.grep }}
+        run: node scripts/test-env.mjs run auth-focused --runner host --grep "$GREP" --artifacts "$RUNNER_TEMP/change-aware"
+      - name: Conservative full-suite fallback
+        if: steps.selection.outputs.mode == 'full'
+        run: node scripts/test-env.mjs run auth --runner host --artifacts "$RUNNER_TEMP/change-aware"
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: change-aware-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/change-aware
+          retention-days: 7
+          if-no-files-found: ignore
