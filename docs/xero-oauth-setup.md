@@ -29,10 +29,12 @@ the exact redirect URI, current Butterbox user and business role, and a
 short-lived signed, HttpOnly, SameSite=Lax state cookie. OAuth codes and tokens
 are exchanged and handled on the server only.
 
-The app requests `offline_access payroll.timesheets`. Xero's AU Payroll v2
-OpenAPI describes `POST /Timesheets` at
+The app requests `offline_access payroll.timesheets`. Xero's
+[AU Payroll v2 OpenAPI](https://github.com/XeroAPI/Xero-OpenAPI/blob/master/xero-payroll-au-v2.yaml)
+describes `POST /Timesheets` at
 `https://api.xero.com/payroll.xro/2.0` with the `payroll.timesheets` scope; GET
-operations also list `payroll.timesheets.read`. Xero's
+operations also list `payroll.timesheets.read` in Xero's
+[OAuth scope reference](https://developer.xero.com/documentation/guides/oauth2/scopes/). Xero's
 [Payroll AU integration guide](https://developer.xero.com/documentation/api/payrollau/integration-guide)
 requires a Standard or Advisor user role with Payroll Admin permissions to call
 these endpoints. This connection slice does not call Payroll endpoints or

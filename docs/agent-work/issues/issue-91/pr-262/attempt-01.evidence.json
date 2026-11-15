@@ -1,0 +1,206 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 91,
+    "url": "https://github.com/farbotkol/butterbox/issues/91"
+  },
+  "pullRequest": {
+    "number": 262,
+    "url": "https://github.com/farbotkol/butterbox/pull/262",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/bb-pay-004-xero-payroll-adapter",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 20261115042713,
+    "agent": "copilot",
+    "commitSha": "2047231994ff027a64c26da7f1486b007431bf5b",
+    "startedAt": "2026-11-15T04:04:23Z",
+    "updatedAt": "2026-11-15T04:38:51Z"
+  },
+  "scope": {
+    "summary": "Partial, owner-authorized first Xero OAuth connection slice; no Payroll AU submission, Award Central, or issue #61 delivery work.",
+    "changedFiles": [
+      ".env.example",
+      "docs/agent-work/issues/issue-91/pr-262/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-91/pr-262/attempt-01.md",
+      "docs/xero-oauth-setup.md",
+      "src/app/api/xero/oauth/authorize/route.ts",
+      "src/app/api/xero/oauth/callback/route.ts",
+      "src/app/settings/payroll/page.tsx",
+      "src/app/settings/payroll/xero/actions.ts",
+      "src/app/settings/payroll/xero/page.tsx",
+      "src/lib/xero-oauth-server.ts",
+      "src/lib/xero-oauth.ts",
+      "src/lib/xero-token-manager.ts",
+      "src/lib/xero-workspace.ts",
+      "supabase/migrations/20261115060000_xero_oauth_connections.sql",
+      "supabase/tests/database/xero_oauth_connections.test.sql",
+      "tests/xero-oauth.test.mjs"
+    ],
+    "implemented": [
+      "Owner/admin-only per-Business Xero OAuth authorization and callback with signed, short-lived, browser-bound CSRF state.",
+      "Server-side token exchange, AES-256-GCM encrypted token persistence, Xero organization selection, revocation, and refresh-token rotation under a database lease.",
+      "RLS-protected, tenant-scoped database RPCs; cross-business authorization tests; retryable final-organization revocation and fail-closed reauthorization state.",
+      "Mocked OAuth tests and owner setup guidance; no live credentials or provider payroll endpoints used."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Current AU endpoints/scopes confirmed",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "review",
+          "reference": "https://github.com/XeroAPI/Xero-OpenAPI/blob/master/xero-payroll-au-v2.yaml",
+          "outcome": "Current AU Payroll v2 contract identifies POST /Timesheets and the payroll.timesheets scope."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/xero-oauth-setup.md",
+          "outcome": "Documents the AU Payroll base path, minimal OAuth scopes, separate read scope, required Xero user permissions, and entitlement limitation."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "OAuth refresh and permission failure handled",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/xero-oauth.test.mjs",
+          "outcome": "11 mocked tests pass for token exchange, refresh rotation, revoked credentials, provider permission errors, encryption, and refresh-lock behavior."
+        },
+        {
+          "kind": "test",
+          "reference": "supabase/tests/database/xero_oauth_connections.test.sql",
+          "outcome": "The isolated pgTAP suite passed; role checks, cross-business denial, refresh leases, reauthorization, and final revocation are covered."
+        },
+        {
+          "kind": "file",
+          "reference": "src/lib/xero-token-manager.ts",
+          "outcome": "Rotated credentials that cannot be persisted fail closed and mark the grant for reauthorization."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "sandbox end-to-end test validates mapping, retries and duplicate prevention.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/xero-oauth-setup.md",
+          "outcome": "Explicitly records that this OAuth-only slice does not call Payroll AU or validate Demo Company Payroll access."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/xero-oauth.test.mjs",
+          "outcome": "Tests are synthetic OAuth/provider mocks; payroll mapping, submission retries, and duplicate prevention were not tested."
+        },
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/issues/91",
+          "outcome": "Owner-authorized first slice excludes live payroll activity; Demo Company Payroll entitlement remains an owner-assisted follow-up."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --experimental-strip-types --test tests/xero-oauth.test.mjs",
+      "outcome": "passed",
+      "result": "11 passed, 0 failed.",
+      "reference": "Focused mocked OAuth test run against implementation commit 2047231994ff027a64c26da7f1486b007431bf5b."
+    },
+    {
+      "command": "npx eslint src/lib/xero-oauth.ts src/lib/xero-oauth-server.ts src/lib/xero-token-manager.ts src/lib/xero-workspace.ts src/app/api/xero/oauth/authorize/route.ts src/app/api/xero/oauth/callback/route.ts src/app/settings/payroll/xero/actions.ts src/app/settings/payroll/xero/page.tsx src/app/settings/payroll/page.tsx tests/xero-oauth.test.mjs",
+      "outcome": "passed",
+      "result": "No lint errors.",
+      "reference": null
+    },
+    {
+      "command": "npx tsc --noEmit --incremental false",
+      "outcome": "passed",
+      "result": "TypeScript check passed.",
+      "reference": null
+    },
+    {
+      "command": "npx --yes node@24 scripts/test-env.mjs run db --runner host",
+      "outcome": "passed",
+      "result": "Verified disposable butterbox-citest reset succeeded; 69 database test files and 3,157 tests passed.",
+      "reference": "Run 2026-11-15T04-27-13-644Z-f4d75b; isolated project stopped afterward."
+    },
+    {
+      "command": "node scripts/test-env.mjs run db",
+      "outcome": "blocked",
+      "result": "Container runner image build failed because DNS could not resolve www.postgresql.org; the trusted host runner then passed the same isolated database suite.",
+      "reference": "Isolated butterbox-citest project only."
+    },
+    {
+      "command": "npm run build",
+      "outcome": "blocked",
+      "result": "Next.js could not fetch the pre-existing Inter and Poppins fonts from Google Fonts in this network-restricted environment.",
+      "reference": null
+    },
+    {
+      "command": "Secret scan on all implementation and documentation files",
+      "outcome": "passed",
+      "result": "No secrets detected; Vercel credentials were not read or exposed.",
+      "reference": null
+    },
+    {
+      "command": "GitHub Verify run on previous source head e922b639b70b65a1b99d43cd6ea18cab69167092",
+      "outcome": "failed",
+      "result": "Verify failed because the prior attempt lacked its JSON and Markdown evidence pair; the Database job had one unrelated offline-claim browser test timeout after 107 passed and 1 skipped.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43675540724"
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "Keep this PR as a draft and keep issue #91 open; acceptance is partial because payroll mapping, retry, duplicate-prevention, and demo-company access are unverified.",
+    "Do not submit payroll, activate production, modify Award Central, or overlap with issue #61 delivery work.",
+    "Use only synthetic fixtures and mocked provider responses in CI."
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "The container database runner could not resolve www.postgresql.org while building its image.",
+      "outcome": "Used the existing trusted Node 24 host runner against the same verified disposable project; all 3,157 database tests passed.",
+      "runId": 20261115042713
+    }
+  ],
+  "limitations": [
+    "No authorized Demo Company OAuth connection or AU Payroll entitlement check has been performed.",
+    "No real provider refresh/revocation, payroll mapping, timesheet submission, retry, duplicate-prevention, or award/payroll correctness test was performed.",
+    "The production build remains unverified because existing Google Fonts could not be fetched.",
+    "The previous GitHub Database job's offline-claim browser timeout predates the current source head and is unrelated to Xero changes."
+  ],
+  "blockers": [
+    "Owner must perform controlled Demo Company authorization and confirm whether that account exposes Australian Payroll API access.",
+    "Securely provision XERO_REDIRECT_URI and a stable XERO_TOKEN_ENCRYPTION_KEY in the server environment before using the connection flow.",
+    "The existing PR description still contains GitHub's generated Fixes #91 suffix; no PR-body editing API is available in this session, and browser access failed certificate validation.",
+    "Current-head Verify and Database workflows must be reviewed after the evidence pair and corrected partial-draft description are published."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-91/pr-262/attempt-01.md",
+  "markdownSha256": "436d31f9050860cf2aa79dbc7539f15ce2b21c17030d47c6ae2a187e0a23a7e9",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
