@@ -14,3 +14,6 @@ Fix the PR coordination checkout that uses the stale `pull_request_target` event
 
 ## Limitations
 - Source validation in CI and security review remain outstanding. No automatic merge or production deployment.
+
+## Additional coordination regression (15 Nov 2026)
+Xero PR #262 now has 16 changed files and a migration with 15 generated database-object components. The coordinator previously rejected combined derived ownership sets over 20 entries as `invalid_component_metadata`. `componentOverlap` now uses a bounded 1000-entry capacity for trusted generated comparisons, while explicitly declared components retain the strict 20-entry limit. Regression tests prove disjoint Xero/CI ownership passes, shared SQL objects still block, and malformed metadata remains fail-closed. This fix is included in the same PR before human review; CI and final approval remain pending.
