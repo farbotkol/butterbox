@@ -218,11 +218,12 @@ export function pullRequestConflicts(candidate, others) {
       conflicts.push({ pullRequest: other.number, reason: 'invalid_component_metadata' });
       continue;
     }
-    if (isPendingEmptyDraft(candidate, declared) || isPendingEmptyDraft(other, otherDeclared)) continue;
+    if (isPendingEmptyDraft(other, otherDeclared)) continue;
     if (!other.draft && Array.isArray(other.files) && other.files.length === 0) {
       conflicts.push({ pullRequest: other.number, reason: 'no_changed_files' });
       continue;
     }
+    if (isPendingEmptyDraft(candidate, declared)) continue;
     const overlap = findOverlaps(left, {
       components: [...otherDeclared, ...(other.components ?? [])],
       files: other.files ?? [],
