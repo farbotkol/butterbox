@@ -40,3 +40,31 @@ handling, and the remaining requested tests before this slice can be reviewed.
 The draft PR body still contains an automatic closing reference, which must be
 removed while issue #95 remains incomplete. Live traffic also requires the
 owner's explicit approval and token rotation.
+
+## Follow-up checkpoint — 2026-11-15
+
+The earlier status above is historical. Commit `96ebc65` adds a disconnected
+Twilio Messaging Service provider boundary and form-signature helper. It does
+not implement a worker, callback route, database schema, consent capture,
+verified phone ownership, tenant checks, quiet hours or sending. The current PR
+body uses a reference rather than the earlier automatic closing reference.
+
+The four original acceptance criteria remain blocked: the boundary alone does
+not respect recorded consent, provide durable queueing, prove publication
+failure isolation or implement push fallback. It must not be used for live
+delivery.
+
+- `node --experimental-strip-types --test tests/twilio-sms.test.mjs`: 4 passed;
+  transport is mocked and no provider requests were made.
+- `npx eslint src/lib/twilio-sms.ts tests/twilio-sms.test.mjs`: passed.
+- `npx tsc --noEmit --incremental false`: passed.
+- Secret scanning of the provider and tests: no secrets found.
+- Provider documentation could not be fetched in this environment. Signature
+  handling and callback URL normalization require verification against the
+  current provider specification before a callback route is enabled.
+- Documentation: `docs/sms-notifications.md` describes the disconnected
+  boundary and its operational limitations. No user-visible feature changed;
+  the shared User Guide was not edited.
+- Database, tenant isolation, consent and browser tests were not run because
+  those features are not implemented. Full issue and live-delivery acceptance
+  remain outstanding; no deploy or outbound message was performed.
