@@ -207,7 +207,6 @@ function isPendingEmptyDraft(pull, declared) {
 export function pullRequestConflicts(candidate, others) {
   const declared = declaredComponents(candidate.body);
   if (declared === null) return [{ pullRequest: candidate.number, reason: 'invalid_component_metadata' }];
-  if (isPendingEmptyDraft(candidate, declared)) return [];
   if (!candidate.draft && Array.isArray(candidate.files) && candidate.files.length === 0) {
     return [{ pullRequest: candidate.number, reason: 'no_changed_files' }];
   }
@@ -219,7 +218,7 @@ export function pullRequestConflicts(candidate, others) {
       conflicts.push({ pullRequest: other.number, reason: 'invalid_component_metadata' });
       continue;
     }
-    if (isPendingEmptyDraft(other, otherDeclared)) continue;
+    if (isPendingEmptyDraft(candidate, declared) || isPendingEmptyDraft(other, otherDeclared)) continue;
     if (!other.draft && Array.isArray(other.files) && other.files.length === 0) {
       conflicts.push({ pullRequest: other.number, reason: 'no_changed_files' });
       continue;
