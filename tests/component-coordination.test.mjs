@@ -111,6 +111,51 @@ test('direct Copilot PRs without controller metadata cannot bypass actual-path o
   assert.deepEqual(conflicts[0].paths, ['tools/agent-controller/listener.mjs']);
 });
 
+test('unstarted empty drafts do not block unrelated or overlapping active PRs', () => {
+  const emptyXero = { number: 262, draft: true, body: '', files: [] };
+  const emptySms = { number: 263, draft: true, body: '', files: [] };
+  const button = {
+    number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }],
+  };
+  assert.deepEqual(pullRequestConflicts(button, [emptyXero, emptySms]), []);
+  assert.deepEqual(pullRequestConflicts(emptyXero, [button, emptySms]), []);
+  assert.deepEqual(pullRequestConflicts(emptySms, [button, emptyXero]), []);
+});
+
+test('empty drafts with malformed metadata and empty non-draft PRs remain blocked', () => {
+  const button = {
+    number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }],
+  };
+  const invalid = { number: 262, draft: true,
+    body: '<!-- butterbox-components: ["not-a-component"] -->', files: [] };
+  const readyEmpty = { number: 263, draft: false, body: '', files: [] };
+  assert.deepEqual(pullRequestConflicts(button, [invalid]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(invalid, [button]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(button, [readyEmpty]), [
+    { pullRequest: 263, reason: 'no_changed_files' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(readyEmpty, [button]), [
+    { pullRequest: 263, reason: 'no_changed_files' },
+  ]);
+});
+
+test('real overlapping changes still block concurrent PRs', () => {
+  const button = { number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }] };
+  const sameFile = { number: 262, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }] };
+  const conflicts = pullRequestConflicts(button, [sameFile]);
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(conflicts[0].paths, ['src/app/people/page.tsx']);
+  assert.equal(conflicts[0].conflicts, true);
+});
+
 test('expired reservations remain blocking until verified safe release', () => {
   const candidate = { issue: 20, digest: 'b'.repeat(64), components: ['agent-controller'] };
   const leases = [{
