@@ -76,6 +76,39 @@ test('oversized component declarations fail closed instead of dropping overlap r
   assert.ok(overlap.components.length > 0);
 });
 
+test('generated Xero-sized SQL ownership remains disjoint from unrelated workflow fixes', () => {
+  const migrationSql = Array.from({ length: 15 }, (_, index) =>
+    `create function public.xero_claim_${index}() returns void language sql as $ select null; $;`
+  ).join('\n');
+  const xero = {
+    number: 262, draft: true, body: '',
+    files: [
+      { path: 'supabase/migrations/20261115060000_xero_oauth_connections.sql', content: migrationSql },
+      ...Array.from({ length: 10 }, (_, index) =>
+        ({ path: `src/app/xero-area-${index}/route.ts` })),
+      { path: 'tests/xero-oauth.test.mjs' },
+    ],
+  };
+  const workflow = {
+    number: 267, draft: true, body: '',
+    files: [{ path: '.github/workflows/pr-coordination.yml' }],
+  };
+  assert.equal(normalizeComponents(Array.from({ length: 21 }, (_, i) => `application:area-${i}`)), null,
+    'declared component cap must remain unchanged');
+  assert.deepEqual(pullRequestConflicts(workflow, [xero]), []);
+  assert.deepEqual(pullRequestConflicts(xero, [workflow]), []);
+
+  const sameObject = {
+    number: 268, draft: true, body: '',
+    files: [{ path: 'supabase/migrations/20261115070000_overlap.sql',
+      content: 'alter function public.xero_claim_0() owner to postgres;' }],
+  };
+  assert.equal(pullRequestConflicts(sameObject, [xero]).length, 1,
+    'a shared SQL object must still block');
+  assert.deepEqual(componentOverlap(['not-a-component'], ['ci:pr-coordination-yml']),
+    ['invalid_component_metadata'], 'invalid metadata must still fail closed');
+});
+
 test('exact file edits and shared SQL objects conflict across different migrations', () => {
   const left = {
     components: [],
