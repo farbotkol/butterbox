@@ -2,12 +2,9 @@ name: Phase 2 - autonomous Development merge
 
 # Only Development. GitHub rulesets remain authoritative.
 # Old Copilot PRs are deliberately excluded from this initial rollout.
+# Automatic scheduling, Verify-triggered merges and PR events disabled.
+# Only an explicitly dispatched run can evaluate merge eligibility.
 on:
-  workflow_run:
-    workflows: ["Verify"]
-    types: [completed]
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       pull_number:
@@ -18,9 +15,6 @@ on:
         description: "Report decisions without updating branches or merging"
         type: boolean
         default: true
-  pull_request:
-    paths:
-      - .github/workflows/phase2-automerge-development.yml
 
 permissions:
   contents: read
