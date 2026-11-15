@@ -1,0 +1,135 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 266,
+    "url": "https://github.com/farbotkol/butterbox/issues/266"
+  },
+  "pullRequest": {
+    "number": 267,
+    "url": "https://github.com/farbotkol/butterbox/pull/267",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/266-trusted-current-coordination",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43676539557,
+    "agent": "human",
+    "commitSha": "649946397d5f5ec47b7274ff2482579d573d3e41",
+    "startedAt": "2026-11-15T04:23:16Z",
+    "updatedAt": "2026-11-15T04:23:24Z"
+  },
+  "scope": {
+    "summary": "Use current trusted Development coordination policy for pull_request_target instead of stale PR event base SHA; preserve privileged execution protections.",
+    "changedFiles": [
+      ".github/workflows/pr-coordination.yml",
+      "tests/pr-coordination-trusted-checkout.test.mjs",
+      "docs/agent-work/issues/issue-266/pr-267/attempt-01.md",
+      "docs/agent-work/issues/issue-266/pr-267/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Use refs/heads/copilot/Development for pull_request_target; retain merge_group base SHA.",
+      "Add focused regression tests for trusted checkout, read-only permissions, and continued coordination checking."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Change only the `pull_request_target` PR-coordination checkout to current trusted `copilot/Development`, not `github.event.pull_request.base.sha`; retain trusted base behavior for `merge_group`.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Explicit event-aware checkout selects trusted current Development for pull_request_target and merge_group base SHA otherwise."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Never run untrusted PR head code in a privileged context; keep read-only permissions, coordination guard and fail-closed behavior for malformed metadata and real file/SQL overlaps.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Read-only token permissions and original checker remain; no checkout of untrusted PR head."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Add regression tests/check for the trusted-ref workflow configuration, including explicit refusal to use PR event base SHA or PR head in `pull_request_target`.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tests/pr-coordination-trusted-checkout.test.mjs",
+          "outcome": "Focused static regression assertions were committed; execution awaits CI."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Run focused tests and required `verify` and `database` CI, retain approval and evidence checks; no bypass, production deploy, or autonomous merge.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tests/pr-coordination-trusted-checkout.test.mjs",
+          "outcome": "CI running, approval pending; no merge or deploy performed."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "After approved merge, trigger fresh checks on #262 and #263. Their existing zero-file drafts correctly remain unmergeable until Copilot adds implementation and paired JSON/Markdown evidence.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/pr-coordination.yml",
+          "outcome": "Depends on merge of reviewed PR #267; integration PRs remain unchanged."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/pr-coordination-trusted-checkout.test.mjs",
+      "outcome": "not-run",
+      "result": "Regression tests committed and pending CI verification.",
+      "reference": "https://github.com/farbotkol/butterbox/pull/267"
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": 43676539557,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43676539557"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43676539557,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43676539557"
+    }
+  ],
+  "decisions": [
+    "Use trusted mutable Development branch ref on pull_request_target; preserve merge_group base SHA pinning.",
+    "No change to permissions, coordination validation, required gate checks or production configuration."
+  ],
+  "reruns": [],
+  "limitations": [
+    "New workflow behavior only becomes effective once the PR merges into the trusted Development branch."
+  ],
+  "blockers": [
+    "Required CI and approval pending; do not merge before review."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-266/pr-267/attempt-01.md",
+  "markdownSha256": "f46a4f81a464584503ef9bb69ba4e74967fd015301a2d810489f563654c1b7aa",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
