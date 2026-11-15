@@ -3,15 +3,8 @@ name: Copilot CLI CI repair (no stored token)
 # Uses GitHub's native Copilot CLI authentication to attempt a bounded repair.
 # GitHub documents built-in-token Copilot CLI billing for eligible ORGANIZATION repos.
 # Butterbox is personally owned: auth smoke test must pass before relying on this workflow.
+# Autonomous repair disabled; manual invocation only.
 on:
-  pull_request:
-    paths:
-      - .github/workflows/agent-merge-enrollment.yml
-  workflow_run:
-    workflows: ["Verify"]
-    types: [completed]
-  # A GITHUB_TOKEN-dispatched Verify doesn't reliably emit workflow_run.
-  # Verify explicitly dispatches us again when a repaired test still fails.
   workflow_dispatch:
     inputs:
       verify_run_id:
