@@ -116,7 +116,8 @@ export function createXeroOAuthStateCookie(
   state: XeroOAuthState,
 ): string {
   if (!isXeroUuid(state.businessId) || !isXeroUuid(state.userId) ||
-    !boundedString(state.state, 128) || !Number.isSafeInteger(state.issuedAt)) {
+    !boundedString(state.state, 128) || state.redirectUri !== config.redirectUri ||
+    !Number.isSafeInteger(state.issuedAt)) {
     throw new XeroOAuthError("invalid_response");
   }
   const payload = Buffer.from(JSON.stringify(state)).toString("base64url");
@@ -249,8 +250,8 @@ async function tokenRequest(
     throw new XeroOAuthError("provider");
   }
   if (!response.ok) {
-    throw new XeroOAuthError(response.status === 401 || response.status === 400
-      ? "reauthorization" : "provider");
+    throw new XeroOAuthError(response.status === 401
+      ? "configuration" : response.status === 400 ? "reauthorization" : "provider");
   }
   let data: Record<string, unknown>;
   try {

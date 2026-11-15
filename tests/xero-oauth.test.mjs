@@ -6,6 +6,7 @@ import {
   loadXeroOAuthConfig, refreshXeroTokenSet, revokeXeroToken, verifyXeroOAuthStateCookie,
   XERO_CONNECTIONS_URL, XERO_REVOCATION_URL, XERO_SCOPES, XERO_TOKEN_URL, XeroOAuthError,
 } from "../src/lib/xero-oauth.ts";
+import { getXeroAccessToken } from "../src/lib/xero-token-manager.ts";
 
 const businessId = "b7700000-0000-4000-8000-000000000001";
 const otherBusinessId = "b7700000-0000-4000-8000-000000000002";
@@ -115,8 +116,10 @@ test("refresh persists rotated credentials and classifies revoked or denied acce
   assert.equal(request.url, XERO_TOKEN_URL);
   assert.equal(request.options.body.get("grant_type"), "refresh_token");
   assert.equal(refreshed.refreshToken, "new-refresh-token");
-  await assert.rejects(refreshXeroTokenSet(config, tokens, async () => new Response(null, { status: 401 })),
+  await assert.rejects(refreshXeroTokenSet(config, tokens, async () => new Response(null, { status: 400 })),
     (error) => error instanceof XeroOAuthError && error.code === "reauthorization");
+  await assert.rejects(refreshXeroTokenSet(config, tokens, async () => new Response(null, { status: 401 })),
+    (error) => error instanceof XeroOAuthError && error.code === "configuration");
   await assert.rejects(refreshXeroTokenSet(config, tokens, async () => new Response(null, { status: 403 })),
     (error) => error instanceof XeroOAuthError && error.code === "provider");
 });
@@ -144,4 +147,125 @@ test("Xero organization discovery and token revocation use bounded server-only r
   assert.equal(request.url, XERO_REVOCATION_URL);
   assert.equal(request.options.body.get("token"), tokens.refreshToken);
   assert.equal(request.options.body.get("token_type_hint"), "refresh_token");
+});
+
+test("expired Xero tokens are refreshed under a lock and the rotated token set is encrypted", async () => {
+  const expired = { ...tokens, expiresAt: "2020-01-01T00:00:00.000Z" };
+  let record = {
+    grantId,
+    encryptedTokens: encryptXeroTokenSet(config, businessId, grantId, expired),
+    expiresAt: expired.expiresAt,
+    scopes: expired.scopes,
+    status: "active",
+  };
+  const calls = [];
+  const repository = {
+    async load() { calls.push("load"); return record; },
+    async claim(_business, _tenant, lockId) {
+      calls.push("claim");
+      this.lockId = lockId;
+      return { ...record, acquired: true };
+    },
+    async save(_business, _grant, lockId, encryptedTokens, expiresAt, scopes) {
+      assert.equal(lockId, this.lockId);
+      calls.push("save");
+      record = { ...record, encryptedTokens, expiresAt, scopes };
+      return true;
+    },
+    async release() { calls.push("release"); },
+  };
+  const accessToken = await getXeroAccessToken(
+    config, repository, businessId, "d7700000-0000-4000-8000-000000000001",
+    async () => tokenResponse(), Date.now(),
+  );
+  assert.equal(accessToken, "new-access-token");
+  assert.deepEqual(calls, ["load", "claim", "save"]);
+  const stored = decryptXeroTokenSet(config, businessId, grantId, record.encryptedTokens);
+  assert.equal(stored.refreshToken, "new-refresh-token");
+  assert.equal(stored.accessToken, accessToken);
+});
+
+test("valid tokens bypass refresh and a competing refresh lock fails closed", async () => {
+  const current = { ...tokens, expiresAt: new Date(Date.now() + 600_000).toISOString() };
+  const record = {
+    grantId,
+    encryptedTokens: encryptXeroTokenSet(config, businessId, grantId, current),
+    expiresAt: current.expiresAt,
+    scopes: current.scopes,
+    status: "active",
+  };
+  let claims = 0;
+  const repository = {
+    async load() { return record; },
+    async claim() { claims += 1; return { ...record, acquired: false }; },
+    async save() { assert.fail("a valid token must not be refreshed"); },
+    async release() {},
+  };
+  assert.equal(await getXeroAccessToken(config, repository, businessId,
+    "d7700000-0000-4000-8000-000000000001", async () => assert.fail("no request"), Date.now()),
+  current.accessToken);
+  assert.equal(claims, 0);
+
+  const expired = { ...tokens, expiresAt: "2020-01-01T00:00:00.000Z" };
+  const expiredRecord = {
+    ...record,
+    expiresAt: expired.expiresAt,
+    encryptedTokens: encryptXeroTokenSet(config, businessId, grantId, expired),
+  };
+  const lockedRepository = {
+    async load() { return expiredRecord; },
+    async claim() { return { ...expiredRecord, acquired: false }; },
+    async save() { assert.fail("a competing refresh must not overwrite tokens"); },
+    async release() {},
+  };
+  await assert.rejects(getXeroAccessToken(config, lockedRepository, businessId,
+    "d7700000-0000-4000-8000-000000000001", async () => assert.fail("refresh lock is held"), Date.now()),
+  (error) => error instanceof XeroOAuthError && error.code === "provider");
+});
+
+test("invalid refresh credentials are marked for owner reauthorization", async () => {
+  const expired = { ...tokens, expiresAt: "2020-01-01T00:00:00.000Z" };
+  const record = {
+    grantId,
+    encryptedTokens: encryptXeroTokenSet(config, businessId, grantId, expired),
+    expiresAt: expired.expiresAt,
+    scopes: expired.scopes,
+    status: "active",
+  };
+  let released;
+  const repository = {
+    async load() { return record; },
+    async claim(_business, _tenant, lockId) { return { ...record, lockId, acquired: true }; },
+    async save() { assert.fail("a revoked token must not be persisted"); },
+    async release(_business, _grant, _lock, reauthorizationRequired) { released = reauthorizationRequired; },
+  };
+  await assert.rejects(getXeroAccessToken(config, repository, businessId,
+    "d7700000-0000-4000-8000-000000000001",
+    async () => new Response(null, { status: 400 }), Date.now()),
+  (error) => error instanceof XeroOAuthError && error.code === "reauthorization");
+  assert.equal(released, true);
+});
+
+test("a rotated refresh token that cannot be persisted requires reauthorization", async () => {
+  const expired = { ...tokens, expiresAt: "2020-01-01T00:00:00.000Z" };
+  const record = {
+    grantId,
+    encryptedTokens: encryptXeroTokenSet(config, businessId, grantId, expired),
+    expiresAt: expired.expiresAt,
+    scopes: expired.scopes,
+    status: "active",
+  };
+  let reauthorizationRequired = false;
+  const repository = {
+    async load() { return record; },
+    async claim(_business, _tenant, lockId) { return { ...record, lockId, acquired: true }; },
+    async save() { throw new Error("database unavailable"); },
+    async release(_business, _grant, _lock, requiresReauthorization) {
+      reauthorizationRequired = requiresReauthorization;
+    },
+  };
+  await assert.rejects(getXeroAccessToken(config, repository, businessId,
+    "d7700000-0000-4000-8000-000000000001", async () => tokenResponse(), Date.now()),
+  (error) => error instanceof XeroOAuthError && error.code === "provider");
+  assert.equal(reauthorizationRequired, true);
 });
