@@ -16,7 +16,7 @@
   "run": {
     "id": 43676539557,
     "agent": "human",
-    "commitSha": "649946397d5f5ec47b7274ff2482579d573d3e41",
+    "commitSha": "17e09036ac7b4f7a875d549904a25c974d3944ef",
     "startedAt": "2026-11-15T04:23:16Z",
     "updatedAt": "2026-11-15T04:23:24Z"
   },
@@ -24,13 +24,16 @@
     "summary": "Use current trusted Development coordination policy for pull_request_target instead of stale PR event base SHA; preserve privileged execution protections.",
     "changedFiles": [
       ".github/workflows/pr-coordination.yml",
+      "tools/agent-controller/component-coordination.mjs",
+      "tests/component-coordination.test.mjs",
       "tests/pr-coordination-trusted-checkout.test.mjs",
       "docs/agent-work/issues/issue-266/pr-267/attempt-01.md",
       "docs/agent-work/issues/issue-266/pr-267/attempt-01.evidence.json"
     ],
     "implemented": [
       "Use refs/heads/copilot/Development for pull_request_target; retain merge_group base SHA.",
-      "Add focused regression tests for trusted checkout, read-only permissions, and continued coordination checking."
+      "Add focused regression tests for trusted checkout, read-only permissions, and continued coordination checking.",
+      "Fix component overlap checks for trusted derived SQL/file ownership lists greater than the 20-entry explicit declaration cap, preserving validation and real overlap checks."
     ]
   },
   "criteria": [
@@ -84,7 +87,24 @@
     },
     {
       "id": "AC-5",
-      "description": "After approved merge, trigger fresh checks on #262 and #263. Their existing zero-file drafts correctly remain unmergeable until Copilot adds implementation and paired JSON/Markdown evidence.",
+      "description": "Ensure generated PR ownership lists (including Xero #262's SQL migration) larger than the 20-entry **declaration** cap are compared safely without false `invalid_component_metadata`; keep the 20-entry cap for explicit declarations, fail-closed malformed metadata and real SQL overlaps.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Raise bounded internal computed-ownership comparison capacity to 1000 while preserving 20-entry explicit declaration validation; add Xero-scale migration overlap regression."
+        },
+        {
+          "kind": "file",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Regression test added; current CI outcome pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-6",
+      "description": "After approved merge, trigger fresh checks on #262 and #263. Require valid implementation and paired JSON/Markdown evidence before either integration PR can merge.",
       "status": "blocked",
       "evidence": [
         {
@@ -100,6 +120,12 @@
       "command": "node --test tests/pr-coordination-trusted-checkout.test.mjs",
       "outcome": "not-run",
       "result": "Regression tests committed and pending CI verification.",
+      "reference": "https://github.com/farbotkol/butterbox/pull/267"
+    },
+    {
+      "command": "node --test tests/component-coordination.test.mjs",
+      "outcome": "not-run",
+      "result": "New regression test added; GitHub CI pending.",
       "reference": "https://github.com/farbotkol/butterbox/pull/267"
     }
   ],
@@ -123,13 +149,14 @@
   ],
   "reruns": [],
   "limitations": [
-    "New workflow behavior only becomes effective once the PR merges into the trusted Development branch."
+    "Workflow checkout hardening becomes effective after merge into trusted Development.",
+    "Current CI and review are pending; no automated merge."
   ],
   "blockers": [
     "Required CI and approval pending; do not merge before review."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-266/pr-267/attempt-01.md",
-  "markdownSha256": "f46a4f81a464584503ef9bb69ba4e74967fd015301a2d810489f563654c1b7aa",
+  "markdownSha256": "fdafae523dc9f8ad8d2006c0c45835c90e5d7367791baf9e95d57102c43cc379",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
