@@ -23,7 +23,6 @@
   "scope": {
     "summary": "Partial, owner-authorized first Xero OAuth connection slice; no Payroll AU submission, Award Central, or issue #61 delivery work.",
     "changedFiles": [
-      ".env.example",
       "docs/agent-work/issues/issue-91/pr-262/attempt-01.evidence.json",
       "docs/agent-work/issues/issue-91/pr-262/attempt-01.md",
       "docs/xero-oauth-setup.md",
@@ -177,7 +176,8 @@
   "decisions": [
     "Keep this PR as a draft and keep issue #91 open; acceptance is partial because payroll mapping, retry, duplicate-prevention, and demo-company access are unverified.",
     "Do not submit payroll, activate production, modify Award Central, or overlap with issue #61 delivery work.",
-    "Use only synthetic fixtures and mocked provider responses in CI."
+    "Use only synthetic fixtures and mocked provider responses in CI.",
+    "Keep repository-wide .env.example unchanged to prevent unrelated PR ownership conflicts; document required Xero variables in docs/xero-oauth-setup.md."
   ],
   "reruns": [
     {
