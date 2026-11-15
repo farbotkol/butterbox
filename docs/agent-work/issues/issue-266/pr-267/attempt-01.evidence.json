@@ -36,7 +36,7 @@
   "criteria": [
     {
       "id": "AC-1",
-      "description": "Change only the `pull_request_target` PR-coordination checkout to current trusted `copilot/Development`, not `github.event.pull_request.base.sha`; retain trusted base behavior for `merge_group`.",
+      "description": "Change only the `pull_request_target` PR-coordination checkout to **current trusted `copilot/Development`**, not `github.event.pull_request.base.sha`; retain trusted base behavior for `merge_group`.",
       "status": "pass",
       "evidence": [
         {
