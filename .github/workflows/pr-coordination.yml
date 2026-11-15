@@ -1,11 +1,8 @@
 name: PR coordination
 
+# Disabled for manual, single-PR development. Retain the workflow for later reactivation.
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
-    branches: [copilot/Development]
-  merge_group:
-    types: [checks_requested]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,6 +14,7 @@ concurrency:
 
 jobs:
   check:
+    if: ${{ false }} # Coordination disabled; do not fail unrelated PRs.
     name: check
     runs-on: ubuntu-latest
     timeout-minutes: 10
