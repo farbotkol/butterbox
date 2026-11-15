@@ -1,6 +1,7 @@
 name: PR coordination
 
 # Disabled for manual, single-PR development. Retain the workflow for later reactivation.
+# Paused for single-PR development. Re-enable triggers for multi-agent coordination.
 on:
   workflow_dispatch:
 
