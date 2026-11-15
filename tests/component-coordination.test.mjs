@@ -137,6 +137,9 @@ test('empty drafts with malformed metadata and empty non-draft PRs remain blocke
   assert.deepEqual(pullRequestConflicts(invalid, [button]), [
     { pullRequest: 262, reason: 'invalid_component_metadata' },
   ]);
+  assert.deepEqual(pullRequestConflicts({ number: 264, draft: true, body: '', files: [] }, [invalid]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
   assert.deepEqual(pullRequestConflicts(button, [readyEmpty]), [
     { pullRequest: 263, reason: 'no_changed_files' },
   ]);
