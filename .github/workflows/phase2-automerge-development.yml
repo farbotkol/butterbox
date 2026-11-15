@@ -4,6 +4,8 @@ name: Phase 2 - autonomous Development merge
 # Old Copilot PRs are deliberately excluded from this initial rollout.
 # Automatic scheduling, Verify-triggered merges and PR events disabled.
 # Only an explicitly dispatched run can evaluate merge eligibility.
+# Automatic merges paused while working one PR at a time.
+# Manual dry-run inspection remains possible; no scheduled or Verify-triggered merges.
 on:
   workflow_dispatch:
     inputs:
@@ -25,10 +27,7 @@ concurrency:
 
 jobs:
   merge-ready-development:
-    if: >-
-      github.event_name != 'workflow_run' ||
-      (contains(fromJSON('["pull_request","workflow_dispatch"]'), github.event.workflow_run.event) &&
-       github.event.workflow_run.conclusion == 'success')
+    if: ${{ inputs.dry_run == true }} # Disable merge mutations; permit manual dry-run only.
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
