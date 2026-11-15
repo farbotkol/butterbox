@@ -12,8 +12,8 @@ const sqlObjectPattern = /\b(?:create|alter|drop)\s+(?:or\s+replace\s+)?(?:(?:te
 const sqlTargetPattern = /\b(?:policy|trigger)\s+("[^"]+"|[a-z_][\w$]*)\s+on\s+("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 const sqlIndexTargetPattern = /\b(?:create|drop)\s+(?:unique\s+)?index(?:\s+(?:if\s+not\s+exists\s+)?("[^"]+"|[a-z_][\w$]*))?\s+on\s+(?:only\s+)?("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 
-export function normalizeComponents(value) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 20 ||
+export function normalizeComponents(value, maxEntries = 20) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > maxEntries ||
     value.some(item => typeof item !== 'string' || !(
       knownComponents.has(item) || dynamicPrefixes.some(prefix => {
         if (!item.startsWith(prefix)) return false;
@@ -151,9 +151,12 @@ export function declaredComponents(body) {
   try { return normalizeComponents(JSON.parse(match[1])); } catch { return null; }
 }
 
+// Computed PR ownership can contain many distinct SQL objects and file components.
+// The 20-entry limit applies to *user-declared* components, not trusted, derived ownership.
+// Keep a bounded cap for overlap calculations and fail closed for invalid inputs.
 export function componentOverlap(left, right) {
-  const a = normalizeComponents(left);
-  const b = normalizeComponents(right);
+  const a = normalizeComponents(left, 1000);
+  const b = normalizeComponents(right, 1000);
   if (!a || !b) return ['invalid_component_metadata'];
   const conflicts = [];
   for (const first of a) for (const second of b) {
