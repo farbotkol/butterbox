@@ -3863,12 +3863,40 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     await expect(page.getByRole("heading", { name: "Your people", exact: true })).toBeVisible();
     await page.getByRole("link", { name: "Add person", exact: true }).click();
     const newEmployee = page.getByRole("region", { name: "New employee", exact: true });
+    const addEmployeeButton = newEmployee.getByRole("button", { name: "Add employee", exact: true });
+    const cancelButton = newEmployee.getByRole("button", { name: "Cancel", exact: true });
+    for (const width of [375, 768, 1024, 1440]) {
+      await page.setViewportSize({ width, height: 900 });
+      const layout = await addEmployeeButton.evaluate((button) => {
+        const bounds = (element) => {
+          const { left, right, top, bottom, width, height } = element.getBoundingClientRect();
+          return { left, right, top, bottom, width, height };
+        };
+        const form = button.closest("form");
+        return {
+          button: bounds(button),
+          form: bounds(form),
+          employmentNote: bounds(form.querySelector("p")),
+          page: { width: document.documentElement.clientWidth, scrollWidth: document.documentElement.scrollWidth },
+        };
+      });
+      expect(layout.button.height, `${width}px action height`).toBeGreaterThanOrEqual(44);
+      expect(layout.button.height, `${width}px action height`).toBeLessThanOrEqual(48);
+      expect(layout.button.width, `${width}px action width`).toBeLessThan(layout.form.width);
+      expect(Math.abs(layout.button.right - layout.form.right), `${width}px action alignment`).toBeLessThanOrEqual(1);
+      expect(layout.button.top, `${width}px footer placement`).toBeGreaterThanOrEqual(layout.employmentNote.bottom);
+      expect(layout.page.scrollWidth, `${width}px horizontal overflow`).toBeLessThanOrEqual(layout.page.width);
+      const cancelBounds = await cancelButton.boundingBox();
+      expect(cancelBounds, `${width}px Cancel visibility`).not.toBeNull();
+      expect(cancelBounds.y, `${width}px Cancel placement`).toBeGreaterThanOrEqual(layout.button.bottom);
+    }
+    await addEmployeeButton.focus();
+    await expect(addEmployeeButton).toBeFocused();
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Profile worker");
     await newEmployee.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("profile@example.test");
     await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
-    await newEmployee.getByRole("button", { name: "Add employee", exact: true })
-      .evaluate((button) => { button.click(); button.click(); });
+    await addEmployeeButton.evaluate((button) => { button.click(); button.click(); });
     await expect(page.getByRole("heading", { name: "Profile worker", exact: true })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Person added." })).toBeVisible();
     const employee = await admin.from("employees").select("id")
