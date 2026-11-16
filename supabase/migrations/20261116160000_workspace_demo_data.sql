@@ -70,6 +70,7 @@ grant select on public.workspace_demo_data_record_tags to authenticated;
 create function public.prevent_demo_employee_account_link()
 returns trigger
 language plpgsql
+security definer
 set search_path = public, pg_temp
 as $$
 begin
@@ -92,6 +93,7 @@ create trigger employees_block_demo_employee_account_link
 create function public.prevent_demo_employee_external_effect()
 returns trigger
 language plpgsql
+security definer
 set search_path = public, pg_temp
 as $$
 begin
