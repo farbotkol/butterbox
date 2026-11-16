@@ -1,0 +1,117 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 91,
+    "url": "https://github.com/farbotkol/butterbox/issues/91"
+  },
+  "pullRequest": {
+    "number": 269,
+    "url": "https://github.com/farbotkol/butterbox/pull/269",
+    "baseBranch": "copilot/Development",
+    "headBranch": "feature/xero-connected-payroll-destinations",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 20261116041500,
+    "agent": "chatgpt",
+    "commitSha": null,
+    "startedAt": "2026-11-16T04:14:52Z",
+    "updatedAt": "2026-11-16T04:14:52Z"
+  },
+  "scope": {
+    "summary": "Idempotent Xero organisation to mapping destination bridge, backfill, navigation, and database assertions; no payroll submissions.",
+    "changedFiles": [
+      "supabase/migrations/20261116150000_xero_connected_payroll_destinations.sql",
+      "supabase/tests/database/xero_oauth_connections.test.sql",
+      "src/app/settings/payroll/new/page.tsx",
+      "src/app/settings/payroll/xero/page.tsx",
+      "docs/xero-payroll-delivery.md",
+      "docs/agent-work/issues/issue-91/pr-269/attempt-01.md",
+      "docs/agent-work/issues/issue-91/pr-269/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Database trigger maps authorized Xero tenant UUID into business-specific payroll destination without browser input.",
+      "Existing connected Xero tenant records backfill idempotently.",
+      "UI sends users through OAuth; existing employee mappings remain audited and manual."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Connected Xero organisations auto-create payroll mapping destinations",
+      "status": "pending",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "supabase/migrations/20261116150000_xero_connected_payroll_destinations.sql",
+          "outcome": "Trigger and historic backfill committed, pending CI."
+        },
+        {
+          "kind": "test",
+          "reference": "supabase/tests/database/xero_oauth_connections.test.sql",
+          "outcome": "Asserts exact tenant ID and idempotent reconnection; not run."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Automatic employee lookup and confirmed mapping",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/xero-payroll-delivery.md",
+          "outcome": "Requires new read scopes, employee lookup and explicit review."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "AU Payroll timesheets submission with idempotency and verification",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/xero-payroll-delivery.md",
+          "outcome": "Payroll POST not implemented or enabled."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "GitHub required checks",
+      "outcome": "pending",
+      "result": "Draft PR awaiting CI."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": null,
+      "url": null
+    }
+  ],
+  "decisions": [
+    "No production DB writes or live Xero submissions until CI and owner approval.",
+    "Reconnection retains mapping IDs and audit history."
+  ],
+  "limitations": [
+    "No Xero employee sync or payroll submission.",
+    "No source build or database tests executed in this session.",
+    "No production migration deployed."
+  ],
+  "blockers": [
+    "Additional Xero read permissions and reauthorization.",
+    "Owner-approved payroll API entitlement and sample data verification."
+  ]
+}
