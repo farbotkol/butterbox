@@ -133,7 +133,7 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
     </section>}
 
     <section aria-labelledby="xero-connected-heading" className="mt-6 rounded-xl border border-line bg-white p-4">
-      <h2 id="xero-connected-heading" className="text-xl font-semibold">Connected organizations</h2>
+      <h2 id="xero-connected-heading" className="text-xl font-semibold">Connected organizations</h2>\n      {connections.length > 0 && <p className="mt-2 text-sm text-muted">\n        Each connected organisation is automatically available as a payroll mapping destination.\n        Employee IDs must still be reviewed before any payroll export.\n      </p>}
       {!connectionError && connections.length === 0 && <p className="mt-3 text-sm text-muted">
         No Xero organization is connected to this business.
       </p>}
@@ -147,7 +147,7 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
                 connection.status === "revocation_pending" ? "Disconnection pending" : "Connected"}
             </p>
           </div>
-          <form action={disconnectXeroOrganizationAction}>
+          <div className="flex flex-wrap items-center gap-3">\n          <Link href={`/settings/payroll?business=${encodeURIComponent(businessId)}`}\n            className="inline-flex min-h-11 items-center font-semibold text-ocean underline">\n            Manage employee mappings\n          </Link>\n          <form action={disconnectXeroOrganizationAction}>
             <input type="hidden" name="business" value={businessId} />
             <input type="hidden" name="tenant" value={connection.tenant_id} />
             <button type="submit" className="min-h-11 rounded-lg border border-line px-4 font-semibold">
