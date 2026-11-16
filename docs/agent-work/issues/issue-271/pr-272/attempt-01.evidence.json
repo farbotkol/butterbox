@@ -1,0 +1,215 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 271,
+    "url": "https://github.com/farbotkol/butterbox/issues/271"
+  },
+  "pullRequest": {
+    "number": 272,
+    "url": "https://github.com/farbotkol/butterbox/pull/272",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/narrow-pr-coordination-issue",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43826573269,
+    "agent": "copilot",
+    "commitSha": "5a680ffd9f852e713e2981a8e53449b365b0be5e",
+    "startedAt": "2026-11-16T07:50:00Z",
+    "updatedAt": "2026-11-16T08:02:03Z"
+  },
+  "scope": {
+    "summary": "Narrow PR-vs-PR blocking to shared changed paths and SQL ownership, retain fail-closed safety checks, and document advisory/recovery behavior.",
+    "changedFiles": [
+      "docs/agent-work/issues/issue-271/pr-272/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
+      "docs/github-issues-workflow.md",
+      "tests/component-coordination.test.mjs",
+      "tests/pr-coordination-trusted-checkout.test.mjs",
+      "tools/agent-controller/README.md",
+      "tools/agent-controller/check-pr-coordination.mjs",
+      "tools/agent-controller/component-coordination.mjs"
+    ],
+    "implemented": [
+      "Broad component overlaps are advisory for PR checks, while the independent issue-dispatch lease policy remains unchanged.",
+      "Evidence paths are scoped to PR number; concrete file and SQL overlaps remain hard conflicts.",
+      "Malformed peer metadata is classified; database ownership and invalid API/file data remain fail-closed.",
+      "Actionable coordination messages and recovery documentation were added."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "COORD-1",
+      "description": "Two PRs changing distinct UI files within the same application area can both pass coordination.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Same application:settings category with distinct paths returns advisory only and no hard conflict."
+        }
+      ]
+    },
+    {
+      "id": "COORD-2",
+      "description": "Two PRs changing distinct tests in the same suite can both pass coordination.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Two distinct auth.spec.mjs paths map to test:auth and do not hard-conflict."
+        }
+      ]
+    },
+    {
+      "id": "COORD-3",
+      "description": "Two PRs with distinct evidence paths for the same parent issue can both pass coordination.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "issue-91/pr-271 and issue-91/pr-269 evidence paths map to separate ownership values."
+        }
+      ]
+    },
+    {
+      "id": "COORD-4",
+      "description": "Empty draft PR remains non-blocking; malformed own PR fails; empty non-draft PR remains invalid.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Tests cover empty drafts, malformed candidate metadata, empty non-draft candidates, and classified malformed peers."
+        }
+      ]
+    },
+    {
+      "id": "COORD-5",
+      "description": "Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Exact shared-file and shared SQL-object cases remain hard conflicts; unreadable migration-blob API failure was not induced locally."
+        },
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/check-pr-coordination.mjs",
+          "outcome": "Migration content retrieval still rejects unreadable or invalid GitHub blob responses before overlap evaluation."
+        }
+      ]
+    },
+    {
+      "id": "COORD-6",
+      "description": "Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/pr-coordination-trusted-checkout.test.mjs",
+          "outcome": "Static regressions assert fresh PR fetch, current trusted Development policy, and merge-group queued head SHA comparison."
+        }
+      ]
+    },
+    {
+      "id": "COORD-7",
+      "description": "Tests reproduce past false-conflict patterns from farbotkol/butterbox#251, farbotkol/butterbox#264 and farbotkol/butterbox#267 plus positive true-conflict cases.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Covers Playwright spec naming, empty drafts, oversized Xero SQL ownership, broad category overlap, exact files, and shared SQL objects."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/pr-coordination-trusted-checkout.test.mjs",
+          "outcome": "Covers the trusted checkout and current/queued SHA safeguards associated with #267."
+        }
+      ]
+    },
+    {
+      "id": "COORD-8",
+      "description": "Demonstrate two independent Copilot PRs passing coordination concurrently, then pass real required checks; report results with links.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827691424",
+          "outcome": "PR #272 coordination passed against the still-trusted base policy."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827156334",
+          "outcome": "PR #269 coordination passed while #272 was open; not a validation of the unmerged policy change."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827695017",
+          "outcome": "PR #272 verify failed at the missing PR reference/marker contract; database job had not completed at the recorded time."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs",
+      "outcome": "passed",
+      "result": "23 tests passed.",
+      "reference": "https://github.com/farbotkol/butterbox/pull/272"
+    },
+    {
+      "command": "npm run lint -- tools/agent-controller/component-coordination.mjs tools/agent-controller/check-pr-coordination.mjs tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed for all changed JavaScript files.",
+      "reference": null
+    },
+    {
+      "command": "node --check tools/agent-controller/component-coordination.mjs && node --check tools/agent-controller/check-pr-coordination.mjs && git diff --check",
+      "outcome": "passed",
+      "result": "Syntax and whitespace checks passed.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43827695017,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827695017"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43827695017,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827695017"
+    }
+  ],
+  "decisions": [
+    "Keep the generic component-overlap behavior used by local issue-dispatch leases unchanged; narrow only PR-vs-PR hard conflicts.",
+    "Do not modify GitHub workflow gates or the trusted pull_request_target/merge_group checkout policy.",
+    "Leave this PR as draft and do not merge or deploy."
+  ],
+  "reruns": [],
+  "limitations": [
+    "The current PR body lacks the canonical Refs #271 and issue/evidence marker lines and has a generated Fixes #271 suffix.",
+    "The canonical issue uses a Tests / acceptance criteria heading with plain bullets; the evidence gate parser expects a separate checkbox heading format.",
+    "No merge-group run or real green verify/database pair on the changed PR was observed.",
+    "CodeQL reported no analyzable changed code and performed no analysis."
+  ],
+  "blockers": [
+    "PR body cannot be edited with the available task tools; an owner/reviewer must correct it before verify can pass.",
+    "Required verify and database checks have not both passed.",
+    "The full concurrency acceptance remains unverified on the changed trusted policy."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
+  "markdownSha256": "4f7cb5d2245d0ce3b6e208c2cabf60f7f0e48695c2f950f6cd3080bc27f1ecbe",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
