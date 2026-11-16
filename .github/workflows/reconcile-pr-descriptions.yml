@@ -1,0 +1,32 @@
+name: Reconcile Copilot PR descriptions
+
+on:
+  pull_request_target:
+    types: [opened, edited, synchronize, reopened]
+    branches: [copilot/Development]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: write
+
+concurrency:
+  group: reconcile-pr-description-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out trusted Development policy
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/copilot/Development
+          persist-credentials: false
+      - name: Reconcile eligible Copilot-authored PR body
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_EVENT_PATH: ${{ github.event_path }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: node tools/agent-evidence/reconcile-pr-description.mjs

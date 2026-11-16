@@ -92,6 +92,45 @@ failed or incomplete evidence cannot report full acceptance. The writer never
 closes or reopens issues; avoid auto-close keywords unless a human has verified
 all issue acceptance criteria.
 
+## Pre-Verify Copilot PR-description reconciliation
+
+`.github/workflows/reconcile-pr-descriptions.yml` uses `pull_request_target`
+on `opened`, `edited`, `synchronize` and `reopened` for PRs targeting
+`copilot/Development`. It checks out only the trusted Development branch and
+grants only `pull-requests: write` plus read access to issues and contents. The
+runtime mutates only open PRs authored by the repository owner, from a
+same-repository `copilot/` branch, with a verified GitHub cross-reference to
+one open canonical issue. Empty drafts, multiple or malformed issue links,
+closed PRs/issues, forks, and other contributors are left untouched.
+
+For an eligible linked PR, the reconciler restores a missing `Refs #N` or
+canonical issue marker, and restores the evidence marker only when exactly one
+matching JSON/Markdown pair is in the PR's changed files. It removes only a
+matching standalone auto-close phrase for that issue; a trailing generated
+footer is removed, while a copied/quoted issue line is changed to a reference.
+A complete, schema-valid evidence set with every issue criterion passing and an
+owner approval on the exact head may retain those phrases; the writer itself
+never closes or reopens issues. Missing or invalid evidence remains subject to
+the unchanged `check-pr-evidence.mjs` gate.
+
+Every correction is logged by PR and issue number in Actions without logging
+body content. Updates occur only when text changes and are serialized per PR.
+A hidden per-head marker allows at most two body repairs for the same head;
+further reintroductions are logged and left for manual resolution rather than
+forming an edited-event loop.
+Before a PATCH, the workflow re-reads the PR and skips if its body, timestamp,
+head, or eligibility changed, protecting detectable concurrent edits. GitHub's
+PR update API does not provide an atomic compare-and-swap for the body, so a
+change in the narrow interval between this re-read and PATCH cannot be ruled
+out; the workflow preserves the latest fetched text and reports API failures
+without writing. A successful body PATCH emits an `edited` event, which starts
+a fresh `Verify` run on the sanitized description. An earlier run may already
+have failed while reconciliation was in flight; only the later run evaluates
+the updated body. If native Copilot appends another footer later, the next
+`edited` event retries the idempotent repair. This workflow does not manage
+external PRs or guarantee behavior until the policy is merged to
+`copilot/Development`.
+
 ## Recovery and rollback
 
 1. If the `Reconcile merged issue evidence` workflow fails, inspect the run
