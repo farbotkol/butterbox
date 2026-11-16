@@ -278,15 +278,15 @@ reset role;
 -- also continue denying account links for tagged demo employees.
 set local role service_role;
 select extensions.lives_ok(
-  $update public.employees set auth_user_id = null
-    where id = 'e7300000-0000-4000-8000-000000000001'$,
+  $$update public.employees set auth_user_id = null
+    where id = 'e7300000-0000-4000-8000-000000000001'$$,
   'service_role can update an untagged real employee despite restricted demo provenance');
 select extensions.throws_ok(
-  $update public.employees set auth_user_id = 'a7300000-0000-4000-8000-000000000001'
+  $$update public.employees set auth_user_id = 'a7300000-0000-4000-8000-000000000001'
     where id = (select id from public.employees
       where business_id = 'b7300000-0000-4000-8000-000000000001'
         and venue_id = 'c7300000-0000-4000-8000-000000000001'
-      order by id limit 1)$,
+      order by id limit 1)$$,
   'P0001', 'Simulation-only employees cannot be linked to user accounts',
   'service_role cannot link a synthetic employee to a real user account');
 reset role;
