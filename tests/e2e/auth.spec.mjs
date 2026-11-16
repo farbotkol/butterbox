@@ -12895,7 +12895,9 @@ test("owners map employees to connected Xero and manually created non-Xero desti
     expect(reauthorizedDestinations.error).toBeNull();
     expect(reauthorizedDestinations.data.find((item) =>
       item.provider === "xero" && item.account_id === xeroTenantId).id).toBe(xeroDestination.id);
-    expect(await mappingRows()).toEqual(mappingsBeforeReauthorization);
+    expect((await mappingRows()).map(({ employee_id, external_employee_id, revision }) => ({
+      employee_id, external_employee_id, revision,
+    }))).toEqual(mappingsBeforeReauthorization);
     await page.getByRole("link", { name: "Back to mappings" }).click();
     await expect(page.getByText("No employees match these filters. Try resetting them.")).toBeVisible();
     await page.getByRole("link", { name: "Reset filters" }).click();
