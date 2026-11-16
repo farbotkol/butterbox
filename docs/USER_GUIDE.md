@@ -1253,6 +1253,7 @@ not every sentence or all app screens; human review remains necessary.
 | 1.12 | 2026-11-04 | BB-FORECAST-001; BB-AI-005 partial | Owner-only historical-demand imports and scoped, rule-based open-shift suggestions; isolated development only |
 | 1.13 | 2026-11-04 | BB-PAY-007 product discovery | QuickBooks AU EH Work, accounting TimeActivity and US QuickBooks Time CSV distinction; no adapter or payroll delivery |
 | 1.14 | 2026-11-05 | Issue #18 CI repair | Discussion labels retain visible action text and shift context; source-contract verification only, browser rerun pending CI |
+| 1.15 | 2026-11-16 | Issue #273 | Gated demo-data setup and owner loader guidance; hosted isolation and live activation remain unverified |
 
 No actual UI screenshots or optional AI help are available through this viewer.
 Do not present concept artwork as UI evidence or planned AI assistance as a

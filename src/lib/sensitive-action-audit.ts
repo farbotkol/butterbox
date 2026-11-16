@@ -45,6 +45,7 @@ export const auditSources = {
   generic_payroll_reconciliations: "Payroll export reconciliation",
   payroll_mapping_connections: "Payroll mapping destinations",
   payroll_employee_mapping_events: "Payroll employee mapping changes",
+  workspace_demo_data_loads: "Fictional demo-data loads",
 } as const;
 
 export type AuditSource = keyof typeof auditSources;

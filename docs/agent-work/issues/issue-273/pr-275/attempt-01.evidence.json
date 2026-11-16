@@ -14,11 +14,11 @@
     "mergeSha": null
   },
   "run": {
-    "id": 43961540531,
+    "id": 43962627983,
     "agent": "copilot",
-    "commitSha": "1801a9467a807b90e4717146f4b6c5f02d419aac",
-    "startedAt": "2026-11-16T21:35:01Z",
-    "updatedAt": "2026-11-16T21:40:35Z"
+    "commitSha": "61eee8d28f71f62599b48e5be21b51c7b6ac1535",
+    "startedAt": "2026-11-16T21:41:31Z",
+    "updatedAt": "2026-11-16T21:49:43Z"
   },
   "scope": {
     "summary": "Implement fail-closed demo data onboarding and an owner-only existing-venue loader; record known CI and hosted-isolation blockers without claiming feature acceptance.",
@@ -36,6 +36,7 @@
       "src/lib/demo-data-environment.ts",
       "src/lib/demo-data.ts",
       "src/lib/navigation.ts",
+      "src/lib/sensitive-action-audit.ts",
       "supabase/migrations/20261116160000_workspace_demo_data.sql",
       "supabase/tests/database/workspace_demo_data.test.sql",
       "tests/demo-data-environment.test.mjs",
@@ -46,7 +47,7 @@
       "Added setup sample-team and post-onboarding owner loader gated by explicit deployment configuration, matching Supabase project identification and database-side approval.",
       "Added tagged fictional FOH/BOH employees, availability, published rosters, attendance/correction and illustrative payroll-preparation examples with idempotent and existing-record protections.",
       "Added database authorization, provenance, audit and safeguards against demo account links, invitations and payroll mapping; documented activation prerequisites and limitations.",
-      "Added the owner-provided fixes in commits 6177831 and 1801a94 for restricted provenance reads and service-role employee-update regression coverage; corrected malformed pgTAP dollar quoting found by CI."
+      "Added the owner-provided fixes in commits 6177831 and 1801a94 for restricted provenance reads and service-role employee-update regression coverage; corrected malformed pgTAP dollar quoting and added the missing audit-source label found by CI."
     ]
   },
   "criteria": [
@@ -58,7 +59,7 @@
         {
           "kind": "file",
           "reference": "src/app/setup/page.tsx; src/app/settings/demo-data/page.tsx; src/app/actions.ts",
-          "outcome": "Both user-facing paths are implemented, but disposable database/browser verification and visible hosted-owner acceptance are not confirmed."
+          "outcome": "Both user-facing paths are implemented. Fast candidate database/pgTAP and critical browser smoke tests passed, but the demo flow has not been visibly accepted on the hosted development app."
         },
         {
           "kind": "test",
@@ -79,8 +80,8 @@
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43961540531",
-          "outcome": "Verify failed at the missing evidence-pair check before executing test/lint/build steps. Its database job failed on malformed SQL quoting at line 283; browser and tenant-isolation jobs were skipped."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43962627983",
+          "outcome": "Verify validated the evidence pair, then npm test failed because the new audited source workspace_demo_data_loads lacked a UI label. The label is added and the focused test passes; lint/build were skipped."
         }
       ]
     },
@@ -92,7 +93,7 @@
         {
           "kind": "file",
           "reference": "supabase/migrations/20261116160000_workspace_demo_data.sql; supabase/tests/database/workspace_demo_data.test.sql",
-          "outcome": "Migration and regression coverage implement clean-venue refusal, tenant-scoped provenance, idempotent fixture loading and counts. All 42 pgTAP assertions passed in CI, but a malformed SQL quote at line 283 caused the test process to fail; that quote is corrected in this working tree and awaits rerun."
+          "outcome": "Migration and regression coverage implement clean-venue refusal, tenant-scoped provenance, idempotent fixture loading and counts. Fast database candidate run 43962627856 passed migration/pgTAP and authenticated cross-tenant isolation; the full Verify database/browser job remains in progress."
         },
         {
           "kind": "test",
@@ -109,7 +110,7 @@
         {
           "kind": "file",
           "reference": "supabase/migrations/20261116160000_workspace_demo_data.sql",
-          "outcome": "Synthetic account-link, invitation and payroll-mapping protections and payroll-input exclusions are implemented. Owner-added pgTAP assertions ran, but the test process failed on malformed quoting in the final service-role regression; it has been corrected and awaits rerun."
+          "outcome": "Synthetic account-link, invitation and payroll-mapping protections and payroll-input exclusions are implemented. Fast candidate pgTAP passed, including service-role update and synthetic-account-link regression coverage. No external provider was used."
         },
         {
           "kind": "commit",
@@ -125,8 +126,8 @@
       "evidence": [
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43961540531",
-          "outcome": "Verify failed because the paired PR evidence files were missing. The database job also failed on malformed SQL quoting at line 283 after 42 assertions passed; browser and tenant-isolation jobs were skipped."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43962627983",
+          "outcome": "Evidence validation passed; npm test failed on a missing audit-source label, now added. The full Verify database/tenant-isolation steps passed and its browser step is still running; required Verify is not green."
         },
         {
           "kind": "file",
@@ -144,30 +145,60 @@
       "reference": null
     },
     {
+      "command": "node --test --experimental-strip-types tests/sensitive-action-audit.test.mjs tests/demo-data-environment.test.mjs tests/navigation.test.mjs",
+      "outcome": "passed",
+      "result": "10/10 tests passed after adding the workspace_demo_data_loads audit label.",
+      "reference": null
+    },
+    {
       "command": "npm run test:ci:local -- --runner host",
-      "outcome": "failed",
+      "outcome": "blocked",
       "result": "Local run stopped before database setup: Supabase CLI 2.122.0 was unavailable. CI run 43961540531 executed the assertions but exited 3 because malformed SQL quoting at line 283 prevented TAP plan output; the query has since been corrected and awaits CI rerun.",
       "reference": null
     },
     {
-      "command": "Authenticated tenant-isolation and browser regression in GitHub Actions",
-      "outcome": "blocked",
-      "result": "Both steps were skipped after the database job failed; no tenant-isolation or browser result is claimed.",
-      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43961540531"
+      "command": "npm test in Verify run 43962627983",
+      "outcome": "failed",
+      "result": "Failed because workspace_demo_data_loads was missing from the sensitive action audit label map. The label is now added and the directly affected test passes locally.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43962627983"
+    },
+    {
+      "command": "Fast database candidate 43962627856",
+      "outcome": "passed",
+      "result": "Disposable database migration/pgTAP, authenticated cross-tenant isolation, and all four critical browser smoke tests passed. These did not exercise the demo-data user flow.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43962627856"
+    },
+    {
+      "command": "npm test",
+      "outcome": "passed",
+      "result": "454 tests: 418 passed, 36 skipped for disposable-database prerequisites, 0 failed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- src/lib/sensitive-action-audit.ts; npx tsc --noEmit",
+      "outcome": "passed",
+      "result": "ESLint on the changed TypeScript source and project TypeScript check passed.",
+      "reference": null
+    },
+    {
+      "command": "node --test --experimental-strip-types tests/help.test.mjs",
+      "outcome": "passed",
+      "result": "19/19 documentation tests passed after adding the User Guide 1.15 review-history row.",
+      "reference": null
     }
   ],
   "ci": [
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43961540531,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43961540531"
+      "runId": 43962627983,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962627983"
     },
     {
       "name": "database",
-      "status": "fail",
-      "runId": 43961540531,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43961540531"
+      "status": "pending",
+      "runId": 43962627983,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962627983"
     }
   ],
   "decisions": [
@@ -177,18 +208,18 @@
   ],
   "reruns": [],
   "limitations": [
-    "CI found malformed SQL quoting at line 283 of the new pgTAP test. It is corrected in this working tree but has not yet been rerun.",
-    "Authenticated tenant-isolation and browser regression were skipped after the database job failed.",
+    "The pgTAP SQL quote is verified by the passing fast database candidate. Audit-label and guide-history fixes pass local full tests, lint and TypeScript but await full Verify on the updated head.",
+    "The full Verify browser regression remains in progress; the separate fast candidate's critical browser smoke tests passed but did not exercise the demo-data user flow.",
     "The hosted development Supabase project has not been verified or changed; no claim of live functionality is made.",
     "Required Verify and database checks are not green."
   ],
   "blockers": [
-    "Re-run CI to verify the SQL quote correction, then confirm pgTAP, tenant-isolation and browser regressions pass on the latest head.",
+    "Run full Verify on the updated head and complete its database/browser jobs.",
     "Verify the hosted development Supabase project is dedicated and isolated, then obtain explicit operator approval before activation.",
     "Re-run required Verify after the paired evidence files are committed and keep issue #273 open for owner-visible acceptance."
   ],
   "recommendation": "blocked",
   "markdownPath": "docs/agent-work/issues/issue-273/pr-275/attempt-01.md",
-  "markdownSha256": "05bab3410bd4b93a05c35c2a789184ee665fe792afb2be2f9e2632d990bb5e51",
+  "markdownSha256": "1f5d53e4e5d53320dff6652bd798305dee735189716139ec53aa38f0f9877aca",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
