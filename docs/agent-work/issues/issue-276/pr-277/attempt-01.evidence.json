@@ -1,0 +1,207 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 276,
+    "url": "https://github.com/farbotkol/butterbox/issues/276"
+  },
+  "pullRequest": {
+    "number": 277,
+    "url": "https://github.com/farbotkol/butterbox/pull/277",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/add-employee-mobile-phone-number",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43953793967,
+    "agent": "copilot",
+    "commitSha": "e96ba8b46a429e8d5498c3728955170bbd6ae0eb",
+    "startedAt": "2026-11-16T20:49:46Z",
+    "updatedAt": "2026-11-16T20:50:47Z"
+  },
+  "scope": {
+    "summary": "Add nullable employee mobile contact storage, E.164 normalization, role-scoped checked writes and People UI; defer SMS consent and delivery.",
+    "changedFiles": [
+      "docs/USER_GUIDE.md",
+      "docs/agent-work/issues/issue-276/pr-277/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-276/pr-277/attempt-01.md",
+      "src/app/actions.ts",
+      "src/app/people/[employeeId]/page.tsx",
+      "src/app/people/people-feedback.tsx",
+      "src/app/people/people-forms.tsx",
+      "src/lib/employee-mobile.ts",
+      "supabase/migrations/20261116190000_employee_mobile_contacts.sql",
+      "supabase/tests/database/employee_mobile_contacts.test.sql",
+      "tests/e2e/auth.spec.mjs",
+      "tests/employee-mobile.test.mjs",
+      "tests/help.test.mjs"
+    ],
+    "implemented": [
+      "Optional mobile contact storage with Australian 04-to-E.164 and syntactic international E.164 normalization.",
+      "Server-side validation, checked save/create RPCs, creation idempotency protection and permission tests.",
+      "Accessible Add Person and primary-profile edit/remove fields, authorized profile display and user guidance.",
+      "Explicit separation of stored contact data from SMS consent, ownership verification and delivery."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC1",
+      "description": "Owner/authorized manager can enter an optional mobile number when adding a person and can edit/remove it later in an employee profile.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/app/people/people-forms.tsx",
+          "outcome": "Optional Add Person and edit fields, including removal, are implemented; the browser test was added but could not execute locally."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs",
+          "outcome": "Focused test stopped before Playwright because the local Next.js build could not fetch Google Fonts."
+        }
+      ]
+    },
+    {
+      "id": "AC2",
+      "description": "Existing employees without mobile remain unaffected; Australian and international validation and E.164 persistence are reliable, including invalid/empty inputs and informative errors.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/employee-mobile.test.mjs",
+          "outcome": "Australian input, international E.164, empty input and malformed values are covered by passing tests."
+        },
+        {
+          "kind": "test",
+          "reference": "supabase/tests/database/employee_mobile_contacts.test.sql",
+          "outcome": "18 focused pgTAP assertions passed, including normalization, invalid input, clearing and creation retries."
+        }
+      ]
+    },
+    {
+      "id": "AC3",
+      "description": "Backend migration/actions/RLS enforce correct business, venue and role permissions; unrelated tenants cannot read or change employee phone data.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "supabase/tests/database/employee_mobile_contacts.test.sql",
+          "outcome": "Assertions passed for owner access, out-of-scope manager read/write denial, linked-worker self-read and cross-business denial."
+        },
+        {
+          "kind": "file",
+          "reference": "supabase/migrations/20261116190000_employee_mobile_contacts.sql",
+          "outcome": "Checked RPCs normalize input and preserve existing authorization checks; mobile values are excluded from audit payloads."
+        }
+      ]
+    },
+    {
+      "id": "AC4",
+      "description": "Saving a phone number never sends SMS and does not silently grant SMS consent; future consent/verification/opt-out state is safe and explicitly distinguished.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "src/app/actions.ts",
+          "outcome": "Profile saves only persist contact data; no delivery or consent action is called."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/USER_GUIDE.md",
+          "outcome": "Separately documents explicit consent source/time, independent verification and opt-out enforcement as prerequisites for future SMS."
+        }
+      ]
+    },
+    {
+      "id": "AC5",
+      "description": "Targeted database, application, accessibility and browser tests cover creation, editing, removal, negative authorization cases and regression; user guide/help are updated.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "node --experimental-strip-types --test tests/help.test.mjs tests/employee-mobile.test.mjs tests/people-directory.test.mjs",
+          "outcome": "Passed, 26 tests; guide/help content and existing directory behavior are covered."
+        },
+        {
+          "kind": "test",
+          "reference": "supabase/tests/database/employee_mobile_contacts.test.sql",
+          "outcome": "Passed, 18 focused pgTAP assertions; local full runner could not build its image because www.postgresql.org DNS resolution failed."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs",
+          "outcome": "Browser test was not reached because the local build could not fetch Google Fonts."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --experimental-strip-types --test tests/help.test.mjs tests/employee-mobile.test.mjs tests/people-directory.test.mjs",
+      "outcome": "passed",
+      "result": "26 tests passed."
+    },
+    {
+      "command": "npx tsc --noEmit",
+      "outcome": "passed",
+      "result": "TypeScript check passed."
+    },
+    {
+      "command": "npm run lint -- src/app/actions.ts src/app/people/people-forms.tsx 'src/app/people/[employeeId]/page.tsx' src/app/people/people-feedback.tsx src/lib/employee-mobile.ts tests/employee-mobile.test.mjs tests/help.test.mjs tests/e2e/auth.spec.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed."
+    },
+    {
+      "command": "psql against the verified disposable butterbox-citest database, executing supabase/tests/database/employee_mobile_contacts.test.sql",
+      "outcome": "passed",
+      "result": "All 18 focused pgTAP assertions passed."
+    },
+    {
+      "command": "npm run test:auth:focused -- --grep 'employee profiles and filtered team directory' --runner host",
+      "outcome": "blocked",
+      "result": "Next.js build stopped before Playwright because Google Fonts could not be fetched in this environment."
+    },
+    {
+      "command": "node scripts/test-env.mjs run db --runner container",
+      "outcome": "blocked",
+      "result": "Migration reset passed; test-runner image build then failed because www.postgresql.org did not resolve."
+    },
+    {
+      "command": "git diff --check",
+      "outcome": "passed",
+      "result": "No whitespace errors."
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43953793967,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43953793967"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43953793967,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43953793967"
+    }
+  ],
+  "decisions": [
+    "Do not add SMS consent, verification or opt-out behavior in this contact-data slice; document these as required separate work before any SMS delivery."
+  ],
+  "reruns": [],
+  "limitations": [
+    "International validation checks E.164 syntax only; it does not prove carrier assignment or number ownership.",
+    "The browser test and complete local pgTAP suite remain unverified in this network-restricted environment."
+  ],
+  "blockers": [
+    "PR #277 still needs its description updated with the canonical issue/evidence markers and without auto-close keywords; Verify fails because the description is missing the reference and issue marker.",
+    "The focused browser test stopped before Playwright when the local Next.js build could not reach Google Fonts.",
+    "The full local database runner image could not build because www.postgresql.org did not resolve; the targeted employee mobile pgTAP file passed via psql."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-276/pr-277/attempt-01.md",
+  "markdownSha256": "dcc055758ac26bb3087ad52e4815fcada669427b275024352cf2b80f13d107cf",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
