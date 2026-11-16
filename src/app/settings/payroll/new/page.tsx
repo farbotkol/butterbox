@@ -36,7 +36,7 @@ export default async function NewPayrollDestinationPage({ searchParams }: { sear
       <Link href={back} className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
         Back to mappings
       </Link>
-      <Link href={helpHref("payroll", workspace.business.id, workspace.venue.id)}
+      <Link href={`/settings/payroll/xero?business=${encodeURIComponent(workspace.business.id)}`}\n        className="inline-flex min-h-11 items-center font-semibold text-ocean underline">\n        Connect a Xero organisation\n      </Link>\n      <Link href={helpHref("payroll", workspace.business.id, workspace.venue.id)}
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with payroll preparation
       </Link>
@@ -55,7 +55,7 @@ export default async function NewPayrollDestinationPage({ searchParams }: { sear
         {selected && <input type="hidden" name="return_connection_id" value={selected.id} />}
         <label className="text-sm font-medium">Provider
           <select name="provider" className={payrollFieldClass}>
-            {Object.entries(payrollProviders).map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            {Object.entries(payrollProviders).filter(([id]) => id !== "xero").map(([id, label]) =>\n              <option key={id} value={id}>{label}</option>)}
           </select>
         </label>
         <label className="min-w-0 text-sm font-medium">Destination name
