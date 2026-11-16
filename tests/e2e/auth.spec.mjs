@@ -3894,8 +3894,9 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     await expect(addEmployeeButton).toBeFocused();
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Rejected mobile worker");
     await newEmployee.getByRole("textbox", { name: "Mobile number", exact: true }).fill("not a number");
+    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
     await addEmployeeButton.click();
-    await expect(page).toHaveURL(/\/people\/new\?/);
+    await expect(page).toHaveURL(/\/people\/new\?.*error=mobile/);
     await expect(page.locator("main p[role='alert']")).toContainText("Enter an Australian mobile as 04");
     expect(await admin.from("employees").select("id")
       .eq("business_id", businessId).eq("name", "Rejected mobile worker")).toMatchObject({ data: [], error: null });
