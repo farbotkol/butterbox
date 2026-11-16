@@ -24,6 +24,14 @@ async function main() {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) {
     throw new Error('GITHUB_REPOSITORY must be owner/name');
   }
+  const currentPullRequest = JSON.parse(runGh([
+    'api', '--hostname', 'github.com',
+    `repos/${repository}/pulls/${pullRequest.number}`,
+  ]));
+  if (currentPullRequest.state !== 'open' ||
+      currentPullRequest.head?.sha !== pullRequest.head?.sha) {
+    throw new Error('PR head changed or closed; this Verify run is stale');
+  }
   const pages = JSON.parse(runGh([
     'api', '--hostname', 'github.com', '--paginate', '--slurp',
     `repos/${repository}/pulls/${pullRequest.number}/files?per_page=100`,
@@ -33,10 +41,10 @@ async function main() {
     `repos/${repository}/pulls/${pullRequest.number}/reviews?per_page=100`,
   ])).flat();
   const result = checkManagedFiles(pages, {
-    labels: pullRequest.labels ?? [],
-    pullRequestBody: pullRequest.body ?? '',
+    labels: currentPullRequest.labels ?? [],
+    pullRequestBody: currentPullRequest.body ?? '',
     reviews,
-    headSha: pullRequest.head.sha,
+    headSha: currentPullRequest.head.sha,
   });
   if (!result.allowed) {
     const paths = result.managedFiles.length

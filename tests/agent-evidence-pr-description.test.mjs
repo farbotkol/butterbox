@@ -7,6 +7,7 @@ import {
   isEligiblePullRequest,
   reconcileDescriptionBody,
   reconcilePullRequestDescription,
+  rerunVerifyForPullRequest,
 } from '../tools/agent-evidence/reconcile-pr-description.mjs';
 import { getEvidencePathFromPullRequest } from '../tools/agent-evidence/evidence.mjs';
 
@@ -104,6 +105,7 @@ function completeEvidence() {
 function fixture(initialBody, options = {}) {
   let current = pr(initialBody, options.pullRequest);
   const updates = [];
+  const reruns = [];
   let pullReads = 0;
   const api = {
     getPullRequest: async () => {
@@ -137,12 +139,21 @@ function fixture(initialBody, options = {}) {
         body: `Canonical issue approved: #${issueNumber}`,
       }] : [];
     },
+    listVerifyRuns: async () => [{
+      id: 700,
+      event: 'pull_request',
+      status: 'completed',
+      conclusion: 'failure',
+      created_at: '2026-11-16T21:00:00Z',
+      pull_requests: [{ number: pullNumber, head: { sha: headSha } }],
+    }],
+    rerunWorkflow: async runId => { reruns.push(runId); },
     updatePullRequestBody: async (_number, nextBody) => {
       updates.push(nextBody);
       current = { ...current, body: nextBody, updated_at: '2026-11-16T21:02:00Z' };
     },
   };
-  return { api, updates, getCurrent: () => current };
+  return { api, updates, reruns, getCurrent: () => current };
 }
 
 test('empty initial draft stays untouched and does not infer an issue', async () => {
@@ -159,6 +170,8 @@ test('valid partial PR loses only its trailing auto-close footer', async () => {
   const result = await reconcilePullRequestDescription({ repository, pullRequest: pr(initial), api: value.api });
   assert.equal(result.status, 'updated');
   assert.equal(result.removedAutoCloseFooter, true);
+  assert.deepEqual(result.verify, { status: 'rerun-requested', runId: 700 });
+  assert.deepEqual(value.reruns, [700]);
   assert.match(value.updates[0], new RegExp(`Refs #${issueNumber}`));
   assert.match(value.updates[0], new RegExp(`<!-- butterbox-evidence: ${evidencePath.replaceAll('/', '\\/')} -->`));
   assert.doesNotMatch(value.updates[0], /-\s*Fixes #/);
@@ -235,8 +248,33 @@ test('only the linked repository auto-close footer is removed', () => {
     issueNumber,
     pullNumber,
   });
-  assert.equal(external.removedFooter, false);
-  assert.match(external.body, /another\/project#278/);
+  assert.equal(external.removedFooter, true);
+  assert.match(external.body, /Refs another\/project#278/);
+  assert.doesNotMatch(external.body, /Fixes another\/project#278/);
+});
+
+test('auto-close lines for other issues are neutralized too', () => {
+  const input = `Refs #${issueNumber}\n<!-- butterbox-issue: ${issueNumber} -->\n` +
+    '- Fixes #280\n- Fixes #278';
+  const result = reconcileDescriptionBody({
+    body: input,
+    repository,
+    issueNumber,
+    pullNumber,
+  });
+  assert.equal(result.status, 'updated');
+  assert.match(result.body, /Refs #280/);
+  assert.doesNotMatch(result.body, /- Fixes #/);
+
+  const unrelatedTail = reconcileDescriptionBody({
+    body: `Refs #${issueNumber}\n<!-- butterbox-issue: ${issueNumber} -->\n- Fixes #280`,
+    repository,
+    issueNumber,
+    pullNumber,
+  });
+  assert.equal(unrelatedTail.status, 'updated');
+  assert.match(unrelatedTail.body, /Refs #280/);
+  assert.doesNotMatch(unrelatedTail.body, /- Fixes #280/);
 });
 
 test('missing markers are restored only from a unique verified issue and actual evidence files', async () => {
@@ -394,17 +432,77 @@ test('fully accepted evidence and exact-head owner approval preserve a close foo
   assert.deepEqual(value.updates, []);
 });
 
+test('Verify rerun waits for the matching PR head and never uses an unrelated run', async () => {
+  let time = 0;
+  let reads = 0;
+  const rerunIds = [];
+  const result = await rerunVerifyForPullRequest({
+    api: {
+      listVerifyRuns: async () => {
+        reads++;
+        if (reads === 1) return [{
+          id: 10, event: 'pull_request', status: 'completed', conclusion: 'failure',
+          pull_requests: [{ number: pullNumber, head: { sha: 'b'.repeat(40) } }],
+        }];
+        return [{
+          id: 11, event: 'pull_request', status: 'completed', conclusion: 'failure',
+          pull_requests: [{ number: pullNumber, head: { sha: headSha } }],
+        }];
+      },
+      rerunWorkflow: async id => { rerunIds.push(id); },
+    },
+    pullRequest: pr(''),
+    timeoutMs: 20,
+    intervalMs: 10,
+    pause: async () => { time += 10; },
+    now: () => time,
+  });
+  assert.equal(result.status, 'rerun-requested');
+  assert.equal(result.runId, 11);
+  assert.deepEqual(rerunIds, [11]);
+});
+
+test('fully accepted evidence cannot carry an unrelated issue auto-close phrase', async () => {
+  const initial = `${body({ footer: false })}\n- Fixes #280\n- Fixes #278`;
+  const value = fixture(initial, { complete: true });
+  const result = await reconcilePullRequestDescription({ repository, pullRequest: pr(initial), api: value.api });
+  assert.equal(result.status, 'updated');
+  assert.match(value.updates[0], /Refs #280/);
+  assert.match(value.updates[0], /- Fixes #278/);
+  assert.doesNotMatch(value.updates[0], /- Fixes #280/);
+
+  const unrelatedTail = `${body({ footer: false })}\n- Fixes #280`;
+  const second = fixture(unrelatedTail, { complete: true });
+  const secondResult = await reconcilePullRequestDescription({
+    repository,
+    pullRequest: pr(unrelatedTail),
+    api: second.api,
+  });
+  assert.equal(secondResult.status, 'updated');
+  assert.match(second.updates[0], /Refs #280/);
+  assert.doesNotMatch(second.updates[0], /- Fixes #280/);
+});
+
 test('the trusted workflow is write-minimal and Verify retains the unchanged evidence gate', async () => {
   const workflow = await readFile(new URL('../.github/workflows/reconcile-pr-descriptions.yml', import.meta.url), 'utf8');
   const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
+  const evidenceGate = await readFile(new URL('../tools/agent-evidence/check-pr-evidence.mjs', import.meta.url), 'utf8');
+  const managedFileGate = await readFile(new URL('../tools/agent-evidence/check-managed-files.mjs', import.meta.url), 'utf8');
   assert.match(workflow, /pull_request_target:/);
   assert.match(workflow, /types: \[opened, edited, synchronize, reopened\]/);
   assert.match(workflow, /pull-requests:\s*write/);
+  assert.match(workflow, /actions:\s*write/);
   assert.match(workflow, /issues:\s*read/);
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /issues:\s*write/);
   assert.match(ci, /node tools\/agent-evidence\/check-pr-evidence\.mjs/);
   assert.match(ci, /pull-requests:\s*read/);
+  for (const gate of [evidenceGate, managedFileGate]) {
+    assert.match(gate, /repos\/\$\{repository\}\/pulls\/\$\{pullRequest\.number\}/);
+    assert.match(gate, /currentPullRequest\.head\?\.\s*sha !== pullRequest\.head\?\.\s*sha/);
+  }
+  assert.match(evidenceGate, /canonicalIssueNumber\(currentPullRequest\.body\)/);
+  assert.match(managedFileGate, /pullRequestBody:\s*currentPullRequest\.body/);
 });
 
 test('GitHub updates use a single pull-request body PATCH with the supplied exact body', async () => {

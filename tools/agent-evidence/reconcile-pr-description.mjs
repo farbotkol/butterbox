@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   canonicalIssueNumber,
   evidenceIsComplete,
@@ -15,6 +16,7 @@ import {
 
 const SHA = /^[a-f0-9]{40}$/i;
 const MAX_REPAIRS_PER_HEAD = 2;
+const VERIFY_RUN_WAIT_MS = 40 * 60 * 1000;
 
 function assertRepository(repository) {
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) {
@@ -49,19 +51,52 @@ function repairState(body, headSha) {
   return { count: Number(markers[0][2]) };
 }
 
+function pullRequestRunIsForHead(run, pullRequest) {
+  return run.event === 'pull_request' &&
+    run.pull_requests?.some(link =>
+      link.number === pullRequest.number &&
+      link.head?.sha === pullRequest.head.sha);
+}
+
+export async function rerunVerifyForPullRequest({
+  api,
+  pullRequest,
+  timeoutMs = VERIFY_RUN_WAIT_MS,
+  intervalMs = 10_000,
+  pause = sleep,
+  now = Date.now,
+}) {
+  const deadline = now() + timeoutMs;
+  while (now() < deadline) {
+    const runs = await api.listVerifyRuns();
+    const run = runs
+      .filter(item => pullRequestRunIsForHead(item, pullRequest))
+      .sort((left, right) => String(right.created_at ?? '').localeCompare(String(left.created_at ?? '')))[0];
+    if (run?.status === 'completed') {
+      if (run.conclusion === 'success') return { status: 'already-passed', runId: run.id };
+      await api.rerunWorkflow(run.id);
+      return { status: 'rerun-requested', runId: run.id };
+    }
+    await pause(intervalMs);
+  }
+  throw new Error(`Timed out waiting for Verify run on PR #${pullRequest.number}`);
+}
+
 function closeFooter(body, repository) {
   const lines = String(body ?? '').split(/\r?\n/);
   let index = lines.length - 1;
   while (index >= 0 && !lines[index].trim()) index--;
   if (index < 0) return null;
   const parsed = autoCloseLine(lines[index], repository);
-  return parsed ? { index, issueNumber: parsed.issueNumber, lines } : null;
+  if (!parsed || (parsed.repository &&
+      parsed.repository.toLowerCase() !== repository.toLowerCase())) return null;
+  return { index, issueNumber: parsed.issueNumber, lines };
 }
 
-function autoCloseLine(line, repository) {
+function autoCloseLine(line) {
   const match = /^(\s*(?:>\s*)*)([-*]\s+)?(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:(\S+\/\S+))?#(\d+)\s*$/i
     .exec(line);
-  if (!match || (match[4] && match[4].toLowerCase() !== repository.toLowerCase())) return null;
+  if (!match) return null;
   return {
     issueNumber: Number(match[5]),
     prefix: match[1],
@@ -71,7 +106,7 @@ function autoCloseLine(line, repository) {
   };
 }
 
-function knownAutoCloseLines(body, repository) {
+function knownAutoCloseLines(body) {
   let fenced = false;
   return String(body ?? '').split(/\r?\n/).flatMap((line, index) => {
     if (/^\s*```/.test(line)) {
@@ -79,7 +114,7 @@ function knownAutoCloseLines(body, repository) {
       return [];
     }
     if (fenced) return [];
-    const parsed = autoCloseLine(line, repository);
+    const parsed = autoCloseLine(line);
     return parsed ? [{ ...parsed, index }] : [];
   });
 }
@@ -95,10 +130,10 @@ function discoverIssue(body, repository) {
   const references = [...content.matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)];
   for (const reference of references) numbers.add(Number(reference[1]));
   const footer = closeFooter(text, repository);
-  if (footer) numbers.add(footer.issueNumber);
-  if (numbers.size === 0) return { error: 'no canonical issue link in PR body' };
-  if (numbers.size !== 1) return { error: 'multiple issue links in PR body' };
-  return { issueNumber: [...numbers][0], footer };
+  if (numbers.size > 1) return { error: 'multiple issue links in PR body' };
+  if (numbers.size === 1) return { issueNumber: [...numbers][0], footer };
+  if (footer) return { issueNumber: footer.issueNumber, footer };
+  return { error: 'no canonical issue link in PR body' };
 }
 
 function evidenceMarkers(body) {
@@ -143,14 +178,17 @@ export function reconcileDescriptionBody({
   const markerMatches = [...content.matchAll(/<!--\s*butterbox-issue:\s*(\d+)\s*-->/gi)];
   const footer = closeFooter(original, repository);
   let removedFooter = false;
-  if (!fullyAccepted) {
-    const closeLines = knownAutoCloseLines(original, repository)
-      .filter(line => line.issueNumber === issueNumber);
-    for (const closeLine of closeLines.sort((left, right) => right.index - left.index)) {
-      if (closeLine.index === footer?.index) {
+  const closeLines = knownAutoCloseLines(original);
+  for (const closeLine of closeLines.sort((left, right) => right.index - left.index)) {
+    const targetsCanonicalIssue = closeLine.issueNumber === issueNumber &&
+      (!closeLine.repository || closeLine.repository.toLowerCase() === repository.toLowerCase());
+    if (!fullyAccepted || !targetsCanonicalIssue) {
+      if (closeLine.index === footer?.index && targetsCanonicalIssue) {
         lines.splice(closeLine.index, 1);
       } else {
-        const reference = closeLine.repository ? `${closeLine.repository}#${issueNumber}` : `#${issueNumber}`;
+        const reference = closeLine.repository
+          ? `${closeLine.repository}#${closeLine.issueNumber}`
+          : `#${closeLine.issueNumber}`;
         lines[closeLine.index] = `${closeLine.prefix}${closeLine.bullet}Refs ${reference}`;
       }
       removedFooter = true;
@@ -259,7 +297,7 @@ export async function reconcilePullRequestDescription({ repository, pullRequest,
 
   const changedFiles = (await api.getFiles(number)).map(file => file.filename);
   let fullyAccepted = false;
-  if (knownAutoCloseLines(current.body, repository).some(line => line.issueNumber === issue.number)) try {
+  if (knownAutoCloseLines(current.body).length) try {
     const candidateBody = reconcileDescriptionBody({
       body: current.body,
       repository,
@@ -310,12 +348,13 @@ export async function reconcilePullRequestDescription({ repository, pullRequest,
   }
 
   await api.updatePullRequestBody(number, result.body);
+  const verify = await rerunVerifyForPullRequest({ api, pullRequest: current });
   return {
     pullNumber: number,
     status: 'updated',
     issueNumber: issue.number,
     removedAutoCloseFooter: result.removedFooter,
-    verifyRerunExpected: true,
+    verify,
   };
 }
 
@@ -337,7 +376,8 @@ export function createGitHubApi({
     if (method) args.push('--method', method);
     args.push(path);
     if (body !== undefined) args.push('--input', '-');
-    return JSON.parse(run(args, body === undefined ? undefined : `${JSON.stringify(body)}\n`));
+    const output = run(args, body === undefined ? undefined : `${JSON.stringify(body)}\n`);
+    return output.trim() ? JSON.parse(output) : null;
   };
   const pages = path => parsePages(run([
     'api', '--hostname', 'github.com', '--paginate', '--slurp', path,
@@ -363,6 +403,9 @@ export function createGitHubApi({
       Boolean(event.source.issue.pull_request)),
     getFiles: number => pages(`repos/${repository}/pulls/${number}/files?per_page=100`),
     getPullRequestReviews: number => pages(`repos/${repository}/pulls/${number}/reviews?per_page=100`),
+    listVerifyRuns: () => pages(
+      `repos/${repository}/actions/workflows/ci.yml/runs?event=pull_request&per_page=100`,
+    ).flatMap(page => page.workflow_runs ?? []),
     getEvidence: async (path, ref) => {
       const raw = await content(path, ref);
       if (raw === null) return null;
@@ -377,6 +420,10 @@ export function createGitHubApi({
       `repos/${repository}/pulls/${number}`,
       'PATCH',
       { body },
+    ),
+    rerunWorkflow: runId => api(
+      `repos/${repository}/actions/runs/${runId}/rerun`,
+      'POST',
     ),
   };
 }
@@ -396,7 +443,7 @@ async function main() {
     const action = result.removedAutoCloseFooter ? 'normalized generated auto-close wording' : result.status;
     console.log(`PR #${result.pullNumber}: ${action}${result.issueNumber ? ` for issue #${result.issueNumber}` : ''}` +
       `${result.reason ? ` (${result.reason})` : ''}` +
-      `${result.verifyRerunExpected ? '; GitHub edited event will rerun Verify' : ''}`);
+      `${result.verify ? `; Verify ${result.verify.status} (run ${result.verify.runId})` : ''}`);
   } catch (error) {
     const text = `${error?.stderr?.toString?.() ?? ''} ${error?.message ?? ''}`;
     const status = text.match(/HTTP\s+\d{3}/i)?.[0] ?? 'GitHub/API error';

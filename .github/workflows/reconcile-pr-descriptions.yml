@@ -6,6 +6,7 @@ on:
     branches: [copilot/Development]
 
 permissions:
+  actions: write
   contents: read
   issues: read
   pull-requests: write
@@ -17,7 +18,7 @@ concurrency:
 jobs:
   reconcile:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 45
     steps:
       - name: Check out trusted Development policy
         uses: actions/checkout@v4
