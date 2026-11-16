@@ -1,33 +1,76 @@
-# Issue 91, PR 269: Xero mapping destination bridge
+# Issue #91 / PR #269 / attempt 01
 
 ## Scope
-Partial delivery of Issue #91. Authorised Xero organisations automatically become
-mapping destinations through an idempotent database trigger and an existing-tenant
-backfill. Existing destination mappings are preserved. Owners can navigate from
-the Xero connection to employee mappings; manual Xero destination creation is
-removed from the generic destination form.
 
-## Acceptance
-- AC-1 (organisations auto-linked): implementation prepared, database test extended;
-  pending hosted CI validation and deployment.
-- AC-2 (employee mapping): existing audited manual workflow reused. Automatic Xero
-  employee lookup is NOT implemented in this PR.
-- AC-3 (Xero timesheets submission): BLOCKED, intentionally not implemented.
-  Additional OAuth read permissions, employee verification, calendars, earnings
-  rate mapping, preflight, explicit owner approval, idempotency, duplicate
-  reconciliation and demonstration on a non-production account remain required.
+PR #269 creates an idempotent payroll mapping destination from an authorized
+Xero tenant UUID, backfills existing connected tenants, removes Xero from
+manual destination creation, and links connected organizations to their exact
+mapping destination. It does not synchronize Xero employees or submit payroll.
+
+This follow-up replaces the obsolete manual-Xero browser setup with a synthetic
+connected-tenant flow. It verifies destination creation and navigation,
+preserves audited employee mappings through reauthorization, and retains manual
+destination creation coverage for MYOB. The corrected reauthorization assertion
+compares the same projected mapping fields on both sides.
+
+## Acceptance evidence
+
+| Criterion | Status | Evidence |
+|---|---|---|
+| Current AU endpoints/scopes confirmed | Pass | Prior merged PR #262 evidence records AU Payroll v2 `POST /Timesheets` and the `payroll.timesheets` scope against the Xero OpenAPI contract. The current delivery document links official endpoint and scope references. |
+| OAuth refresh and permission failure handled | Pass | Prior merged PR #262 evidence records mocked refresh, token rotation, revocation, provider permission errors, and refresh-lock coverage. This follow-up additionally verifies same-tenant reauthorization preserves the destination and mapped employee IDs. |
+| sandbox end-to-end test validates mapping, retries and duplicate prevention. | Blocked | Hosted full browser and database runs passed synthetic mapping and reauthorization idempotency coverage. No authorized Xero Payroll sandbox submission or provider retry/remote duplicate test was performed; this PR enables no Xero API writes. |
+
+**Documentation: updated** — `docs/xero-payroll-delivery.md` describes the
+implemented mapping destination and the still-required Xero Payroll sandbox,
+retry, and duplicate-prevention verification. This follow-up changes test and
+evidence files only; no new user-facing workflow was introduced.
 
 ## Verification
-Changes have been committed to a draft branch; no local test run, full CI pass,
-database deployment or Xero provider write has been performed. Verify the pgTAP
-assertions and required GitHub status checks before review/merge. Database
-migration and production rollout must use the existing gated deployment process.
 
-## Changed files
-- supabase/migrations/20261116150000_xero_connected_payroll_destinations.sql
-- supabase/tests/database/xero_oauth_connections.test.sql
-- src/app/settings/payroll/new/page.tsx
-- src/app/settings/payroll/xero/page.tsx
-- docs/xero-payroll-delivery.md
-- docs/agent-work/issues/issue-91/pr-269/attempt-01.md
-- docs/agent-work/issues/issue-91/pr-269/attempt-01.evidence.json
+### Corrected source/test commit
+
+- Tested commit: `e951b137070be6fd9fe008dbdfa35cc3d051c006`.
+- Required Verify run
+  [43827159056](https://github.com/farbotkol/butterbox/actions/runs/43827159056):
+  the `database` job passed disposable Supabase startup, all database/pgTAP
+  assertions, tenant isolation, and the complete authenticated browser suite:
+  **108 passed, 1 skipped, 0 failed**.
+- Advisory change-aware run
+  [43827158966](https://github.com/farbotkol/butterbox/actions/runs/43827158966)
+  selected its conservative full-suite fallback and passed **108 tests, 1
+  skipped, 0 failed or flaky**.
+- Fast database candidate
+  [43827159011](https://github.com/farbotkol/butterbox/actions/runs/43827159011)
+  passed migration/pgTAP assertions, authenticated tenant isolation, and the
+  critical browser smoke.
+- The `verify` job in run 43827159056 stopped at the pre-existing malformed
+  evidence gate before running `npm test`, lint, or build. This attempt repairs
+  that evidence pair; fresh Verify results must be checked after this commit.
+
+### Test iteration and local checks
+
+- Initial full browser runs on `eebdca2` found one test-only mismatch:
+  **107 passed, 1 skipped, 1 failed**. The RPC included `employee_name`, while
+  the pre-reauthorization snapshot projected only employee ID, external ID, and
+  revision. The comparison now projects the same fields on both sides.
+- `node --experimental-strip-types --test tests/*.test.mjs` — **408 passed,
+  36 skipped, 0 failed** on the preceding E2E-only head.
+- Repository ESLint and `npx tsc --noEmit` passed on the preceding head.
+- `node --check tests/e2e/auth.spec.mjs`, `npx eslint
+  tests/e2e/auth.spec.mjs`, and `git diff --check` passed after the assertion
+  correction.
+- `npm run test:auth:focused -- --test tests/e2e/auth.spec.mjs:12718` could not
+  start locally because the pinned Supabase CLI 2.122.0 is unavailable; the
+  hosted full-suite runs completed successfully instead.
+- Local `npm run build` could not fetch the existing Inter and Poppins fonts in
+  this network-restricted environment. The current Verify workflow stopped
+  before its build step at evidence validation.
+
+## Remaining limitations
+
+- No Xero payroll sandbox, real employee synchronization, payroll submission,
+  provider retry, or remote duplicate-prevention behavior was exercised.
+- No production migration or deployment was performed.
+- PR #269 remains draft. Do not treat this partial mapping delivery as full
+  completion of the sandbox payroll acceptance criterion.
