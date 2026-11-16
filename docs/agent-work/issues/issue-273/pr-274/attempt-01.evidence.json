@@ -14,20 +14,23 @@
     "mergeSha": null
   },
   "run": {
-    "id": 43942058489,
+    "id": 43943053945,
     "agent": "copilot",
-    "commitSha": "955a33901e97a93edae1d2e280d30b93c45877ff",
-    "startedAt": "2026-11-16T19:42:18Z",
-    "updatedAt": "2026-11-16T19:44:59Z"
+    "commitSha": "733babe082627cf64826e388c32307ecccf0dfa6",
+    "startedAt": "2026-11-16T19:47:48Z",
+    "updatedAt": "2026-11-16T19:47:58Z"
   },
   "scope": {
-    "summary": "Record why Verify failed on the empty draft PR and preserve the demo-feature criteria as blocked pending sequencing with issue #86. No feature behavior is implemented.",
+    "summary": "Fix plain-bullet acceptance criterion parsing and record the PR evidence validation failures; preserve the demo-feature criteria as blocked pending sequencing with issue #86.",
     "changedFiles": [
       "docs/agent-work/issues/issue-273/pr-274/attempt-01.evidence.json",
-      "docs/agent-work/issues/issue-273/pr-274/attempt-01.md"
+      "docs/agent-work/issues/issue-273/pr-274/attempt-01.md",
+      "tests/agent-evidence.test.mjs",
+      "tools/agent-evidence/evidence.mjs"
     ],
     "implemented": [
-      "Added the required paired evidence files for the blocked attempt; no demo-data implementation was made."
+      "Added the required paired evidence files for the blocked attempt.",
+      "Acceptance criteria parsing now accepts plain bullet items as well as checkbox items under the canonical heading, with a mixed-format regression test."
     ]
   },
   "criteria": [
@@ -68,8 +71,8 @@
       "evidence": [
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43942058489/job/133562015713",
-          "outcome": "Verify failed because the evidence pair was absent; later test, lint, and build steps were skipped."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43943053945",
+          "outcome": "Verify failed because the parser did not recognize plain bullets under the issue's Acceptance criteria heading; the parser fix has not yet run in CI."
         },
         {
           "kind": "ci",
@@ -81,15 +84,15 @@
   ],
   "tests": [
     {
-      "command": "node tools/agent-evidence/validate-all.mjs",
+      "command": "node --test tests/agent-evidence.test.mjs",
       "outcome": "passed",
-      "result": "Validated all repository evidence files, including this attempt's paired files.",
+      "result": "11/11 tests passed, including mixed plain and checked acceptance bullets.",
       "reference": null
     },
     {
-      "command": "node --test tests/agent-evidence.test.mjs",
-      "outcome": "passed",
-      "result": "Focused evidence validation regression tests passed.",
+      "command": "npm run lint -- tools/agent-evidence/evidence.mjs tests/agent-evidence.test.mjs",
+      "outcome": "not-run",
+      "result": "ESLint was unavailable because repository dependencies were not installed in the sandbox.",
       "reference": null
     }
   ],
@@ -97,8 +100,8 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43942058489,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43942058489"
+      "runId": 43943053945,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43943053945"
     },
     {
       "name": "database",
@@ -113,7 +116,7 @@
   ],
   "reruns": [],
   "limitations": [
-    "This evidence records the CI run before its own files were added; a new Verify run is required to validate the paired files in the PR.",
+    "The parser fix and evidence are local tests and have not yet been validated by a new GitHub Verify run.",
     "The database job did not complete browser authentication tests.",
     "No demo-data implementation, deployment verification, or user-facing behavior was tested."
   ],
@@ -123,6 +126,6 @@
   ],
   "recommendation": "blocked",
   "markdownPath": "docs/agent-work/issues/issue-273/pr-274/attempt-01.md",
-  "markdownSha256": "afc908a50995f056a94d5c15d4b2c18b3d8ece18558f039493b8438974cf4ea4",
+  "markdownSha256": "87f178bd586eb311c015c69b7f71be2167c77dc48222d39cd6c908c547af7a7b",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

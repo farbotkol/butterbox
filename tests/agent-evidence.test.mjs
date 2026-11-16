@@ -315,6 +315,12 @@ test('partial and documentation-only deliveries never become full-story acceptan
     '## Acceptance criteria\n- [ ] First\n- [x] Second\n## Notes\n- [ ] Not a criterion',
   ), [{ checked: false, description: 'First' }, { checked: true, description: 'Second' }]);
   assert.deepEqual(parseAcceptanceCriteria(
+    '## Acceptance criteria\n- First plain criterion\n- [ ] Second criterion\n## Notes\n- Not a criterion',
+  ), [
+    { checked: false, description: 'First plain criterion' },
+    { checked: false, description: 'Second criterion' },
+  ]);
+  assert.deepEqual(parseAcceptanceCriteria(
     `## Tests / acceptance criteria
 - Two PRs changing distinct UI files within the same application area can both pass coordination.
 - Two PRs changing distinct tests in the same suite can both pass coordination.
