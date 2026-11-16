@@ -18,7 +18,7 @@
     "agent": "copilot",
     "commitSha": "5a680ffd9f852e713e2981a8e53449b365b0be5e",
     "startedAt": "2026-11-16T07:50:00Z",
-    "updatedAt": "2026-11-16T08:03:13Z"
+    "updatedAt": "2026-11-16T09:30:00Z"
   },
   "scope": {
     "summary": "Narrow PR-vs-PR blocking to shared changed paths and SQL ownership, retain fail-closed safety checks, and document advisory/recovery behavior.",
@@ -26,8 +26,10 @@
       "docs/agent-work/issues/issue-271/pr-272/attempt-01.evidence.json",
       "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
       "docs/github-issues-workflow.md",
+      "tests/agent-evidence.test.mjs",
       "tests/component-coordination.test.mjs",
       "tests/pr-coordination-trusted-checkout.test.mjs",
+      "tools/agent-evidence/evidence.mjs",
       "tools/agent-controller/README.md",
       "tools/agent-controller/check-pr-coordination.mjs",
       "tools/agent-controller/component-coordination.mjs"
@@ -36,7 +38,8 @@
       "Broad component overlaps are advisory for PR checks, while the independent issue-dispatch lease policy remains unchanged.",
       "Evidence paths are scoped to PR number; concrete file and SQL overlaps remain hard conflicts.",
       "Malformed peer metadata is classified; database ownership and invalid API/file data remain fail-closed.",
-      "Actionable coordination messages and recovery documentation were added."
+      "Actionable coordination messages and recovery documentation were added.",
+      "The evidence parser accepts the canonical Tests / acceptance criteria heading with strict exact-text and count validation."
     ]
   },
   "criteria": [
@@ -119,7 +122,7 @@
     },
     {
       "id": "COORD-7",
-      "description": "Tests reproduce past false-conflict patterns from farbotkol/butterbox#251, farbotkol/butterbox#264 and farbotkol/butterbox#267 plus positive true-conflict cases.",
+      "description": "Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases.",
       "status": "pass",
       "evidence": [
         {
@@ -151,8 +154,20 @@
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43828146554",
-          "outcome": "PR #272 validate-all passed for 16 evidence files, then verify failed at the missing PR reference/marker contract; database job had not completed at the recorded time."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43828505266",
+          "outcome": "Verify failed because the evidence parser did not recognize the canonical issue checklist; database failed while starting disposable Supabase, before tests ran. Coordination was not validated against this unmerged policy."
+        }
+      ]
+    },
+    {
+      "id": "COORD-9",
+      "description": "No automatic merge or production deploy in this issue. Submit a small reviewed PR against `copilot/Development`.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "https://github.com/farbotkol/butterbox/pull/272",
+          "outcome": "No merge or production deploy was performed, but PR #272 remains a draft and has not received review."
         }
       ]
     }
@@ -163,6 +178,18 @@
       "outcome": "passed",
       "result": "23 tests passed.",
       "reference": "https://github.com/farbotkol/butterbox/pull/272"
+    },
+    {
+      "command": "node --test tests/agent-evidence.test.mjs tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs",
+      "outcome": "passed",
+      "result": "34 tests passed, including parsing of the canonical nine plain-bullet acceptance criteria.",
+      "reference": "https://github.com/farbotkol/butterbox/pull/272"
+    },
+    {
+      "command": "npm run lint -- tools/agent-evidence/evidence.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed for the changed evidence parser and tests.",
+      "reference": null
     },
     {
       "command": "npm run lint -- tools/agent-controller/component-coordination.mjs tools/agent-controller/check-pr-coordination.mjs tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs",
@@ -181,14 +208,14 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43828146554,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828146554"
+      "runId": 43828505266,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828505266"
     },
     {
       "name": "database",
-      "status": "pending",
-      "runId": 43828146554,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828146554"
+      "status": "fail",
+      "runId": 43828505266,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828505266"
     }
   ],
   "decisions": [
@@ -198,18 +225,16 @@
   ],
   "reruns": [],
   "limitations": [
-    "The current PR body lacks the canonical Refs #271 and issue/evidence marker lines and has a generated Fixes #271 suffix.",
-    "The canonical issue uses a Tests / acceptance criteria heading with plain bullets; the evidence gate parser expects a separate checkbox heading format.",
-    "No merge-group run or real green verify/database pair on the changed PR was observed.",
-    "CodeQL reported no analyzable changed code and performed no analysis."
+    "The PR body has the canonical reference and markers but retains the generated Fixes #271 suffix, which is incompatible with this partial evidence; the available browser session is unauthenticated and cannot edit it.",
+    "The database job failed during disposable Supabase startup before database, tenant-isolation, or browser tests executed; the startup log was redirected to a runner-temporary file and was not published.",
+    "No merge-group run or real green verify/database pair on the changed PR was observed."
   ],
   "blockers": [
-    "PR body cannot be edited with the available task tools; an owner/reviewer must correct it before verify can pass.",
     "Required verify and database checks have not both passed.",
     "The full concurrency acceptance remains unverified on the changed trusted policy."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
-  "markdownSha256": "638cbd314e836c0ab9f4b769c5c8dc0beb3feebd80e88cb0b815378bdf510ac7",
+  "markdownSha256": "461d7dd0e0f675abd24d2d6f613f9e099f1bc215bff60b8e3b3a2c99b872894b",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

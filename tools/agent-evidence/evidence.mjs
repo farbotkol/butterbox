@@ -372,13 +372,19 @@ export function hasAutoCloseKeyword(body) {
 
 export function parseAcceptanceCriteria(body) {
   const lines = String(body ?? '').split(/\r?\n/);
-  const heading = lines.findIndex(line => /^#{1,6}\s+Acceptance criteria\s*$/i.test(line.trim()));
+  const heading = lines.findIndex(line => /^#{1,6}\s+(?:Acceptance criteria|Tests\s*\/\s*acceptance criteria)\s*$/i.test(line.trim()));
   if (heading < 0) return [];
+  const acceptsPlainBullets = /Tests\s*\/\s*acceptance criteria/i.test(lines[heading]);
   const criteria = [];
   for (const line of lines.slice(heading + 1)) {
     if (/^#{1,6}\s+/.test(line.trim())) break;
-    const match = /^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
-    if (match) criteria.push({ checked: match[1].toLowerCase() === 'x', description: match[2] });
+    const match = acceptsPlainBullets
+      ? /^\s*[-*]\s+(?:\[([ xX])\]\s+)?(.+?)\s*$/.exec(line)
+      : /^\s*[-*]\s+\[([ xX])\]\s+(.+?)\s*$/.exec(line);
+    if (match) criteria.push({
+      checked: match[1]?.toLowerCase() === 'x',
+      description: match[2],
+    });
   }
   return criteria;
 }
