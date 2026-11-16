@@ -6,7 +6,7 @@ import path from 'node:path';
 import { BRANCH, LABEL, OWNER_ID, Controller, StateStore, parseTask } from '../tools/agent-controller/listener.mjs';
 import {
   canReleaseLease, componentOverlap, componentsForFiles, declaredComponents, findOverlaps, leaseConflicts,
-  filesWithinComponents, normalizeComponents, pullRequestConflicts,
+  filesWithinComponents, normalizeComponents, pullRequestAdvisories, pullRequestConflicts,
 } from '../tools/agent-controller/component-coordination.mjs';
 
 test('component metadata is validated and paths map to isolated work areas', () => {
@@ -16,7 +16,7 @@ test('component metadata is validated and paths map to isolated work areas', () 
   assert.deepEqual(componentsForFiles(['tools/agent-controller/listener.mjs']), ['agent-controller']);
   assert.deepEqual(componentsForFiles(['.github/workflows/ci.yml']), ['ci:ci-yml']);
   assert.deepEqual(componentsForFiles(['docs/agent-work/issues/issue-12/pr-34/attempt-01.md']),
-    ['evidence:issue-12']);
+    ['evidence:issue-12-pr-34']);
 });
 
 test('Playwright spec filenames produce valid, disjoint component identifiers', () => {
@@ -64,6 +64,47 @@ test('disjoint files and issue evidence paths can proceed concurrently', () => {
   assert.deepEqual(componentsForFiles(['docs/github-issues-workflow.md']), ['governance:workflow']);
   assert.deepEqual(componentsForFiles(['docs/agent-status/roadmap.md']), ['governance:status']);
   assert.equal(componentOverlap(['governance:workflow'], ['governance:status']).length, 0);
+});
+
+test('broad application, test-suite, and evidence ownership remains advisory', () => {
+  const cases = [
+    [
+      { number: 271, body: '', files: [{ path: 'src/app/settings/profile/page.tsx' }] },
+      { number: 269, body: '', files: [{ path: 'src/app/settings/security/page.tsx' }] },
+      'application:settings',
+    ],
+    [
+      { number: 271, body: '', files: [{ path: 'tests/e2e/auth.spec.mjs' }] },
+      { number: 269, body: '', files: [{ path: 'tests/unit/auth.spec.mjs' }] },
+      'test:auth',
+    ],
+    [
+      { number: 271, body: '', files: [{ path: 'docs/agent-work/issues/issue-91/pr-271/attempt-01.md' }] },
+      { number: 269, body: '', files: [{ path: 'docs/agent-work/issues/issue-91/pr-269/attempt-01.md' }] },
+      undefined,
+    ],
+    [
+      { number: 271, body: '<!-- butterbox-components: ["repository-wide"] -->',
+        files: [{ path: 'src/app/settings/profile/page.tsx' }] },
+      { number: 269, body: '', files: [{ path: 'tools/agent-controller/listener.mjs' }] },
+      'repository-wide / agent-controller',
+    ],
+  ];
+  for (const [candidate, other, advisoryComponent] of cases) {
+    assert.deepEqual(pullRequestConflicts(candidate, [other]), []);
+    const advisories = pullRequestAdvisories(candidate, [other]);
+    if (advisoryComponent) {
+      assert.deepEqual(advisories, [{
+        pullRequest: other.number,
+        reason: 'broad_component_overlap',
+        components: [advisoryComponent],
+      }]);
+    } else {
+      assert.deepEqual(advisories, []);
+      assert.deepEqual(componentsForFiles(candidate.files), ['evidence:issue-91-pr-271']);
+      assert.deepEqual(componentsForFiles(other.files), ['evidence:issue-91-pr-269']);
+    }
+  }
 });
 
 test('oversized component declarations fail closed instead of dropping overlap results', () => {
@@ -156,28 +197,58 @@ test('unstarted empty drafts do not block unrelated or overlapping active PRs', 
   assert.deepEqual(pullRequestConflicts(emptySms, [button, emptyXero]), []);
 });
 
-test('empty drafts with malformed metadata and empty non-draft PRs remain blocked', () => {
+test('malformed candidate metadata and empty non-draft candidates remain blocked', () => {
   const button = {
     number: 261, draft: true, body: '',
     files: [{ path: 'src/app/people/page.tsx' }],
   };
   const invalid = { number: 262, draft: true,
     body: '<!-- butterbox-components: ["not-a-component"] -->', files: [] };
+  const invalidActive = { ...invalid, files: [{ path: 'docs/xero-payroll-delivery.md' }] };
   const readyEmpty = { number: 263, draft: false, body: '', files: [] };
-  assert.deepEqual(pullRequestConflicts(button, [invalid]), [
-    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  assert.deepEqual(pullRequestConflicts(button, [invalid]), []);
+  assert.deepEqual(pullRequestAdvisories(button, [invalid]), [
+    { pullRequest: 262, reason: 'invalid_peer_component_metadata' },
   ]);
+  assert.deepEqual(pullRequestConflicts(button, [invalidActive]), []);
+  assert.deepEqual(pullRequestAdvisories(button, [invalidActive]), [
+    { pullRequest: 262, reason: 'invalid_peer_component_metadata' },
+  ]);
+  const invalidDatabaseOwnership = {
+    number: 265,
+    draft: true,
+    body: '<!-- butterbox-components: ["database:table:public.shifts", "not-a-component"] -->',
+    files: [{ path: 'src/app/reports/page.tsx' }],
+  };
+  assert.deepEqual(pullRequestConflicts(button, [invalidDatabaseOwnership]), [
+    { pullRequest: 265, reason: 'invalid_safety_critical_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestAdvisories(button, [invalidDatabaseOwnership]), []);
   assert.deepEqual(pullRequestConflicts(invalid, [button]), [
     { pullRequest: 262, reason: 'invalid_component_metadata' },
   ]);
-  assert.deepEqual(pullRequestConflicts({ number: 264, draft: true, body: '', files: [] }, [invalid]), [
-    { pullRequest: 262, reason: 'invalid_component_metadata' },
-  ]);
-  assert.deepEqual(pullRequestConflicts(button, [readyEmpty]), [
-    { pullRequest: 263, reason: 'no_changed_files' },
+  assert.deepEqual(pullRequestConflicts({ number: 264, draft: true, body: '', files: [] }, [invalid]), []);
+  assert.deepEqual(pullRequestConflicts(button, [readyEmpty]), []);
+  assert.deepEqual(pullRequestAdvisories(button, [readyEmpty]), [
+    { pullRequest: 263, reason: 'peer_no_changed_files' },
   ]);
   assert.deepEqual(pullRequestConflicts(readyEmpty, [button]), [
     { pullRequest: 263, reason: 'no_changed_files' },
+  ]);
+});
+
+test('invalid API changed-file paths fail closed with the affected PR identified', () => {
+  const candidate = { number: 271, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }] };
+  assert.deepEqual(pullRequestConflicts({
+    ...candidate, files: [{ path: '../invalid.ts' }],
+  }, []), [
+    { pullRequest: 271, reason: 'invalid_changed_files' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(candidate, [{
+    number: 269, draft: true, body: '', files: [{ path: '../invalid.ts' }],
+  }]), [
+    { pullRequest: 269, reason: 'invalid_changed_files' },
   ]);
 });
 
