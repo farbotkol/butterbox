@@ -12,7 +12,7 @@ test("owner navigation follows the approved group and item order", () => {
   assert.deepEqual(labels(navigationGroups("owner")), [
     ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
     ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
-    ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings"]],
+    ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings", "Demo Data"]],
     ["Business", ["Payroll", "Hours & labour", "Permissions", "Audit history"]],
   ]);
 });
@@ -40,6 +40,7 @@ test("active navigation chooses the most specific route and respects path bounda
     ["/", "Dashboard"], ["/attendance", "Clock in / out"], ["/attendance/history", "Clock in / out"],
     ["/attendance/kiosks", "Clock kiosks"], ["/settings/departments/123/roles/456", "Departments & roles"],
     ["/settings/organisation", "Venue settings"], ["/settings/payroll/new", "Payroll"],
+    ["/settings/demo-data", "Demo Data"],
     ["/roster/planning", "Rostering"], ["/help", "Help"],
   ]) assert.equal(activeNavigationItem(pathname, items)?.label, label, pathname);
   assert.equal(activeNavigationItem("/attendance-extra", items), undefined);
@@ -50,6 +51,7 @@ test("navigation carries the selected venue without narrowing business-wide dest
   const items = navigationGroups("owner").flatMap((group) => group.items);
   for (const [label, expectedKey] of [
     ["Dashboard", "venue"], ["People", "venue"], ["Payroll", "venue"], ["Clock kiosks", "venue"],
+    ["Demo Data", "venue"],
     ["Hours & labour", "contextVenue"], ["Permissions", "contextVenue"], ["Audit history", "contextVenue"],
   ]) {
     const item = items.find((candidate) => candidate.label === label);

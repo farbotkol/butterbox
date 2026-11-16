@@ -14,6 +14,8 @@ import { authCallbackUrl, invitationEmailUrl } from "@/lib/auth-urls";
 import { validExceptionDates } from "@/lib/availability";
 import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
+import { demoDataProjectRef } from "@/lib/demo-data-environment";
+import { workspaceDemoDataApproved } from "@/lib/demo-data";
 import { departmentHref, parseDepartmentFilterContext } from "@/lib/department-directory";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
 import { employmentMetadataFailure, isEmploymentBasis, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
@@ -2356,7 +2358,11 @@ export async function saveBusinessDraftAction(formData: FormData) {
   const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
-  if (formData.has("sample_data")) redirect("/setup?error=sample-disabled");
+  const includeSampleData = formData.get("sample_data") === "on";
+  if (formData.has("sample_data") && (!includeSampleData ||
+    !(await workspaceDemoDataApproved(workspace.supabase)))) {
+    redirect("/setup?error=sample-disabled");
+  }
 
   const timezone = text(formData, "timezone", 64);
   if (!timezone) redirect("/setup?error=draft");
@@ -2367,7 +2373,7 @@ export async function saveBusinessDraftAction(formData: FormData) {
     venue_name: text(formData, "venue_name", 100),
     venue_address: text(formData, "venue_address", 200),
     timezone,
-    include_sample_data: false,
+    include_sample_data: includeSampleData,
   });
   if (error) redirect("/setup?error=draft");
   redirect("/setup?saved=1");
@@ -2377,7 +2383,11 @@ export async function createBusinessAction(formData: FormData) {
   const workspace = await getWorkspace(undefined, businessContext(formData));
   if (workspace.status === "anonymous") redirect("/login?message=session-ended");
   if (workspace.status !== "needs_setup") redirect("/");
-  if (formData.has("sample_data")) redirect("/setup?error=sample-disabled");
+  const includeSampleData = formData.get("sample_data") === "on";
+  if (formData.has("sample_data") && (!includeSampleData ||
+    !(await workspaceDemoDataApproved(workspace.supabase)))) {
+    redirect("/setup?error=sample-disabled");
+  }
 
   const businessName = text(formData, "business_name", 100);
   const venueName = text(formData, "venue_name", 100);
@@ -2392,7 +2402,7 @@ export async function createBusinessAction(formData: FormData) {
     p_venue_name: venueName,
     p_venue_address: venueAddress,
     p_timezone: timezone,
-    p_include_sample_data: false,
+    p_include_sample_data: includeSampleData,
   });
   if (error) {
     console.error("Workspace setup failed.", { code: error.code, message: error.message });
@@ -2400,6 +2410,50 @@ export async function createBusinessAction(formData: FormData) {
       ? "/setup?error=sample-disabled" : "/setup?error=create");
   }
   redirect("/");
+}
+
+export async function loadWorkspaceDemoDataAction(formData: FormData) {
+  const businessIds = formData.getAll("business_id");
+  const venueIds = uuidList(formData, "venue_id", 1);
+  const confirmed = formData.getAll("confirm_demo_load");
+  if (businessIds.length !== 1 || !venueIds || venueIds.length !== 1 ||
+    confirmed.length !== 1 || confirmed[0] !== "yes") {
+    redirect("/settings/demo-data?error=invalid");
+  }
+
+  const workspace = await getWorkspace(venueIds[0], { businessId: businessIds[0] });
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status !== "ready") redirect("/?error=workspace");
+  const destination = withBusiness(
+    `/settings/demo-data?venue=${encodeURIComponent(venueIds[0])}`,
+    workspace.business.id,
+  );
+  if (workspace.membership.role !== "owner") redirect(`${destination}&error=permission`);
+
+  const projectRef = demoDataProjectRef(process.env);
+  if (!projectRef || !(await workspaceDemoDataApproved(workspace.supabase))) {
+    redirect(`${destination}&error=disabled`);
+  }
+
+  const { error } = await workspace.supabase.rpc("load_workspace_demo_data", {
+    p_business_id: workspace.business.id,
+    p_venue_id: workspace.venue.id,
+    p_project_ref: projectRef,
+  });
+  if (error) {
+    console.error("Workspace demo-data load failed.", { code: error.code, message: error.message });
+    const failure = error.message.includes("clean venue") ? "not-clean"
+      : error.message.includes("direct roster publication") ? "publication-mode"
+        : error.message.includes("Permission denied") ? "permission"
+          : error.message.includes("not enabled") ? "disabled" : "load";
+    redirect(`${destination}&error=${failure}`);
+  }
+
+  for (const route of ["/settings/demo-data", "/people", "/roster", "/attendance", "/timesheets"]) {
+    revalidatePath(route);
+  }
+  redirect(destination);
 }
 
 export async function saveShiftAction(_previous: ShiftFormState, formData: FormData): Promise<ShiftFormState> {

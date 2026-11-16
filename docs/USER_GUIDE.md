@@ -3,7 +3,7 @@
 **Audience:** Australian café and restaurant owners, venue managers, employees and payroll administrators.  
 **Status:** Living guide for functionality verified in the Main Roadmap branch; not a promise of production availability.  
 **Product:** Butterbox Systems — *Less admin. More good days.*
-**Guide version:** 1.14 — reviewed 2026-11-05 (Shift discussion accessible labels; other sections retain their earlier review dates).
+**Guide version:** 1.15 — reviewed 2026-11-16 (gated demo-data onboarding and owner workflow; other sections retain their earlier review dates).
 
 > This guide is a functional overview, not a substitute for award interpretation, payroll/legal advice or a final production user acceptance walkthrough. Screen names and availability may change as the product evolves. Some features depend on role, venue and department permissions.
 
@@ -13,6 +13,7 @@
 [Attendance](#attendance) | [Timesheets and payroll](#timesheets-and-payroll-preparation) |
 [Hours and labour](#hours-and-labour--owners) |
 [Overtime and exceptions](#overtime-and-exceptions--managers) |
+[Demo data in approved development workspaces](#demo-data-in-approved-development-workspaces) |
 [Internal showcase](#internal-synthetic-showcase) | [Troubleshooting](#troubleshooting)
 
 ## Internal synthetic showcase
@@ -20,7 +21,7 @@
 This is a **synthetic internal evaluation**, not a live customer workspace.
 An authorized operator must prepare the separately verified showcase using the
 [operator procedure](../README.md#isolated-local-synthetic-showcase). Do not
-create a sample business through ordinary signup/setup or enter real names,
+use this pre-provisioned showcase to create a sample business or enter real names,
 contact details, attendance or payroll information. The local review app is
 `http://127.0.0.1:3137`. The operator can also supply a separate temporary
 HTTPS link to the internet-accessible preview.
@@ -200,12 +201,56 @@ Award Central and production/legal acceptance are not implied.
   rather than changing URL IDs.
 - First-time owners use `/setup`: complete business/venue name, address and
   **Venue timezone**, then **Create workspace**. **Save progress** retains
-  an incomplete setup. **Add a sample team** is unavailable in this environment;
-  leave it off and create a clean workspace. This is not a demo-data installer.
+  an incomplete setup. **Add a sample team** is available only in an explicitly
+  approved, isolated development deployment. In other environments it is
+  disabled with an explanation and the workspace starts without sample staff or
+  shifts. See [Demo data in approved development workspaces](#demo-data-in-approved-development-workspaces).
 
 Registration, password and staff-invitation emails are account-service messages
 and depend on the deployment's configured mail service. They do not mean optional
 roster/attendance email, SMS, push or WhatsApp channels are live.
+
+### Demo data in approved development workspaces
+
+This owner-only operation is for a development workspace on a dedicated,
+isolated Supabase project that an operator has verified and explicitly
+approved. A page URL or deployment name is not proof of isolation. In every
+unapproved, unidentified or production environment, **Add a sample team** is
+disabled during setup and the **Demo Data** page reports that loading is
+disabled. Do not attempt to bypass these controls; ask the deployment operator
+to verify and configure the isolated project first. See the
+[operator activation steps](../README.md#operator-activation-gated-workspace-demo-data).
+The currently hosted development app is not activated until this verification
+has been completed.
+
+After setup, a workspace owner can open **Demo Data** in **Venue Management**
+or follow the **Demo Data** link from **Venue settings**. Other roles do not
+see this navigation item and cannot use its page or server action. Select the
+venue, review the **SIMULATION ONLY** notice, confirm the checkbox and choose
+**Load Demo Data**. The form announces when the load is in progress. It does
+not create anything merely by opening or viewing the page.
+
+The loader adds clearly tagged fictional FOH/BOH departments and employees,
+availability, published roster examples, completed sample attendance with an
+attributed correction, and separately stored payroll-preparation examples.
+After loading, the page displays the record counts, load time and
+illustrative-hours examples. Repeating the operation is safe and does not
+create duplicates. It does not delete or overwrite workspace configuration or
+real records, and there is no reset control.
+
+The selected venue must be clean: the operation refuses to load if that venue
+already has employees, shifts, attendance, roster publication history or staff
+invitations, if the business has a payroll integration, or if the venue uses
+approval-based roster publication. Existing records remain unchanged when a
+load is refused. Ask the operator to resolve any eligibility issue rather
+than removing real data or changing the venue's publication settings.
+
+Fictional employees have no login accounts or invitation addresses and cannot
+be linked to an account, invited or mapped to payroll. No external messages,
+payroll exports/submissions or Xero records are created. Preparation examples
+are not payroll records, wage or award calculations, compliance evidence or
+provider submissions. If the owner sees **Loading is disabled**, no demo
+operation is available until the operator verifies and approves the deployment.
 
 ### Delegate access and select a venue
 

@@ -1,10 +1,15 @@
 type DemoDataEnvironment = Record<string, string | undefined>;
 
 const projectRefPattern = /^[a-z0-9][a-z0-9-]{2,62}$/;
+const localProjectPorts: Record<string, string> = {
+  butterbox: "54321",
+  "butterbox-citest": "59421",
+};
 
 export function demoDataProjectRef(environment: DemoDataEnvironment): string | null {
   const projectRef = environment.BUTTERBOX_DEMO_DATA_PROJECT_REF;
   if (
+    !projectRef ||
     environment.BUTTERBOX_DEMO_DATA_ENABLED !== "true" ||
     environment.BUTTERBOX_DEMO_DATA_ENVIRONMENT !== "development" ||
     !projectRefPattern.test(projectRef ?? "")
@@ -34,7 +39,7 @@ export function demoDataProjectRef(environment: DemoDataEnvironment): string | n
       !vercelEnvironment &&
       url.protocol === "http:" &&
       ["127.0.0.1", "localhost", "[::1]"].includes(url.hostname) &&
-      Boolean(url.port)
+      url.port === localProjectPorts[projectRef]
     ) {
       return projectRef;
     }

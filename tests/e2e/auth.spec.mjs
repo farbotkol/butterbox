@@ -13057,7 +13057,7 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
       owner: [
         ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
         ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
-        ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings"]],
+        ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings", "Demo Data"]],
         ["Business", ["Payroll", "Hours & labour", "Permissions", "Audit history"]],
       ],
       admin: [
@@ -13138,6 +13138,7 @@ test("navigation UX: every owner destination, context and browser history", asyn
       ["People", "/people"], ["Announcements", "/announcements"], ["Timesheet review", "/timesheets"],
       ["Work time", "/work-time"], ["Exceptions", "/reports/exceptions"], ["Clock kiosks", "/attendance/kiosks"],
       ["Departments & roles", "/settings/departments"], ["Venue settings", "/settings/organisation"],
+      ["Demo Data", "/settings/demo-data"],
       ["Payroll", "/settings/payroll"], ["Hours & labour", "/reports/hours"],
       ["Permissions", "/settings/permissions"], ["Audit history", "/settings/audit"], ["Help", "/help"],
     ];
@@ -13148,6 +13149,9 @@ test("navigation UX: every owner destination, context and browser history", asyn
       await expect(page).toHaveURL((url) => url.pathname === pathname &&
         url.searchParams.get(businessWide.has(label) ? "contextVenue" : "venue") === secondVenue);
       await expect(page.getByRole("main")).toBeVisible();
+      if (label === "Demo Data") {
+        await expect(page.getByRole("heading", { name: "Loading is disabled" })).toBeVisible();
+      }
       await expect(page.locator("aside").first().getByText("Second venue", { exact: true })).toBeVisible();
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
       await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
