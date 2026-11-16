@@ -33,7 +33,7 @@ test("local development requires a loopback Supabase URL with a port", () => {
   }), null);
 });
 
-test("Vercel preview requires the configured hosted project and production is always blocked", () => {
+test("Vercel deployments require the configured hosted project and production runtime opt-in", () => {
   const preview = {
     ...base,
     NODE_ENV: "production",
@@ -43,6 +43,17 @@ test("Vercel preview requires the configured hosted project and production is al
   };
   assert.equal(demoDataProjectRef(preview), "butterbox");
   assert.equal(demoDataProjectRef({ ...preview, VERCEL_ENV: "production" }), null);
+  assert.equal(demoDataProjectRef({
+    ...preview,
+    VERCEL_ENV: "production",
+    BUTTERBOX_DEMO_DATA_ALLOW_PRODUCTION_RUNTIME: "true",
+  }), "butterbox");
+  assert.equal(demoDataProjectRef({
+    ...preview,
+    VERCEL_ENV: "production",
+    BUTTERBOX_DEMO_DATA_ALLOW_PRODUCTION_RUNTIME: "true",
+    NEXT_PUBLIC_SUPABASE_URL: "https://another-project.supabase.co",
+  }), null);
   assert.equal(demoDataProjectRef({
     ...preview, NEXT_PUBLIC_SUPABASE_URL: "https://another-project.supabase.co",
   }), null);

@@ -102,14 +102,20 @@ operator must:
    tenants, contains no customer data, and has no live payroll or messaging
    credentials. Do not inspect or change the hosted development database until
    its isolation is verified.
-2. Verify the app deployment is Vercel **Preview/Development** or local
-   development, never Production. Configure only that deployment's server
+2. Verify the runtime deployment separately from the data classification.
+   Vercel **Preview/Development** or local development is supported by default.
+   If Vercel Production is intentionally serving this development-only app,
+   configure `BUTTERBOX_DEMO_DATA_ALLOW_PRODUCTION_RUNTIME=true` only after
+   verifying the isolated Supabase project above; this opt-in does not classify
+   customer or production data as safe. Configure only that deployment's server
    environment with `BUTTERBOX_DEMO_DATA_ENABLED=true`,
    `BUTTERBOX_DEMO_DATA_ENVIRONMENT=development`, and
    `BUTTERBOX_DEMO_DATA_PROJECT_REF=<verified-project-ref>`. Confirm
-   `NEXT_PUBLIC_SUPABASE_URL` points to that exact project. Local development
-   is additionally restricted to the repository's known loopback project/port
-   pairs. Do not set these variables for Production.
+   `NEXT_PUBLIC_SUPABASE_URL` points to that exact isolated project. The
+   database must also have its matching explicit approval enabled. Local
+   development is additionally restricted to the repository's known loopback
+   project/port pairs. Never set these variables for customer or production
+   data, even when the Vercel runtime opt-in is used.
 3. Apply the migration through the normal reviewed migration process. Using
    the verified project's protected database-administrator access (not an app
    owner, service-role key or browser), explicitly enable only that project:

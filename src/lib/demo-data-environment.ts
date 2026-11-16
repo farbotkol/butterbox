@@ -18,11 +18,12 @@ export function demoDataProjectRef(environment: DemoDataEnvironment): string | n
   }
 
   const vercelEnvironment = environment.VERCEL_ENV;
-  if (
-    vercelEnvironment
-      ? !["preview", "development"].includes(vercelEnvironment)
-      : environment.NODE_ENV !== "development"
-  ) {
+  if (vercelEnvironment && !["preview", "development"].includes(vercelEnvironment)) {
+    if (
+      vercelEnvironment !== "production" ||
+      environment.BUTTERBOX_DEMO_DATA_ALLOW_PRODUCTION_RUNTIME !== "true"
+    ) return null;
+  } else if (!vercelEnvironment && environment.NODE_ENV !== "development") {
     return null;
   }
 
