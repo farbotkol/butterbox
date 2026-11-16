@@ -16,9 +16,9 @@
   "run": {
     "id": 43953793967,
     "agent": "copilot",
-    "commitSha": "e96ba8b46a429e8d5498c3728955170bbd6ae0eb",
+    "commitSha": "ae374c71ae36ddceca9c911c920fde2a7b646f26",
     "startedAt": "2026-11-16T20:49:46Z",
-    "updatedAt": "2026-11-16T20:50:47Z"
+    "updatedAt": "2026-11-16T21:59:46Z"
   },
   "scope": {
     "summary": "Add nullable employee mobile contact storage, E.164 normalization, role-scoped checked writes and People UI; defer SMS consent and delivery.",
@@ -41,24 +41,25 @@
       "Optional mobile contact storage with Australian 04-to-E.164 and syntactic international E.164 normalization.",
       "Server-side validation, checked save/create RPCs, creation idempotency protection and permission tests.",
       "Accessible Add Person and primary-profile edit/remove fields, authorized profile display and user guidance.",
-      "Explicit separation of stored contact data from SMS consent, ownership verification and delivery."
+      "Explicit separation of stored contact data from SMS consent, ownership verification and delivery.",
+      "Review fixes keep invalid Add Person submissions on the form, verify the server-side mobile error path and cover the updated profile keyboard order."
     ]
   },
   "criteria": [
     {
       "id": "AC1",
       "description": "Owner/authorized manager can enter an optional mobile number when adding a person and can edit/remove it later in an employee profile.",
-      "status": "blocked",
+      "status": "pass",
       "evidence": [
         {
-          "kind": "file",
-          "reference": "src/app/people/people-forms.tsx",
-          "outcome": "Optional Add Person and edit fields, including removal, are implemented; the browser test was added but could not execute locally."
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs (employee profiles and filtered team directory)",
+          "outcome": "Passed in GitHub run 43962828340; verifies invalid input reaches server validation, shows the actionable error and creates no employee, then creates the valid profile."
         },
         {
           "kind": "test",
-          "reference": "tests/e2e/auth.spec.mjs",
-          "outcome": "Focused test stopped before Playwright because the local Next.js build could not fetch Google Fonts."
+          "reference": "tests/e2e/auth.spec.mjs (People directory and profiles preserve scoped access, concurrency and five viewport layouts)",
+          "outcome": "Passed in GitHub run 43962828340 with the mobile field included in the keyboard tab order."
         }
       ]
     },
@@ -116,22 +117,22 @@
     {
       "id": "AC5",
       "description": "Targeted database, application, accessibility and browser tests cover creation, editing, removal, negative authorization cases and regression; user guide/help are updated.",
-      "status": "blocked",
+      "status": "pass",
       "evidence": [
         {
           "kind": "test",
-          "reference": "node --experimental-strip-types --test tests/help.test.mjs tests/employee-mobile.test.mjs tests/people-directory.test.mjs",
-          "outcome": "Passed, 26 tests; guide/help content and existing directory behavior are covered."
+          "reference": "GitHub Verify run 43962828303",
+          "outcome": "Application tests, lint, build and container health passed."
         },
         {
           "kind": "test",
-          "reference": "supabase/tests/database/employee_mobile_contacts.test.sql",
-          "outcome": "Passed, 18 focused pgTAP assertions; local full runner could not build its image because www.postgresql.org DNS resolution failed."
+          "reference": "GitHub browser run 43962828340",
+          "outcome": "Full auth suite passed: 108 passed, 0 failed, 0 flaky, 1 skipped; includes the Add Person validation and profile keyboard cases."
         },
         {
-          "kind": "test",
-          "reference": "tests/e2e/auth.spec.mjs",
-          "outcome": "Browser test was not reached because the local build could not fetch Google Fonts."
+          "kind": "file",
+          "reference": "docs/USER_GUIDE.md",
+          "outcome": "User guidance distinguishes stored phone data from consent, verification and SMS delivery; contextual-help tests passed."
         }
       ]
     }
@@ -158,9 +159,9 @@
       "result": "All 18 focused pgTAP assertions passed."
     },
     {
-      "command": "npm run test:auth:focused -- --grep 'employee profiles and filtered team directory' --runner host",
+      "command": "npm run test:auth:focused -- --test tests/e2e/auth.spec.mjs:3859 --runner host",
       "outcome": "blocked",
-      "result": "Next.js build stopped before Playwright because Google Fonts could not be fetched in this environment."
+      "result": "Local runner stopped before Playwright because the required Supabase CLI 2.122.0 was unavailable."
     },
     {
       "command": "node scripts/test-env.mjs run db --runner container",
@@ -171,37 +172,63 @@
       "command": "git diff --check",
       "outcome": "passed",
       "result": "No whitespace errors."
+    },
+    {
+      "command": "GitHub Verify run 43962828303",
+      "outcome": "passed",
+      "result": "Verify checks passed: application tests, ESLint, build, container health, pgTAP and tenant isolation."
+    },
+    {
+      "command": "GitHub full auth browser suite (run 43962828340)",
+      "outcome": "passed",
+      "result": "108 passed, 0 failed, 0 flaky, 1 skipped; both review-requested browser cases passed."
+    },
+    {
+      "command": "GitHub full auth browser suite (run 43959490267)",
+      "outcome": "failed",
+      "result": "107 passed, 1 failed, 1 skipped. The invalid-mobile test omitted required Job role, so native validation prevented submission; corrected and reverified in ae374c7."
     }
   ],
   "ci": [
     {
       "name": "verify",
-      "status": "fail",
-      "runId": 43953793967,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43953793967"
+      "status": "pass",
+      "runId": 43962828303,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962828303"
     },
     {
       "name": "database",
-      "status": "pending",
-      "runId": 43953793967,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43953793967"
+      "status": "pass",
+      "runId": 43962828303,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962828303"
     }
   ],
   "decisions": [
     "Do not add SMS consent, verification or opt-out behavior in this contact-data slice; document these as required separate work before any SMS delivery."
   ],
-  "reruns": [],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "Full browser rerun exposed that the invalid-mobile test omitted required Job role and did not submit.",
+      "outcome": "107 passed, 1 failed, 1 skipped; fixed by filling Job role and asserting the mobile-error redirect.",
+      "runId": 43959490267
+    },
+    {
+      "attempt": 2,
+      "reason": "Verify the corrected server-validation case and mobile-field keyboard navigation.",
+      "outcome": "108 passed, 0 failed, 0 flaky, 1 skipped; Verify and database checks passed.",
+      "runId": 43962828340
+    }
+  ],
   "limitations": [
     "International validation checks E.164 syntax only; it does not prove carrier assignment or number ownership.",
-    "The browser test and complete local pgTAP suite remain unverified in this network-restricted environment."
+    "The local focused browser runner could not start because Supabase CLI 2.122.0 was unavailable; CI browser and database suites passed."
   ],
   "blockers": [
-    "PR #277 still needs its description updated with the canonical issue/evidence markers and without auto-close keywords; Verify fails because the description is missing the reference and issue marker.",
-    "The focused browser test stopped before Playwright when the local Next.js build could not reach Google Fonts.",
-    "The full local database runner image could not build because www.postgresql.org did not resolve; the targeted employee mobile pgTAP file passed via psql."
+    "PR #277 remains a draft and issue #276 remains open pending owner review, as requested."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-276/pr-277/attempt-01.md",
-  "markdownSha256": "dcc055758ac26bb3087ad52e4815fcada669427b275024352cf2b80f13d107cf",
+  "markdownSha256": "ad68299c06bfe2f66aed62538d1b55d5e8aa293f9887a1a311766a5e4b5fb02b",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
