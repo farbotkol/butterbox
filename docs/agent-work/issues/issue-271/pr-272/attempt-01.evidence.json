@@ -18,7 +18,7 @@
     "agent": "copilot",
     "commitSha": "5a680ffd9f852e713e2981a8e53449b365b0be5e",
     "startedAt": "2026-11-16T07:50:00Z",
-    "updatedAt": "2026-11-16T08:02:03Z"
+    "updatedAt": "2026-11-16T08:03:13Z"
   },
   "scope": {
     "summary": "Narrow PR-vs-PR blocking to shared changed paths and SQL ownership, retain fail-closed safety checks, and document advisory/recovery behavior.",
@@ -141,7 +141,7 @@
       "evidence": [
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827691424",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43828143232",
           "outcome": "PR #272 coordination passed against the still-trusted base policy."
         },
         {
@@ -151,8 +151,8 @@
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827695017",
-          "outcome": "PR #272 verify failed at the missing PR reference/marker contract; database job had not completed at the recorded time."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43828146554",
+          "outcome": "PR #272 validate-all passed for 16 evidence files, then verify failed at the missing PR reference/marker contract; database job had not completed at the recorded time."
         }
       ]
     }
@@ -181,14 +181,14 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43827695017,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827695017"
+      "runId": 43828146554,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828146554"
     },
     {
       "name": "database",
       "status": "pending",
-      "runId": 43827695017,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827695017"
+      "runId": 43828146554,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828146554"
     }
   ],
   "decisions": [
@@ -210,6 +210,6 @@
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
-  "markdownSha256": "4f7cb5d2245d0ce3b6e208c2cabf60f7f0e48695c2f950f6cd3080bc27f1ecbe",
+  "markdownSha256": "638cbd314e836c0ab9f4b769c5c8dc0beb3feebd80e88cb0b815378bdf510ac7",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

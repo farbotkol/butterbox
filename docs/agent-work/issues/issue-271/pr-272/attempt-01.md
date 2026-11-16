@@ -1,7 +1,7 @@
 # Issue #271 / PR #272 / attempt 01
 
 ## Status
-- **Observed:** 2026-11-16 08:02:03 UTC.
+- **Observed:** 2026-11-16 08:03:13 UTC.
 - **Phase:** Implementation and focused tests complete; required CI and canonical PR evidence are blocked.
 - **Issue / PR:** [#271](https://github.com/farbotkol/butterbox/issues/271) / [#272](https://github.com/farbotkol/butterbox/pull/272), targeting `copilot/Development`.
 - **Implementation commit:** `5a680ffd9f852e713e2981a8e53449b365b0be5e`; pushed through the progress tool.
@@ -23,14 +23,14 @@
 | Shared file/SQL object and unreadable migration safety | Exact shared path and shared SQL object cases remain hard conflicts; invalid file paths and database-ownership metadata fail closed. No end-to-end unreadable GitHub migration-blob failure was induced locally; the existing trusted checker rejects unreadable blobs. | Blocked |
 | Fresh PR metadata and current/queued SHA behavior | `tests/pr-coordination-trusted-checkout.test.mjs` covers fresh PR metadata, current trusted Development checkout, and comparison against `merge_group.head_sha`. | Pass |
 | Historical false-conflict patterns and true conflicts | Focused tests cover `.spec.mjs` ownership, empty drafts, oversized Xero SQL ownership, category-only overlaps, exact paths, and shared SQL objects. | Pass |
-| Two independent PRs plus successful real required checks | PR #269 coordination run [#43827156334](https://github.com/farbotkol/butterbox/actions/runs/43827156334) and PR #272 run [#43827691424](https://github.com/farbotkol/butterbox/actions/runs/43827691424) both passed while both PRs were open. These checks used the still-trusted base policy, not the unmerged policy change. PR #272 `verify` [#43827695017](https://github.com/farbotkol/butterbox/actions/runs/43827695017) failed at the PR-reference contract; its database job remained in progress at the recorded time. PR #269's verify also failed its evidence validation and its database job remained in progress. Therefore real required-check acceptance is not established. | Blocked |
+| Two independent PRs plus successful real required checks | PR #269 coordination run [#43827156334](https://github.com/farbotkol/butterbox/actions/runs/43827156334) and PR #272 run [#43828143232](https://github.com/farbotkol/butterbox/actions/runs/43828143232) both passed while both PRs were open. These checks used the still-trusted base policy, not the unmerged policy change. PR #272 `verify` [#43828146554](https://github.com/farbotkol/butterbox/actions/runs/43828146554) validated all 16 evidence files, then failed at the missing PR-reference contract; its database job remained in progress at the recorded time. PR #269's verify also failed its evidence validation and its database job remained in progress. Therefore real required-check acceptance is not established. | Blocked |
 
 ## Tests and checks
 - `node --test tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs` — **23/23 passed**.
 - `npm run lint -- tools/agent-controller/component-coordination.mjs tools/agent-controller/check-pr-coordination.mjs tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs` — passed.
 - `node --check` on both changed controller modules and `git diff --check` — passed.
 - CodeQL was requested after the implementation commit; the tool reported that no analyzable code changes were detected and performed no analysis.
-- GitHub PR coordination checks passed for #269 and #272. The PR #272 `verify` workflow failed because its generated body lacks `Refs #271` and the matching issue marker. The database job was still running when recorded.
+- GitHub PR coordination checks passed for #269 and #272. In PR #272's latest `verify` run, paired evidence validation passed; the job then failed because its generated body lacks `Refs #271` and the matching issue marker. The database job was still running when recorded.
 
 ## Blockers and limitations
 - PR #272 remains a draft and its current body still contains the generated `Fixes #271` suffix, without the required `Refs #271`, `<!-- butterbox-issue: 271 -->`, and evidence marker lines. The available progress operation did not edit the PR body; no PR-body editing operation is available in this task. No merge or issue closure was performed.
