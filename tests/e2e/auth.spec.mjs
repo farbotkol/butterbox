@@ -3895,10 +3895,10 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Rejected mobile worker");
     await newEmployee.getByRole("textbox", { name: "Mobile number", exact: true }).fill("not a number");
     await addEmployeeButton.click();
-    await expect(page.getByRole("alert")).toContainText("Enter an Australian mobile as 04");
+    await expect(page).toHaveURL(/\/people\/new\?/);
+    await expect(page.locator("main p[role='alert']")).toContainText("Enter an Australian mobile as 04");
     expect(await admin.from("employees").select("id")
       .eq("business_id", businessId).eq("name", "Rejected mobile worker")).toMatchObject({ data: [], error: null });
-    await page.getByRole("link", { name: "Add person", exact: true }).click();
     const retryForm = page.getByRole("region", { name: "New employee", exact: true });
     await retryForm.getByRole("textbox", { name: "Name", exact: true }).fill("Profile worker");
     await retryForm.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("profile@example.test");
@@ -4123,8 +4123,18 @@ test("People directory and profiles preserve scoped access, concurrency and five
     await expect(keyboardOverview.getByRole("textbox", { name: "Name", exact: true })).toBeFocused();
     await page.keyboard.press("ControlOrMeta+A");
     await page.keyboard.type("Keyboard saved profile");
-    for (let index = 0; index < 5; index += 1) await page.keyboard.press("Tab");
-    await expect(keyboardOverview.getByRole("button", { name: "Save employee" })).toBeFocused();
+    const profileTabOrder = [
+      keyboardOverview.getByRole("textbox", { name: "Preferred contact email", exact: true }),
+      keyboardOverview.getByRole("textbox", { name: "Mobile number", exact: true }),
+      keyboardOverview.getByRole("combobox", { name: "Department", exact: true }),
+      keyboardOverview.getByRole("textbox", { name: "Job role", exact: true }),
+      keyboardOverview.getByRole("combobox", { name: "Employment type", exact: true }),
+      keyboardOverview.getByRole("button", { name: "Save employee", exact: true }),
+    ];
+    for (const control of profileTabOrder) {
+      await page.keyboard.press("Tab");
+      await expect(control).toBeFocused();
+    }
     await page.keyboard.press("Enter");
     await expect(page.getByRole("heading", { name: "Keyboard saved profile" })).toBeVisible();
     await page.reload();

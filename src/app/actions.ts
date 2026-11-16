@@ -103,7 +103,8 @@ function peopleDestination(formData: FormData, businessId: string, venueId: stri
     console.error("Invalid People return context.");
     redirect(withBusiness(`/people?venue=${encodeURIComponent(venueId)}&error=filter`, businessId));
   }
-  return peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+  const href = peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+  return origins[0] === "new" && !createdId ? href.replace("/people?", "/people/new?") : href;
 }
 
 function departmentDestination(formData: FormData, businessId: string, venueId: string, createdId?: string) {
