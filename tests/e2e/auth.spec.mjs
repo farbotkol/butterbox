@@ -3892,16 +3892,28 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     }
     await addEmployeeButton.focus();
     await expect(addEmployeeButton).toBeFocused();
-    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Profile worker");
-    await newEmployee.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("profile@example.test");
-    await newEmployee.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
-    await newEmployee.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
+    await newEmployee.getByRole("textbox", { name: "Name", exact: true }).fill("Rejected mobile worker");
+    await newEmployee.getByRole("textbox", { name: "Mobile number", exact: true }).fill("not a number");
+    await addEmployeeButton.click();
+    await expect(page.getByRole("alert")).toContainText("Enter an Australian mobile as 04");
+    expect(await admin.from("employees").select("id")
+      .eq("business_id", businessId).eq("name", "Rejected mobile worker")).toMatchObject({ data: [], error: null });
+    await page.getByRole("link", { name: "Add person", exact: true }).click();
+    const retryForm = page.getByRole("region", { name: "New employee", exact: true });
+    await retryForm.getByRole("textbox", { name: "Name", exact: true }).fill("Profile worker");
+    await retryForm.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("profile@example.test");
+    const mobileInput = retryForm.getByRole("textbox", { name: "Mobile number", exact: true });
+    await expect(mobileInput).toHaveAttribute("aria-describedby", "employee-mobile-help");
+    await mobileInput.fill("04 1234 5678");
+    await retryForm.getByRole("textbox", { name: "Job role", exact: true }).fill("Server");
+    await retryForm.getByRole("combobox", { name: "Department", exact: true }).selectOption(departmentIds[0]);
     await addEmployeeButton.evaluate((button) => { button.click(); button.click(); });
     await expect(page.getByRole("heading", { name: "Profile worker", exact: true })).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Person added." })).toBeVisible();
-    const employee = await admin.from("employees").select("id")
+    const employee = await admin.from("employees").select("id, mobile_phone")
       .eq("business_id", businessId).eq("name", "Profile worker").single();
     expect(employee.error).toBeNull();
+    expect(employee.data.mobile_phone).toBe("+61412345678");
     expect((await admin.from("shifts").insert({
       business_id: businessId, venue_id: venueIds[0], department_id: departmentIds[0],
       employee_id: employee.data.id, role_title: "Server",
@@ -3919,22 +3931,29 @@ test("employee profiles and filtered team directory", async ({ page }) => {
     await overview.getByRole("button", { name: "Edit overview" }).click();
     await overview.getByRole("textbox", { name: "Name", exact: true }).fill("Archived worker");
     await overview.getByRole("textbox", { name: "Preferred contact email", exact: true }).fill("updated@example.test");
+    await overview.getByRole("textbox", { name: "Mobile number", exact: true }).fill("+14155552671");
     await overview.getByRole("combobox", { name: "Employment type", exact: true }).selectOption("part_time");
     await overview.getByRole("button", { name: "Save employee" }).click();
     await expect(page.getByRole("heading", { name: "Archived worker", exact: true })).toBeVisible();
     await page.reload();
     await expect(page.getByText("updated@example.test", { exact: true })).toBeVisible();
+    await expect(page.getByText("+14155552671", { exact: true })).toBeVisible();
+    await overview.getByRole("button", { name: "Edit overview" }).click();
+    await overview.getByRole("textbox", { name: "Mobile number", exact: true }).fill("");
+    await overview.getByRole("button", { name: "Save employee" }).click();
+    await expect(overview.getByText("Not provided", { exact: true })).toBeVisible();
     const employment = page.getByRole("region", { name: "Employment", exact: true });
     await employment.getByRole("button", { name: "Archive person" }).click();
     const archive = page.getByRole("form", { name: "Archive Archived worker" });
     await archive.getByLabel("I confirm this status change.").check();
     await archive.getByRole("button", { name: "Confirm archive" }).click();
     await expect(page.getByText("Person archived. Existing history is preserved.", { exact: true })).toBeVisible();
-    const savedEmployee = await admin.from("employees").select("name, email, employment_type, active")
+    const savedEmployee = await admin.from("employees").select("name, email, mobile_phone, employment_type, active")
       .eq("id", employee.data.id).single();
     expect(savedEmployee.error).toBeNull();
     expect(savedEmployee.data).toEqual({
       name: "Archived worker", email: "updated@example.test", employment_type: "part_time", active: false,
+      mobile_phone: null,
     });
     const history = await admin.from("shifts").select("id").eq("employee_id", employee.data.id);
     expect(history.error).toBeNull();

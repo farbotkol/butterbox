@@ -44,7 +44,7 @@ export default async function PersonPage({
     redirect(`/people?business=${encodeURIComponent(initialWorkspace.business.id)}&error=filter`);
   }
   const employeeResponse = await initialWorkspace.supabase.from("employees")
-    .select("id, name, email, auth_user_id, department_id, venue_id, role_title, employment_type, active, profile_revision")
+    .select("id, name, email, mobile_phone, auth_user_id, department_id, venue_id, role_title, employment_type, active, profile_revision")
     .eq("business_id", initialWorkspace.business.id).eq("id", employeeId).maybeSingle();
   if (employeeResponse.error) {
     console.error("Could not load the employee profile.", employeeResponse.error);
@@ -172,6 +172,8 @@ export default async function PersonPage({
           read={<dl className="mt-3 grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div><dt className="text-muted">Name</dt><dd className="break-words">{employee.name}</dd></div>
             <div><dt className="text-muted">Preferred contact email</dt><dd className="break-all">{employee.email || "Not provided"}</dd></div>
+            <div><dt className="text-muted">Mobile number</dt><dd>{employee.mobile_phone || "Not provided"}</dd>
+              <dd className="mt-1 text-xs text-muted">Stored contact only; this does not indicate SMS consent or verification.</dd></div>
             <div><dt className="text-muted">Job title</dt><dd className="break-words">{employee.role_title}</dd></div>
             <div><dt className="text-muted">Primary department</dt><dd>{primaryDepartment?.name ?? "Unavailable"}</dd></div>
           </dl>}
