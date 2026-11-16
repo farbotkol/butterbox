@@ -12743,12 +12743,15 @@ test("multi-business members switch explicitly with per-tab isolation, revocatio
   }
 });
 
-test("owners explicitly map same-name employees to payroll destinations without connecting a provider", async ({ page, browser }) => {
+test("owners map employees to connected Xero and manually created non-Xero destinations", async ({ page, browser }) => {
   page.setDefaultTimeout(20_000);
   const suffix = randomUUID();
   const password = `${randomBytes(18).toString("base64url")}aA1!`;
   const [businessId, outsideId, venueId, outsideVenueId, departmentId, firstEmployee, secondEmployee] =
     Array.from({ length: 7 }, () => randomUUID());
+  const xeroTenantId = randomUUID();
+  const firstGrantId = randomUUID();
+  const reauthorizationGrantId = randomUUID();
   const users = [];
   const contexts = [];
   try {
@@ -12781,22 +12784,63 @@ test("owners explicitly map same-name employees to payroll destinations without 
     await signIn(page, `mapping-owner-${suffix}@example.test`, password);
     const owner = createClient(apiUrl, anonKey, options);
     expect((await owner.auth.signInWithPassword({ email: `mapping-owner-${suffix}@example.test`, password })).error).toBeNull();
-    await page.goto(`/timesheets?venue=${venueId}&week=2024-01-08`);
-    await page.getByRole("link", { name: "Manage payroll employee mapping" }).click();
+    const availableTenants = [{
+      tenantId: xeroTenantId, tenantName: "Synthetic Xero organization", tenantType: "ORGANISATION",
+    }];
+    async function storeXeroGrant(grantId, tokens) {
+      const result = await owner.rpc("store_xero_oauth_grant", {
+        p_business_id: businessId,
+        p_grant_id: grantId,
+        p_encrypted_tokens: tokens,
+        p_expires_at: new Date(Date.now() + 30 * 60_000).toISOString(),
+        p_scopes: ["offline_access", "payroll.timesheets"],
+        p_available_tenants: availableTenants,
+      });
+      expect(result.error).toBeNull();
+      expect(result.data).toBe(grantId);
+    }
+    await storeXeroGrant(firstGrantId, "synthetic-initial-token");
+    expect((await owner.rpc("select_xero_oauth_tenant", {
+      p_business_id: businessId, p_grant_id: firstGrantId, p_tenant_id: xeroTenantId,
+    })).error).toBeNull();
+    const initialDestinations = await owner.rpc("list_payroll_mapping_connections", {
+      p_business_id: businessId,
+    });
+    expect(initialDestinations.error).toBeNull();
+    const xeroDestination = initialDestinations.data.find((item) =>
+      item.provider === "xero" && item.account_id === xeroTenantId);
+    expect(xeroDestination).toBeDefined();
+
+    await page.goto(`/settings/payroll/xero?business=${businessId}`);
+    await expect(page.getByRole("heading", { name: "Xero organization connection" })).toBeVisible();
+    await expect(page.getByText("Synthetic Xero organization", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Manage employee mappings" }).click();
+    await expect(page).toHaveURL(new RegExp(
+      `/settings/payroll\\?business=${businessId}&connection=${xeroDestination.id}`,
+    ));
     await expect(page.getByRole("heading", { name: "Payroll employee mapping", exact: true })).toBeVisible();
-    await expect(page.getByText("No payroll destinations have been added.", { exact: false })).toBeVisible();
+    await expect(page.getByText("Mapped: 0 · Missing: 2")).toBeVisible();
     await Promise.all([
       page.waitForURL(/\/settings\/payroll\/new\?/),
       page.getByRole("link", { name: "Add mapping destination" }).click(),
     ]);
     await expect(page.getByRole("heading", { name: "Add mapping destination" })).toBeVisible();
     const add = page.getByRole("region", { name: "Add payroll destination" });
-    await add.getByRole("combobox", { name: "Provider", exact: true }).selectOption("xero");
-    await add.getByLabel("Destination name").fill("Test Xero account");
-    await add.getByLabel("Payroll account ID").fill("explicit-account-id");
+    const provider = add.getByRole("combobox", { name: "Provider", exact: true });
+    await expect(provider.locator('option[value="xero"]')).toHaveCount(0);
+    await provider.selectOption("myob");
+    await add.getByLabel("Destination name").fill("Test MYOB account");
+    await add.getByLabel("Payroll account ID").fill("explicit-myob-account-id");
     await add.getByRole("button", { name: "Add mapping destination" }).click();
     await expect(page.locator("main").getByRole("status"))
       .toContainText("Payroll mapping destination created. No provider has been connected.");
+    const afterManualCreation = await owner.rpc("list_payroll_mapping_connections", {
+      p_business_id: businessId,
+    });
+    expect(afterManualCreation.error).toBeNull();
+    expect(afterManualCreation.data).toContainEqual(expect.objectContaining({
+      provider: "myob", account_id: "explicit-myob-account-id", name: "Test MYOB account",
+    }));
     await expect(page.getByText("Mapped: 0 · Missing: 2")).toBeVisible();
     const filters = page.getByRole("form", { name: "Payroll mapping filters" });
     await filters.getByRole("searchbox", { name: "Search employees" }).fill("Same Name");
@@ -12854,6 +12898,34 @@ test("owners explicitly map same-name employees to payroll destinations without 
     await page.getByLabel("I confirmed the destination and account shown above for this employee.").check();
     await page.getByRole("button", { name: "Save payroll ID" }).click();
     await expect(page.locator("main").getByRole("status")).toContainText("Payroll employee mapping saved");
+    const mappingsBeforeReauthorization = (await mappingRows()).map((row) => ({
+      employee_id: row.employee_id,
+      external_employee_id: row.external_employee_id,
+      revision: row.revision,
+    }));
+    const refreshLockId = randomUUID();
+    const refreshClaim = await owner.rpc("claim_xero_oauth_refresh", {
+      p_business_id: businessId, p_tenant_id: xeroTenantId, p_lock_id: refreshLockId,
+    });
+    expect(refreshClaim.error).toBeNull();
+    expect(refreshClaim.data).toMatchObject([{ acquired: true, grant_id: firstGrantId }]);
+    expect((await owner.rpc("release_xero_oauth_refresh", {
+      p_business_id: businessId, p_grant_id: firstGrantId,
+      p_lock_id: refreshLockId, p_reauthorization_required: true,
+    })).data).toBe(true);
+    await storeXeroGrant(reauthorizationGrantId, "synthetic-reauthorization-token");
+    expect((await owner.rpc("select_xero_oauth_tenant", {
+      p_business_id: businessId, p_grant_id: reauthorizationGrantId, p_tenant_id: xeroTenantId,
+    })).error).toBeNull();
+    const reauthorizedDestinations = await owner.rpc("list_payroll_mapping_connections", {
+      p_business_id: businessId,
+    });
+    expect(reauthorizedDestinations.error).toBeNull();
+    expect(reauthorizedDestinations.data.find((item) =>
+      item.provider === "xero" && item.account_id === xeroTenantId).id).toBe(xeroDestination.id);
+    expect((await mappingRows()).map(({ employee_id, external_employee_id, revision }) => ({
+      employee_id, external_employee_id, revision,
+    }))).toEqual(mappingsBeforeReauthorization);
     await page.getByRole("link", { name: "Back to mappings" }).click();
     await expect(page.getByText("No employees match these filters. Try resetting them.")).toBeVisible();
     await page.getByRole("link", { name: "Reset filters" }).click();

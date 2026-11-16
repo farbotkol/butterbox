@@ -1,0 +1,196 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 91,
+    "url": "https://github.com/farbotkol/butterbox/issues/91"
+  },
+  "pullRequest": {
+    "number": 269,
+    "url": "https://github.com/farbotkol/butterbox/pull/269",
+    "baseBranch": "copilot/Development",
+    "headBranch": "feature/xero-connected-payroll-destinations",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43827159056,
+    "agent": "copilot",
+    "commitSha": "e951b137070be6fd9fe008dbdfa35cc3d051c006",
+    "startedAt": "2026-11-16T07:54:54Z",
+    "updatedAt": "2026-11-16T08:12:15Z"
+  },
+  "scope": {
+    "summary": "Follow-up evidence and browser regression coverage for automatic, idempotent Xero payroll mapping destinations; no payroll submission.",
+    "changedFiles": [
+      "docs/agent-work/issues/issue-91/pr-269/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-91/pr-269/attempt-01.md",
+      "docs/xero-payroll-delivery.md",
+      "src/app/settings/payroll/new/page.tsx",
+      "src/app/settings/payroll/xero/page.tsx",
+      "supabase/migrations/20261116150000_xero_connected_payroll_destinations.sql",
+      "supabase/tests/database/xero_oauth_connections.test.sql",
+      "tests/e2e/auth.spec.mjs"
+    ],
+    "implemented": [
+      "Selected authorized Xero tenants create one business-scoped payroll mapping destination using the tenant UUID; existing connected tenants are backfilled idempotently.",
+      "Generic manual destination creation excludes Xero and connected organizations link to their exact destination.",
+      "Synthetic browser coverage verifies auto-creation, exact navigation, explicit employee mappings, and destination/mapping preservation through reauthorization."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Current AU endpoints/scopes confirmed",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/agent-work/issues/issue-91/pr-262/attempt-01.evidence.json",
+          "outcome": "The prior merged OAuth slice records confirmation of AU Payroll v2 POST /Timesheets and the payroll.timesheets scope against the Xero OpenAPI contract."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/xero-payroll-delivery.md",
+          "outcome": "The follow-up documents Payroll AU Timesheets 2.0 and links the official endpoint and OAuth scopes references."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "OAuth refresh and permission failure handled",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "docs/agent-work/issues/issue-91/pr-262/attempt-01.evidence.json",
+          "outcome": "Prior merged evidence records passing mocked refresh, token rotation, revoked credentials, provider permission-error, refresh-lock, and database role-isolation coverage."
+        },
+        {
+          "kind": "test",
+          "reference": "tests/e2e/auth.spec.mjs",
+          "outcome": "This follow-up additionally verifies that reauthorizing the same synthetic tenant preserves its destination ID and explicit employee mappings."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "sandbox end-to-end test validates mapping, retries and duplicate prevention.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827159056/job/133163615124",
+          "outcome": "Synthetic full browser suite passed 108 tests with 1 skipped, including connected-tenant mapping and reauthorization idempotency; it does not call Xero payroll endpoints."
+        },
+        {
+          "kind": "file",
+          "reference": "docs/xero-payroll-delivery.md",
+          "outcome": "Actual Xero sandbox submission, provider retry behavior, and remote duplicate prevention remain unverified; this change enables no Xero API writes."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --experimental-strip-types --test tests/*.test.mjs",
+      "outcome": "passed",
+      "result": "408 passed, 36 skipped, 0 failed on the preceding E2E-only source head; the final change only adjusts the Playwright result projection.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint; npx tsc --noEmit",
+      "outcome": "passed",
+      "result": "Repository ESLint and TypeScript checks passed on the preceding source head; the final change is confined to tests/e2e/auth.spec.mjs.",
+      "reference": null
+    },
+    {
+      "command": "node --check tests/e2e/auth.spec.mjs && npx eslint tests/e2e/auth.spec.mjs && git diff --check",
+      "outcome": "passed",
+      "result": "Syntax, focused ESLint, and whitespace checks passed after the reauthorization assertion fix.",
+      "reference": null
+    },
+    {
+      "command": "npm run test:auth:focused -- --test tests/e2e/auth.spec.mjs:12718",
+      "outcome": "blocked",
+      "result": "Local isolated runner could not start because Supabase CLI 2.122.0 is not installed; hosted GitHub full-suite runs completed instead.",
+      "reference": null
+    },
+    {
+      "command": "npm run build",
+      "outcome": "blocked",
+      "result": "Local build could not fetch the existing Inter and Poppins Google Fonts in this network-restricted environment; Verify on this head stopped at the pre-build evidence gate.",
+      "reference": null
+    },
+    {
+      "command": "Full Verify database job: migrations, pgTAP, tenant isolation, authenticated Playwright suite",
+      "outcome": "passed",
+      "result": "On e951b137070be6fd9fe008dbdfa35cc3d051c006: pgTAP and tenant isolation passed; full auth.spec.mjs suite had 108 passed, 1 skipped, 0 failed.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827159056/job/133163615124"
+    },
+    {
+      "command": "Advisory conservative full-browser fallback",
+      "outcome": "passed",
+      "result": "On e951b137070be6fd9fe008dbdfa35cc3d051c006: 108 passed, 1 skipped, 0 failed or flaky.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827158966"
+    },
+    {
+      "command": "Fast database candidate: migrations, pgTAP, tenant isolation, critical browser smoke",
+      "outcome": "passed",
+      "result": "Disposable database migration assertions, authenticated cross-tenant isolation, and critical browser smoke passed.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827159011"
+    },
+    {
+      "command": "Verify workflow evidence gate",
+      "outcome": "failed",
+      "result": "Run 43827159056 stopped at validation of the pre-existing malformed attempt-01 evidence before npm tests, lint, or build; the database job in the same run passed.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43827159056"
+    },
+    {
+      "command": "First full browser run after replacing the obsolete manual-Xero setup",
+      "outcome": "failed",
+      "result": "Run 43825243520 had 107 passed, 1 skipped, and 1 failed. Reauthorization preserved mappings, but the assertion compared rows including employee_name against a snapshot that intentionally projected only mapping IDs and revision; e951b13 corrected the projection.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/43825243520"
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43827159056,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827159056"
+    },
+    {
+      "name": "database",
+      "status": "pass",
+      "runId": 43827159056,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43827159056"
+    }
+  ],
+  "decisions": [
+    "Keep PR #269 in draft; do not merge or deploy.",
+    "Use synthetic tenant and employee fixtures only; do not submit payroll or apply a production migration.",
+    "Keep issue #91 criteria 1 and 2 supported by the prior merged OAuth implementation; mark sandbox payroll end-to-end acceptance blocked."
+  ],
+  "reruns": [
+    {
+      "attempt": 1,
+      "reason": "The first complete browser run found an over-wide object comparison in the new reauthorization assertion.",
+      "outcome": "Projected identical employee mapping fields before and after reauthorization; subsequent required database and advisory full-browser runs passed 108 tests with 1 skipped.",
+      "runId": 43827159056
+    }
+  ],
+  "limitations": [
+    "The successful full browser runs use synthetic fixtures and do not establish Xero Payroll AU sandbox access, provider retry semantics, or remote duplicate prevention.",
+    "The current Verify run's application-level npm test, lint, and build steps did not run because evidence validation failed first; a corrected evidence pair is required to trigger fresh Verify.",
+    "Local build and focused browser execution were blocked by unavailable Google Fonts network access and missing pinned Supabase CLI, respectively."
+  ],
+  "blockers": [
+    "The corrected evidence pair must be pushed before Verify can run its remaining application checks.",
+    "Actual Xero payroll sandbox testing, provider retries, and duplicate prevention remain outside this PR and need authorized Xero access."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-91/pr-269/attempt-01.md",
+  "markdownSha256": "1e966dd81b3a5401cad920cbe84c32fe512023239983836e5ebd6cf8ecd39303",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

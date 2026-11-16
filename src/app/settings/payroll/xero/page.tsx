@@ -3,7 +3,7 @@ import {
   cancelPendingXeroAuthorizationAction, disconnectXeroOrganizationAction, selectXeroOrganizationAction,
 } from "./actions";
 import { isXeroUuid } from "@/lib/xero-oauth";
-import { requirePayrollWorkspace } from "../payroll-workspace";
+import { loadPayrollConnections, requirePayrollWorkspace } from "../payroll-workspace";
 
 type SearchValue = string | string[] | undefined;
 type XeroSearch = {
@@ -47,6 +47,7 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
       typeof row.tenant_name === "string" && typeof row.tenant_type === "string" &&
     ["active", "reauthorization_required", "revocation_pending"].includes(row.status))
     : [];
+  const payrollDestinations = connections.length > 0 ? await loadPayrollConnections(workspace) : [];
   const grant = first(search.grant);
   let pending: { tenant_id: string; tenant_name: string; tenant_type: string }[] = [];
   let pendingError = false;
@@ -134,6 +135,10 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
 
     <section aria-labelledby="xero-connected-heading" className="mt-6 rounded-xl border border-line bg-white p-4">
       <h2 id="xero-connected-heading" className="text-xl font-semibold">Connected organizations</h2>
+      {connections.length > 0 && <p className="mt-2 text-sm text-muted">
+        Each connected organisation is automatically available as a payroll mapping destination.
+        Employee IDs must still be reviewed before any payroll export.
+      </p>}
       {!connectionError && connections.length === 0 && <p className="mt-3 text-sm text-muted">
         No Xero organization is connected to this business.
       </p>}
@@ -147,6 +152,15 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
                 connection.status === "revocation_pending" ? "Disconnection pending" : "Connected"}
             </p>
           </div>
+          <div className="flex flex-wrap items-center gap-3">
+          <Link href={`/settings/payroll?business=${encodeURIComponent(businessId)}${(() => {
+            const destination = payrollDestinations.find((item) => item.provider === "xero" &&
+              item.account_id.toLowerCase() === connection.tenant_id.toLowerCase());
+            return destination ? `&connection=${encodeURIComponent(destination.id)}` : "";
+          })()}`}
+            className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
+            Manage employee mappings
+          </Link>
           <form action={disconnectXeroOrganizationAction}>
             <input type="hidden" name="business" value={businessId} />
             <input type="hidden" name="tenant" value={connection.tenant_id} />
@@ -154,6 +168,7 @@ export default async function XeroConnectionPage({ searchParams }: { searchParam
               Disconnect
             </button>
           </form>
+          </div>
         </li>)}
       </ul>
     </section>
