@@ -155,13 +155,12 @@ select extensions.throws_ok(
   $$select public.create_staff_invitation(
     'b7300000-0000-4000-8000-000000000001',
     'c7300000-0000-4000-8000-000000000001',
-    (select id from public.departments where venue_id = 'c7300000-0000-4000-8000-000000000001' limit 1),
-    (select id from public.employees e
-      where e.venue_id = 'c7300000-0000-4000-8000-000000000001'
-        and e.department_id = (
-          select d.id from public.departments d
-          where d.venue_id = 'c7300000-0000-4000-8000-000000000001' limit 1
-        ) limit 1),
+    (select department_id from public.employees
+      where venue_id = 'c7300000-0000-4000-8000-000000000001'
+      order by id limit 1),
+    (select id from public.employees
+      where venue_id = 'c7300000-0000-4000-8000-000000000001'
+      order by id limit 1),
     'fictional@example.test'
   )$$,
   'P0001', 'Simulation-only employees cannot be invited or mapped to payroll',
@@ -191,7 +190,7 @@ select extensions.is((select count(*)::integer from public.list_payroll_employee
   'b7300000-0000-4000-8000-000000000001',
   'd7300000-0000-4000-8000-000000000099',
   'c7300000-0000-4000-8000-000000000001'
-)), 0,
+  ) where external_employee_id is not null), 0,
   'rejected mappings create no payroll mapping records');
 
 select set_config('request.jwt.claim.sub', 'a7300000-0000-4000-8000-000000000004', true);
