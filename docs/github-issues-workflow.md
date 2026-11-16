@@ -78,11 +78,31 @@ the lease. Queue/owner/reason/expiry, PR, merge and release details are recorded
 in the issue comments and private run ledger, not the historical archive files.
 
 The base-trusted `PR coordination / check` evaluates actual changed files and
-declared components on every Development PR, and repeats the check for merge
-groups. It includes direct/manual Copilot PRs; exact shared files and database
-objects conflict even when their PR descriptions omit component metadata.
-The existing managed-file guard remains in force and is independent of
-component overlap.
+SQL objects on every Development PR, and repeats the check against the actual
+queued merge-group head. It includes direct/manual Copilot PRs. Exact shared
+file paths and shared SQL objects are hard conflicts even when PR descriptions
+omit component metadata. Broad component/category overlaps are advisory only;
+they never block by themselves. Evidence beneath
+`docs/agent-work/issues/issue-N/pr-M/` is scoped to PR `M`, not shared by every
+PR for issue `N`. Shared test paths are reported with a combined-validation
+resolution; compatible test-only edits may be validated together at merge
+time. No other PR-level exclusive resources are currently registered; any
+future exclusive resource must be named and have a documented correctness
+rationale rather than relying on a broad component label. The existing
+managed-file guard remains in force and is independent of these overlap rules.
+
+An invalid component declaration or empty non-draft candidate PR fails
+coordination. Malformed declarations on unrelated open PRs are classified and
+reported as advisory unless they declare database ownership, which remains
+fail-closed; an unrelated empty non-draft PR is also advisory. In either case,
+the current API file list is still checked for concrete overlaps.
+Invalid/unreadable API data, invalid changed-file paths, open-PR identity/SHA,
+pagination, or migration content remains fail-closed. For recovery, repair the
+candidate's metadata/state or restore GitHub API access, verify the current
+`copilot/Development` policy and PR head, and rerun the check. The pull-request
+event fetches fresh PR metadata and migration content at the current head SHA;
+merge-group validation uses the actual queued head. Required `verify`,
+`database`, tenant-isolation, security, secrets and release gates are unchanged.
 
 **Required owner setup:** A status check alone is not a required merge gate.
 Before relying on the coordination check, the repository owner must configure a

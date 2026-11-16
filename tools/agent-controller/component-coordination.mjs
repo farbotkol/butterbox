@@ -80,9 +80,11 @@ export function componentsForFiles(files) {
       continue;
     }
 
-    const evidence = name.match(/^docs\/agent-work\/issues\/issue-(\d+)\//);
+    const evidence = name.match(/^docs\/agent-work\/issues\/issue-(\d+)(?:\/pr-(\d+))?\//);
     if (evidence) {
-      components.add(`evidence:issue-${evidence[1]}`);
+      components.add(evidence[2]
+        ? `evidence:issue-${evidence[1]}-pr-${evidence[2]}`
+        : `evidence:issue-${evidence[1]}`);
       continue;
     }
 
@@ -151,6 +153,13 @@ export function declaredComponents(body) {
   try { return normalizeComponents(JSON.parse(match[1])); } catch { return null; }
 }
 
+function declaresSafetyCriticalComponents(body) {
+  const match = typeof body === 'string'
+    ? body.match(/<!-- butterbox-components: ([\s\S]*?) -->/)
+    : null;
+  return Boolean(match && /database-schema|database:/i.test(match[1]));
+}
+
 // Computed PR ownership can contain many distinct SQL objects and file components.
 // The 20-entry limit applies to *user-declared* components, not trusted, derived ownership.
 // Keep a bounded cap for overlap calculations and fail closed for invalid inputs.
@@ -198,6 +207,25 @@ export function findOverlaps(candidate, other) {
   return { paths, components, database, conflicts: paths.length > 0 || components.length > 0 || database.length > 0 };
 }
 
+function pullRequestOverlaps(candidate, other) {
+  const candidatePaths = new Set(candidate.files.map(file => file.path));
+  const otherPaths = new Set(other.files.map(file => file.path));
+  const paths = [...candidatePaths].filter(file => otherPaths.has(file)).sort();
+  const leftComponents = [...(candidate.components ?? []), ...componentsForFiles(candidate.files)];
+  const rightComponents = [...(other.components ?? []), ...componentsForFiles(other.files)];
+  const components = componentOverlap(leftComponents, rightComponents);
+  const leftDatabase = leftComponents.filter(component =>
+    component === 'database-schema' || component.startsWith('database:')
+  );
+  const rightDatabase = rightComponents.filter(component =>
+    component === 'database-schema' || component.startsWith('database:')
+  );
+  const database = leftDatabase.length && rightDatabase.length
+    ? componentOverlap(leftDatabase, rightDatabase)
+    : [];
+  return { paths, components, database, conflicts: paths.length > 0 || database.length > 0 };
+}
+
 // Copilot can open a draft before pushing its first implementation commit.
 // An empty, metadata-free draft cannot overlap any changed files, but malformed
 // declarations and empty non-draft PRs must still fail closed.
@@ -207,9 +235,56 @@ function isPendingEmptyDraft(pull, declared) {
     (pull.components ?? []).length === 0;
 }
 
+function hasInvalidChangedFiles(pull) {
+  return !Array.isArray(pull.files) || pull.files.some(file => {
+    const value = typeof file === 'string' ? file : file?.path;
+    const normalized = normalizedPath(value);
+    return normalized === null || normalized !== value;
+  });
+}
+
+// PR labels aid review, but only concrete paths and SQL ownership block. The
+// issue-dispatch lease path deliberately keeps using findOverlaps unchanged.
+export function pullRequestAdvisories(candidate, others) {
+  const declared = declaredComponents(candidate.body);
+  if (declared === null || isPendingEmptyDraft(candidate, declared)) return [];
+  const left = { components: [...declared, ...(candidate.components ?? [])], files: candidate.files ?? [] };
+  const advisories = [];
+  for (const other of others) {
+    const otherDeclared = declaredComponents(other.body);
+    if (otherDeclared !== null && isPendingEmptyDraft(other, otherDeclared)) continue;
+    if (!other.draft && Array.isArray(other.files) && other.files.length === 0) {
+      advisories.push({ pullRequest: other.number, reason: 'peer_no_changed_files' });
+      continue;
+    }
+    if (otherDeclared === null) {
+      if (!declaresSafetyCriticalComponents(other.body)) {
+        advisories.push({ pullRequest: other.number, reason: 'invalid_peer_component_metadata' });
+      }
+    }
+    const overlap = pullRequestOverlaps(left, {
+      components: [...(otherDeclared ?? []), ...(other.components ?? [])],
+      files: other.files ?? [],
+    });
+    const components = overlap.components.filter(component =>
+      component !== 'invalid_component_metadata' && component !== 'database-schema' &&
+      !component.startsWith('database:')
+    );
+    if (components.length) advisories.push({
+      pullRequest: other.number,
+      reason: 'broad_component_overlap',
+      components,
+    });
+  }
+  return advisories;
+}
+
 export function pullRequestConflicts(candidate, others) {
   const declared = declaredComponents(candidate.body);
   if (declared === null) return [{ pullRequest: candidate.number, reason: 'invalid_component_metadata' }];
+  if (hasInvalidChangedFiles(candidate)) {
+    return [{ pullRequest: candidate.number, reason: 'invalid_changed_files' }];
+  }
   if (!candidate.draft && Array.isArray(candidate.files) && candidate.files.length === 0) {
     return [{ pullRequest: candidate.number, reason: 'no_changed_files' }];
   }
@@ -217,18 +292,21 @@ export function pullRequestConflicts(candidate, others) {
   const conflicts = [];
   for (const other of others) {
     const otherDeclared = declaredComponents(other.body);
-    if (otherDeclared === null) {
-      conflicts.push({ pullRequest: other.number, reason: 'invalid_component_metadata' });
+    if (otherDeclared === null && declaresSafetyCriticalComponents(other.body)) {
+      conflicts.push({ pullRequest: other.number, reason: 'invalid_safety_critical_component_metadata' });
       continue;
     }
-    if (isPendingEmptyDraft(other, otherDeclared)) continue;
+    if (isPendingEmptyDraft(other, otherDeclared ?? [])) continue;
+    if (hasInvalidChangedFiles(other)) {
+      conflicts.push({ pullRequest: other.number, reason: 'invalid_changed_files' });
+      continue;
+    }
     if (!other.draft && Array.isArray(other.files) && other.files.length === 0) {
-      conflicts.push({ pullRequest: other.number, reason: 'no_changed_files' });
       continue;
     }
     if (isPendingEmptyDraft(candidate, declared)) continue;
-    const overlap = findOverlaps(left, {
-      components: [...otherDeclared, ...(other.components ?? [])],
+    const overlap = pullRequestOverlaps(left, {
+      components: [...(otherDeclared ?? []), ...(other.components ?? [])],
       files: other.files ?? [],
     });
     if (overlap.conflicts) conflicts.push({ pullRequest: other.number, ...overlap });

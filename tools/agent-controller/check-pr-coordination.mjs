@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFileSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
-import { pullRequestConflicts } from './component-coordination.mjs';
+import { pullRequestAdvisories, pullRequestConflicts } from './component-coordination.mjs';
 
 const shaPattern = /^[a-f0-9]{40}$/;
 
@@ -62,13 +62,43 @@ async function pullRequests(repository) {
 }
 
 function explain(conflict) {
+  if (conflict.reason === 'invalid_safety_critical_component_metadata') {
+    return `PR #${conflict.pullRequest}: malformed safety-critical database ownership metadata. Correct the declaration and rerun coordination; this check fails closed until then.`;
+  }
+  if (conflict.reason === 'invalid_component_metadata') {
+    return `PR #${conflict.pullRequest}: malformed component declaration. Correct the declaration and rerun coordination.`;
+  }
+  if (conflict.reason === 'invalid_changed_files') {
+    return `PR #${conflict.pullRequest}: invalid or unreadable changed-file metadata. Restore valid GitHub API/file data and rerun coordination.`;
+  }
+  if (conflict.reason === 'no_changed_files') {
+    return `PR #${conflict.pullRequest}: non-draft PR has no changed files. Push its implementation or convert/close it before rerunning coordination.`;
+  }
   const reasons = [
-    ...(conflict.paths ?? []).map(name => `file ${name}`),
-    ...(conflict.components ?? []).map(name => `component ${name}`),
-    ...(conflict.database ?? []).map(name => `database object ${name}`),
+    ...(conflict.paths ?? []).map(name => `shared file ${name}`),
+    ...(conflict.database ?? []).map(name => `shared SQL object ${name}`),
     ...(conflict.reason ? [conflict.reason] : []),
   ];
-  return `PR #${conflict.pullRequest}: ${reasons.join(', ') || 'invalid coordination metadata'}`;
+  const resolution = (conflict.paths ?? []).some(name => name.startsWith('tests/'))
+    ? 'Coordinate the test edits or validate their combined result at merge time, then rerun coordination.'
+    : 'Coordinate the shared change, rebase or merge the PRs, then rerun coordination.';
+  return `PR #${conflict.pullRequest}: ${reasons.join(', ') || 'invalid coordination metadata'}. ${resolution}`;
+}
+
+function explainAdvisory(advisory) {
+  if (advisory.reason === 'invalid_peer_component_metadata') {
+    return `[advisory] PR #${advisory.pullRequest} has malformed non-authoritative component metadata; the current API file list was used. Repair its declaration; unavailable or invalid API data still fails closed.`;
+  }
+  if (advisory.reason === 'peer_no_changed_files') {
+    return `[advisory] PR #${advisory.pullRequest} is an empty non-draft PR and is not treated as an overlap; add its changed files or convert/close it.`;
+  }
+  return `[advisory] PR #${advisory.pullRequest} shares broad component labels ${advisory.components.join(', ')}; labels alone do not block. Review combined behavior and rely on merge-time validation where safe.`;
+}
+
+function reportAdvisories(candidate, others) {
+  for (const advisory of pullRequestAdvisories(candidate, others)) {
+    console.log(explainAdvisory(advisory));
+  }
 }
 
 async function currentPullRequest(event, repository) {
@@ -119,10 +149,11 @@ async function main() {
       pull.files = await filesFor(pull, repository);
       others.push(pull);
     }
+    reportAdvisories(candidate, others);
     const conflicts = pullRequestConflicts(candidate, others);
     if (conflicts.length) throw new Error(`PR #${candidate.number} conflicts with active PRs:\n` +
       conflicts.map(explain).join('\n'));
-    console.log(`PR #${candidate.number} has no declared-component, changed-file, or SQL-object overlap.`);
+    console.log(`PR #${candidate.number} has no hard shared-file or SQL-object conflicts.`);
     return;
   }
 
@@ -139,10 +170,11 @@ async function main() {
   for (let index = 0; index < included.length; index++) {
     const candidate = included[index];
     const peers = [...included.slice(0, index), ...included.slice(index + 1), ...outside];
+    reportAdvisories(candidate, peers);
     conflicts.push(...pullRequestConflicts(candidate, peers));
   }
   if (conflicts.length) throw new Error(`Merge group conflicts with active PRs:\n${conflicts.map(explain).join('\n')}`);
-  console.log(`Merge group of PRs ${included.map(pull => `#${pull.number}`).join(', ')} is conflict-free.`);
+  console.log(`Merge group of PRs ${included.map(pull => `#${pull.number}`).join(', ')} has no hard shared-file or SQL-object conflicts.`);
 }
 
 main().catch(error => {

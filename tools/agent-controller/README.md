@@ -92,11 +92,30 @@ ledger and issue comments. For a closed-unmerged PR, delete its task branch only
 after confirming the agent is stopped; a later reconciliation can then release
 the lease. Never edit `coordination.json` by hand.
 
-`PR coordination / check` runs trusted base-branch code on
-`pull_request_target` and `merge_group`. It compares declared areas, actual
-changed paths and database objects across all open Development PRs, including
-manually created Copilot PRs. The existing managed-file guard remains separate;
-its narrowly approved single-writer exception does not waive overlap checks.
+`PR coordination / check` runs trusted Development policy on
+`pull_request_target` and merge-queue policy on `merge_group`. Across open
+Development PRs, exact changed-file paths and shared SQL objects are hard
+conflicts; broad component labels are advisory. Evidence under
+`docs/agent-work/issues/issue-N/pr-M/` belongs to PR `M`, not to every PR for
+issue `N`. A test-only shared path is reported with a combined-validation
+resolution; compatible test edits can be validated together at merge time.
+No other PR-level exclusive resources are currently registered; a future one
+must name the resource and document its correctness rationale rather than
+relying on a broad component label.
+The existing managed-file guard remains separate; its narrowly approved
+single-writer exception does not waive exact-path overlap checks.
+
+The candidate PR's malformed component declaration and an empty non-draft
+candidate remain invalid. Malformed declarations on unrelated PRs are reported
+as advisory unless they declare database ownership, which remains fail-closed;
+an unrelated empty non-draft PR is also reported as advisory. These peer
+conditions do not mask concrete path or SQL overlap checks. Invalid GitHub API
+data, invalid changed-file paths, open-PR identity/SHA, pagination errors, and
+unreadable migration content still fail closed. For recovery, verify the
+current `copilot/Development` policy and PR head, repair the affected metadata
+or restore API access, then rerun the check. The check always fetches current PR
+metadata and migration content at the current PR head; merge-group checks
+compare against the queued head.
 
 The workflow is not a substitute for repository rulesets. The owner must
 explicitly require **`PR coordination / check`**, `verify`, `database` and the

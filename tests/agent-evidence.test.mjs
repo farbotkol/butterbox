@@ -314,6 +314,30 @@ test('partial and documentation-only deliveries never become full-story acceptan
   assert.deepEqual(parseAcceptanceCriteria(
     '## Acceptance criteria\n- [ ] First\n- [x] Second\n## Notes\n- [ ] Not a criterion',
   ), [{ checked: false, description: 'First' }, { checked: true, description: 'Second' }]);
+  assert.deepEqual(parseAcceptanceCriteria(
+    `## Tests / acceptance criteria
+- Two PRs changing distinct UI files within the same application area can both pass coordination.
+- Two PRs changing distinct tests in the same suite can both pass coordination.
+- Two PRs with distinct evidence paths for the same parent issue can both pass coordination.
+- Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid.
+- Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely.
+- Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy.
+- Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases.
+- Demonstrate two independent Copilot PRs passing coordination concurrently, then pass real required checks; report results with links.
+- No automatic merge or production deploy in this issue. Submit a small reviewed PR against \`copilot/Development\`.
+## Success measure
+- Not a criterion`,
+  ).map(item => item.description), [
+    'Two PRs changing distinct UI files within the same application area can both pass coordination.',
+    'Two PRs changing distinct tests in the same suite can both pass coordination.',
+    'Two PRs with distinct evidence paths for the same parent issue can both pass coordination.',
+    'Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid.',
+    'Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely.',
+    'Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy.',
+    'Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases.',
+    'Demonstrate two independent Copilot PRs passing coordination concurrently, then pass real required checks; report results with links.',
+    'No automatic merge or production deploy in this issue. Submit a small reviewed PR against `copilot/Development`.',
+  ]);
   const docs = buildReconciliationComment({
     repository, issueNumber, pullNumber, mergeSha, ci, evidence: evidence(), changedFiles: docsFiles,
   });
