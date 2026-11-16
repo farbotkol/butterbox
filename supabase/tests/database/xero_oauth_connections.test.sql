@@ -126,6 +126,16 @@ select extensions.is(public.select_xero_oauth_tenant(
   'b9910000-0000-4000-8000-000000000001', 'd9910000-0000-4000-8000-000000000001',
   'e9910000-0000-4000-8000-000000000001'),
   'e9910000-0000-4000-8000-000000000001'::uuid, 'organization selection is linked to its business grant');
+select extensions.is(
+  (select count(*) from public.list_payroll_mapping_connections(
+    'b9910000-0000-4000-8000-000000000001'
+  ) where provider = 'xero' and account_id = 'e9910000-0000-4000-8000-000000000001'),
+  1::bigint, 'selecting an authorized Xero organization creates a mapping destination using its tenant ID');
+select extensions.is(
+  (select count(*) from public.list_payroll_mapping_connections(
+    'b9910000-0000-4000-8000-000000000001'
+  ) where provider = 'xero' and account_id = 'e9910000-0000-4000-8000-000000000002'),
+  0::bigint, 'unselected Xero organizations do not create mapping destinations');
 select extensions.is((select count(*) from public.list_xero_oauth_tenants(
   'b9910000-0000-4000-8000-000000000001')),
   1::bigint, 'connected Xero organization is visible only in its business');
@@ -178,6 +188,11 @@ select extensions.is(public.select_xero_oauth_tenant(
   'e9910000-0000-4000-8000-000000000001'),
   'e9910000-0000-4000-8000-000000000001'::uuid,
   'an owner can reconnect an organization after provider revocation');
+select extensions.is(
+  (select count(*) from public.list_payroll_mapping_connections(
+    'b9910000-0000-4000-8000-000000000001'
+  ) where provider = 'xero' and account_id = 'e9910000-0000-4000-8000-000000000001'),
+  1::bigint, 'Xero reauthorization reuses the destination without creating a duplicate');
 select extensions.throws_ok($$select public.disconnect_xero_oauth_tenant(
   'b9910000-0000-4000-8000-000000000001', 'e9910000-0000-4000-8000-000000000001')$$,
   'P0001', 'Xero connection unavailable',
