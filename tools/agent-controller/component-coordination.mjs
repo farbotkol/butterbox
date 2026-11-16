@@ -12,8 +12,8 @@ const sqlObjectPattern = /\b(?:create|alter|drop)\s+(?:or\s+replace\s+)?(?:(?:te
 const sqlTargetPattern = /\b(?:policy|trigger)\s+("[^"]+"|[a-z_][\w$]*)\s+on\s+("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 const sqlIndexTargetPattern = /\b(?:create|drop)\s+(?:unique\s+)?index(?:\s+(?:if\s+not\s+exists\s+)?("[^"]+"|[a-z_][\w$]*))?\s+on\s+(?:only\s+)?("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 
-export function normalizeComponents(value) {
-  if (!Array.isArray(value) || value.length < 1 || value.length > 20 ||
+export function normalizeComponents(value, maxEntries = 20) {
+  if (!Array.isArray(value) || value.length < 1 || value.length > maxEntries ||
     value.some(item => typeof item !== 'string' || !(
       knownComponents.has(item) || dynamicPrefixes.some(prefix => {
         if (!item.startsWith(prefix)) return false;
@@ -151,9 +151,12 @@ export function declaredComponents(body) {
   try { return normalizeComponents(JSON.parse(match[1])); } catch { return null; }
 }
 
+// Computed PR ownership can contain many distinct SQL objects and file components.
+// The 20-entry limit applies to *user-declared* components, not trusted, derived ownership.
+// Keep a bounded cap for overlap calculations and fail closed for invalid inputs.
 export function componentOverlap(left, right) {
-  const a = normalizeComponents(left);
-  const b = normalizeComponents(right);
+  const a = normalizeComponents(left, 1000);
+  const b = normalizeComponents(right, 1000);
   if (!a || !b) return ['invalid_component_metadata'];
   const conflicts = [];
   for (const first of a) for (const second of b) {
@@ -195,9 +198,21 @@ export function findOverlaps(candidate, other) {
   return { paths, components, database, conflicts: paths.length > 0 || components.length > 0 || database.length > 0 };
 }
 
+// Copilot can open a draft before pushing its first implementation commit.
+// An empty, metadata-free draft cannot overlap any changed files, but malformed
+// declarations and empty non-draft PRs must still fail closed.
+function isPendingEmptyDraft(pull, declared) {
+  return pull.draft === true && Array.isArray(pull.files) && pull.files.length === 0 &&
+    declared.length === 0 && Array.isArray(pull.components ?? []) &&
+    (pull.components ?? []).length === 0;
+}
+
 export function pullRequestConflicts(candidate, others) {
   const declared = declaredComponents(candidate.body);
   if (declared === null) return [{ pullRequest: candidate.number, reason: 'invalid_component_metadata' }];
+  if (!candidate.draft && Array.isArray(candidate.files) && candidate.files.length === 0) {
+    return [{ pullRequest: candidate.number, reason: 'no_changed_files' }];
+  }
   const left = { components: [...declared, ...(candidate.components ?? [])], files: candidate.files ?? [] };
   const conflicts = [];
   for (const other of others) {
@@ -206,6 +221,12 @@ export function pullRequestConflicts(candidate, others) {
       conflicts.push({ pullRequest: other.number, reason: 'invalid_component_metadata' });
       continue;
     }
+    if (isPendingEmptyDraft(other, otherDeclared)) continue;
+    if (!other.draft && Array.isArray(other.files) && other.files.length === 0) {
+      conflicts.push({ pullRequest: other.number, reason: 'no_changed_files' });
+      continue;
+    }
+    if (isPendingEmptyDraft(candidate, declared)) continue;
     const overlap = findOverlaps(left, {
       components: [...otherDeclared, ...(other.components ?? [])],
       files: other.files ?? [],

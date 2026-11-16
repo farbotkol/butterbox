@@ -76,6 +76,39 @@ test('oversized component declarations fail closed instead of dropping overlap r
   assert.ok(overlap.components.length > 0);
 });
 
+test('generated Xero-sized SQL ownership remains disjoint from unrelated workflow fixes', () => {
+  const migrationSql = Array.from({ length: 15 }, (_, index) =>
+    `create function public.xero_claim_${index}() returns void language sql as $ select null; $;`
+  ).join('\n');
+  const xero = {
+    number: 262, draft: true, body: '',
+    files: [
+      { path: 'supabase/migrations/20261115060000_xero_oauth_connections.sql', content: migrationSql },
+      ...Array.from({ length: 10 }, (_, index) =>
+        ({ path: `src/app/xero-area-${index}/route.ts` })),
+      { path: 'tests/xero-oauth.test.mjs' },
+    ],
+  };
+  const workflow = {
+    number: 267, draft: true, body: '',
+    files: [{ path: '.github/workflows/pr-coordination.yml' }],
+  };
+  assert.equal(normalizeComponents(Array.from({ length: 21 }, (_, i) => `application:area-${i}`)), null,
+    'declared component cap must remain unchanged');
+  assert.deepEqual(pullRequestConflicts(workflow, [xero]), []);
+  assert.deepEqual(pullRequestConflicts(xero, [workflow]), []);
+
+  const sameObject = {
+    number: 268, draft: true, body: '',
+    files: [{ path: 'supabase/migrations/20261115070000_overlap.sql',
+      content: 'alter function public.xero_claim_0() owner to postgres;' }],
+  };
+  assert.equal(pullRequestConflicts(sameObject, [xero]).length, 1,
+    'a shared SQL object must still block');
+  assert.deepEqual(componentOverlap(['not-a-component'], ['ci:pr-coordination-yml']),
+    ['invalid_component_metadata'], 'invalid metadata must still fail closed');
+});
+
 test('exact file edits and shared SQL objects conflict across different migrations', () => {
   const left = {
     components: [],
@@ -109,6 +142,54 @@ test('direct Copilot PRs without controller metadata cannot bypass actual-path o
   const conflicts = pullRequestConflicts(manual, [active]);
   assert.equal(conflicts.length, 1);
   assert.deepEqual(conflicts[0].paths, ['tools/agent-controller/listener.mjs']);
+});
+
+test('unstarted empty drafts do not block unrelated or overlapping active PRs', () => {
+  const emptyXero = { number: 262, draft: true, body: '', files: [] };
+  const emptySms = { number: 263, draft: true, body: '', files: [] };
+  const button = {
+    number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }],
+  };
+  assert.deepEqual(pullRequestConflicts(button, [emptyXero, emptySms]), []);
+  assert.deepEqual(pullRequestConflicts(emptyXero, [button, emptySms]), []);
+  assert.deepEqual(pullRequestConflicts(emptySms, [button, emptyXero]), []);
+});
+
+test('empty drafts with malformed metadata and empty non-draft PRs remain blocked', () => {
+  const button = {
+    number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }],
+  };
+  const invalid = { number: 262, draft: true,
+    body: '<!-- butterbox-components: ["not-a-component"] -->', files: [] };
+  const readyEmpty = { number: 263, draft: false, body: '', files: [] };
+  assert.deepEqual(pullRequestConflicts(button, [invalid]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(invalid, [button]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestConflicts({ number: 264, draft: true, body: '', files: [] }, [invalid]), [
+    { pullRequest: 262, reason: 'invalid_component_metadata' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(button, [readyEmpty]), [
+    { pullRequest: 263, reason: 'no_changed_files' },
+  ]);
+  assert.deepEqual(pullRequestConflicts(readyEmpty, [button]), [
+    { pullRequest: 263, reason: 'no_changed_files' },
+  ]);
+});
+
+test('real overlapping changes still block concurrent PRs', () => {
+  const button = { number: 261, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }] };
+  const sameFile = { number: 262, draft: true, body: '',
+    files: [{ path: 'src/app/people/page.tsx' }] };
+  const conflicts = pullRequestConflicts(button, [sameFile]);
+  assert.equal(conflicts.length, 1);
+  assert.deepEqual(conflicts[0].paths, ['src/app/people/page.tsx']);
+  assert.equal(conflicts[0].conflicts, true);
 });
 
 test('expired reservations remain blocking until verified safe release', () => {

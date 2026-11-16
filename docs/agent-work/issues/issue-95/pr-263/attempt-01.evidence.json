@@ -1,0 +1,144 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 95,
+    "url": "https://github.com/farbotkol/butterbox/issues/95"
+  },
+  "pullRequest": {
+    "number": 263,
+    "url": "https://github.com/farbotkol/butterbox/pull/263",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/bb-comms-003-email-push-delivery",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43768599931,
+    "agent": "copilot",
+    "commitSha": "96ebc6523ddb6db0bee6a9e4f8eddb8b5bb1d817",
+    "startedAt": "2026-11-15T22:19:00Z",
+    "updatedAt": "2026-11-15T22:24:23Z"
+  },
+  "scope": {
+    "summary": "Add a disconnected Twilio SMS provider boundary; full SMS delivery remains blocked.",
+    "changedFiles": [
+      "docs/agent-work/issues/issue-95/pr-263/attempt-01.md",
+      "docs/agent-work/issues/issue-95/pr-263/attempt-01.evidence.json",
+      "docs/sms-notifications.md",
+      "src/lib/twilio-sms.ts",
+      "tests/twilio-sms.test.mjs"
+    ],
+    "implemented": [
+      "Disconnected Messaging Service adapter and form-signature helper with mock-only tests."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Consent/preferences respected",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "supabase/migrations/20261101160000_employee_preferences.sql",
+          "outcome": "Existing preferences include email flags; no SMS consent or verified-phone model was identified."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "delivery is queued with retry and logs",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "review",
+          "reference": "https://github.com/farbotkol/butterbox/pull/263",
+          "outcome": "The provider boundary is disconnected; no SMS queue, retry worker or callback route was added."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "failures do not block roster publication",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "supabase/migrations/20261101220000_roster_publication_notifications.sql",
+          "outcome": "The existing in-app publication path was not changed; SMS failure isolation was not implemented or tested."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "unsupported push devices have fallback.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "review",
+          "reference": "https://github.com/farbotkol/butterbox/issues/95",
+          "outcome": "Push remains outside the authorized SMS-only slice."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "SMS targeted tests",
+      "outcome": "not-run",
+      "result": "The full SMS workflow, tenant isolation and database tests were not run because they are not implemented.",
+      "reference": null
+    },
+    {
+      "command": "node --experimental-strip-types --test tests/twilio-sms.test.mjs",
+      "outcome": "passed",
+      "result": "Four provider boundary tests passed using mocked transport.",
+      "reference": null
+    },
+    {
+      "command": "npx eslint src/lib/twilio-sms.ts tests/twilio-sms.test.mjs",
+      "outcome": "passed",
+      "result": "Changed code passed ESLint.",
+      "reference": null
+    },
+    {
+      "command": "npx tsc --noEmit --incremental false",
+      "outcome": "passed",
+      "result": "TypeScript check passed.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43675239772,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43675239772"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43675239772,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43675239772"
+    }
+  ],
+  "decisions": [
+    "Do not add an unverified SMS sending path or send real messages.",
+    "Keep issue 95 open and the PR in draft."
+  ],
+  "reruns": [],
+  "limitations": [
+    "The provider boundary is disconnected; no SMS workflow, isolation or retry worker has been implemented or verified.",
+    "Documentation: operational limitations documented in docs/sms-notifications.md; no user-visible feature changed.",
+    "Twilio provider documentation was unavailable; signature URL normalization requires verification before integration."
+  ],
+  "blockers": [
+    "A trustworthy phone-ownership and consent flow and safe asynchronous delivery design still need implementation and verification.",
+    "Live delivery requires explicit owner approval and token rotation."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-95/pr-263/attempt-01.md",
+  "markdownSha256": "7517b1869c0797b7ec0fc2d89f78af6e202489d83d70e8dd57209fa7c7601f6c",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

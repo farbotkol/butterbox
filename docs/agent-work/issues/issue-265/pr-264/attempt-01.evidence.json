@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 265,
+    "url": "https://github.com/farbotkol/butterbox/issues/265"
+  },
+  "pullRequest": {
+    "number": 264,
+    "url": "https://github.com/farbotkol/butterbox/pull/264",
+    "baseBranch": "copilot/Development",
+    "headBranch": "fix/coordination-empty-draft-prs",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43671961118,
+    "agent": "human",
+    "commitSha": "393a0756bc215ccea6aa594c869bedcc3e54ad4e",
+    "startedAt": "2026-11-15T03:20:58Z",
+    "updatedAt": "2026-11-15T03:22:00Z"
+  },
+  "scope": {
+    "summary": "Fix false multi-agent coordination conflicts created by empty draft PRs without disabling the factory.",
+    "changedFiles": [
+      "tools/agent-controller/component-coordination.mjs",
+      "tests/component-coordination.test.mjs",
+      "docs/agent-work/issues/issue-265/pr-264/attempt-01.md",
+      "docs/agent-work/issues/issue-265/pr-264/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Exclude only pending empty drafts from overlap decisions after validating metadata.",
+      "Preserve fail-closed behavior for malformed metadata and empty non-draft PRs.",
+      "Add targeted regression tests for independent drafts, real overlaps and invalid metadata."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Empty draft PRs with no changed files or declared components do not block other PRs.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Source change and regression test added; CI pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Malformed component declarations and empty non-draft PRs continue to fail closed.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Source change and regression test added; CI pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Real file, component, and shared SQL-object conflicts still block.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "Source change and regression test added; CI pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Automated regression tests cover the observed three-PR deadlock and safety cases.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tests/component-coordination.test.mjs",
+          "outcome": "Regression tests added; execution pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "CI passes; no merge or deployment without review of the result.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-controller/component-coordination.mjs",
+          "outcome": "CI and merge checks are pending."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/component-coordination.test.mjs",
+      "outcome": "not-run",
+      "result": "Committed regression tests; awaiting GitHub CI run.",
+      "reference": "https://github.com/farbotkol/butterbox/pull/264"
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": 43671961118,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43671961118"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43671961118,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43671961118"
+    }
+  ],
+  "decisions": [
+    "Maintain multi-agent coordination and automatic CI repair; fix the specific empty-draft edge case.",
+    "Keep PR draft; no merge or deployment before tests pass."
+  ],
+  "reruns": [],
+  "limitations": [
+    "GitHub Actions results still pending when evidence was created."
+  ],
+  "blockers": [
+    "Required checks have not yet been confirmed green."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-265/pr-264/attempt-01.md",
+  "markdownSha256": "c0a31e0f342d22965d790c54cd56ead7a2e84c42576098600744ced6f4bb5832",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

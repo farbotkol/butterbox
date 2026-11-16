@@ -54,6 +54,10 @@ export default async function PayrollMappingPage({ searchParams }: { searchParam
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Help with payroll preparation
       </Link>
+      <Link href={`/settings/payroll/xero?business=${encodeURIComponent(businessId)}`}
+        className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+        Manage Xero organization connection
+      </Link>
       <Link href={`/timesheets?venue=${encodeURIComponent(venueId)}&business=${encodeURIComponent(businessId)}`}
         className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Return to timesheets
