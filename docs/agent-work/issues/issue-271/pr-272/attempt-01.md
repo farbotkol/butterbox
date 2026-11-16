@@ -20,7 +20,7 @@
 | Two PRs changing distinct UI files within the same application area can both pass coordination. | `tests/component-coordination.test.mjs`: same `application:settings`, distinct paths produce an advisory and no hard conflict. | Pass |
 | Two PRs changing distinct tests in the same suite can both pass coordination. | Same `test:auth`, distinct paths produce an advisory and no hard conflict. | Pass |
 | Two PRs with distinct evidence paths for the same parent issue can both pass coordination. | `issue-91/pr-271` and `issue-91/pr-269` paths map separately and do not conflict. | Pass |
-| Empty draft PR remains non-blocking; malformed own PR fails; empty non-draft PR remains invalid. | Empty draft is non-blocking; invalid own component metadata and own empty non-draft PR fail. Malformed unrelated metadata is classified; malformed database ownership remains fail-closed. | Pass |
+| Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid. | Empty draft is non-blocking; invalid own component metadata and own empty non-draft PR fail. Malformed unrelated metadata is classified; malformed database ownership remains fail-closed. | Pass |
 | Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely. | Exact shared path and shared SQL object cases remain hard conflicts; invalid file paths and database-ownership metadata fail closed. No end-to-end unreadable GitHub migration-blob failure was induced locally; the trusted checker rejects unreadable blobs. | Blocked |
 | Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy. | `tests/pr-coordination-trusted-checkout.test.mjs` covers fresh PR metadata, current trusted Development checkout, and comparison against `merge_group.head_sha`. | Pass |
 | Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases. | Focused tests cover `.spec.mjs` ownership, empty drafts, oversized Xero SQL ownership, category-only overlaps, exact paths, shared SQL objects, and trusted checkout/queued SHA behavior. | Pass |
@@ -35,11 +35,11 @@
 - `npm run lint -- tools/agent-controller/component-coordination.mjs tools/agent-controller/check-pr-coordination.mjs tests/component-coordination.test.mjs tests/pr-coordination-trusted-checkout.test.mjs` — passed.
 - `node --check` on both changed controller modules and `git diff --check` — passed.
 - CodeQL was requested after the implementation commit; the tool reported that no analyzable code changes were detected and performed no analysis.
-- GitHub PR coordination checks passed for #269 and #272 against the still-trusted base policy. On head `6d1544c`, the latest `verify` run validated all 16 delivery files but failed because the evidence criteria count did not match the canonical Issue #271 checklist. The latest `database` job failed at disposable Supabase startup; no database, tenant-isolation, or browser tests executed.
+- GitHub PR coordination checks passed for #269 and #272 against the still-trusted base policy. On head `10b0a9d`, the latest `verify` run validated all 16 delivery files and the nine-criterion count, then identified the missing literal Markdown emphasis in criterion 4. The database job is still starting Supabase; it has not yet reported a test result.
 
 ## Blockers and limitations
 - PR #272 remains a draft and its body contains the generated `Fixes #271` suffix; that auto-close keyword must be removed because this is still partial work. The available browser session is unauthenticated, so I cannot edit the PR description.
-- The database job suppressed its startup diagnostic into a runner-temporary file that was not uploaded, so the exact startup cause is unavailable. The job failed before tests ran.
+- The prior database job suppressed its startup diagnostic into a runner-temporary file that was not uploaded, so the exact startup cause for that failed attempt is unavailable. The job failed before tests ran.
 - No merge-group event or updated trusted-policy run after this PR merges was observed. Required `verify` and `database` checks have not both passed.
 - No automatic merge, production deployment, or live database operation was performed.
 - **Documentation: updated** in the controller README and GitHub issue workflow guide. **User Guide: not applicable** — this is development tooling and does not change a user-facing workflow.

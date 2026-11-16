@@ -319,7 +319,7 @@ test('partial and documentation-only deliveries never become full-story acceptan
 - Two PRs changing distinct UI files within the same application area can both pass coordination.
 - Two PRs changing distinct tests in the same suite can both pass coordination.
 - Two PRs with distinct evidence paths for the same parent issue can both pass coordination.
-- Empty draft PR remains non-blocking; malformed own PR fails; empty non-draft PR remains invalid.
+- Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid.
 - Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely.
 - Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy.
 - Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases.
@@ -331,7 +331,7 @@ test('partial and documentation-only deliveries never become full-story acceptan
     'Two PRs changing distinct UI files within the same application area can both pass coordination.',
     'Two PRs changing distinct tests in the same suite can both pass coordination.',
     'Two PRs with distinct evidence paths for the same parent issue can both pass coordination.',
-    'Empty draft PR remains non-blocking; malformed own PR fails; empty non-draft PR remains invalid.',
+    'Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid.',
     'Same changed file and same SQL object still trigger concrete hard conflicts; unreadable migrations fail safely.',
     'Fresh PR metadata and SHA are used; stale historical PR base SHA cannot reintroduce the old policy.',
     'Tests reproduce past false-conflict patterns from #251, #264 and #267 plus positive true-conflict cases.',

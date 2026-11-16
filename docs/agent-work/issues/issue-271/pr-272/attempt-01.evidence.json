@@ -18,7 +18,7 @@
     "agent": "copilot",
     "commitSha": "5a680ffd9f852e713e2981a8e53449b365b0be5e",
     "startedAt": "2026-11-16T07:50:00Z",
-    "updatedAt": "2026-11-16T09:30:00Z"
+    "updatedAt": "2026-11-16T09:34:00Z"
   },
   "scope": {
     "summary": "Narrow PR-vs-PR blocking to shared changed paths and SQL ownership, retain fail-closed safety checks, and document advisory/recovery behavior.",
@@ -81,7 +81,7 @@
     },
     {
       "id": "COORD-4",
-      "description": "Empty draft PR remains non-blocking; malformed own PR fails; empty non-draft PR remains invalid.",
+      "description": "Empty draft PR remains non-blocking; malformed *own* PR fails; empty non-draft PR remains invalid.",
       "status": "pass",
       "evidence": [
         {
@@ -154,8 +154,8 @@
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43828505266",
-          "outcome": "Verify failed because the evidence parser did not recognize the canonical issue checklist; database failed while starting disposable Supabase, before tests ran. Coordination was not validated against this unmerged policy."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43840681039",
+          "outcome": "On head 10b0a9d, Verify recognized nine criteria but failed the exact criterion[3] description comparison due omitted Markdown emphasis. Database was in progress; coordination ran against the still-trusted base policy."
         }
       ]
     },
@@ -208,14 +208,14 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 43828505266,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828505266"
+      "runId": 43840681039,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43840681039"
     },
     {
       "name": "database",
-      "status": "fail",
-      "runId": 43828505266,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43828505266"
+      "status": "pending",
+      "runId": 43840681039,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43840681039"
     }
   ],
   "decisions": [
@@ -235,6 +235,6 @@
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-271/pr-272/attempt-01.md",
-  "markdownSha256": "461d7dd0e0f675abd24d2d6f613f9e099f1bc215bff60b8e3b3a2c99b872894b",
+  "markdownSha256": "1ad420212e10acdbe9a984cf6b94771de67161377a04196494c6062269439602",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
