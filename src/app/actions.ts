@@ -16,6 +16,7 @@ import { parseConflictPolicy } from "@/lib/conflict-policy";
 import { getWeekStart } from "@/lib/dates";
 import { departmentHref, parseDepartmentFilterContext } from "@/lib/department-directory";
 import { parseEmployeePreferences } from "@/lib/employee-preferences";
+import { normalizeEmployeeMobile } from "@/lib/employee-mobile";
 import { employmentMetadataFailure, isEmploymentBasis, parseEmploymentMetadataInput } from "@/lib/employment-rule-metadata";
 import { isPayrollUuid } from "@/lib/generic-payroll-exports";
 import {
@@ -102,7 +103,8 @@ function peopleDestination(formData: FormData, businessId: string, venueId: stri
     console.error("Invalid People return context.");
     redirect(withBusiness(`/people?venue=${encodeURIComponent(venueId)}&error=filter`, businessId));
   }
-  return peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+  const href = peopleHref(businessId, venueId, filters, origins[0] === "profile" || createdId ? employeeId : undefined);
+  return origins[0] === "new" && !createdId ? href.replace("/people?", "/people/new?") : href;
 }
 
 function departmentDestination(formData: FormData, businessId: string, venueId: string, createdId?: string) {
@@ -528,11 +530,14 @@ export async function saveEmployeeAction(formData: FormData) {
   const requestIds = uuidList(formData, "request_id", 1);
   const name = singleFormString(formData, "name");
   const email = singleFormString(formData, "email");
+  const mobilePhone = singleFormString(formData, "mobile_phone");
+  const normalizedMobilePhone = normalizeEmployeeMobile(mobilePhone);
   const roleTitle = singleFormString(formData, "role_title");
   const employmentType = singleFormString(formData, "employment_type");
   const profileRevisions = formData.getAll("profile_revision");
   const profileRevision = profileRevisions.length === 1 ? parseProfileRevision(profileRevisions[0]) : null;
   const confirmation = formData.getAll("confirmed");
+  if (!normalizedMobilePhone.valid) redirect(`${destination}&error=mobile`);
   if ((active !== "true" && active !== "false") || employmentRevision === null || !employeeIds || !requestIds ||
     departmentIds?.length !== 1 || name === null || !name.trim() || name.trim().length > 100 ||
     email === null || email.trim().length > 254 || roleTitle === null || !roleTitle.trim() ||
@@ -551,6 +556,7 @@ export async function saveEmployeeAction(formData: FormData) {
     p_department_id: departmentIds[0],
     p_name: name.trim(),
     p_email: email.trim(),
+    p_mobile_phone: normalizedMobilePhone.value,
     p_role_title: roleTitle.trim(),
     p_employment_type: employmentType,
     p_active: active === "true",
@@ -559,7 +565,7 @@ export async function saveEmployeeAction(formData: FormData) {
     ? await workspace.supabase.rpc("create_employee_profile_idempotent", {
       ...profile, p_request_id: requestIds[0],
     })
-    : await workspace.supabase.rpc("save_employee_profile_checked_v2", {
+    : await workspace.supabase.rpc("save_employee_profile_mobile_checked_v3", {
       ...profile, p_employee_id: employeeIds[0], p_expected_employment_revision: employmentRevision,
       p_expected_profile_revision: profileRevision, p_lifecycle_confirmed: confirmation[0] === "yes",
     });
@@ -568,7 +574,8 @@ export async function saveEmployeeAction(formData: FormData) {
     const code = error?.message === "Employment metadata changed; refresh before saving" ? "employment-stale"
       : error?.message === "Employee profile changed; refresh before saving" ? "profile-stale"
       : error?.message === "Confirm the employee status change" ? "lifecycle-confirm"
-      : error?.message === "Permission denied" ? "permission" : "save";
+      : error?.message === "Permission denied" ? "permission"
+        : error?.message === "Invalid mobile number" ? "mobile" : "save";
     redirect(`${destination}&error=${code}`);
   }
   revalidatePath("/people");

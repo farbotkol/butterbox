@@ -333,6 +333,15 @@ accounts are provisioned by the operator.
    then **Add employee**. The new profile opens with a confirmation. Existing
    profiles open read-only: choose **Edit overview**, make changes and **Save
    employee**, or **Cancel** and confirm **Discard changes** if prompted.
+   **Mobile number** is optional: enter an Australian number such as `0412345678`
+   or an international E.164 number such as `+14155552671`; spaces, parentheses,
+   hyphens and periods are accepted. Invalid formats are rejected, and an empty
+   value removes the stored number. The number is visible only in the employee's
+   primary-department profile scope. Storing or changing it does not verify
+   ownership, record SMS consent or send a text; SMS delivery and consent/opt-out
+   management are not available. A separately implemented and reviewed SMS
+   feature must record explicit consent source/time, verify number ownership
+   independently and enforce opt-out before any delivery is enabled.
    The compact primary action is right-aligned in the form footer on desktop and
    mobile; **Cancel** remains below the form.
    Wait while a save is pending. If a connection is interrupted, reload and
