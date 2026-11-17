@@ -45,7 +45,7 @@
   "criteria": [
     {
       "id": "AC-1",
-      "description": "An incomplete Copilot PR is not failed solely because the generated body appended an auto-close footer; the footer is corrected/removed before final evidence validation, with audit visibility.",
+      "description": "An incomplete Copilot PR is not failed **solely** because the generated body appended an auto-close footer; the footer is corrected/removed before final evidence validation, with audit visibility.",
       "status": "pass",
       "evidence": [
         {
@@ -57,7 +57,7 @@
     },
     {
       "id": "AC-2",
-      "description": "Required Refs #N and matching canonical markers survive Copilot PR-body rewrites; a PR without actual required evidence is still blocked until the evidence exists and is valid.",
+      "description": "Required `Refs #N` and matching canonical markers survive Copilot PR-body rewrites; a PR without actual required evidence is still blocked until the evidence exists and is valid.",
       "status": "pass",
       "evidence": [
         {
