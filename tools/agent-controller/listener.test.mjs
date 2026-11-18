@@ -9,6 +9,7 @@ import {
   OWNER_ID, BRANCH, LABEL, parseTask, originalOwnerTask, GitHub, StateStore, Controller,
   ControllerError, execFile, safeEnvironment, approvedFiles, copilotArguments, codingHome, taskPrompt,
   autonomousSettings, autonomousArguments, autonomousEnvironment, sandboxSettings, taskBranch,
+  controllerEvidenceMarker, controllerPullRequestBody,
   classifyCommandFailure, redactDiagnostics,
 } from './listener.mjs';
 
@@ -827,7 +828,19 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
       agents.push({ args, options, settings });
       return String((await agent(options.cwd, options, args)) ?? 'Agent summary: changed files, tests passed.');
     }
-    if (command === 'gh') { prs.push({ args, options }); pr.created = true; pr.branch = args[args.indexOf('--head') + 1]; return 'https://github.com/farbotkol/butterbox/pull/77'; }
+    if (command === 'gh') {
+      if (args[1] === 'create') {
+        prs.push({ args, options });
+        pr.created = true;
+        pr.branch = args[args.indexOf('--head') + 1];
+        return 'https://github.com/farbotkol/butterbox/pull/77';
+      }
+      if (args[1] === 'edit') {
+        prEdits.push({ args, options });
+        return '';
+      }
+      throw new Error(`unexpected gh command ${args.join(' ')}`);
+    }
     if (command === 'git') {
       const index = args.indexOf('set-url');
       if (index > -1) args = [...args.slice(0, index + 2), remote];
@@ -835,6 +848,7 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     }
     throw new Error(`unexpected command ${command}`);
   };
+  const prEdits = [];
   const labels = []; const unlabels = []; const merges = []; const deleted = []; const checkCalls = []; const reruns = []; const logs = [];
   const head = () => sh(remote, 'rev-parse', pr.branch ?? taskBranch(parseTask(issue())));
   const remoteHead = branch => {
@@ -871,6 +885,7 @@ async function autonomousFixture(t, { agent = async cwd => writeFile(path.join(c
     autonomousEnabled: true, signal, checksPollMs: 1, checksGraceMs: 0, retryBaseMs });
   return { directory, remote, profile, taskRoot, store, controller, comments, closures, prs, agents, config, exec,
     github: githubClient, task: parseTask(issue()), labels, unlabels, merges, deleted, checkCalls, pr, head, reruns, logs,
+    prEdits,
     copilot, remoteHead };
 }
 
@@ -953,6 +968,12 @@ test('autonomous success waits for green CI, squash-merges the exact commit, the
   assert.equal(pr[pr.indexOf('--base') + 1], BRANCH);
   assert.equal(pr[pr.indexOf('--head') + 1], branch);
   assert.match(pr[pr.indexOf('--body') + 1], /^Refs #42/);
+  assert.equal(value.prEdits.length, 1);
+  const editedBody = value.prEdits[0].args[value.prEdits[0].args.indexOf('--body') + 1];
+  assert.match(editedBody, /Refs #42/);
+  assert.match(editedBody, /<!-- butterbox-issue: 42 -->/);
+  assert.match(editedBody, /<!-- butterbox-evidence: docs\/agent-work\/issues\/issue-42\/pr-77\/attempt-01\.evidence\.json -->/);
+  assert.doesNotMatch(editedBody, /\b(?:Fixes|Closes|Resolves)\s+#42/);
   const commit = value.head();
   assert.ok(value.checkCalls.length >= 2 && value.checkCalls.every(sha => sha === commit));
   assert.deepEqual(value.merges, [{ number: 77, sha: commit }]);
@@ -970,6 +991,72 @@ test('autonomous success waits for green CI, squash-merges the exact commit, the
   assert.deepEqual(await value.controller.tick(), { eligible: 0, executed: 0 });
   assert.equal(value.agents.length, 1);
   assert.equal(value.merges.length, 1);
+});
+
+test('controller PR marker builder binds the actual PR and keeps incomplete deliveries reference-only', () => {
+  const marker = controllerEvidenceMarker(42, 77, [
+    'docs/agent-work/issues/issue-42/pr-77/attempt-03.evidence.json',
+    'docs/agent-work/issues/issue-42/pr-77/attempt-03.md',
+  ]);
+  assert.equal(marker, '<!-- butterbox-evidence: docs/agent-work/issues/issue-42/pr-77/attempt-03.evidence.json -->');
+  const text = controllerPullRequestBody({
+    issueNumber: 42,
+    pullNumber: 77,
+    components: ['application:roster'],
+    delivery: 'Draft for owner review.',
+    baseCommit: 'a'.repeat(40),
+    changedFiles: ['src/example.ts'],
+    summary: 'Unverified summary.',
+  });
+  assert.match(text, /^Refs #42/);
+  assert.match(text, /<!-- butterbox-issue: 42 -->/);
+  assert.match(text, /<!-- butterbox-evidence: docs\/agent-work\/issues\/issue-42\/pr-77\/attempt-01\.evidence\.json -->/);
+  assert.doesNotMatch(text, /\b(?:Fixes|Closes|Resolves)\s+#42/);
+  assert.doesNotMatch(controllerPullRequestBody({
+    issueNumber: 42,
+    components: [],
+    delivery: 'Draft.',
+    baseCommit: 'a'.repeat(40),
+    changedFiles: [],
+    summary: '',
+  }), /butterbox-evidence/);
+});
+
+test('controller adds the actual PR evidence path after GitHub creates the PR', async t => {
+  const taskDir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'controller-pr-body-')));
+  t.after(() => rm(taskDir, { recursive: true, force: true }));
+  await writeFile(path.join(taskDir, 'copilot-output.txt'), 'Summary.');
+  const calls = [];
+  const controller = Object.create(Controller.prototype);
+  controller.autonomous = { autoMerge: false };
+  controller.componentLeaseMs = 1000;
+  controller.exec = async (_command, args) => {
+    calls.push(args);
+    return args[1] === 'create' ? 'https://github.com/farbotkol/butterbox/pull/77' : '';
+  };
+  controller.store = { renewComponents: async () => {}, save: async () => {} };
+
+  await controller.createPullRequest({
+    number: 42,
+    task: 'Synthetic controller task',
+    components: ['application:roster'],
+  }, {
+    taskDir,
+    issue: 42,
+    branch: 'agent/issue-42-deadbeef',
+    baseCommit: 'a'.repeat(40),
+    files: ['src/example.ts'],
+    changedFiles: 1,
+  }, { branch: BRANCH }, undefined);
+
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0][1], 'create');
+  assert.equal(calls[1][1], 'edit');
+  const bodyValue = calls[1][calls[1].indexOf('--body') + 1];
+  assert.match(bodyValue, /^Refs #42/);
+  assert.match(bodyValue, /<!-- butterbox-issue: 42 -->/);
+  assert.match(bodyValue, /<!-- butterbox-evidence: docs\/agent-work\/issues\/issue-42\/pr-77\/attempt-01\.evidence\.json -->/);
+  assert.doesNotMatch(bodyValue, /\b(?:Fixes|Closes|Resolves)\s+#42/);
 });
 
 test('autonomous autoMerge false keeps the draft-only review flow and never merges or closes', async t => {
@@ -1248,9 +1335,11 @@ test('autonomous lost pull request creation response adopts the existing PR inst
   };
   assert.deepEqual(await value.controller.tick(), { eligible: 1, executed: 1 });
   assert.equal(value.prs.length, 1);
+  assert.equal(value.prEdits.length, 0);
   const ledger = await value.store.read(42);
   assert.equal(ledger.status, 'succeeded');
   assert.ok(ledger.history.some(entry => entry.event === 'reconciled_pull_request'));
+  assert.ok(ledger.history.some(entry => entry.event === 'pull_request_description_update_skipped'));
 });
 
 test('autonomous GitHub reporting outage queues reports durably and delivers each exactly once later', async t => {

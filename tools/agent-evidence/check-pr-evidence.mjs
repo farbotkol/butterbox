@@ -31,12 +31,20 @@ async function main() {
       !/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository ?? '')) {
     throw new Error('Issue evidence validation requires a pull_request event and owner/name repository');
   }
-  const issueNumber = canonicalIssueNumber(pullRequest.body);
-  if (!issueNumber || !referencesCanonicalIssue(pullRequest.body, issueNumber)) {
+  const currentPullRequest = JSON.parse(runGh([
+    'api', '--hostname', 'github.com',
+    `repos/${repository}/pulls/${pullRequest.number}`,
+  ]));
+  if (currentPullRequest.state !== 'open' ||
+      currentPullRequest.head?.sha !== pullRequest.head?.sha) {
+    throw new Error('PR head changed or closed; this Verify run is stale');
+  }
+  const issueNumber = canonicalIssueNumber(currentPullRequest.body);
+  if (!issueNumber || !referencesCanonicalIssue(currentPullRequest.body, issueNumber)) {
     throw new Error('PR body must include `Refs #N` and the matching canonical issue marker');
   }
   const evidencePath = getEvidencePathFromPullRequest(
-    pullRequest.body, issueNumber, pullRequest.number,
+    currentPullRequest.body, issueNumber, pullRequest.number,
   );
   if (!evidencePath) throw new Error('PR body must include its matching attempt-specific JSON evidence marker');
 

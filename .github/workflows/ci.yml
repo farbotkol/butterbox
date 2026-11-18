@@ -30,34 +30,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate isolated delivery evidence
         run: node tools/agent-evidence/validate-all.mjs
-      # Classify using GitHub's actual changed-file list, not PR descriptions or labels.
-      # Application, database, dependency and unknown changes remain strictly gated.
-      - name: Classify automation-only PR
-        if: ${{ github.event_name == 'pull_request' }}
-        id: change-scope
-        env:
-          GH_TOKEN: ${{ github.token }}
-          REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          files="$(gh api --paginate "repos/$REPO/pulls/$PR_NUMBER/files?per_page=100" --jq '.[].filename')"
-          if [ -z "$files" ]; then
-            echo "No changed files; evidence remains blocking."
-            exit 0
-          fi
-          while IFS= read -r file; do
-            case "$file" in
-              .github/workflows/*|tools/agent-controller/*|tools/agent-evidence/*|tests/agent-*|tests/component-coordination.test.mjs|tests/pr-coordination-*|docs/agent-* ) ;;
-              *) echo "Non-automation path: $file; evidence remains blocking."; exit 0 ;;
-            esac
-          done <<< "$files"
-          echo 'automation_only=true' >> "$GITHUB_OUTPUT"
-          echo "Automation-only changes; PR evidence is advisory, not a merge blocker."
       - name: Validate this PR's issue evidence and references
         if: ${{ github.event_name == 'pull_request' }}
-        continue-on-error: ${{ steps.change-scope.outputs.automation_only == 'true' }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: node tools/agent-evidence/check-pr-evidence.mjs

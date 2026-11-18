@@ -1,0 +1,172 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 278,
+    "url": "https://github.com/farbotkol/butterbox/issues/278"
+  },
+  "pullRequest": {
+    "number": 279,
+    "url": "https://github.com/farbotkol/butterbox/pull/279",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/fix-copilot-generated-pr-auto-close-footers",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 43963202317,
+    "agent": "copilot",
+    "commitSha": "fe3341a6cbcc0483241455c3cf6d415b09598e38",
+    "startedAt": "2026-11-16T21:45:16Z",
+    "updatedAt": "2026-11-16T21:45:24Z"
+  },
+  "scope": {
+    "summary": "Implement trusted, auditable reconciliation of Copilot-generated PR auto-close footers and rerun the unchanged Verify gate against the sanitized current PR body.",
+    "changedFiles": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/reconcile-pr-descriptions.yml",
+      "docs/agent-evidence-reconciliation.md",
+      "docs/agent-work/issues/issue-278/pr-279/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-278/pr-279/attempt-01.md",
+      "tests/agent-evidence-pr-description.test.mjs",
+      "tools/agent-controller/README.md",
+      "tools/agent-controller/listener.mjs",
+      "tools/agent-controller/listener.test.mjs",
+      "tools/agent-evidence/check-managed-files.mjs",
+      "tools/agent-evidence/check-pr-evidence.mjs",
+      "tools/agent-evidence/reconcile-pr-description.mjs"
+    ],
+    "implemented": [
+      "Trusted eligibility-checked PR description reconciliation with bounded repairs and audit diagnostics.",
+      "Post-creation canonical evidence markers in controller-generated descriptions; recovered PR bodies remain untouched.",
+      "Explicit rerun of the matching Verify run and live PR body/head validation in existing evidence guards.",
+      "Regression tests and operator documentation."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "An incomplete Copilot PR is not failed **solely** because the generated body appended an auto-close footer; the footer is corrected/removed before final evidence validation, with audit visibility.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence-pr-description.test.mjs: valid partial PR loses only its trailing auto-close footer",
+          "outcome": "Passes: sanitizer removes the footer and requests Verify rerun for the matching PR head."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Required `Refs #N` and matching canonical markers survive Copilot PR-body rewrites; a PR without actual required evidence is still blocked until the evidence exists and is valid.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence-pr-description.test.mjs: marker restoration and missing-evidence cases; tools/agent-controller/listener.test.mjs: post-creation evidence marker cases",
+          "outcome": "Passes: marker paths are tied to the actual PR and existing evidence pair; missing or malformed evidence is not fabricated."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Tests prove no editing loops, no unauthorized PR edits, and fail-closed behavior for malformed/uncertain issue links and API errors.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/agent-evidence-pr-description.test.mjs",
+          "outcome": "31 evidence/reconciliation tests pass, including repeat repairs, unrelated PRs, ambiguity, concurrent edits, API/rate-limit errors, and idempotency."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Existing hard evidence, security, database and merge protections remain enforced; new automation cannot cause premature issue closure.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "tools/agent-evidence/check-pr-evidence.mjs; .github/workflows/ci.yml",
+          "outcome": "Existing evidence gate and Verify/database workflows remain enabled; both evidence guards now reject stale PR heads and read current metadata."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/43963202317",
+          "outcome": "Verify failed closed at the missing-marker gate before later steps; no evidence or merge protection was bypassed."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "Real-world demonstration on a fresh Copilot draft PR plus later Copilot description update, with required Verify passing when legitimate evidence is present, and actual feature tests unchanged.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/pull/279",
+          "outcome": "Blocked until the trusted workflow is merged and can run on a fresh draft and subsequent Copilot body update."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/agent-evidence-pr-description.test.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "31 tests passed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- tools/agent-evidence/reconcile-pr-description.mjs tools/agent-evidence/check-pr-evidence.mjs tools/agent-evidence/check-managed-files.mjs tests/agent-evidence-pr-description.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed on changed JavaScript files.",
+      "reference": null
+    },
+    {
+      "command": "node --test --test-name-pattern='evidence marker|adopted PR' tools/agent-controller/listener.test.mjs",
+      "outcome": "passed",
+      "result": "1 focused controller regression test passed.",
+      "reference": null
+    },
+    {
+      "command": "CodeQL Actions analysis",
+      "outcome": "passed",
+      "result": "0 alerts.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 43963202317,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43963202317"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 43963202317,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/43963202317"
+    }
+  ],
+  "decisions": [
+    "Keep the evidence and database gates intact; a repaired PR body must still pass existing checks.",
+    "Do not close or auto-merge Issue #278; retain the PR as draft until human review and the live demonstration are complete."
+  ],
+  "reruns": [],
+  "limitations": [
+    "The trusted reconciliation workflow is not active until merged to copilot/Development; actual Copilot reappend/rewrite behavior has not been demonstrated.",
+    "The current PR body lacks top-level canonical markers, so Verify fails before test/build steps.",
+    "GitHub's PR update API does not provide an atomic compare-and-swap; the workflow mitigates but cannot eliminate a narrow concurrent edit race.",
+    "The independent PR coordination check failed with an undefined replaceAll error and was not modified."
+  ],
+  "blockers": [
+    "Replace the current PR body with canonical Refs and issue/evidence markers, then rerun the required Verify checks.",
+    "Complete a fresh-draft and later-description-update demonstration after the trusted workflow is active."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-278/pr-279/attempt-01.md",
+  "markdownSha256": "73f4ec7619fde4b73d610346dbe7d8f5090ac59cfddfc9e65c3407ca50f9854f",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

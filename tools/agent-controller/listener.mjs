@@ -1018,6 +1018,35 @@ export function autonomousPrompt(task, instructions, testHelper) {
   ].join('\n\n');
 }
 
+export function controllerEvidenceMarker(issueNumber, pullNumber, files = []) {
+  const pattern = new RegExp(
+    `^docs/agent-work/issues/issue-${issueNumber}/pr-${pullNumber}/attempt-(\\d{2})\\.evidence\\.json$`,
+  );
+  const attempts = files
+    .filter(file => files.includes(file.replace(/\.evidence\.json$/, '.md')))
+    .map(file => pattern.exec(file)?.[1])
+    .filter(Boolean);
+  const attempt = attempts.length === 1 ? attempts[0] : '01';
+  return `<!-- butterbox-evidence: docs/agent-work/issues/issue-${issueNumber}/pr-${pullNumber}/attempt-${attempt}.evidence.json -->`;
+}
+
+export function controllerPullRequestBody({
+  issueNumber,
+  pullNumber,
+  components,
+  delivery,
+  baseCommit,
+  changedFiles,
+  summary,
+}) {
+  return `Refs #${issueNumber}\n\n<!-- butterbox-issue: ${issueNumber} -->\n` +
+    `${pullNumber ? `${controllerEvidenceMarker(issueNumber, pullNumber, changedFiles)}\n` : ''}` +
+    `<!-- butterbox-components: ${JSON.stringify(components)} -->\n\n${delivery}\n\n` +
+    `Base: \`${baseCommit}\`\n\nChanged files (${changedFiles.length}):\n` +
+    changedFiles.map(file => `- \`${file}\``).join('\n') +
+    `\n\nAgent summary (unverified agent output):\n\n\`\`\`\n${summary.slice(-4000).replaceAll('```', "'''")}\n\`\`\``;
+}
+
 export function repairPrompt(task, instructions, attempt, maximum, failures, testHelper) {
   return [
     `Butterbox ${task.workstream} autonomous agent: CI repair attempt ${attempt} of ${maximum} for issue ` +
@@ -1802,15 +1831,23 @@ export class Controller {
       ? `Created by the Butterbox local controller (autonomous mode). It is squash-merged into \`${profile.branch}\` ` +
         'only after every CI check on this exact commit passes; it is never deployed.'
       : 'Draft created by the Butterbox local controller (autonomous mode) for owner review. It is not merged or deployed.';
+    const body = pullNumber => controllerPullRequestBody({
+      issueNumber: task.number,
+      pullNumber,
+      components: task.components,
+      delivery,
+      baseCommit: value.baseCommit,
+      changedFiles: files,
+      summary: output,
+    });
     let url;
+    let createdByThisCall = false;
     try {
       url = await this.exec('gh', ['pr', 'create', '--repo', REPO, ...(settings.autoMerge ? [] : ['--draft']),
         '--base', profile.branch, '--head', value.branch, '--title', `Agent #${task.number}: ${this.summary(task)}`,
-        '--body', `Refs #${task.number}\n\n<!-- butterbox-issue: ${task.number} -->\n` +
-        `<!-- butterbox-components: ${JSON.stringify(task.components)} -->\n\n${delivery}\n\nBase: \`${value.baseCommit}\`\n\n` +
-        `Changed files (${value.changedFiles ?? files.length}):\n` + files.map(file => `- \`${file}\``).join('\n') +
-        `\n\nAgent summary (unverified agent output):\n\n\`\`\`\n${output.slice(-4000).replaceAll('```', "'''")}\n\`\`\``],
+        '--body', body(null)],
       { cwd: path.join(value.taskDir, 'repo'), signal, timeoutMs: 120_000 });
+      createdByThisCall = true;
     } catch (error) {
       // A lost response may hide a created pull request; adopt it instead of opening a duplicate.
       const existing = await this.retrying(signal)(() => this.github.pullRequestForBranch(value.branch, signal))
@@ -1823,6 +1860,20 @@ export class Controller {
     value.pullRequest = url;
     await this.store.renewComponents(value.issue, this.componentLeaseMs, url);
     await this.store.save(value);
+    const pullNumber = Number(url.match(/\/pull\/([1-9]\d*)$/)?.[1]);
+    if (Number.isSafeInteger(pullNumber) && createdByThisCall) {
+      try {
+        await this.exec('gh', ['pr', 'edit', url, '--body', body(pullNumber)],
+          { cwd: path.join(value.taskDir, 'repo'), signal, timeoutMs: 120_000 });
+        audit(value, 'pull_request_description_markers_added', `PR #${pullNumber}`);
+      } catch (error) {
+        audit(value, 'pull_request_description_update_failed', error?.code ?? 'unknown_error');
+      }
+      await this.store.save(value);
+    } else if (!createdByThisCall) {
+      audit(value, 'pull_request_description_update_skipped', 'adopted existing PR body preserved');
+      await this.store.save(value);
+    }
   }
   async waitForChecks(value, signal) {
     const wait = ms => sleep(ms, undefined, { signal }).catch(() => fail('operation_cancelled'));

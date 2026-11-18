@@ -356,7 +356,9 @@ run first. Then the controller:
    - more than `maxChangedFiles` changed files.
 5. Commits as you, then pushes **only** `refs/heads/agent/issue-N-<digest8>`
    without force. It runs `gh pr create` against the workstream branch with
-   `Refs #N`.
+   `Refs #N` and the canonical issue marker, then adds the attempt-specific
+   evidence marker after GitHub assigns the actual PR number. A missing evidence
+   file remains a hard Verify failure; the marker does not create evidence.
 6. Waits up to `checksTimeoutMinutes` (default 90) for the PR's head commit.
    Every GitHub check run and commit status on that exact commit must finish as
    `success`, `neutral` or `skipped`. A 2-minute grace period lets every workflow
