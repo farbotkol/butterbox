@@ -7,6 +7,7 @@ import { BRANCH, LABEL, OWNER_ID, Controller, StateStore, parseTask } from '../t
 import {
   canReleaseLease, componentOverlap, componentsForFiles, declaredComponents, findOverlaps, leaseConflicts,
   filesWithinComponents, normalizeComponents, pullRequestAdvisories, pullRequestConflicts,
+  databaseObjectsForFiles,
 } from '../tools/agent-controller/component-coordination.mjs';
 
 test('component metadata is validated and paths map to isolated work areas', () => {
@@ -148,6 +149,20 @@ test('generated Xero-sized SQL ownership remains disjoint from unrelated workflo
     'a shared SQL object must still block');
   assert.deepEqual(componentOverlap(['not-a-component'], ['ci:pr-coordination-yml']),
     ['invalid_component_metadata'], 'invalid metadata must still fail closed');
+});
+
+test('SQL policy and trigger targets are captured without crashing coordination', () => {
+  const files = [{
+    path: 'supabase/migrations/202611190001_policy_trigger.sql',
+    content: [
+      'create policy staff_read on public.employees for select using (true);',
+      'create trigger audit_staff after update on public.employees for each row execute function public.audit();',
+    ].join('\n'),
+  }];
+  const objects = databaseObjectsForFiles(files);
+  assert.ok(objects.includes('database:policy:staff_read'));
+  assert.ok(objects.includes('database:trigger:audit_staff'));
+  assert.ok(objects.includes('database:table:public.employees'));
 });
 
 test('exact file edits and shared SQL objects conflict across different migrations', () => {
