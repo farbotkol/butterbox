@@ -23,6 +23,7 @@
   "scope": {
     "summary": "Implement trusted, auditable reconciliation of Copilot-generated PR auto-close footers and rerun the unchanged Verify gate against the sanitized current PR body.",
     "changedFiles": [
+      ".github/workflows/ci.yml",
       ".github/workflows/reconcile-pr-descriptions.yml",
       "docs/agent-evidence-reconciliation.md",
       "docs/agent-work/issues/issue-278/pr-279/attempt-01.evidence.json",
