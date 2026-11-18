@@ -145,9 +145,12 @@ test("People help describes the directory, focused editing and lifecycle control
   const people = helpTopics(source, "foh_manager").find((topic) => topic.id === "people");
   assert.ok(people);
   for (const label of ["Your people", "View profile", "Add person", "Edit overview",
-    "Discard changes", "Archive person", "Reactivate person", "Manage invitation"]) {
+    "Discard changes", "Archive person", "Reactivate person", "Manage invitation",
+    "Mobile number"]) {
     assert.ok(people.markdown.includes(label), label);
   }
+  assert.match(people.markdown.replace(/\s+/g, " "),
+    /does not verify ownership, record SMS consent or send a text/);
   assert.match(people.markdown, /An owner can choose \*\*Edit account link\*\*/);
   assert.match(people.markdown, /public showcase does not\s+send invitations/);
 });

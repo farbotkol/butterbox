@@ -14,6 +14,7 @@ export type Employee = {
   id: string;
   name: string;
   email: string | null;
+  mobile_phone: string | null;
   auth_user_id: string | null;
   department_id: string;
   role_title: string;
@@ -158,6 +159,16 @@ export function EmployeeForm({ employee, departments, context, employment, creat
       <label className="text-sm">Preferred contact email
         <input name="email" type="email" maxLength={254} defaultValue={employee?.email ?? ""} className={fieldClass} />
       </label>
+      <div>
+        <label className="text-sm">Mobile number
+          <input name="mobile_phone" type="tel" autoComplete="tel" maxLength={64}
+            defaultValue={employee?.mobile_phone ?? ""} aria-describedby="employee-mobile-help"
+            className={fieldClass} />
+        </label>
+        <p id="employee-mobile-help" className="mt-1 text-xs text-muted">
+          Use 04… or an international E.164 number. Storing a number does not opt anyone into texts; no SMS is sent.
+        </p>
+      </div>
       <label className="text-sm">Department
         <select name="department_id" required defaultValue={employee?.department_id ?? departments[0]?.id} className={fieldClass}>
           {departments.filter((department) => !employee || department.id === employee.department_id)
@@ -196,6 +207,7 @@ export function EmployeeLifecycleForm({ employee, context, employment }: {
     <input type="hidden" name="department_id" value={employee.department_id} />
     <input type="hidden" name="name" value={employee.name} />
     <input type="hidden" name="email" value={employee.email ?? ""} />
+    <input type="hidden" name="mobile_phone" value={employee.mobile_phone ?? ""} />
     <input type="hidden" name="role_title" value={employee.role_title} />
     <input type="hidden" name="employment_type" value={employment.employment_basis ?? employee.employment_type} />
     <input type="hidden" name="employment_revision" value={employment.revision} />

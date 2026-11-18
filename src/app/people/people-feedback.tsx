@@ -20,6 +20,7 @@ const errors: Record<string, string> = {
   "profile-stale": "This profile changed while you were editing. Review the current details before trying again.",
   "section-stale": "This section changed while you were editing. Review the current details before trying again.",
   "lifecycle-confirm": "Confirm the status change before saving.",
+  mobile: "Enter an Australian mobile as 04… or an international number in E.164 format, such as +14155552671. Check the number and try again.",
   "employment-invalid": "Could not save employment metadata. Check all dates and details and try again.",
   filter: "That directory filter is unavailable. Choose a permitted venue, department and role.",
   save: "Could not save the employee. Check the details and try again.",
