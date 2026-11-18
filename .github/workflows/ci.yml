@@ -30,8 +30,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Validate isolated delivery evidence
         run: node tools/agent-evidence/validate-all.mjs
-      # PR-description / issue-reference validation removed as a merge gate.
-      # Isolated delivery evidence, managed-file protection, and tests remain enforced.
+      - name: Validate this PR's issue evidence and references
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node tools/agent-evidence/check-pr-evidence.mjs
       - name: Protect centrally managed archives and status
         if: ${{ github.event_name == 'pull_request' }}
         env:

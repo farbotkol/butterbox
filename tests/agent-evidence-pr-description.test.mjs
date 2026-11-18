@@ -496,6 +496,9 @@ test('the trusted workflow is write-minimal and Verify retains the unchanged evi
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /issues:\s*write/);
   assert.match(ci, /node tools\/agent-evidence\/check-pr-evidence\.mjs/);
+  const evidenceStep = ci.match(/- name: Validate this PR's issue evidence and references\n([\s\S]*?)(?=\n      - name:|\n\n  database:)/);
+  assert.ok(evidenceStep);
+  assert.doesNotMatch(evidenceStep[1], /continue-on-error:/);
   assert.match(ci, /pull-requests:\s*read/);
   for (const gate of [evidenceGate, managedFileGate]) {
     assert.match(gate, /repos\/\$\{repository\}\/pulls\/\$\{pullRequest\.number\}/);
