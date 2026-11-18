@@ -9,7 +9,7 @@ const dynamicPrefixes = ['application:', 'ci:', 'database:', 'docs:', 'evidence:
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 const databaseIdentifier = /^[a-z][a-z0-9-]{0,20}:[a-z0-9_$."()-]{1,128}$/;
 const sqlObjectPattern = /\b(?:create|alter|drop)\s+(?:or\s+replace\s+)?(?:(?:temporary|temp|unlogged)\s+)?(materialized\s+view|table|function|procedure|view|index|sequence|type|domain|trigger|policy)\s+(?:if\s+(?:not\s+)?exists\s+)?("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
-const sqlTargetPattern = /\b(?:policy|trigger)\s+("[^"]+"|[a-z_][\w$]*)\s+on\s+("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
+const sqlTargetPattern = /\b(policy|trigger)\s+("[^"]+"|[a-z_][\w$]*)\s+on\s+("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 const sqlIndexTargetPattern = /\b(?:create|drop)\s+(?:unique\s+)?index(?:\s+(?:if\s+not\s+exists\s+)?("[^"]+"|[a-z_][\w$]*))?\s+on\s+(?:only\s+)?("[^"]+"|[a-z_][\w$]*(?:\s*\.\s*(?:"[^"]+"|[a-z_][\w$]*))?)/gi;
 
 export function normalizeComponents(value, maxEntries = 20) {
