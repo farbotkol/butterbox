@@ -275,6 +275,12 @@ export function pullRequestAdvisories(candidate, others) {
       reason: 'broad_component_overlap',
       components,
     });
+    const sharedPaths = overlap.paths.filter(name => !name.startsWith('supabase/migrations/'));
+    if (sharedPaths.length) advisories.push({
+      pullRequest: other.number,
+      reason: 'shared_file_overlap',
+      paths: sharedPaths,
+    });
   }
   return advisories;
 }
@@ -309,7 +315,12 @@ export function pullRequestConflicts(candidate, others) {
       components: [...(otherDeclared ?? []), ...(other.components ?? [])],
       files: other.files ?? [],
     });
-    if (overlap.conflicts) conflicts.push({ pullRequest: other.number, ...overlap });
+    // Ordinary shared files require merge-time review, not a blanket PR block.
+    // Shared migration files or SQL-object ownership remain hard conflicts.
+    const criticalPaths = overlap.paths.filter(name => name.startsWith('supabase/migrations/'));
+    if (criticalPaths.length || overlap.database.length) {
+      conflicts.push({ pullRequest: other.number, ...overlap, paths: criticalPaths });
+    }
   }
   return conflicts;
 }
