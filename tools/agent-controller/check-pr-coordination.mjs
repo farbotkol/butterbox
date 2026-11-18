@@ -86,6 +86,9 @@ function explain(conflict) {
 }
 
 function explainAdvisory(advisory) {
+  if (advisory.reason === 'shared_file_overlap') {
+    return `[advisory] PR #${advisory.pullRequest} shares files ${advisory.paths.join(', ')}; review integration and use GitHub merge-conflict and required test gates.`;
+  }
   if (advisory.reason === 'invalid_peer_component_metadata') {
     return `[advisory] PR #${advisory.pullRequest} has malformed non-authoritative component metadata; the current API file list was used. Repair its declaration; unavailable or invalid API data still fails closed.`;
   }
@@ -153,7 +156,7 @@ async function main() {
     const conflicts = pullRequestConflicts(candidate, others);
     if (conflicts.length) throw new Error(`PR #${candidate.number} conflicts with active PRs:\n` +
       conflicts.map(explain).join('\n'));
-    console.log(`PR #${candidate.number} has no hard shared-file or SQL-object conflicts.`);
+    console.log(`PR #${candidate.number} has no hard migration-file or SQL-object conflicts.`);
     return;
   }
 
@@ -174,7 +177,7 @@ async function main() {
     conflicts.push(...pullRequestConflicts(candidate, peers));
   }
   if (conflicts.length) throw new Error(`Merge group conflicts with active PRs:\n${conflicts.map(explain).join('\n')}`);
-  console.log(`Merge group of PRs ${included.map(pull => `#${pull.number}`).join(', ')} has no hard shared-file or SQL-object conflicts.`);
+  console.log(`Merge group of PRs ${included.map(pull => `#${pull.number}`).join(', ')} has no hard migration-file or SQL-object conflicts.`);
 }
 
 main().catch(error => {
