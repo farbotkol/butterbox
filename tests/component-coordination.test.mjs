@@ -171,7 +171,7 @@ test('exact file edits and shared SQL objects conflict across different migratio
   ).conflicts, true);
 });
 
-test('direct Copilot PRs without controller metadata cannot bypass actual-path overlap checks', () => {
+test('direct Copilot PRs sharing ordinary files receive advisories rather than automatic blocks', () => {
   const manual = {
     number: 73, user: { login: 'Copilot' }, body: '',
     files: [{ path: 'tools/agent-controller/listener.mjs' }],
@@ -180,9 +180,10 @@ test('direct Copilot PRs without controller metadata cannot bypass actual-path o
     number: 72, body: '<!-- butterbox-components: ["agent-controller"] -->',
     files: [{ path: 'tools/agent-controller/listener.mjs' }],
   };
-  const conflicts = pullRequestConflicts(manual, [active]);
-  assert.equal(conflicts.length, 1);
-  assert.deepEqual(conflicts[0].paths, ['tools/agent-controller/listener.mjs']);
+  assert.deepEqual(pullRequestConflicts(manual, [active]), []);
+  assert.ok(pullRequestAdvisories(manual, [active]).some(advisory =>
+    advisory.reason === 'shared_file_overlap' &&
+    advisory.paths.includes('tools/agent-controller/listener.mjs')));
 });
 
 test('unstarted empty drafts do not block unrelated or overlapping active PRs', () => {
@@ -252,15 +253,20 @@ test('invalid API changed-file paths fail closed with the affected PR identified
   ]);
 });
 
-test('real overlapping changes still block concurrent PRs', () => {
+test('ordinary file overlaps warn while shared migrations still block', () => {
   const button = { number: 261, draft: true, body: '',
     files: [{ path: 'src/app/people/page.tsx' }] };
   const sameFile = { number: 262, draft: true, body: '',
     files: [{ path: 'src/app/people/page.tsx' }] };
-  const conflicts = pullRequestConflicts(button, [sameFile]);
-  assert.equal(conflicts.length, 1);
-  assert.deepEqual(conflicts[0].paths, ['src/app/people/page.tsx']);
-  assert.equal(conflicts[0].conflicts, true);
+  assert.deepEqual(pullRequestConflicts(button, [sameFile]), []);
+  assert.ok(pullRequestAdvisories(button, [sameFile]).some(advisory =>
+    advisory.reason === 'shared_file_overlap' &&
+    advisory.paths.includes('src/app/people/page.tsx')));
+  const sql = { number: 263, draft: true, body: '',
+    files: [{ path: 'supabase/migrations/202611180001_example.sql', content: 'alter table public.employees add column example text;' }] };
+  const sameSql = { number: 264, draft: true, body: '',
+    files: [{ path: 'supabase/migrations/202611180001_example.sql', content: 'alter table public.employees add column example text;' }] };
+  assert.equal(pullRequestConflicts(sql, [sameSql]).length, 1);
 });
 
 test('expired reservations remain blocking until verified safe release', () => {
