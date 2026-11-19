@@ -14,11 +14,11 @@
     "mergeSha": null
   },
   "run": {
-    "id": 43962627983,
+    "id": 44486407880,
     "agent": "copilot",
-    "commitSha": "61eee8d28f71f62599b48e5be21b51c7b6ac1535",
-    "startedAt": "2026-11-16T21:41:31Z",
-    "updatedAt": "2026-11-16T21:49:43Z"
+    "commitSha": "c78186a704f30ef4e19a8e845204c4fedeef19de",
+    "startedAt": "2026-11-19T08:17:53Z",
+    "updatedAt": "2026-11-19T08:21:42Z"
   },
   "scope": {
     "summary": "Implement fail-closed demo data onboarding and an owner-only existing-venue loader; record known CI and hosted-isolation blockers without claiming feature acceptance.",
@@ -185,20 +185,44 @@
       "outcome": "passed",
       "result": "19/19 documentation tests passed after adding the User Guide 1.15 review-history row.",
       "reference": null
+    },
+    {
+      "command": "node --test --experimental-strip-types tests/demo-data-environment.test.mjs tests/navigation.test.mjs",
+      "outcome": "passed",
+      "result": "7/7 tests passed on commit c78186a704f30ef4e19a8e845204c4fedeef19de.",
+      "reference": null
+    },
+    {
+      "command": "npx eslint tests/e2e/auth.spec.mjs && npx tsc --noEmit",
+      "outcome": "passed",
+      "result": "ESLint for the changed browser test and the project TypeScript check passed on commit c78186a704f30ef4e19a8e845204c4fedeef19de.",
+      "reference": null
+    },
+    {
+      "command": "Fast database candidate 44486407878",
+      "outcome": "passed",
+      "result": "On commit c78186a704f30ef4e19a8e845204c4fedeef19de, database migration/pgTAP, authenticated cross-tenant isolation, and critical authenticated browser smoke passed. This is not the full Verify browser suite or live demo-flow acceptance.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/44486407878"
+    },
+    {
+      "command": "Verify run 44486407880",
+      "outcome": "blocked",
+      "result": "The workflow for commit c78186a704f30ef4e19a8e845204c4fedeef19de was cancelled before its verify/database jobs completed; it does not establish a pass.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/44486407880"
     }
   ],
   "ci": [
     {
       "name": "verify",
-      "status": "fail",
-      "runId": 43962627983,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962627983"
+      "status": "pending",
+      "runId": null,
+      "url": null
     },
     {
       "name": "database",
       "status": "pending",
-      "runId": 43962627983,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/43962627983"
+      "runId": null,
+      "url": null
     }
   ],
   "decisions": [
@@ -209,7 +233,8 @@
   "reruns": [],
   "limitations": [
     "The pgTAP SQL quote is verified by the passing fast database candidate. Audit-label and guide-history fixes pass local full tests, lint and TypeScript but await full Verify on the updated head.",
-    "The full Verify browser regression remains in progress; the separate fast candidate's critical browser smoke tests passed but did not exercise the demo-data user flow.",
+    "The latest fast candidate on c78186a passed database migration/pgTAP, tenant isolation and critical authenticated browser smoke; it did not exercise the full demo-data user flow.",
+    "Verify run 44486407880 for c78186a was cancelled before required jobs completed; a fresh Verify run is required.",
     "The hosted development Supabase project has not been verified or changed; no claim of live functionality is made.",
     "Required Verify and database checks are not green."
   ],
@@ -220,6 +245,6 @@
   ],
   "recommendation": "blocked",
   "markdownPath": "docs/agent-work/issues/issue-273/pr-275/attempt-01.md",
-  "markdownSha256": "1f5d53e4e5d53320dff6652bd798305dee735189716139ec53aa38f0f9877aca",
+  "markdownSha256": "536a1a6f888ad88d00cd5f53320068b5e75ee740f8ec62e253b9868e0d580b07",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

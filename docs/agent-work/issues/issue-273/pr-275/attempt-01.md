@@ -44,3 +44,14 @@ The next Verify run validated the evidence pair, then `npm test` found the new a
 
 ## Next action
 Run full Verify on the updated head and complete its database/browser jobs. Verify the isolated hosted development environment with the owner before activation. Do not close issue #273 from this attempt.
+
+## Addendum — 2026-11-19 08:21 UTC
+
+- **Current application/test commit:** `c78186a704f30ef4e19a8e845204c4fedeef19de`.
+- Updated `tests/e2e/auth.spec.mjs` to assert the current fail-closed setup explanation, verify the owner’s venue-scoped Demo Data link and non-owner denial, and replace the brittle fixed navigation-link count with an authorized destination assertion. Existing responsive target-size and accessibility checks remain.
+- `node --test --experimental-strip-types tests/demo-data-environment.test.mjs tests/navigation.test.mjs` — passed, 7/7. `npx eslint tests/e2e/auth.spec.mjs` and `npx tsc --noEmit` — passed.
+- [Fast database candidate #44486407878](https://github.com/farbotkol/butterbox/actions/runs/44486407878) — passed on this commit: database migration/pgTAP, authenticated cross-tenant isolation, and critical authenticated browser smoke. Its browser smoke is not the full authentication regression suite or demo-loader acceptance.
+- [Verify #44486407880](https://github.com/farbotkol/butterbox/actions/runs/44486407880) and [advisory browser #44486407995](https://github.com/farbotkol/butterbox/actions/runs/44486407995) for this commit were cancelled before their requested suites completed. A Verify retry and advisory retry are running against the older `62ae93d` head; their results cannot verify `c78186a`.
+- The focused local browser suite could not be completed in this sandbox because the runner could not fetch required build dependencies. No full-browser pass is claimed. A new Verify and advisory run on the latest head remain necessary.
+- No hosted project was seeded or reset. Backend isolation and operator activation remain unverified; issue #273 stays open and PR #275 stays draft.
+- **PR body follow-up:** the PR currently contains the canonical `Refs #273` and evidence markers, but its prose still says the evidence files are missing. The evidence pair is present and validates locally; the available GitHub interface did not expose a PR-body edit action.
