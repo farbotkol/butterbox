@@ -13094,6 +13094,7 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
           await expect(group).toHaveAccessibleName(name);
           await expect(group.getByRole("link")).toHaveText(items);
         }
+        await expect(nav.getByRole("link", { name: "Help", exact: true })).toHaveCount(1);
         const demoDataLink = nav.getByRole("link", { name: "Demo Data", exact: true });
         if (role === "owner") {
           await expect(demoDataLink).toHaveAttribute("href", `/settings/demo-data?venue=${venueId}`);
@@ -13102,7 +13103,6 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
           await rolePage.goto(`/settings/demo-data?business=${businessId}&venue=${venueId}`);
           await expect(rolePage).toHaveURL(/error=permission/);
         }
-        await expect(nav.getByRole("link", { name: "Help", exact: true })).toHaveCount(1);
         if (screenshotDir && (role === "foh" || role === "employee")) {
           await rolePage.screenshot({ path: `${screenshotDir}/after-${role}-375.png`, fullPage: true });
         }
