@@ -209,20 +209,44 @@
       "outcome": "blocked",
       "result": "The workflow for commit c78186a704f30ef4e19a8e845204c4fedeef19de was cancelled before its verify/database jobs completed; it does not establish a pass.",
       "reference": "https://github.com/farbotkol/butterbox/actions/runs/44486407880"
+    },
+    {
+      "command": "Verify database browser step 44487133148",
+      "outcome": "failed",
+      "result": "pgTAP and tenant-isolation steps passed, but Playwright had 102 passed, 6 failed, and 1 skipped. All six failures were the two Demo Data href assertions expecting a business query parameter absent from the canonical single-business venue link; assertions corrected locally.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/44487133148"
+    },
+    {
+      "command": "Advisory browser run 44487133167",
+      "outcome": "failed",
+      "result": "Fallback browser suite failed on the same six Demo Data href mismatches; no separate behavior or authorization regression was observed in the reported failures.",
+      "reference": "https://github.com/farbotkol/butterbox/actions/runs/44487133167"
+    },
+    {
+      "command": "npm run test:auth:focused -- --test tests/e2e/auth.spec.mjs:13090 --test tests/e2e/auth.spec.mjs:13248",
+      "outcome": "blocked",
+      "result": "The disposable local project butterbox-citest was initialized/reset, but the runner exited before Playwright because pinned Supabase CLI 2.122.0 was unavailable (detected version: none).",
+      "reference": null
+    },
+    {
+      "command": "node scripts/test-env.mjs run db",
+      "outcome": "blocked",
+      "result": "The disposable local project butterbox-citest was initialized/reset, but the runner exited before pgTAP because pinned Supabase CLI 2.122.0 was unavailable (detected version: none).",
+      "reference": null
     }
   ],
   "ci": [
     {
       "name": "verify",
-      "status": "pending",
-      "runId": null,
-      "url": null
+      "status": "pass",
+      "runId": 44487133148,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44487133148"
     },
     {
       "name": "database",
-      "status": "pending",
-      "runId": null,
-      "url": null
+      "status": "fail",
+      "runId": 44487133148,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44487133148"
     }
   ],
   "decisions": [
@@ -236,15 +260,15 @@
     "The latest fast candidate on c78186a passed database migration/pgTAP, tenant isolation and critical authenticated browser smoke; it did not exercise the full demo-data user flow.",
     "Verify run 44486407880 for c78186a was cancelled before required jobs completed; a fresh Verify run is required.",
     "The hosted development Supabase project has not been verified or changed; no claim of live functionality is made.",
-    "Required Verify and database checks are not green."
+    "The latest completed run on the prior head passed the verify job but failed its database browser job on the six now-corrected route assertions; fresh checks on the corrected commit are required."
   ],
   "blockers": [
-    "Run full Verify on the updated head and complete its database/browser jobs.",
+    "Run fresh Verify/database and advisory browser checks after committing the corrected venue-only href assertions.",
     "Verify the hosted development Supabase project is dedicated and isolated, then obtain explicit operator approval before activation.",
     "Re-run required Verify after the paired evidence files are committed and keep issue #273 open for owner-visible acceptance."
   ],
   "recommendation": "blocked",
   "markdownPath": "docs/agent-work/issues/issue-273/pr-275/attempt-01.md",
-  "markdownSha256": "536a1a6f888ad88d00cd5f53320068b5e75ee740f8ec62e253b9868e0d580b07",
+  "markdownSha256": "b01f063d608d73f8514add5cc0d31c7b37e889c0662a7cf8132305cf62fafd40",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }

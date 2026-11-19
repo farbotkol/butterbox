@@ -13096,7 +13096,7 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
         }
         const demoDataLink = nav.getByRole("link", { name: "Demo Data", exact: true });
         if (role === "owner") {
-          await expect(demoDataLink).toHaveAttribute("href", `/settings/demo-data?business=${businessId}&venue=${venueId}`);
+          await expect(demoDataLink).toHaveAttribute("href", `/settings/demo-data?venue=${venueId}`);
         } else {
           await expect(demoDataLink).toHaveCount(0);
           await rolePage.goto(`/settings/demo-data?business=${businessId}&venue=${venueId}`);
@@ -13258,7 +13258,7 @@ for (const width of [375, 390, 768, 1024, 1440]) {
       const menu = nav.getByRole("button", { name: "Menu", exact: true });
       await expect(nav.getByRole("group")).toHaveCount(4);
       await expect(nav.getByRole("link", { name: "Demo Data", exact: true }))
-        .toHaveAttribute("href", `/settings/demo-data?business=${businessId}&venue=${venueId}`);
+        .toHaveAttribute("href", `/settings/demo-data?venue=${venueId}`);
       const sizes = await nav.locator("a").evaluateAll((anchors) =>
         anchors.map((anchor) => ({ label: anchor.textContent.trim(), height: anchor.getBoundingClientRect().height })));
       for (const size of sizes) expect(size.height, `${width}px ${size.label} target height`).toBeGreaterThanOrEqual(44);
