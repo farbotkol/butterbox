@@ -1,7 +1,7 @@
 export type NavigationIcon =
   | "dashboard" | "schedule" | "clock" | "availability" | "notifications" | "roster" | "people"
   | "announcements" | "timesheets" | "work-time" | "exceptions" | "kiosks" | "departments"
-  | "venue-settings" | "payroll" | "hours" | "permissions" | "audit" | "help";
+  | "venue-settings" | "demo-data" | "payroll" | "hours" | "permissions" | "audit" | "help";
 
 export type NavigationItem = {
   href: string;
@@ -46,6 +46,7 @@ const groups: readonly NavigationGroup[] = [
       { href: "/attendance/kiosks", label: "Clock kiosks", icon: "kiosks", context: "venue", roles: owners },
       { href: "/settings/departments", label: "Departments & roles", icon: "departments", context: "venue", roles: managers },
       { href: "/settings/organisation", label: "Venue settings", icon: "venue-settings", context: "venue", roles: owners },
+      { href: "/settings/demo-data", label: "Demo Data", icon: "demo-data", context: "venue", roles: owners },
     ],
   },
   {

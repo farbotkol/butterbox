@@ -194,6 +194,12 @@ export default async function OrganisationPage({
         className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
         Open departments and roles
       </Link>
+      {workspace.membership.role === "owner" && (
+        <Link href={`/settings/demo-data?${new URLSearchParams({ business: workspace.business.id, venue: venueId })}`}
+          className="ml-4 inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
+          Demo Data
+        </Link>
+      )}
 
       {(venues.data?.length ?? 0) > 1 && (
         <form action="/settings/organisation" className="mt-5 flex items-end gap-3">

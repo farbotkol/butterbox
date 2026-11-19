@@ -1,7 +1,7 @@
 "use client";
 
 import {
-  Bell, Building2, CalendarCheck, CalendarDays, ChartColumn, CircleHelp, ClipboardCheck, Clock, History,
+  Bell, Building2, CalendarCheck, CalendarDays, ChartColumn, CircleHelp, ClipboardCheck, Clock, Database, History,
   Hourglass, LayoutDashboard, Megaphone, Menu, Settings2, ShieldCheck, Tablet, Timer, UsersRound, Wallet, X,
   type LucideIcon,
 } from "lucide-react";
@@ -15,7 +15,8 @@ import {
 const icons: Record<NavigationIcon, LucideIcon> = {
   dashboard: LayoutDashboard, schedule: CalendarCheck, clock: Timer, availability: Clock, notifications: Bell,
   roster: CalendarDays, people: UsersRound, announcements: Megaphone, timesheets: ClipboardCheck, "work-time": Hourglass,
-  exceptions: ChartColumn, kiosks: Tablet, departments: Building2, "venue-settings": Settings2, payroll: Wallet,
+  exceptions: ChartColumn, kiosks: Tablet, departments: Building2, "venue-settings": Settings2,
+  "demo-data": Database, payroll: Wallet,
   hours: ChartColumn, permissions: ShieldCheck, audit: History, help: CircleHelp,
 };
 

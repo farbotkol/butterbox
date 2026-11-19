@@ -78,15 +78,80 @@ timezone; completing setup creates the owner membership atomically.
 The owner's dashboard includes a business, venue, staff, draft-shift and
 publication checklist, with links and brief guidance for the next steps.
 
-Fictional sample staff and shifts remain unavailable in ordinary workspaces. The setup
-form, server actions and database seed functions reject sample requests;
-ordinary accounts, the service role and an operator updating the old policy
-cannot enable them. New customer workspaces start without sample staff or
-shifts. Applying the safeguard disables a previously enabled policy but does
-not delete or establish the provenance of any historical sample records.
-Privileged direct table writes or schema changes can bypass this safeguard and
-must be governed separately. See `docs/DECISION_LOG.md` (DEC-003) for the
-remaining isolation, historical-data assessment and clean-conversion requirements.
+Fictional sample staff and shifts remain unavailable by default. An owner can
+choose **Add a sample team** during onboarding or later open **Demo Data** in
+Venue Management only when both the application and database have been
+explicitly approved for the same isolated development Supabase project. The
+new path adds clearly tagged fictional staff, published rosters, availability,
+attendance/corrections and separate payroll-preparation examples to a clean
+venue. It refuses venues with operational history or payroll integrations,
+does not overwrite workspace settings or real records, and has no reset
+operation. Production, unconfigured and unverified deployments fail closed.
+The existing DEC-003 safeguard remains in place; it is not an approval to seed
+customer data or convert demo data into a real business.
+
+#### Operator activation: gated workspace demo data
+
+Do not activate demo loading based on a Vercel project name, app URL or owner
+request alone. Before the first activation, an authorized deployment/database
+operator must:
+
+1. Verify independently in Supabase that the project reference, API URL and
+   database are the intended **dedicated, isolated, non-production development
+   project**. Confirm that it is not shared with production or customer
+   tenants, contains no customer data, and has no live payroll or messaging
+   credentials. Do not inspect or change the hosted development database until
+   its isolation is verified.
+2. Verify the runtime deployment separately from the data classification.
+   Vercel **Preview/Development** or local development is supported by default.
+   If Vercel Production is intentionally serving this development-only app,
+   configure `BUTTERBOX_DEMO_DATA_ALLOW_PRODUCTION_RUNTIME=true` only after
+   verifying the isolated Supabase project above; this opt-in does not classify
+   customer or production data as safe. Configure only that deployment's server
+   environment with `BUTTERBOX_DEMO_DATA_ENABLED=true`,
+   `BUTTERBOX_DEMO_DATA_ENVIRONMENT=development`, and
+   `BUTTERBOX_DEMO_DATA_PROJECT_REF=<verified-project-ref>`. Confirm
+   `NEXT_PUBLIC_SUPABASE_URL` points to that exact isolated project. The
+   database must also have its matching explicit approval enabled. Local
+   development is additionally restricted to the repository's known loopback
+   project/port pairs. Never set these variables for customer or production
+   data, even when the Vercel runtime opt-in is used.
+3. Apply the migration through the normal reviewed migration process. Using
+   the verified project's protected database-administrator access (not an app
+   owner, service-role key or browser), explicitly enable only that project:
+
+   ```sql
+   insert into public.workspace_demo_environment_approval
+     (singleton, enabled, environment, project_ref, jwt_issuer)
+   values
+     (true, true, 'development', '<verified-project-ref>',
+      'https://<verified-project-ref>.supabase.co/auth/v1')
+   on conflict (singleton) do update set
+     enabled = excluded.enabled,
+     environment = excluded.environment,
+     project_ref = excluded.project_ref,
+     jwt_issuer = excluded.jwt_issuer,
+     approved_at = clock_timestamp();
+   ```
+
+   Replace both placeholders with the independently verified project
+   reference; never run this statement against an unidentified or shared
+   database. The approval table is inaccessible to application roles.
+4. Sign in as a workspace owner and confirm the setup checkbox or
+   **Venue Management → Demo Data** is enabled only on that deployment.
+   Initially test only a clean synthetic venue. If the project or issuer
+   cannot be verified, leave the database approval absent/disabled and the
+   application variables unset.
+
+The loader never auto-runs when a page is viewed. It requires an explicit
+owner confirmation, refuses venues with existing employees, shifts,
+attendance, roster history, invitations or payroll integrations, and records
+an audit event and provenance tags. Repeated loads are idempotent. Demo
+employees cannot be linked to accounts, invited or mapped to payroll; sample
+attendance is excluded from payroll-preparation/export inputs. The hosted
+development app remains disabled until its project isolation is independently
+verified and an operator performs these activation steps. See
+`docs/DECISION_LOG.md` (DEC-003) for the isolation and clean-conversion policy.
 
 ### Isolated local synthetic showcase
 

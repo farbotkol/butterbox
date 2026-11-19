@@ -11540,7 +11540,7 @@ test("sample teams remain unavailable and saved preferences cannot seed a custom
     await expect(sample).toBeDisabled();
     await expect(sample).not.toBeChecked();
     await expect(page.getByRole("status")).toContainText("previously saved sample-team selection");
-    await expect(page.getByText(/Sample teams are unavailable/)).toBeVisible();
+    await expect(page.getByText(/Unavailable because this app has not confirmed an explicitly approved isolated development database/)).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     findingsMustBeEmpty(await accessibilityFindings(page, "mobile clean setup"));
 
@@ -13087,7 +13087,7 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
       owner: [
         ["My Work", ["Dashboard", "My schedule", "Clock in / out", "My availability", "Notifications"]],
         ["Team Management", ["Rostering", "People", "Announcements", "Timesheet review", "Work time", "Exceptions"]],
-        ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings"]],
+        ["Venue Management", ["Clock kiosks", "Departments & roles", "Venue settings", "Demo Data"]],
         ["Business", ["Payroll", "Hours & labour", "Permissions", "Audit history"]],
       ],
       admin: [
@@ -13125,6 +13125,14 @@ test("navigation UX: role visibility and direct-route authorization", async ({ b
           await expect(group.getByRole("link")).toHaveText(items);
         }
         await expect(nav.getByRole("link", { name: "Help", exact: true })).toHaveCount(1);
+        const demoDataLink = nav.getByRole("link", { name: "Demo Data", exact: true });
+        if (role === "owner") {
+          await expect(demoDataLink).toHaveAttribute("href", `/settings/demo-data?venue=${venueId}`);
+        } else {
+          await expect(demoDataLink).toHaveCount(0);
+          await rolePage.goto(`/settings/demo-data?business=${businessId}&venue=${venueId}`);
+          await expect(rolePage).toHaveURL(/error=permission/);
+        }
         if (screenshotDir && (role === "foh" || role === "employee")) {
           await rolePage.screenshot({ path: `${screenshotDir}/after-${role}-375.png`, fullPage: true });
         }
@@ -13168,6 +13176,7 @@ test("navigation UX: every owner destination, context and browser history", asyn
       ["People", "/people"], ["Announcements", "/announcements"], ["Timesheet review", "/timesheets"],
       ["Work time", "/work-time"], ["Exceptions", "/reports/exceptions"], ["Clock kiosks", "/attendance/kiosks"],
       ["Departments & roles", "/settings/departments"], ["Venue settings", "/settings/organisation"],
+      ["Demo Data", "/settings/demo-data"],
       ["Payroll", "/settings/payroll"], ["Hours & labour", "/reports/hours"],
       ["Permissions", "/settings/permissions"], ["Audit history", "/settings/audit"], ["Help", "/help"],
     ];
@@ -13178,6 +13187,9 @@ test("navigation UX: every owner destination, context and browser history", asyn
       await expect(page).toHaveURL((url) => url.pathname === pathname &&
         url.searchParams.get(businessWide.has(label) ? "contextVenue" : "venue") === secondVenue);
       await expect(page.getByRole("main")).toBeVisible();
+      if (label === "Demo Data") {
+        await expect(page.getByRole("heading", { name: "Loading is disabled" })).toBeVisible();
+      }
       await expect(page.locator("aside").first().getByText("Second venue", { exact: true })).toBeVisible();
       await expect(nav.getByRole("link", { name: label, exact: true })).toHaveAttribute("aria-current", "page");
       await expect(nav.locator('a[aria-current="page"]')).toHaveCount(1);
@@ -13275,7 +13287,8 @@ for (const width of [375, 390, 768, 1024, 1440]) {
       const nav = page.getByRole("navigation", { name: "Main navigation" });
       const menu = nav.getByRole("button", { name: "Menu", exact: true });
       await expect(nav.getByRole("group")).toHaveCount(4);
-      await expect(nav.getByRole("link")).toHaveCount(19);
+      await expect(nav.getByRole("link", { name: "Demo Data", exact: true }))
+        .toHaveAttribute("href", `/settings/demo-data?venue=${venueId}`);
       const sizes = await nav.locator("a").evaluateAll((anchors) =>
         anchors.map((anchor) => ({ label: anchor.textContent.trim(), height: anchor.getBoundingClientRect().height })));
       for (const size of sizes) expect(size.height, `${width}px ${size.label} target height`).toBeGreaterThanOrEqual(44);

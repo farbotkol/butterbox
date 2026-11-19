@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createBusinessAction, saveBusinessDraftAction } from "@/app/actions";
 import { BrandLockup } from "@/components/brand-lockup";
+import { workspaceDemoDataApproved } from "@/lib/demo-data";
 import { helpHref } from "@/lib/help";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { getWorkspace } from "@/lib/workspace";
@@ -17,6 +18,9 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
   if (workspace.status === "ready") redirect("/");
   if (workspace.status === "error" && "reason" in workspace) redirect("/");
   const params = await searchParams;
+  const sampleDataEnabled = workspace.status === "needs_setup"
+    ? await workspaceDemoDataApproved(workspace.supabase)
+    : false;
   const draftResult =
     workspace.status === "needs_setup"
       ? await workspace.supabase
@@ -129,19 +133,21 @@ export default async function SetupPage({ searchParams }: SetupPageProps) {
           <label className="flex items-start gap-3 rounded-xl border border-line bg-cloud p-4">
             <input
               className="mt-1 accent-ocean"
-              disabled
+              defaultChecked={sampleDataEnabled && Boolean(draft?.include_sample_data)}
+              disabled={!sampleDataEnabled}
               name="sample_data"
               type="checkbox"
             />
             <span>
               <span className="block text-sm font-semibold">Add a sample team</span>
               <span className="mt-1 block text-xs leading-5 text-muted">
-                Sample teams are unavailable until a separately isolated demo environment
-                is available. Your new workspace starts without sample staff or shifts.
+                {sampleDataEnabled
+                  ? "Adds clearly tagged fictional staff, availability, published shifts, sample attendance and non-payroll preparation records. No invitations or external messages are sent."
+                  : "Unavailable because this app has not confirmed an explicitly approved isolated development database. Your new workspace starts without sample staff or shifts."}
               </span>
             </span>
           </label>
-          {draft?.include_sample_data && (
+          {draft?.include_sample_data && !sampleDataEnabled && (
             <p role="status" className="rounded-xl bg-soft-sea px-4 py-3 text-sm text-ocean">
               Your previously saved sample-team selection is no longer available.
               Creating a workspace will start without sample staff or shifts.
