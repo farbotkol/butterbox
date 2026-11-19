@@ -8,7 +8,8 @@ Safely widen eligibility for Copilot-authored Development PRs, report actionable
 - The open-PR query for `copilot/Development` returned only PR #284 at the time checked. It is a draft authored by `farbotkol`, not a Copilot-authored PR. It is therefore not evidence of an eligible PR needing human merge.
 - The scheduled Phase 2 run [44584405419](https://github.com/farbotkol/butterbox/actions/runs/44584405419) completed successfully but did not demonstrate a merge. Its log contains no candidate evaluation or auto-merge request.
 - The first policy workflow run on this PR failed because its existing write-capable job had no checkout for the new policy module (`MODULE_NOT_FOUND`). The workflow now runs policy tests in a read-only PR job and only runs the write-capable merge job against checked-out `copilot/Development`. The PR policy test passed in [run 44638102848](https://github.com/farbotkol/butterbox/actions/runs/44638102848); the merge job was skipped for the pull-request event.
-- Verify [run 44638102933](https://github.com/farbotkol/butterbox/actions/runs/44638102933) failed at the existing PR evidence guard because the PR body did not yet include its attempt-specific JSON evidence marker. This is not a policy-test failure. `database` was still running when this attempt was recorded.
+- Verify [run 44638538710](https://github.com/farbotkol/butterbox/actions/runs/44638538710) failed at the existing PR evidence guard because the PR body still does not include its attempt-specific JSON evidence marker. This is not a policy-test failure. `database` was still running at the latest check.
+- The PR-description reconciliation workflow [run 44638538383](https://github.com/farbotkol/butterbox/actions/runs/44638538383) remains pending and reports zero jobs, so the marker has not been added. The latest policy check [run 44638538412](https://github.com/farbotkol/butterbox/actions/runs/44638538412) passed; its merge job was skipped for the pull-request event.
 - Actions logs show the Phase 2 job token had `contents: write`, `pull-requests: write`, `actions: write`, and `checks: read`; the observed policy failure occurred before a merge API request, so token permission sufficiency for an actual merge remains unproven. The Copilot CLI repair auth workflow documents that auth is not proven for this personally owned repository; this issue did not run its PR #33 auth smoke test.
 - The GitHub read surfaces available here did not expose the live Development ruleset. PR review queries for #34/#39 returned no review submissions or review-comment threads at the time queried; that does not establish historical approvals or the ruleset’s current requirements. The owner must inspect the ruleset directly.
 
@@ -31,7 +32,9 @@ Safely widen eligibility for Copilot-authored Development PRs, report actionable
 - `bash -n` on the embedded merge-job shell — passed.
 - `git diff --check` — passed.
 - PR policy check [44638102848](https://github.com/farbotkol/butterbox/actions/runs/44638102848) — passed; merge job skipped for the pull-request event.
-- Verify [44638102933](https://github.com/farbotkol/butterbox/actions/runs/44638102933) — failed at the missing attempt-specific JSON marker; database was pending at record time.
+- Verify [44638538710](https://github.com/farbotkol/butterbox/actions/runs/44638538710) — failed at the missing attempt-specific JSON marker; database was pending at the latest check.
+- PR-description reconciliation [44638538383](https://github.com/farbotkol/butterbox/actions/runs/44638538383) — pending with zero jobs; marker remains absent.
+- Latest Phase 2 policy run [44638538412](https://github.com/farbotkol/butterbox/actions/runs/44638538412) — policy test passed; merge job skipped for the pull-request event.
 - Secret scan — no secrets detected.
 - CodeQL Actions analysis — 0 alerts.
 - Documentation: not applicable (backend-only workflow and policy; no user-facing behavior changed).

@@ -10,7 +10,7 @@
     "url": "https://github.com/farbotkol/butterbox/pull/284",
     "baseBranch": "copilot/Development",
     "headBranch": "copilot/dev-factory-282-diagnose-merge-blockers",
-    "headSha": null,
+    "headSha": "504740e586f8e8c238c403038894b23874134352",
     "mergeSha": null
   },
   "run": {
@@ -85,13 +85,18 @@
       "evidence": [
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638102848",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538412",
           "outcome": "Read-only PR policy test passed; merge job skipped for the pull_request event."
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638102933",
-          "outcome": "Verify failed at the missing attempt-specific JSON evidence marker; database was pending at record time."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538710",
+          "outcome": "Latest Verify failed at the missing attempt-specific JSON evidence marker; database remained pending at the latest check."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538383",
+          "outcome": "PR-description reconciliation remains pending with zero jobs; the attempt-specific marker is still absent from the PR body."
         },
         {
           "kind": "issue",
@@ -149,14 +154,14 @@
     {
       "name": "verify",
       "status": "fail",
-      "runId": 44638102933,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638102933"
+      "runId": 44638538710,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638538710"
     },
     {
       "name": "database",
       "status": "pending",
-      "runId": 44638102933,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638102933"
+      "runId": 44638538710,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638538710"
     }
   ],
   "decisions": [
@@ -173,12 +178,12 @@
     "Copilot CLI authentication for a personally owned repository remains unproven."
   ],
   "blockers": [
-    "The attempt-specific evidence marker has not yet been reconciled into the remote PR body; Verify must be rerun after it is added.",
+    "The attempt-specific evidence marker is still absent from the remote PR body. Reconciliation run 44638538383 is pending with zero jobs, and the latest Verify run failed at the existing evidence guard; resolve the marker through the repository's authorized PR-description workflow and rerun required CI.",
     "The current PR remains draft and current-head verify/database success and a real eligible auto-merge have not been demonstrated.",
     "The owner must inspect Development ruleset approvals and conversation-resolution requirements before deciding whether zero required human approvals are appropriate."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-283/pr-284/attempt-01.md",
-  "markdownSha256": "1823a05d5d82e45c1e49a0a4a81ad05fe2037dcc635e8be47796c48368973282",
+  "markdownSha256": "a0d1f4ba7a01df1172d62f5f0ab76b476e1a547b72d8aded131c1dc89cd59295",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
