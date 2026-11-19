@@ -1,7 +1,7 @@
 name: Phase 2 - autonomous Development merge
 
 # Only Development. GitHub rulesets remain authoritative.
-# Old Copilot PRs are deliberately excluded from this initial rollout.
+# Eligibility is fail-closed; native GitHub branch rules remain authoritative.
 on:
   workflow_run:
     workflows: ["Verify"]
@@ -80,39 +80,33 @@ jobs:
 
           for number in "${numbers[@]}"; do
             pr="$(gh api "repos/$REPO/pulls/$number")"
-            if ! jq -e --arg repo "$REPO" '
-              .state == "open"
-              and .base.ref == "copilot/Development"
-              and .head.repo.full_name == $repo
-              and (.head.ref | startswith("copilot/"))
-              and (
-                (.number == 34 and .head.ref == "copilot/tokenless-agent-merge-probe")
-                or (.number == 39 and .head.ref == "copilot/phase2-scheduled-smoke-20261107")
-                or (
-                  (.user.login | ascii_downcase) == "copilot"
-                  and .created_at >= "2026-11-07T01:30:00Z"
-                )
-              )
-            ' <<< "$pr" >/dev/null; then
-              echo "PR #$number: outside the strictly scoped Phase 2 pilot."
+            policy="$(jq -cn --arg repo "$REPO" --argjson pr "$pr" \
+              '{repository: $repo, pullRequest: $pr}' |
+              node tools/phase2-automerge-policy.mjs)"
+            if [[ "$(jq -r '.eligible' <<< "$policy")" != "true" ]]; then
+              reason="$(jq -r '.reason' <<< "$policy")"
+              echo "PR #$number: ineligible: $reason"
               continue
             fi
             sha="$(jq -r '.head.sha' <<< "$pr")"
-            draft="$(jq -r '.draft' <<< "$pr")"
-            echo "Evaluating PR #$number at $sha (draft=$draft)."
+            echo "PR #$number: eligible at HEAD $sha; checking required gates."
 
             # Never trust check results from a previous commit or a non-Actions integration.
             checks="$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100&filter=latest")"
             for required in verify database; do
-              if ! jq -e --arg name "$required" '
-                # Check the newest matching run, not the number of successful runs.
+              check_state="$(jq -r --arg name "$required" '
                 [.check_runs[] |
                   select(.name == $name and .app.slug == "github-actions")]
                 | sort_by(.started_at // .created_at // "", .id)
                 | last
-                | . != null and .status == "completed" and .conclusion == "success"
-              ' <<< "$checks" >/dev/null; then
-                echo "PR #$number: $required is not successful on the latest HEAD."
+                | if . == null then "missing"
+                  elif .status != "completed" then "pending"
+                  elif .conclusion != "success" then "failed (\(.conclusion // "unknown"))"
+                  else "success"
+                  end
+              ' <<< "$checks")"
+              if [[ "$check_state" != "success" ]]; then
+                echo "PR #$number: required check '$required' is $check_state on HEAD $sha; resolve or rerun that check before auto-merge."
                 # GitHub may mark pull_request runs action_required after a bot-updated
                 # branch. Explicitly dispatch CI once, but never bypass a failed test.
                 if [[ "$DRY_RUN" != "true" ]]; then
@@ -189,19 +183,13 @@ jobs:
               continue
             fi
 
-            if [[ "$draft" == "true" ]]; then
-              echo "PR #$number: marking draft ready for review."
-              gh pr ready "$number" --repo "$REPO" || {
-                echo "::warning::GitHub rejected ready transition for PR #$number."
-                continue
-              }
-            fi
-
             # Native GitHub auto-merge, never a bypass or force push. GitHub
             # enforces every branch rule, approval and required status check.
             echo "PR #$number: enabling GitHub-native auto-merge."
-            gh pr merge "$number" --repo "$REPO" --squash --auto || {
-              echo "::warning::GitHub rejected merge for PR #$number; leaving open."
+            if ! merge_output="$(gh pr merge "$number" --repo "$REPO" --squash --auto 2>&1)"; then
+              echo "::warning::PR #$number: GitHub rejected the native auto-merge request; review token permissions, branch rules, unresolved conversations, approvals, and merge conflicts. CLI details follow."
+              printf '%s\n' "$merge_output" | sed 's/^::/ /'
               continue
-            }
+            fi
+            echo "$merge_output"
           done
