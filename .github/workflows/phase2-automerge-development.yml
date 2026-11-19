@@ -30,11 +30,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  test-policy:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Test Development merge eligibility policy
+        run: node --test tests/phase2-automerge-policy.test.mjs
+
   merge-ready-development:
     if: >-
-      github.event_name != 'workflow_run' ||
-      (contains(fromJSON('["pull_request","workflow_dispatch"]'), github.event.workflow_run.event) &&
-       github.event.workflow_run.conclusion == 'success')
+      github.event_name != 'pull_request' &&
+      (github.event_name != 'workflow_run' ||
+       (contains(fromJSON('["pull_request","workflow_dispatch"]'), github.event.workflow_run.event) &&
+        github.event.workflow_run.conclusion == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     permissions:
@@ -43,6 +56,10 @@ jobs:
       actions: write
       checks: read
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: copilot/Development
+          persist-credentials: false
       - name: Check eligibility and honor existing GitHub merge gates
         env:
           GH_TOKEN: ${{ github.token }}
