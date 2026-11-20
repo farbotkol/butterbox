@@ -1,9 +1,9 @@
 name: Reconcile Copilot PR descriptions
 
+# Legacy repair tool retained for deliberate manual use only.
+# Do not automatically rewrite PR descriptions or insert hidden evidence tags.
 on:
-  pull_request_target:
-    types: [opened, edited, synchronize, reopened]
-    branches: [copilot/Development]
+  workflow_dispatch:
 
 permissions:
   actions: write

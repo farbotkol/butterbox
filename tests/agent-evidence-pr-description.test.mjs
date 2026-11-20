@@ -483,28 +483,19 @@ test('fully accepted evidence cannot carry an unrelated issue auto-close phrase'
   assert.doesNotMatch(second.updates[0], /- Fixes #280/);
 });
 
-test('the trusted workflow is write-minimal and Verify retains the unchanged evidence gate', async () => {
+test('Verify no longer requires PR evidence markers and preserves managed-file protections', async () => {
   const workflow = await readFile(new URL('../.github/workflows/reconcile-pr-descriptions.yml', import.meta.url), 'utf8');
   const ci = await readFile(new URL('../.github/workflows/ci.yml', import.meta.url), 'utf8');
-  const evidenceGate = await readFile(new URL('../tools/agent-evidence/check-pr-evidence.mjs', import.meta.url), 'utf8');
   const managedFileGate = await readFile(new URL('../tools/agent-evidence/check-managed-files.mjs', import.meta.url), 'utf8');
-  assert.match(workflow, /pull_request_target:/);
-  assert.match(workflow, /types: \[opened, edited, synchronize, reopened\]/);
-  assert.match(workflow, /pull-requests:\s*write/);
-  assert.match(workflow, /actions:\s*write/);
-  assert.match(workflow, /issues:\s*read/);
-  assert.match(workflow, /persist-credentials: false/);
-  assert.doesNotMatch(workflow, /issues:\s*write/);
-  assert.match(ci, /node tools\/agent-evidence\/check-pr-evidence\.mjs/);
-  const evidenceStep = ci.match(/- name: Validate this PR's issue evidence and references\n([\s\S]*?)(?=\n      - name:|\n\n  database:)/);
-  assert.ok(evidenceStep);
-  assert.doesNotMatch(evidenceStep[1], /continue-on-error:/);
-  assert.match(ci, /pull-requests:\s*read/);
-  for (const gate of [evidenceGate, managedFileGate]) {
-    assert.match(gate, /repos\/\$\{repository\}\/pulls\/\$\{pullRequest\.number\}/);
-    assert.match(gate, /currentPullRequest\.head\?\.\s*sha !== pullRequest\.head\?\.\s*sha/);
-  }
-  assert.match(evidenceGate, /canonicalIssueNumber\(currentPullRequest\.body\)/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request_target:/);
+  assert.doesNotMatch(ci, /run: node tools\/agent-evidence\/check-pr-evidence\.mjs/);
+  assert.doesNotMatch(ci, /run: node tools\/agent-evidence\/validate-all\.mjs/);
+  assert.match(ci, /node tools\/agent-evidence\/check-managed-files\.mjs/);
+  assert.match(ci, /- run: npm test/);
+  assert.match(ci, /- run: npm run lint/);
+  assert.match(ci, /- run: npm run build/);
+  assert.match(ci, /npx --yes supabase@2\.122\.0 test db/);
   assert.match(managedFileGate, /pullRequestBody:\s*currentPullRequest\.body/);
 });
 

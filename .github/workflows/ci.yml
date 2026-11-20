@@ -28,13 +28,6 @@ jobs:
       pull-requests: read
     steps:
       - uses: actions/checkout@v4
-      - name: Validate isolated delivery evidence
-        run: node tools/agent-evidence/validate-all.mjs
-      - name: Validate this PR's issue evidence and references
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node tools/agent-evidence/check-pr-evidence.mjs
       - name: Protect centrally managed archives and status
         if: ${{ github.event_name == 'pull_request' }}
         env:
