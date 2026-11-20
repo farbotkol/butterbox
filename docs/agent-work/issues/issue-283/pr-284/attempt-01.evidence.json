@@ -1,0 +1,189 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 283,
+    "url": "https://github.com/farbotkol/butterbox/issues/283"
+  },
+  "pullRequest": {
+    "number": 284,
+    "url": "https://github.com/farbotkol/butterbox/pull/284",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/dev-factory-282-diagnose-merge-blockers",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 44638102848,
+    "agent": "copilot",
+    "commitSha": "6a034fb58f51885e2955ac217a36bfc4cc33ae7e",
+    "startedAt": "2026-11-19T23:29:41Z",
+    "updatedAt": "2026-11-19T23:29:47Z"
+  },
+  "scope": {
+    "summary": "Replace the date-gated Development pilot allowlist with a tested fail-closed Copilot eligibility policy and actionable merge diagnostics, preserving all native GitHub gates.",
+    "changedFiles": [
+      ".github/workflows/phase2-automerge-development.yml",
+      "tests/phase2-automerge-policy.test.mjs",
+      "tools/phase2-automerge-policy.mjs",
+      "docs/agent-work/issues/issue-283/pr-284/attempt-01.md",
+      "docs/agent-work/issues/issue-283/pr-284/attempt-01.evidence.json"
+    ],
+    "implemented": [
+      "Tested Copilot-only eligibility for same-repository PRs targeting copilot/Development, with no creation-date cutoff and fail-closed reasons.",
+      "Actionable diagnostics for drafts, requested reviewers, mismatched PR metadata, and missing, pending or failed required checks.",
+      "Read-only policy tests for pull_request events; write-capable merge job checks out trusted copilot/Development.",
+      "Native squash auto-merge retained without draft promotion, force push, or protection bypass."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Tests prove legacy-date Copilot PRs can be considered safely without approving untrusted or mismatched PRs.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/phase2-automerge-policy.test.mjs: allows existing and future Copilot PRs without using a creation-date cutoff",
+          "outcome": "Passes for a date before the former cutoff and a future date using the same fail-closed predicate."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "Ineligible PRs get actionable diagnostic reasons.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/phase2-automerge-policy.test.mjs: rejects mismatched and unsafe PR metadata with actionable reasons",
+          "outcome": "Passes for closed, wrong-base, fork, wrong-head namespace, wrong-author, draft, pending-review and incomplete metadata cases."
+        },
+        {
+          "kind": "file",
+          "reference": ".github/workflows/phase2-automerge-development.yml",
+          "outcome": "Workflow reports missing, pending and failed required checks separately."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Required `verify` and `database` remain mandatory.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "test",
+          "reference": "tests/phase2-automerge-policy.test.mjs: workflow retains required CI and native squash auto-merge without draft promotion",
+          "outcome": "Passes assertions for both required gates, native squash-only auto-merge, no draft promotion, no admin bypass, and no old pilot exceptions."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Scoped PR and CI results linked here and on #282; no automatic merge claimed until demonstrated.",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538412",
+          "outcome": "Read-only PR policy test passed; merge job skipped for the pull_request event."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538710",
+          "outcome": "Latest Verify failed at the missing attempt-specific JSON evidence marker; database remained pending at the latest check."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44638538383",
+          "outcome": "PR-description reconciliation remains pending with zero jobs; the attempt-specific marker is still absent from the PR body."
+        },
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/issues/282",
+          "outcome": "Parent scope linked in PR #284; no real eligible auto-merge has been demonstrated or claimed."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "If Copilot dispatch is unavailable, record blocker with precise permissions/capability, do not claim an agent started.",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/pull/284",
+          "outcome": "The current implementation is scoped to this active PR; no additional task was dispatched and no second agent start is claimed. Copilot CLI repair authentication remains unproven."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/phase2-automerge-policy.test.mjs",
+      "outcome": "passed",
+      "result": "4 focused policy and workflow-guard tests passed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- tools/phase2-automerge-policy.mjs tests/phase2-automerge-policy.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed on the changed JavaScript files.",
+      "reference": null
+    },
+    {
+      "command": "bash -n /tmp/phase2-automerge-development.sh",
+      "outcome": "passed",
+      "result": "Embedded merge-job shell syntax passed.",
+      "reference": null
+    },
+    {
+      "command": "git diff --check",
+      "outcome": "passed",
+      "result": "No whitespace errors.",
+      "reference": null
+    },
+    {
+      "command": "CodeQL Actions analysis",
+      "outcome": "passed",
+      "result": "0 alerts.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "fail",
+      "runId": 44638538710,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638538710"
+    },
+    {
+      "name": "database",
+      "status": "pending",
+      "runId": 44638538710,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44638538710"
+    }
+  ],
+  "decisions": [
+    "Treat all PR eligibility dates alike but require a Copilot author, same-repository head, exact Development target, non-draft status, complete reviewer metadata and no pending reviewer requests.",
+    "Leave branch protections and repository settings unchanged; native GitHub auto-merge remains the only merge path.",
+    "Do not claim automatic merging or Copilot CLI repair authentication until demonstrated."
+  ],
+  "reruns": [],
+  "limitations": [
+    "The live ruleset applying to copilot/Development could not be queried through the available GitHub read surfaces; approval and conversation-resolution settings require owner verification.",
+    "No open Copilot-authored Development PR was found; the only open PR returned, #284, is draft and authored by farbotkol.",
+    "PR review/thread queries for the historical pilot PRs returned no current review data and cannot establish historical approval requirements.",
+    "The successful PR policy run is dry-run/read-only and does not demonstrate a merge.",
+    "Copilot CLI authentication for a personally owned repository remains unproven."
+  ],
+  "blockers": [
+    "The attempt-specific evidence marker is still absent from the remote PR body. Reconciliation run 44638538383 is pending with zero jobs, and the latest Verify run failed at the existing evidence guard; resolve the marker through the repository's authorized PR-description workflow and rerun required CI.",
+    "The current PR remains draft and current-head verify/database success and a real eligible auto-merge have not been demonstrated.",
+    "The owner must inspect Development ruleset approvals and conversation-resolution requirements before deciding whether zero required human approvals are appropriate."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-283/pr-284/attempt-01.md",
+  "markdownSha256": "a0d1f4ba7a01df1172d62f5f0ab76b476e1a547b72d8aded131c1dc89cd59295",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}
