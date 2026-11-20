@@ -7,7 +7,7 @@ const root = new URL('../', import.meta.url);
 test('repair authentication smoke is same-repository and non-destructive', async () => {
   const workflow = await readFile(new URL('.github/workflows/agent-merge-enrollment.yml', root), 'utf8');
 
-  assert.match(workflow, /copilot-requests: write/);
+  assert.match(workflow, /copilot-requests: read/);
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(workflow, /attempt == '1'/);
   assert.match(workflow, /contents: write[\s\S]*pull-requests: read[\s\S]*actions: write[\s\S]*copilot-requests: write/);
