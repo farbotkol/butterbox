@@ -1,8 +1,11 @@
-name: Copilot CLI CI repair (no stored token)
+name: Copilot CLI CI repair (personal-account compatible)
 
-# Uses GitHub's native Copilot CLI authentication to attempt a bounded repair.
-# GitHub documents built-in-token Copilot CLI billing for eligible ORGANIZATION repos.
-# Butterbox is personally owned: auth smoke test must pass before relying on this workflow.
+# On personal accounts, a fine-grained user PAT with only the Copilot Requests
+# permission may be stored in Actions as COPILOT_GITHUB_TOKEN. The CLI prefers
+# that variable, while GitHub API calls keep using the scoped Actions token.
+# If no secret is configured, CLI falls back to GITHUB_TOKEN and the live smoke
+# test determines whether the built-in token is supported for this repository.
+# Never log the secret or make the user token available to repository scripts.
 on:
   pull_request:
     paths:
@@ -187,10 +190,11 @@ jobs:
         if: steps.guard.outputs.eligible == 'true'
         run: npm install --global @github/copilot
 
-      - name: Non-destructive built-in-token authentication smoke test
+      - name: Non-destructive Copilot authentication smoke test
         if: steps.guard.outputs.eligible == 'true' && steps.guard.outputs.attempt == '1'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/copilot-auth-smoke.txt"
@@ -201,7 +205,7 @@ jobs:
             :
           else
             exit_code=$?
-            echo "::error::Copilot CLI GITHUB_TOKEN authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
+            echo "::error::Copilot CLI authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
             sed -E \
               -e 's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[REDACTED]/g' \
               -e 's/Bearer[[:space:]]+[^[:space:]]+/Bearer-REDACTED/Ig' \
@@ -212,12 +216,13 @@ jobs:
             echo "::error::Copilot CLI authentication returned an unexpected response; no response or credentials were logged."
             exit 1
           fi
-          echo "Copilot CLI GITHUB_TOKEN authentication succeeded with no tools enabled."
+          echo "Copilot CLI authentication succeeded with no tools enabled."
 
       - name: Ask Copilot to repair failing Node test files
         if: steps.guard.outputs.eligible == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           ATTEMPT: ${{ steps.guard.outputs.attempt }}
           MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |
