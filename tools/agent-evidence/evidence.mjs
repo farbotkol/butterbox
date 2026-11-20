@@ -233,7 +233,9 @@ export function validateEvidence(evidence, {
       continue;
     }
     allowOnlyKeys(result, ['name', 'status', 'runId', 'url'], `ci[${index}]`, errors);
-    if (!['verify', 'database'].includes(result.name)) errors.push(`ci[${index}].name must be verify or database`);
+    if (!['verify', 'database', 'database-smoke'].includes(result.name)) {
+      errors.push(`ci[${index}].name must be verify, database-smoke, or legacy database`);
+    }
     if (ciNames.has(result.name)) errors.push(`ci[${index}].name must be unique`);
     ciNames.add(result.name);
     if (!CI_STATUSES.has(result.status)) errors.push(`ci[${index}].status is invalid`);
@@ -244,8 +246,9 @@ export function validateEvidence(evidence, {
       errors.push(`ci[${index}].url must be a GitHub Actions run URL or null`);
     }
   }
-  for (const requiredName of ['verify', 'database']) {
-    if (!ciNames.has(requiredName)) errors.push(`ci must include ${requiredName}`);
+  if (!ciNames.has('verify')) errors.push('ci must include verify');
+  if (!ciNames.has('database-smoke') && !ciNames.has('database')) {
+    errors.push('ci must include database-smoke or legacy database evidence');
   }
 
   const tests = Array.isArray(evidence.tests) ? evidence.tests : [];
@@ -406,7 +409,11 @@ export function evidenceIsComplete(evidence, changedFiles, acceptanceCriteria) {
 
 export function requiredCiStatus(checkRuns) {
   const results = {};
-  for (const name of ['verify', 'database']) {
+  const databaseName = checkRuns.some(check => check.name === 'database-smoke') ||
+    !checkRuns.some(check => check.name === 'database')
+    ? 'database-smoke'
+    : 'database';
+  for (const name of ['verify', databaseName]) {
     const latest = checkRuns
       .filter(check => check.name === name)
       .sort((left, right) => String(right.started_at ?? '').localeCompare(String(left.started_at ?? '')))[0];
@@ -437,12 +444,13 @@ export function buildReconciliationComment({
   acceptanceCriteria,
 }) {
   const key = `<!-- butterbox-reconciliation:v1:pr-${pullNumber}:${mergeSha} -->`;
-  const ciPassed = ci.verify.status === 'pass' && ci.database.status === 'pass';
+  const databaseName = Object.hasOwn(ci, 'database-smoke') ? 'database-smoke' : 'database';
+  const ciPassed = ci.verify.status === 'pass' && ci[databaseName].status === 'pass';
   const criteria = Array.isArray(evidence?.criteria) ? evidence.criteria : [];
   const docsOnly = isDocumentationOnly(changedFiles);
   const evidenceComplete = errors.length === 0 && ciPassed &&
     evidenceIsComplete(evidence, changedFiles, acceptanceCriteria);
-  const gateLine = ['verify', 'database'].map(name =>
+  const gateLine = ['verify', databaseName].map(name =>
     `${name}: ${ci[name].status}${ci[name].url ? ` ([run](${ci[name].url}))` : ''}`).join(' · ');
   const criterionLines = criteria.length
     ? criteria.map(item => {

@@ -80,7 +80,7 @@ function evidence(overrides = {}) {
     }],
     ci: [
       { name: 'verify', status: 'pass', runId: 10, url: 'https://github.com/example/butterbox/actions/runs/10' },
-      { name: 'database', status: 'pass', runId: 11, url: 'https://github.com/example/butterbox/actions/runs/11' },
+      { name: 'database-smoke', status: 'pass', runId: 11, url: 'https://github.com/example/butterbox/actions/runs/11' },
     ],
     decisions: ['Keep canonical issue authoritative.'],
     reruns: [],
@@ -278,11 +278,14 @@ test('managed-file enforcement rejects feature edits and accepts only exact-head
 test('required CI comes from actual exact-name check runs and missing gates remain not-tested', () => {
   const ci = requiredCiStatus([
     ...successfulChecks(),
+    { name: 'database-smoke', status: 'completed', conclusion: 'success', started_at: '2026-11-12T00:02:30Z', run_id: 12 },
     { name: 'verify', status: 'completed', conclusion: 'failure', started_at: '2026-11-12T00:03:00Z' },
   ]);
   assert.equal(ci.verify.status, 'fail');
-  assert.equal(ci.database.status, 'pass');
-  assert.equal(requiredCiStatus([]).database.status, 'not-tested');
+  assert.equal(ci['database-smoke'].status, 'pass');
+  assert.equal(Object.hasOwn(ci, 'database'), false);
+  assert.equal(requiredCiStatus([])['database-smoke'].status, 'not-tested');
+  assert.equal(requiredCiStatus(successfulChecks()).database.status, 'pass');
 });
 
 test('partial and documentation-only deliveries never become full-story acceptance or close an issue', () => {
@@ -311,6 +314,12 @@ test('partial and documentation-only deliveries never become full-story acceptan
   assert.equal(evidenceIsComplete(evidence(), changedFiles, expected), true);
   assert.equal(evidenceIsComplete(evidence({ blockers: ['Still blocked.'] }), changedFiles, expected), false);
   assert.equal(evidenceIsComplete(evidence(), changedFiles, ['Different criterion.']), false);
+  assert.deepEqual(validateEvidence(evidence({
+    ci: [
+      { name: 'verify', status: 'pass', runId: 10, url: 'https://github.com/example/butterbox/actions/runs/10' },
+      { name: 'database-smoke', status: 'pass', runId: 12, url: 'https://github.com/example/butterbox/actions/runs/12' },
+    ],
+  })), []);
   assert.deepEqual(parseAcceptanceCriteria(
     '## Acceptance criteria\n- [ ] First\n- [x] Second\n## Notes\n- [ ] Not a criterion',
   ), [{ checked: false, description: 'First' }, { checked: true, description: 'Second' }]);
@@ -370,7 +379,7 @@ test('merged PR reconciliation is idempotent and verifies issue, evidence, file 
     repository, pullRequest: pr, api: missingCi.api,
   });
   assert.equal(unverified.status, 'merged-unverified');
-  assert.match(missingCi.comments[0].body, /database: not-tested/);
+  assert.match(missingCi.comments[0].body, /database-smoke: not-tested/);
   await assert.rejects(
     reconcileCandidates({ repository, pullRequests: [pr], api: missingCi.api }),
     /Reconciliation unresolved/,

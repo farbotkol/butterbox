@@ -81,7 +81,7 @@ test('workflow retains required CI and native squash auto-merge without draft pr
   assert.match(workflow, /test-policy:\s+if: github\.event_name == 'pull_request'/);
   assert.match(workflow, /github\.event_name != 'pull_request' &&/);
   assert.match(workflow, /ref: copilot\/Development/);
-  assert.match(workflow, /for required in verify database/);
+  assert.match(workflow, /for required in verify database-smoke/);
   assert.match(workflow, /gh pr merge "\$number" --repo "\$REPO" --squash --auto/);
   assert.doesNotMatch(workflow, /gh pr ready/);
   assert.doesNotMatch(workflow, /--admin|--force/);

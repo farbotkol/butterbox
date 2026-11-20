@@ -167,7 +167,8 @@ export async function reconcilePullRequest({ repository, pullRequest, api }) {
 
   const marker = `<!-- butterbox-reconciliation:v1:pr-${number}:${mergeSha} -->`;
   const existingComments = await api.getComments(issueNumber);
-  const ciPassed = ci.verify.status === 'pass' && ci.database.status === 'pass';
+  const databaseName = Object.hasOwn(ci, 'database-smoke') ? 'database-smoke' : 'database';
+  const ciPassed = ci.verify.status === 'pass' && ci[databaseName].status === 'pass';
   const unverified = errors.length > 0 || !ciPassed ||
     !evidenceIsComplete(evidence, changedFiles, acceptanceCriteria);
   if (existingComments.some(comment => comment.body?.includes(marker))) {
