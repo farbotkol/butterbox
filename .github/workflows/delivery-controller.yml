@@ -55,7 +55,15 @@ jobs:
             echo "::error::PR query may be truncated; aborting."
             exit 1
           fi
-          jq '{pullRequests: .}' "$RUNNER_TEMP/open-prs.json" > "$RUNNER_TEMP/snapshot.json"
+          # List-pulls responses omit mergeable; load the detailed PR object.
+          if (( count == 1 )); then
+            number="$(jq -r '.[0].number' "$RUNNER_TEMP/open-prs.json")"
+            [[ "$number" =~ ^[1-9][0-9]*$ ]] || exit 1
+            gh api "repos/$REPO/pulls/$number" |
+              jq -s '{pullRequests: .}' > "$RUNNER_TEMP/snapshot.json"
+          else
+            jq '{pullRequests: .}' "$RUNNER_TEMP/open-prs.json" > "$RUNNER_TEMP/snapshot.json"
+          fi
       - name: Choose guarded action
         id: decision
         run: node tools/delivery-controller/run.mjs "$RUNNER_TEMP/snapshot.json"
