@@ -32,22 +32,6 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  cli-auth-smoke:
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 33
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    permissions:
-      contents: read
-      copilot-requests: write
-    steps:
-      - name: Install Copilot CLI
-        run: npm install --global @github/copilot
-      - name: Check built-in-token Copilot authentication
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          copilot -p "Respond with the single word AUTHENTICATED. Do not use tools." -s
-
   repair-failed-test:
     if: >-
       (github.event_name == 'workflow_run' &&
@@ -101,6 +85,16 @@ jobs:
             echo "No matching completed, failing Verify run; exiting safely."
             exit 0
           fi
+          failed_jobs="$(gh api "repos/$REPO/actions/runs/$RUN_ID/jobs?per_page=100&filter=latest")"
+          if ! jq -e '
+            any(.jobs[];
+              .name == "verify"
+              and .conclusion == "failure"
+              and any(.steps[]; .name == "Run npm test" and .conclusion == "failure"))
+          ' <<< "$failed_jobs" >/dev/null; then
+            echo "Verify failed outside the Node test step; no test repair will run."
+            exit 0
+          fi
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             number=""
           else
@@ -122,18 +116,36 @@ jobs:
             number="${matching[0]}"
           fi
           pr="$(gh api "repos/$REPO/pulls/$number")"
-          if ! jq -e --arg repo "$REPO" --arg sha "$RUN_SHA" --argjson number "$number" '
+          repo_owner="${REPO%%/*}"
+          if ! jq -e --arg repo "$REPO" --arg owner "$repo_owner" --arg sha "$RUN_SHA" --argjson number "$number" '
             .number == $number
             and .state == "open"
             and .base.ref == "copilot/Development"
             and .head.repo.full_name == $repo
             and .head.sha == $sha
             and (
-              ((.user.login | ascii_downcase) == "copilot" and (.head.ref | startswith("copilot/")))
+              ((.head.ref | startswith("copilot/"))
+                and ((.user.login | ascii_downcase) == "copilot"
+                  or (.user.login | ascii_downcase) == ($owner | ascii_downcase)))
               or ($number == 34 and .head.ref == "copilot/tokenless-agent-merge-probe")
             )
           ' <<< "$pr" >/dev/null; then
             echo "Not a current, eligible Development PR; exiting."
+            exit 0
+          fi
+          created_at="$(jq -r '.created_at // empty' <<< "$pr")"
+          if [[ -z "$created_at" ]] || ! created_epoch="$(date -u -d "$created_at" +%s 2>/dev/null)"; then
+            echo "::error::PR creation time is unavailable; refusing an unbounded repair."
+            exit 1
+          fi
+          elapsed=$(( $(date -u +%s) - created_epoch ))
+          if (( elapsed >= 12 * 60 * 60 )); then
+            echo "::warning::PARKED: PR #$number exceeded the 12-hour repair window; no further repair attempt will run."
+            {
+              echo "## CI repair parked"
+              echo "PR #$number exceeded the 12-hour repair window."
+              echo "Next action: owner/reviewer must inspect the failed Verify run and decide whether to restart the scoped task."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           # Count repair commits for this PR, including legacy single-attempt
@@ -174,6 +186,33 @@ jobs:
       - name: Install Copilot CLI
         if: steps.guard.outputs.eligible == 'true'
         run: npm install --global @github/copilot
+
+      - name: Non-destructive built-in-token authentication smoke test
+        if: steps.guard.outputs.eligible == 'true' && steps.guard.outputs.attempt == '1'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/copilot-auth-smoke.txt"
+          error="$RUNNER_TEMP/copilot-auth-smoke.err"
+          if copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
+            -s --deny-tool=write --deny-tool=shell --deny-tool=url \
+            >"$output" 2>"$error"; then
+            :
+          else
+            exit_code=$?
+            echo "::error::Copilot CLI GITHUB_TOKEN authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
+            sed -E \
+              -e 's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[REDACTED]/g' \
+              -e 's/Bearer[[:space:]]+[^[:space:]]+/Bearer-REDACTED/Ig' \
+              "$error" | tail -n 40
+            exit 1
+          fi
+          if [[ "$(cat "$output")" != "AUTHENTICATED" ]]; then
+            echo "::error::Copilot CLI authentication returned an unexpected response; no response or credentials were logged."
+            exit 1
+          fi
+          echo "Copilot CLI GITHUB_TOKEN authentication succeeded with no tools enabled."
 
       - name: Ask Copilot to repair failing Node test files
         if: steps.guard.outputs.eligible == 'true'
@@ -291,6 +330,7 @@ jobs:
             -f sha="$commit_sha" -F force=false >/dev/null
           echo "Pushed one atomic repair commit covering ${#changed[@]} existing test file(s) on PR #$NUMBER."
           # GITHUB_TOKEN commits do not trigger synchronize runs. Explicit
-          # workflow_dispatch retries the full Verify gate.
+          # dispatches rerun both current required checks on the repaired SHA.
           gh workflow run ci.yml --ref "$BRANCH"
-          echo "Dispatched Verify against repaired branch; no direct merge attempted."
+          gh workflow run fast-database-candidate.yml --ref "$BRANCH"
+          echo "Dispatched Verify and database-smoke against repaired branch; no direct merge attempted."

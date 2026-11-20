@@ -110,7 +110,7 @@ jobs:
 
             # Never trust check results from a previous commit or a non-Actions integration.
             checks="$(gh api "repos/$REPO/commits/$sha/check-runs?per_page=100&filter=latest")"
-            for required in verify database; do
+            for required in verify database-smoke; do
               check_state="$(jq -r --arg name "$required" '
                 [.check_runs[] |
                   select(.name == $name and .app.slug == "github-actions")]
