@@ -1,8 +1,7 @@
-name: Copilot CLI CI repair (no stored token)
+name: Copilot CLI CI repair (personal-account compatible)
 
-# Uses GitHub's native Copilot CLI authentication to attempt a bounded repair.
-# GitHub documents built-in-token Copilot CLI billing for eligible ORGANIZATION repos.
-# Butterbox is personally owned: auth smoke test must pass before relying on this workflow.
+# GitHub bills built-in-token Copilot CLI requests to the personal repository
+# owner's Copilot seat. Verify entitlement with a tool-free model request.
 on:
   pull_request:
     paths:
@@ -14,13 +13,15 @@ on:
   # Verify explicitly dispatches us again when a repaired test still fails.
   workflow_dispatch:
     inputs:
+      smoke_only:
+        description: "Test built-in Copilot authentication without repairing a PR"
+        type: boolean
+        default: false
       verify_run_id:
-        description: "Failed Verify run ID to authenticate and inspect"
-        required: true
+        description: "Failed Verify run ID (required for repair)"
         type: string
       head_sha:
-        description: "Failed Verify commit SHA"
-        required: true
+        description: "Failed Verify commit SHA (required for repair)"
         type: string
 
 permissions:
@@ -48,6 +49,7 @@ jobs:
     steps:
       - name: Select eligible, latest failing Development PR
         id: guard
+        if: inputs.smoke_only != true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -169,6 +171,41 @@ jobs:
           echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
           echo "branch=$(jq -r '.head.ref' <<< "$pr")" >> "$GITHUB_OUTPUT"
 
+      - name: Install Copilot CLI
+        if: inputs.smoke_only == true || steps.guard.outputs.eligible == 'true'
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @github/copilot
+
+      - name: Non-destructive Copilot authentication smoke test
+        if: inputs.smoke_only == true || steps.guard.outputs.attempt == '1'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          smoke_dir="$(mktemp -d "$RUNNER_TEMP/copilot-auth-smoke.XXXXXX")"
+          trap 'rm -rf -- "$smoke_dir"' EXIT
+          cd "$smoke_dir"
+          output="$smoke_dir/response"
+          error="$smoke_dir/diagnostic"
+          if copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
+            -s --no-ask-user --disable-builtin-mcps --deny-tool=read --deny-tool=write --deny-tool=shell --deny-tool=url \
+            >"$output" 2>"$error"; then
+            :
+          else
+            exit_code=$?
+            echo "::error::Copilot CLI authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
+            sed -E \
+              -e 's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[REDACTED]/g' \
+              -e 's/Bearer[[:space:]]+[^[:space:]]+/Bearer-REDACTED/Ig' \
+              "$error" | tail -n 40
+            exit 1
+          fi
+          if [[ "$(cat "$output")" != "AUTHENTICATED" ]]; then
+            echo "::error::Copilot CLI authentication returned an unexpected response; no response or credentials were logged."
+            exit 1
+          fi
+          echo "Copilot CLI authentication succeeded with no tools enabled."
+
       - name: Checkout exact PR commit without persisted credentials
         if: steps.guard.outputs.eligible == 'true'
         uses: actions/checkout@v4
@@ -182,37 +219,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id || github.event.workflow_run.id }}
         run: gh run view "$RUN_ID" --log-failed > .agent-failed-ci.log
-
-      - name: Install Copilot CLI
-        if: steps.guard.outputs.eligible == 'true'
-        run: npm install --global @github/copilot
-
-      - name: Non-destructive built-in-token authentication smoke test
-        if: steps.guard.outputs.eligible == 'true' && steps.guard.outputs.attempt == '1'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          output="$RUNNER_TEMP/copilot-auth-smoke.txt"
-          error="$RUNNER_TEMP/copilot-auth-smoke.err"
-          if copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
-            -s --deny-tool=write --deny-tool=shell --deny-tool=url \
-            >"$output" 2>"$error"; then
-            :
-          else
-            exit_code=$?
-            echo "::error::Copilot CLI GITHUB_TOKEN authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
-            sed -E \
-              -e 's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[REDACTED]/g' \
-              -e 's/Bearer[[:space:]]+[^[:space:]]+/Bearer-REDACTED/Ig' \
-              "$error" | tail -n 40
-            exit 1
-          fi
-          if [[ "$(cat "$output")" != "AUTHENTICATED" ]]; then
-            echo "::error::Copilot CLI authentication returned an unexpected response; no response or credentials were logged."
-            exit 1
-          fi
-          echo "Copilot CLI GITHUB_TOKEN authentication succeeded with no tools enabled."
 
       - name: Ask Copilot to repair failing Node test files
         if: steps.guard.outputs.eligible == 'true'
