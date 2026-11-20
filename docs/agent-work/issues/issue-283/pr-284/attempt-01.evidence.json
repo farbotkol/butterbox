@@ -10,7 +10,7 @@
     "url": "https://github.com/farbotkol/butterbox/pull/284",
     "baseBranch": "copilot/Development",
     "headBranch": "copilot/dev-factory-282-diagnose-merge-blockers",
-    "headSha": "504740e586f8e8c238c403038894b23874134352",
+    "headSha": null,
     "mergeSha": null
   },
   "run": {
@@ -80,7 +80,7 @@
     },
     {
       "id": "AC-4",
-      "description": "Scoped PR and CI results linked here and on farbotkol/butterbox#282; no automatic merge claimed until demonstrated.",
+      "description": "Scoped PR and CI results linked here and on #282; no automatic merge claimed until demonstrated.",
       "status": "blocked",
       "evidence": [
         {
