@@ -8,8 +8,8 @@ test('repair authentication smoke supports personal accounts and stays non-destr
   const workflow = await readFile(new URL('.github/workflows/agent-merge-enrollment.yml', root), 'utf8');
 
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.equal((workflow.match(/COPILOT_GITHUB_TOKEN: \\$\\{\\{ secrets\\.COPILOT_GITHUB_TOKEN \\}\\}/g) || []).length, 2);
-  assert.match(workflow, /GH_TOKEN: \\$\\{\\{ github\\.token \\}\\}/);
+  assert.equal((workflow.match(/COPILOT_GITHUB_TOKEN: \$\{\{ secrets\.COPILOT_GITHUB_TOKEN \}\}/g) || []).length, 2);
+  assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(workflow, /attempt == '1'/);
   assert.match(workflow, /contents: write[\s\S]*pull-requests: read[\s\S]*actions: write[\s\S]*copilot-requests: write/);
   assert.match(workflow, /\.head\.repo\.full_name == \$repo/);
