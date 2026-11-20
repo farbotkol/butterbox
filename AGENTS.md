@@ -188,39 +188,26 @@ The default is targeted verification, not a full regression after every story.
   `agent-evidence-governance-exception` label, a linked issue in the PR body,
   and the repository owner's approval review on the exact PR head. This is an
   audited exception, not permission to restore those files as live status.
-## Mandatory Copilot pull request description contract
+## Copilot pull request links and evidence
 
-When creating or updating **any** PR, follow `tools/agent-evidence/check-pr-evidence.mjs` and the repository PR template. GitHub's automatic Copilot `Fixes #N` suffix is **not sufficient** and will fail `Verify / verify`.
-
-- Create or identify the canonical GitHub Issue first. After the PR number is known, use the *same* issue number `N` in the PR body reference and the two markers below; use the actual PR number `M` and evidence attempt `XX`.
-- Include these exact plain-text lines **outside a fenced code block** in every PR body:
-  ```text
-  Refs #N
-  <!-- butterbox-issue: N -->
-  <!-- butterbox-evidence: docs/agent-work/issues/issue-N/pr-M/attempt-XX.evidence.json -->
-  ```
-- Add **both** matching files `docs/agent-work/issues/issue-N/pr-M/attempt-XX.evidence.json` and `docs/agent-work/issues/issue-N/pr-M/attempt-XX.md` to that PR, with per-criterion status and validated evidence. A marker alone cannot satisfy CI.
-- Remove auto-generated `Fixes #N`, `Closes #N` or `Resolves #N` for draft, partial or incompletely accepted work. Do not close a canonical story from a partial slice. Auto-close may only be considered once full acceptance and exact-head owner approval are verified.
-- Before marking ready for review, verify that the PR body, issue ID, PR ID, evidence paths and JSON/Markdown validation match. Check the actual `verify` and `database` results. Never silence the validator to compensate for a missing reference.
-
-- Merged-PR evidence reconciliation is append-only on the canonical GitHub
-  issue. Include `Refs #N` plus the exact issue/evidence markers in the PR body
-  and add both Markdown and JSON attempt files. CI checks the markers and evidence;
-  the writer requires a repository-owner approval review on the exact PR head
-  saying `Canonical issue approved: #N`, and verifies GitHub's issue-to-PR
-  cross-reference before commenting.
-  Partial and documentation-only PRs must use reference-only links. CI permits
-  auto-close keywords only when evidence exactly matches every canonical issue
-  criterion, every criterion passes, there are no blockers, and the delivery is
-  not documentation-only. The writer never closes or reopens an issue; human
-  reviewers decide full-story acceptance and closure.
-- Use an issue branch and PR to `copilot/Development`, subject to existing
-  CI, security, review and merge gates. Production changes require explicit
-  approval. Use closing keywords only when all issue acceptance criteria have
-  been verified; otherwise link the partial PR without auto-closing the issue.
-- Completion requires recorded per-criterion evidence and the actual PR merge
-  status, not just a green CI run or an agent claim. Update the issue after
-  merge and maintain auditable links; do not independently rewrite the archives.
+- Link the relevant canonical GitHub Issue in ordinary PR text (for example,
+  `Refs #N`). Hidden `butterbox-issue` and `butterbox-evidence` HTML markers,
+  attempt-specific JSON evidence files and paired Markdown logs are **not
+  mandatory PR formatting or Verify gates**.
+- Record actual test results, acceptance coverage, blockers and documentation
+  status in the PR or linked issue. Never fabricate evidence or claim a test
+  passed when it was not run.
+- GitHub auto-close wording (`Fixes #N`, `Closes #N`, `Resolves #N`) may
+  close an issue when the PR merges into the default branch. Prefer a reference
+  without auto-closing for partial work. Do not intentionally close an issue
+  before the acceptance criteria are complete.
+- Existing issue/PR evidence archives may be retained for traceability; do not
+  rewrite historical files merely to satisfy legacy formatting conventions.
+- Merged-PR evidence reconciliation may use available structured evidence, but
+  lack of a hidden PR-body marker must not block code validation or merging.
+- Preserve required `verify` and `database` CI checks, reviews, security
+  safeguards and branch protections. Use issue branches and PRs targeting
+  `copilot/Development`; production changes require explicit approval.
 - See `docs/github-issues-workflow.md` for migration/cutover rules.
 
 <!-- BEGIN:nextjs-agent-rules -->
