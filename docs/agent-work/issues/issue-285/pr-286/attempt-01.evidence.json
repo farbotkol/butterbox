@@ -16,7 +16,7 @@
   "run": {
     "id": 44673600630,
     "agent": "copilot",
-    "commitSha": "428d3e89e8555a063dcf944ddf52bc0a1bb049d1",
+    "commitSha": "f1d4cbee740ae6428d559bbd90f51ea2dd5ceb25",
     "startedAt": "2026-11-20T04:19:13Z",
     "updatedAt": "2026-11-20T04:30:02Z"
   },
@@ -54,6 +54,11 @@
           "kind": "ci",
           "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674502512",
           "outcome": "The initial PR run was skipped because Verify failed before npm test; this is not an authentication result."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674951024",
+          "outcome": "The current-head repair workflow was skipped because Verify failed at the evidence-marker guard; the exact-permission authentication smoke did not run."
         }
       ]
     },
@@ -71,6 +76,11 @@
           "kind": "file",
           "reference": ".github/workflows/agent-merge-enrollment.yml",
           "outcome": "The repair guard now requires the verify job's Run npm test step to fail; controlled assertion injection and repair remain pending."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674950900",
+          "outcome": "Current-head Verify failed at the PR evidence-marker guard before npm test; the repair workflow was consequently skipped."
         }
       ]
     },
@@ -80,14 +90,19 @@
       "status": "blocked",
       "evidence": [
         {
-          "kind": "file",
-          "reference": ".github/workflows/phase2-automerge-development.yml",
-          "outcome": "Phase 2 now checks verify and database-smoke on the current head; the final passing head and eligibility decision remain pending."
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674950900",
+          "outcome": "The verify job failed at the evidence-marker guard, and the legacy database job remained in progress at last observation."
         },
         {
           "kind": "ci",
-          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674502809",
-          "outcome": "Verify on the implementation head was still running when this evidence snapshot was prepared."
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674950967",
+          "outcome": "The current-head database-smoke check passed."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674950931",
+          "outcome": "Phase 2 policy tests passed, but merge-ready-development was skipped; current PR metadata is owner-authored and draft."
         }
       ]
     },
@@ -105,6 +120,16 @@
           "kind": "issue",
           "reference": "https://github.com/farbotkol/butterbox/issues/282",
           "outcome": "Parent scope remains open; no parent issue completion or merge is claimed."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674947140",
+          "outcome": "Current-head PR description reconciliation is pending behind run 44673598880; the PR body still lacks its attempt-specific evidence marker."
+        },
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/issues/285",
+          "outcome": "An issue comment could not be posted: the browser is signed out and available GitHub write tools do not create issue comments."
         }
       ]
     },
@@ -167,15 +192,21 @@
   "ci": [
     {
       "name": "verify",
-      "status": "pending",
-      "runId": 44674502809,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674502809"
+      "status": "fail",
+      "runId": 44674950900,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674950900"
     },
     {
       "name": "database-smoke",
+      "status": "pass",
+      "runId": 44674950967,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674950967"
+    },
+    {
+      "name": "database",
       "status": "pending",
-      "runId": 44674502553,
-      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674502553"
+      "runId": 44674950900,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674950900"
     }
   ],
   "decisions": [
@@ -187,16 +218,17 @@
   "reruns": [],
   "limitations": [
     "The live Development ruleset approval and conversation-resolution settings were not available from the GitHub read surfaces used here.",
-    "The current implementation-head Verify and database-smoke runs had not completed at the time of this evidence snapshot.",
-    "No current auth smoke, controlled test repair, bot repair commit, or final auto-merge eligibility result is claimed."
+    "Current-head Verify did not reach npm test because the PR evidence marker is absent; the repair and authentication smoke therefore did not run.",
+    "The current-head reconciliation run is queued behind a still-running reconciliation step for the initial PR head; its running logs were unavailable to this agent.",
+    "No controlled test repair or bot repair commit is claimed. The owner-authored draft PR is not eligible for Phase 2 auto-merge."
   ],
   "blockers": [
-    "The initial Verify run failed because the PR body lacked the attempt-specific evidence marker; add the paired evidence marker and rerun before fault injection.",
-    "Authentication and unattended test repair remain unproven in the current task; run the controlled assertion failure only after the PR evidence gate passes.",
-    "Post final per-run links, the failure explanation, and the next action on issues #285 and #282."
+    "The current Verify run failed because the PR body lacks the attempt-specific evidence marker; wait for current-head reconciliation or have the owner cancel the still-running stale reconciliation, then rerun the evidence gate before fault injection.",
+    "Authentication and unattended test repair remain unproven; run the controlled assertion failure only after the PR evidence gate passes.",
+    "Post final per-run links, the failure explanation, and the next action on issues #285 and #282; the available unauthenticated GitHub surfaces cannot create those comments."
   ],
   "recommendation": "partial",
   "markdownPath": "docs/agent-work/issues/issue-285/pr-286/attempt-01.md",
-  "markdownSha256": "5d1903d426973ceb708f633761ff91f65056b438131ecbd5d3bc33b6bc9a55ef",
+  "markdownSha256": "e829cdfee0d6f4a2f37f67e3a3d7cf5047a27d02126c80c89bd6bf7c1e94c95a",
   "auditUrl": "https://github.com/farbotkol/butterbox"
 }
