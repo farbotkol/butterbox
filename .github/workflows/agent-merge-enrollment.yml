@@ -194,10 +194,18 @@ jobs:
         run: |
           set -euo pipefail
           output="$RUNNER_TEMP/copilot-auth-smoke.txt"
-          if ! copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
+          error="$RUNNER_TEMP/copilot-auth-smoke.err"
+          if copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
             -s --deny-tool=write --deny-tool=shell --deny-tool=url \
-            >"$output" 2>/dev/null; then
-            echo "::error::Copilot CLI GITHUB_TOKEN authentication smoke test failed; no response or credentials were logged."
+            >"$output" 2>"$error"; then
+            :
+          else
+            exit_code=$?
+            echo "::error::Copilot CLI GITHUB_TOKEN authentication smoke test failed (exit $exit_code); sanitized CLI diagnostic follows."
+            sed -E \
+              -e 's/(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,})/[REDACTED]/g' \
+              -e 's/Bearer[[:space:]]+[^[:space:]]+/Bearer-REDACTED/Ig' \
+              "$error" | tail -n 40
             exit 1
           fi
           if [[ "$(cat "$output")" != "AUTHENTICATED" ]]; then

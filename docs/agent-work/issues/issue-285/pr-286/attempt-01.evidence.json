@@ -1,0 +1,202 @@
+{
+  "schemaVersion": 1,
+  "attempt": 1,
+  "issue": {
+    "number": 285,
+    "url": "https://github.com/farbotkol/butterbox/issues/285"
+  },
+  "pullRequest": {
+    "number": 286,
+    "url": "https://github.com/farbotkol/butterbox/pull/286",
+    "baseBranch": "copilot/Development",
+    "headBranch": "copilot/dev-factory-282-cloud-copilot-repair-authenticatio",
+    "headSha": null,
+    "mergeSha": null
+  },
+  "run": {
+    "id": 44673600630,
+    "agent": "copilot",
+    "commitSha": "428d3e89e8555a063dcf944ddf52bc0a1bb049d1",
+    "startedAt": "2026-11-20T04:19:13Z",
+    "updatedAt": "2026-11-20T04:30:02Z"
+  },
+  "scope": {
+    "summary": "Make the cloud-only CI repair path authenticate safely, repair only eligible failing Node tests, and align Phase 2 and evidence reconciliation with the current Development required checks.",
+    "changedFiles": [
+      ".github/workflows/agent-merge-enrollment.yml",
+      ".github/workflows/phase2-automerge-development.yml",
+      "docs/agent-work/issues/issue-285/pr-286/attempt-01.evidence.json",
+      "docs/agent-work/issues/issue-285/pr-286/attempt-01.md",
+      "tests/agent-evidence.test.mjs",
+      "tests/ci-repair-workflow.test.mjs",
+      "tests/phase2-automerge-policy.test.mjs",
+      "tools/agent-evidence/evidence.mjs",
+      "tools/agent-evidence/reconcile.mjs"
+    ],
+    "implemented": [
+      "Added exact failed-npm-test-step eligibility, a first-attempt tokenless auth smoke, bounded configurable retries, a 12-hour parking signal, and existing stale-HEAD/no-force safeguards.",
+      "Reruns Verify and database-smoke after a repair and aligns Phase 2 and current evidence reconciliation with verify plus database-smoke.",
+      "Preserved legacy database workflow coverage, nightly regression, squash-only native auto-merge, and GitHub's review/conversation gates."
+    ]
+  },
+  "criteria": [
+    {
+      "id": "AC-1",
+      "description": "Exact Copilot CLI authentication outcome proven by real Actions run or explicitly blocked with logs and a supported alternative",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": "https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli-in-actions",
+          "outcome": "Official documentation confirms copilot-requests: write and GITHUB_TOKEN support; current exact-permission Actions smoke has not yet run."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674502512",
+          "outcome": "The initial PR run was skipped because Verify failed before npm test; this is not an authentication result."
+        }
+      ]
+    },
+    {
+      "id": "AC-2",
+      "description": "One safe failing Verify observed, targeted repair agent actually launched, and repair commit made, or an explicit verified blocker",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44673599685",
+          "outcome": "Verify failed at the missing PR evidence marker, not the Node test step; no test repair was eligible."
+        },
+        {
+          "kind": "file",
+          "reference": ".github/workflows/agent-merge-enrollment.yml",
+          "outcome": "The repair guard now requires the verify job's Run npm test step to fail; controlled assertion injection and repair remain pending."
+        }
+      ]
+    },
+    {
+      "id": "AC-3",
+      "description": "Subsequent Verify status, auto-merge eligibility, and status-check mismatch diagnosed without protection bypass",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "file",
+          "reference": ".github/workflows/phase2-automerge-development.yml",
+          "outcome": "Phase 2 now checks verify and database-smoke on the current head; the final passing head and eligibility decision remain pending."
+        },
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44674502809",
+          "outcome": "Verify on the implementation head was still running when this evidence snapshot was prepared."
+        }
+      ]
+    },
+    {
+      "id": "AC-4",
+      "description": "Per-run/PR links, failure explanation and next action recorded on this issue and parent farbotkol/butterbox#282",
+      "status": "blocked",
+      "evidence": [
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/issues/285",
+          "outcome": "This paired PR evidence records the observed run links and next actions; issue and parent issue checkpoints remain to be posted."
+        },
+        {
+          "kind": "issue",
+          "reference": "https://github.com/farbotkol/butterbox/issues/282",
+          "outcome": "Parent scope remains open; no parent issue completion or merge is claimed."
+        }
+      ]
+    },
+    {
+      "id": "AC-5",
+      "description": "No simultaneous second coding task, no prod effects, no Mac dependency, no secrets exposed",
+      "status": "pass",
+      "evidence": [
+        {
+          "kind": "ci",
+          "reference": "https://github.com/farbotkol/butterbox/actions/runs/44673600630",
+          "outcome": "A single GitHub-hosted Copilot cloud session is confirmed; no second task or Mac listener was used."
+        },
+        {
+          "kind": "file",
+          "reference": ".github/workflows/agent-merge-enrollment.yml",
+          "outcome": "The auth prompt enables no tools, suppresses the response, and redacts common token forms from any diagnostic."
+        }
+      ]
+    }
+  ],
+  "tests": [
+    {
+      "command": "node --test tests/ci-repair-workflow.test.mjs tests/phase2-automerge-policy.test.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "18 focused workflow, merge-policy, and evidence tests passed.",
+      "reference": null
+    },
+    {
+      "command": "npm run lint -- tools/agent-evidence/evidence.mjs tools/agent-evidence/reconcile.mjs tests/agent-evidence.test.mjs tests/ci-repair-workflow.test.mjs tests/phase2-automerge-policy.test.mjs",
+      "outcome": "passed",
+      "result": "ESLint passed on all changed JavaScript files.",
+      "reference": null
+    },
+    {
+      "command": "node --test tests/agent-evidence-pr-description.test.mjs tests/agent-evidence.test.mjs",
+      "outcome": "passed",
+      "result": "31 evidence and PR-description tests passed.",
+      "reference": null
+    },
+    {
+      "command": "js-yaml parse of agent-merge-enrollment.yml, phase2-automerge-development.yml, ci.yml, and fast-database-candidate.yml",
+      "outcome": "passed",
+      "result": "All four workflow YAML files parsed.",
+      "reference": null
+    },
+    {
+      "command": "git diff --check",
+      "outcome": "passed",
+      "result": "No whitespace errors.",
+      "reference": null
+    },
+    {
+      "command": "npm test",
+      "outcome": "not-run",
+      "result": "Full package test suite deferred; focused evidence, workflow, and merge-policy suites were run.",
+      "reference": null
+    }
+  ],
+  "ci": [
+    {
+      "name": "verify",
+      "status": "pending",
+      "runId": 44674502809,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674502809"
+    },
+    {
+      "name": "database-smoke",
+      "status": "pending",
+      "runId": 44674502553,
+      "url": "https://github.com/farbotkol/butterbox/actions/runs/44674502553"
+    }
+  ],
+  "decisions": [
+    "Use official tokenless Copilot CLI authentication with the Actions GITHUB_TOKEN and copilot-requests: write; make no authentication success claim until the exact job smoke passes.",
+    "Repair only same-repository open Development PRs whose failed Verify job stopped at npm test, with current-head validation and no force update.",
+    "Require current verify and database-smoke results for Phase 2 and new evidence; retain legacy database evidence only for historical runs without the smoke check.",
+    "Keep PR #286 draft and the parent issue open; do not alter branch protection or initiate production, database, external integration, or deployment work."
+  ],
+  "reruns": [],
+  "limitations": [
+    "The live Development ruleset approval and conversation-resolution settings were not available from the GitHub read surfaces used here.",
+    "The current implementation-head Verify and database-smoke runs had not completed at the time of this evidence snapshot.",
+    "No current auth smoke, controlled test repair, bot repair commit, or final auto-merge eligibility result is claimed."
+  ],
+  "blockers": [
+    "The initial Verify run failed because the PR body lacked the attempt-specific evidence marker; add the paired evidence marker and rerun before fault injection.",
+    "Authentication and unattended test repair remain unproven in the current task; run the controlled assertion failure only after the PR evidence gate passes.",
+    "Post final per-run links, the failure explanation, and the next action on issues #285 and #282."
+  ],
+  "recommendation": "partial",
+  "markdownPath": "docs/agent-work/issues/issue-285/pr-286/attempt-01.md",
+  "markdownSha256": "5d1903d426973ceb708f633761ff91f65056b438131ecbd5d3bc33b6bc9a55ef",
+  "auditUrl": "https://github.com/farbotkol/butterbox"
+}

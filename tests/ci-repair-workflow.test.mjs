@@ -11,9 +11,14 @@ test('repair authentication smoke is same-repository and non-destructive', async
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
   assert.match(workflow, /attempt == '1'/);
   assert.match(workflow, /contents: write[\s\S]*pull-requests: read[\s\S]*actions: write[\s\S]*copilot-requests: write/);
+  assert.match(workflow, /\.head\.repo\.full_name == \$repo/);
+  assert.match(workflow, /\.base\.ref == "copilot\/Development"/);
+  assert.match(workflow, /\.head\.ref \| startswith\("copilot\/"\)/);
   assert.match(workflow, /Do not use any tools/);
   assert.match(workflow, /--deny-tool=write --deny-tool=shell --deny-tool=url/);
   assert.match(workflow, /no response or credentials were logged/);
+  assert.match(workflow, /sanitized CLI diagnostic follows/);
+  assert.match(workflow, /group: copilot-ci-test-repair-development[\s\S]*cancel-in-progress: false/);
   assert.ok(workflow.indexOf('Non-destructive built-in-token authentication smoke test') <
     workflow.indexOf('Ask Copilot to repair failing Node test files'));
 });
