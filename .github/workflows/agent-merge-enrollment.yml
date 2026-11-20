@@ -1,11 +1,7 @@
 name: Copilot CLI CI repair (personal-account compatible)
 
-# On personal accounts, a fine-grained user PAT with only the Copilot Requests
-# permission may be stored in Actions as COPILOT_GITHUB_TOKEN. The CLI prefers
-# that variable, while GitHub API calls keep using the scoped Actions token.
-# If no secret is configured, CLI falls back to GITHUB_TOKEN and the live smoke
-# test determines whether the built-in token is supported for this repository.
-# Never log the secret or make the user token available to repository scripts.
+# GitHub bills built-in-token Copilot CLI requests to the personal repository
+# owner's Copilot seat. Verify entitlement with a tool-free model request.
 on:
   pull_request:
     paths:
@@ -17,13 +13,15 @@ on:
   # Verify explicitly dispatches us again when a repaired test still fails.
   workflow_dispatch:
     inputs:
+      smoke_only:
+        description: "Test built-in Copilot authentication without repairing a PR"
+        type: boolean
+        default: false
       verify_run_id:
-        description: "Failed Verify run ID to authenticate and inspect"
-        required: true
+        description: "Failed Verify run ID (required for repair)"
         type: string
       head_sha:
-        description: "Failed Verify commit SHA"
-        required: true
+        description: "Failed Verify commit SHA (required for repair)"
         type: string
 
 permissions:
@@ -51,6 +49,7 @@ jobs:
     steps:
       - name: Select eligible, latest failing Development PR
         id: guard
+        if: inputs.smoke_only != true
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -172,35 +171,24 @@ jobs:
           echo "sha=$RUN_SHA" >> "$GITHUB_OUTPUT"
           echo "branch=$(jq -r '.head.ref' <<< "$pr")" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout exact PR commit without persisted credentials
-        if: steps.guard.outputs.eligible == 'true'
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.guard.outputs.sha }}
-          persist-credentials: false
-
-      - name: Collect failed GitHub Actions logs (no PR scripts run)
-        if: steps.guard.outputs.eligible == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id || github.event.workflow_run.id }}
-        run: gh run view "$RUN_ID" --log-failed > .agent-failed-ci.log
-
       - name: Install Copilot CLI
-        if: steps.guard.outputs.eligible == 'true'
+        if: inputs.smoke_only == true || steps.guard.outputs.eligible == 'true'
+        working-directory: ${{ runner.temp }}
         run: npm install --global @github/copilot
 
       - name: Non-destructive Copilot authentication smoke test
-        if: steps.guard.outputs.eligible == 'true' && steps.guard.outputs.attempt == '1'
+        if: inputs.smoke_only == true || steps.guard.outputs.attempt == '1'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          output="$RUNNER_TEMP/copilot-auth-smoke.txt"
-          error="$RUNNER_TEMP/copilot-auth-smoke.err"
+          smoke_dir="$(mktemp -d "$RUNNER_TEMP/copilot-auth-smoke.XXXXXX")"
+          trap 'rm -rf -- "$smoke_dir"' EXIT
+          cd "$smoke_dir"
+          output="$smoke_dir/response"
+          error="$smoke_dir/diagnostic"
           if copilot -p "Respond with exactly AUTHENTICATED. Do not use any tools." \
-            -s --deny-tool=write --deny-tool=shell --deny-tool=url \
+            -s --no-ask-user --disable-builtin-mcps --deny-tool=read --deny-tool=write --deny-tool=shell --deny-tool=url \
             >"$output" 2>"$error"; then
             :
           else
@@ -218,11 +206,24 @@ jobs:
           fi
           echo "Copilot CLI authentication succeeded with no tools enabled."
 
+      - name: Checkout exact PR commit without persisted credentials
+        if: steps.guard.outputs.eligible == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.guard.outputs.sha }}
+          persist-credentials: false
+
+      - name: Collect failed GitHub Actions logs (no PR scripts run)
+        if: steps.guard.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event_name == 'workflow_dispatch' && inputs.verify_run_id || github.event.workflow_run.id }}
+        run: gh run view "$RUN_ID" --log-failed > .agent-failed-ci.log
+
       - name: Ask Copilot to repair failing Node test files
         if: steps.guard.outputs.eligible == 'true'
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           ATTEMPT: ${{ steps.guard.outputs.attempt }}
           MAX_ATTEMPTS: ${{ steps.guard.outputs.max_attempts }}
         run: |

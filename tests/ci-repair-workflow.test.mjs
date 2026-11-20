@@ -8,20 +8,32 @@ test('repair authentication smoke supports personal accounts and stays non-destr
   const workflow = await readFile(new URL('.github/workflows/agent-merge-enrollment.yml', root), 'utf8');
 
   assert.match(workflow, /GITHUB_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.equal((workflow.match(/COPILOT_GITHUB_TOKEN: \$\{\{ secrets\.COPILOT_GITHUB_TOKEN \}\}/g) || []).length, 2);
+  assert.doesNotMatch(workflow, /secrets\.COPILOT_GITHUB_TOKEN/);
   assert.match(workflow, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.match(workflow, /attempt == '1'/);
+  assert.match(workflow, /smoke_only:\s*description:.*\s*type: boolean\s*default: false/);
+  assert.match(workflow, /id: guard\s*if: inputs\.smoke_only != true/);
+  assert.match(workflow, /if: inputs\.smoke_only == true \|\| steps\.guard\.outputs\.attempt == '1'/);
+  assert.match(workflow, /Invalid failed-run SHA or ID/);
   assert.match(workflow, /contents: write[\s\S]*pull-requests: read[\s\S]*actions: write[\s\S]*copilot-requests: write/);
   assert.match(workflow, /\.head\.repo\.full_name == \$repo/);
   assert.match(workflow, /\.base\.ref == "copilot\/Development"/);
   assert.match(workflow, /\.head\.ref \| startswith\("copilot\/"\)/);
   assert.match(workflow, /Do not use any tools/);
-  assert.match(workflow, /--deny-tool=write --deny-tool=shell --deny-tool=url/);
+  assert.match(workflow, /--disable-builtin-mcps --deny-tool=read --deny-tool=write --deny-tool=shell --deny-tool=url/);
   assert.match(workflow, /no response or credentials were logged/);
   assert.match(workflow, /sanitized CLI diagnostic follows/);
   assert.match(workflow, /group: copilot-ci-test-repair-development[\s\S]*cancel-in-progress: false/);
-  assert.ok(workflow.indexOf('Non-destructive Copilot authentication smoke test') <
-    workflow.indexOf('Ask Copilot to repair failing Node test files'));
+  const smoke = workflow.indexOf('Non-destructive Copilot authentication smoke test');
+  const checkout = workflow.indexOf('Checkout exact PR commit');
+  assert.ok(smoke > 0 && smoke < checkout);
+  for (const step of [
+    'Checkout exact PR commit without persisted credentials',
+    'Collect failed GitHub Actions logs (no PR scripts run)',
+    'Ask Copilot to repair failing Node test files',
+    'Validate all edited Node test files and push one atomic repair',
+  ]) {
+    assert.ok(workflow.includes(`- name: ${step}\n        if: steps.guard.outputs.eligible == 'true'`));
+  }
 });
 
 test('repair is limited to failed Node tests, bounded attempts, and a 12-hour window', async () => {
