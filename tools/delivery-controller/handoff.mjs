@@ -20,6 +20,6 @@ export function assessHandoff({lease,tasks,prs,issue,openPRs}={}) {
  if(merged.length!==1)return blocked('No unique merged PR with canonical issue/evidence markers');
  // Cross-check the actual PR artifact if supplied by the agent API.
  const artifacts=(task.artifacts??[]).filter(x=>x.type==='pull').map(x=>Number(x.data?.id)).filter(Number.isSafeInteger);
- if(!artifacts.includes(merged[0].number))return blocked('Merged PR does not match confirmed Copilot task artifact');
+ if(!artifacts.includes(merged[0].number) && !artifacts.includes(merged[0].id))return blocked('Merged PR does not match confirmed Copilot task artifact');
  return {action:'RELEASE_VERIFIED',taskId:task.id,pr:merged[0].number,mergeSha:merged[0].merge_commit_sha};
 }
