@@ -61,7 +61,7 @@ const [prs,allIssues,agentTasks,ref]=await Promise.all([
  paged('/pulls?state=open&base=copilot%2FDevelopment'),
  paged('/issues?state=open'),
  tasksApi.list(),
- gh('/git/ref/heads/copilot%2FDevelopment')
+ gh('/git/ref/heads/copilot/Development')
 ]);
 const issues=allIssues.filter(i=>!i.pull_request);
 const selection=selectReadyIssue({issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}});
