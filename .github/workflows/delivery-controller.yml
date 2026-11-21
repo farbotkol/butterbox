@@ -13,6 +13,7 @@ on:
       - tests/delivery-controller-actions.test.mjs
       - tests/delivery-controller-dependencies.test.mjs
       - tests/delivery-controller-lease.test.mjs
+      - tests/delivery-controller-live-gate.test.mjs
 
 permissions:
   contents: read
@@ -29,7 +30,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - run: node --test tests/delivery-controller-actions.test.mjs tests/delivery-controller-dependencies.test.mjs tests/delivery-controller-lease.test.mjs
+      - run: node --test tests/delivery-controller-actions.test.mjs tests/delivery-controller-dependencies.test.mjs tests/delivery-controller-lease.test.mjs tests/delivery-controller-live-gate.test.mjs
 
   act:
     if: github.event_name != 'pull_request'
@@ -66,9 +67,14 @@ jobs:
           else
             jq '{pullRequests: .}' "$RUNNER_TEMP/open-prs.json" > "$RUNNER_TEMP/snapshot.json"
           fi
+      - name: Read live exclusive lease (read-only; fail closed)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node tools/delivery-controller/observe-lease.mjs "$RUNNER_TEMP/live-lease.json"
       - name: Choose guarded action
         id: decision
-        run: node tools/delivery-controller/run.mjs "$RUNNER_TEMP/snapshot.json"
+        run: node tools/delivery-controller/run.mjs "$RUNNER_TEMP/snapshot.json" "$RUNNER_TEMP/live-lease.json"
       - name: Request existing native merge gate
         if: steps.decision.outputs.action == 'REQUEST_GUARDED_MERGE'
         env:
