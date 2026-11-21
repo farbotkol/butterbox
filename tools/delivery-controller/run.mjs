@@ -2,6 +2,9 @@ import { readFileSync, appendFileSync } from 'node:fs';
 import { decide } from './decide.mjs';
 
 const snapshot = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+const leaseSnapshotPath = process.argv[3];
+if (!leaseSnapshotPath) throw new Error('Live lease snapshot path required; fail closed');
+snapshot.lease = JSON.parse(readFileSync(leaseSnapshotPath, 'utf8'));
 const action = decide(snapshot);
 const allowed = new Set(['REPORT_BLOCKED', 'OBSERVE', 'REQUEST_GUARDED_MERGE']);
 if (!allowed.has(action.action)) throw new Error('Unrecognized controller action');
