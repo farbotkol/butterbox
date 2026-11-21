@@ -4,6 +4,7 @@ import {githubLeaseApi} from './github-lease-api.mjs';
 import {readLease,acquireLease,releaseLease} from './lease.mjs';
 import {selectReadyIssue} from './queue.mjs';
 import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from './agent-tasks-api.mjs';
+import {assessHandoff,taskMarker} from './handoff.mjs';
 const repo=process.env.GITHUB_REPOSITORY;
 const ghToken=process.env.GITHUB_TOKEN;
 const agentToken=process.env.COPILOT_AGENT_USER_TOKEN;
@@ -35,8 +36,25 @@ const tasksApi=agentTasksApi({token:agentToken,repository:repo});
 const current=await readLease(leaseApi);
 if(current){
  const ageHours=(Date.now()-Date.parse(current.startedAt))/3600000;
- report('LEASE_HELD issue #'+current.issue+' run '+current.runId+' age '+ageHours.toFixed(1)+'h. No new dispatch.');
- if(ageHours>=12) report('PARK_REVIEW_REQUIRED: age >= 12 hours; do not release until independent live writer and merge checks prove safe.');
+ report('LEASE_HELD issue #'+current.issue+' run '+current.runId+' age '+ageHours.toFixed(1)+'h. Verifying independently.');
+ const [taskRows,openPrRows,closedPrRows,issueRow]=await Promise.all([
+  tasksApi.list(),paged('/pulls?state=open&base=copilot%2FDevelopment'),
+  paged('/pulls?state=closed&base=copilot%2FDevelopment'),gh('/issues/'+current.issue)
+ ]);
+ // Read each task independently: list responses omit full session prompt information.
+ const taskDetails=await Promise.all(taskRows.map(t=>tasksApi.get(t.id)));
+ const result=assessHandoff({lease:current,tasks:taskDetails,prs:closedPrRows,openPRs:openPrRows,issue:issueRow});
+ if(result.action==='RELEASE_VERIFIED'){
+   // Only the original lease owner may release. Another run cannot impersonate it:
+   // verified GitHub task + issue + PR evidence authorises the recovery operation.
+   // Our lease helper requires matching run ID and an externally verified stopped writer.
+   await releaseLease(leaseApi,{runId:current.runId,confirmedWriterStopped:true});
+   report('LEASE_RELEASED after independently confirmed task '+result.taskId+' PR #'+result.pr+' merge '+result.mergeSha);
+   report('Next eligible issue will be considered on the next scheduled run; not in this run.');
+ }else{
+   report('RETAIN_LEASE: '+result.reason);
+   if(ageHours>=12) report('PARK_REVIEW_REQUIRED: age >= 12 hours; do not steal or release while writer status is uncertain.');
+ }
  process.exit(0);
 }
 const [prs,allIssues,agentTasks,ref]=await Promise.all([
@@ -64,6 +82,7 @@ if(finalPrs.length||activeAgentTasks(finalTasks).length){
 }
 const prompt=[
  'Implement Butterbox GitHub issue #'+issue.number+' only, against copilot/Development.',
+ taskMarker(runId),
  'Issue: '+issue.title,
  'Read its current GitHub issue description and acceptance criteria before coding.',
  'Respect AGENTS.md, existing CI, tenant isolation, evidence contract and squash merge gates.',
