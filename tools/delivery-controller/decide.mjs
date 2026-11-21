@@ -1,6 +1,17 @@
 // A conservative action selector. GitHub state, not model text, controls writes.
 // This first slice never dispatches an unverified Copilot coding session.
 export function decide(snapshot) {
+  // Live lease ownership is authoritative. Unknown/malformed state is not free.
+  const lease = snapshot?.lease;
+  if (!lease || !['free', 'held'].includes(lease.state)) {
+    return { action: 'REPORT_BLOCKED', reason: 'Live lease state is unavailable or invalid; fail closed.' };
+  }
+  if (lease.state === 'held') {
+    if (!Number.isSafeInteger(lease.issue) || lease.issue < 1 || !/^[A-Za-z0-9_-]{1,96}$/.test(lease.runId ?? '')) {
+      return { action: 'REPORT_BLOCKED', reason: 'Live lease owner metadata is invalid; fail closed.' };
+    }
+    return { action: 'REPORT_BLOCKED', reason: 'Exclusive implementation lease held by issue #' + lease.issue + ' / run ' + lease.runId + '; do not act concurrently.' };
+  }
   const prs = (snapshot.pullRequests ?? []).filter(
     (p) => p.state === 'open' && p.base?.ref === 'copilot/Development',
   );
