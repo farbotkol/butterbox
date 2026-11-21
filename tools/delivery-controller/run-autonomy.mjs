@@ -75,9 +75,14 @@ const acquired=await acquireLease(leaseApi,{issue:issue.number,runId,baseSha:ref
 if(!acquired.acquired){report('LEASE_CONFLICT: another controller owns '+acquired.holder.runId);process.exit(0);}
 report('LEASE_ACQUIRED for #'+issue.number+' by '+runId+'. Dispatch will retain lease on ambiguity.');
 // Recheck after acquiring atomically. Never dispatch while a competing PR or task exists.
-const [finalPrs,finalTasks]=await Promise.all([paged('/pulls?state=open&base=copilot%2FDevelopment'),tasksApi.list()]);
-if(finalPrs.length||activeAgentTasks(finalTasks).length){
- report('POST_LEASE_BLOCK: PR/task appeared after initial snapshot. Lease retained for safe manual reconciliation.');
+const [finalPrs,finalTasks,finalIssue,finalRef]=await Promise.all([
+ paged('/pulls?state=open&base=copilot%2FDevelopment'),tasksApi.list(),
+ gh('/issues/'+issue.number),gh('/git/ref/heads/copilot/Development')
+]);
+const finalSelection=selectReadyIssue({issues:[finalIssue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
+if(finalSelection.action!=='SELECT_NEXT_READY'||finalSelection.issue!==issue.number||
+   finalRef?.object?.sha!==ref.object.sha){
+ report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Lease retained for safe manual reconciliation.');
  process.exit(0);
 }
 const prompt=[
