@@ -63,3 +63,40 @@ export async function releaseLease(api, {runId, expectedTagSha, confirmedWriterS
   await api.deleteRef(LEASE_REF);
   return {released:true,issue:current.issue};
 }
+
+const parkingRef = issue => 'refs/tags/butterbox-controller-parked-' + issue;
+
+export async function isParked(api, issue) {
+  if (!validIssue(issue)) throw new Error('Invalid parked issue identifier');
+  try {
+    const ref = await api.getRef(parkingRef(issue));
+    if (ref?.object?.type !== 'tag' || !validSha(ref.object.sha)) {
+      throw new Error('Unrecognized parking ref; fail closed');
+    }
+    return true;
+  } catch (error) {
+    if (error.status === 404) return false;
+    throw error;
+  }
+}
+
+export async function recordParking(api, lease, evidence) {
+  const current = await readLease(api);
+  if (!current || current.tagSha !== lease.tagSha || current.runId !== lease.runId ||
+      evidence.action !== 'PARK_VERIFIED') throw new Error('Parking requires the unchanged lease and stopped-writer evidence');
+  const tagName = parkingRef(current.issue).slice('refs/tags/'.length);
+  const tag = await api.createTag({
+    tag:tagName,
+    message:JSON.stringify({version:1, issue:current.issue, runId:current.runId, startedAt:current.startedAt,
+      taskId:evidence.taskId, taskUrl:evidence.taskUrl, blocker:evidence.taskState, sessionCount:evidence.sessionCount,
+      action:evidence.action}),
+    object:current.baseSha, type:'commit'
+  });
+  if (!validSha(tag?.sha)) throw new Error('Invalid parking tag SHA');
+  try {
+    await api.createRef({ref:parkingRef(current.issue),sha:tag.sha});
+  } catch (error) {
+    // A restarted run can proceed once the durable quarantine still exists.
+    if (![409, 422].includes(error.status) || !await isParked(api, current.issue)) throw error;
+  }
+}

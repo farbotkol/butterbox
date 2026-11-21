@@ -27,3 +27,15 @@ test('handoff rejects a marker prefix collision or an incomplete session list',(
   assert.equal(assessHandoff(good({tasks:[candidate]})).action,'RETAIN_LEASE');
  }
 });
+
+test('12-hour parking requires fully stopped sessions, an open issue and no PR artifact',()=>{
+ const startedAt='2026-11-21T00:00:00Z';
+ const now=Date.parse('2026-11-21T12:00:00Z');
+ const failed={...task,state:'failed',artifacts:[],sessions:[{...task.sessions[0],state:'failed'}]};
+ const snapshot=good({lease:{...lease,startedAt},tasks:[failed],issue:{number:301,state:'open'},now});
+ assert.equal(assessHandoff(snapshot).action,'PARK_VERIFIED');
+ assert.equal(assessHandoff({...snapshot,now:now-1}).action,'RETAIN_LEASE');
+ assert.equal(assessHandoff({...snapshot,tasks:[{...failed,artifacts:task.artifacts}]}).action,'RETAIN_LEASE');
+ assert.equal(assessHandoff({...snapshot,tasks:[failed,{state:'waiting_for_user',sessions:[]}]}).action,'RETAIN_LEASE');
+ assert.equal(assessHandoff({...snapshot,openPRs:[{state:'open',base:{ref:'copilot/Development'}}]}).action,'RETAIN_LEASE');
+});

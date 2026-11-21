@@ -1,7 +1,7 @@
 // Cloud-only autonomous issue dispatcher. No unverified coding session is ever claimed.
 import {appendFileSync} from 'node:fs';
 import {githubLeaseApi} from './github-lease-api.mjs';
-import {readLease,acquireLease,releaseLease} from './lease.mjs';
+import {readLease,acquireLease,releaseLease,isParked,recordParking} from './lease.mjs';
 import {ownerApprovedQueueLabels,selectReadyIssue} from './queue.mjs';
 import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from './agent-tasks-api.mjs';
 import {assessHandoff,taskMarker} from './handoff.mjs';
@@ -45,7 +45,12 @@ if(current){
  // Read each task independently: list responses omit full session prompt information.
  const taskDetails=await Promise.all(taskRows.map(t=>tasksApi.get(t.id)));
  const result=assessHandoff({lease:current,tasks:taskDetails,prs:closedPrRows,openPRs:openPrRows,issue:issueRow});
- if(result.action==='RELEASE_VERIFIED'){
+ if(result.action==='PARK_VERIFIED'){
+   await recordParking(leaseApi,current,result);
+   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
+   report('PARKED issue #'+current.issue+' after task '+result.taskId+' ended '+result.taskState+
+    '; the next run can select another issue.');
+ }else if(result.action==='RELEASE_VERIFIED'){
    // Only the original lease owner may release. Another run cannot impersonate it:
    // verified GitHub task + issue + PR evidence authorises the recovery operation.
    // Our lease helper requires matching run ID and an externally verified stopped writer.
@@ -75,7 +80,12 @@ async function readApprovedIssue(number) {
    dependencies.every(dependency=>dependency.state==='closed'&&dependency.state_reason==='completed');
  return {issue,approved};
 }
-const selection=selectReadyIssue({issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}});
+const queue={issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}};
+let selection=selectReadyIssue(queue);
+while(selection.action==='SELECT_NEXT_READY'&&await isParked(leaseApi,selection.issue)){
+ queue.issues=queue.issues.filter(candidate=>candidate.number!==selection.issue);
+ selection=selectReadyIssue(queue);
+}
 if(selection.action!=='SELECT_NEXT_READY'){report(selection.action+': '+selection.reason);process.exit(0);}
 if(ref?.object?.type!=='commit'||!/^[a-f0-9]{40}$/.test(ref.object.sha))throw new Error('Current Development SHA invalid');
 const {issue,approved}=await readApprovedIssue(selection.issue);
@@ -92,7 +102,7 @@ const [finalPrs,finalTasks,approval,finalRef]=await Promise.all([
 ]);
 const finalSelection=selectReadyIssue({issues:[approval.issue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
 if(finalSelection.action!=='SELECT_NEXT_READY'||finalSelection.issue!==issue.number||
-   !approval.approved||approval.issue.updated_at!==issue.updated_at||
+   await isParked(leaseApi,issue.number)||!approval.approved||approval.issue.updated_at!==issue.updated_at||
    finalRef?.object?.type!=='commit'||finalRef?.object?.sha!==ref.object.sha){
  await releaseLease(leaseApi,{runId,expectedTagSha:acquired.tagSha,confirmedWriterStopped:true});
  report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Released unused lease before task creation.');
