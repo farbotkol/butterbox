@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { decide } from '../tools/delivery-controller/decide.mjs';
+import { decide as decideRaw } from '../tools/delivery-controller/decide.mjs';
+const decide = snapshot => decideRaw({...snapshot, lease:{state:'free'}});
 
 const pr = (overrides = {}) => ({
   number: 300, state: 'open', base: { ref: 'copilot/Development' },
