@@ -1,0 +1,95 @@
+name: Controller live lease contention proof
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/controller-live-lease-proof.yml
+
+permissions:
+  contents: write
+
+jobs:
+  contender:
+    name: contender-${{ matrix.side }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        side: [one, two]
+    outputs:
+      unused: ${{ steps.attempt.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Acquire same disposable live GitHub ref
+        id: attempt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          BASE_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_ID: ${{ github.run_id }}
+          SIDE: ${{ matrix.side }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {acquireLease,readLease,LEASE_REF} from './tools/delivery-controller/lease.mjs';
+          import {githubLeaseApi} from './tools/delivery-controller/github-lease-api.mjs';
+          import fs from 'node:fs';
+          const ref='refs/tags/butterbox-live-lease-proof-'+process.env.RUN_ID;
+          const raw=githubLeaseApi({token:process.env.GH_TOKEN,repository:process.env.REPO});
+          const api={
+            ...raw,
+            createRef:data=>raw.createRef({...data,ref}),
+            getRef:()=>raw.getRef(ref),
+            deleteRef:()=>raw.deleteRef(ref),
+          };
+          const runId='proof_'+process.env.RUN_ID+'_'+process.env.SIDE;
+          const result=await acquireLease(api,{issue:290,runId,baseSha:process.env.BASE_SHA});
+          const holder=await readLease(api);
+          if(!holder || !['proof_'+process.env.RUN_ID+'_one','proof_'+process.env.RUN_ID+'_two'].includes(holder.runId)) throw new Error('Unexpected lease owner');
+          const outcome=result.acquired?'ACQUIRED':'CONFLICT';
+          console.log(JSON.stringify({outcome,runId,holder:holder.runId,tagSha:holder.tagSha,ref}));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'### '+process.env.SIDE+': '+outcome+'\n\nHolder: '+holder.runId+'\n\nRef: '+ref+'\n\nTag SHA: '+holder.tagSha+'\n');
+          fs.appendFileSync(process.env.GITHUB_OUTPUT,'result='+outcome+'\n');
+          NODE
+
+  verify-and-clean:
+    name: verify durable exclusive owner and safe cleanup
+    needs: contender
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Independently read and release owned probe ref
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
+          CONTENDER_RESULT: ${{ needs.contender.result }}
+        run: |
+          node --input-type=module <<'NODE'
+          import {readLease,releaseLease} from './tools/delivery-controller/lease.mjs';
+          import {githubLeaseApi} from './tools/delivery-controller/github-lease-api.mjs';
+          import fs from 'node:fs';
+          const ref='refs/tags/butterbox-live-lease-proof-'+process.env.RUN_ID;
+          const raw=githubLeaseApi({token:process.env.GH_TOKEN,repository:process.env.REPO});
+          const api={...raw,createRef:data=>raw.createRef({...data,ref}),getRef:()=>raw.getRef(ref),deleteRef:()=>raw.deleteRef(ref)};
+          if(process.env.CONTENDER_RESULT!=='success') throw new Error('Both contenders did not complete successfully; preserve uncertain ref');
+          const holder=await readLease(api);
+          if(!holder) throw new Error('Live lease missing: no persistence');
+          if(!['proof_'+process.env.RUN_ID+'_one','proof_'+process.env.RUN_ID+'_two'].includes(holder.runId)) throw new Error('Unexpected owner; refuse release');
+          const forbidden=holder.runId.endsWith('_one')?'proof_'+process.env.RUN_ID+'_two':'proof_'+process.env.RUN_ID+'_one';
+          let rejected=false;
+          try {await releaseLease(api,{runId:forbidden,confirmedWriterStopped:true});} catch(e) {rejected=/another/.test(e.message);}
+          if(!rejected) throw new Error('Non-owner release was not rejected');
+          if((await readLease(api)).tagSha!==holder.tagSha) throw new Error('Lease changed while reading');
+          // Matrix job has fully completed. This is the independent writer-inactivity gate.
+          const released=await releaseLease(api,{runId:holder.runId,confirmedWriterStopped:true});
+          if(!released.released || await readLease(api)) throw new Error('Cleanup not verified');
+          console.log(JSON.stringify({persistent:true,owner:holder.runId,tagSha:holder.tagSha,nonOwnerReleaseRejected:true,cleaned:true}));
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,'### Live proof verified\n\nBoth contenders completed; a single durable owner existed: '+holder.runId+' (tag '+holder.tagSha+'). Non-owner release rejected. Owner release completed and temporary ref removed.\n');
+          NODE
