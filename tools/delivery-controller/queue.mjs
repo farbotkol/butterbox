@@ -23,7 +23,7 @@ export function selectReadyIssue({issues, prs, activeTasks, lease, snapshotCompl
     if(nonStories.test(i.title??'')) return false;
     if(blockedTerms.test((i.title??'')+' '+(i.body??'').slice(0,2000))) return false;
     if(!/## Acceptance criteria/i.test(i.body??'')) return false;
-    if(/\b#268\b|\b#270\b/.test((i.title??'')+' '+(i.body??''))) return false;
+    if(/#(?:268|270)\b/.test((i.title??'')+' '+(i.body??''))) return false;
     // Dependencies must be resolved externally; only explicitly dependency-free stories can be dispatched.
     if(!tags.has('dependencies-cleared')) return false;
     return true;
