@@ -2,15 +2,16 @@
 import {appendFileSync} from 'node:fs';
 import {githubLeaseApi} from './github-lease-api.mjs';
 import {readLease,acquireLease,releaseLease} from './lease.mjs';
-import {selectReadyIssue} from './queue.mjs';
+import {ownerApprovedQueueLabels,selectReadyIssue} from './queue.mjs';
 import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from './agent-tasks-api.mjs';
 import {assessHandoff,taskMarker} from './handoff.mjs';
 const repo=process.env.GITHUB_REPOSITORY;
 const ghToken=process.env.GITHUB_TOKEN;
 const agentToken=process.env.COPILOT_AGENT_USER_TOKEN;
-const runId='actions_'+process.env.GITHUB_RUN_ID;
+const runId='actions_'+process.env.GITHUB_RUN_ID+'_'+process.env.GITHUB_RUN_ATTEMPT;
 const summary=process.env.GITHUB_STEP_SUMMARY;
 const report=message=>{console.log(message);if(summary)appendFileSync(summary,message+'\n');};
+if(!/^actions_[1-9][0-9]*_[1-9][0-9]*$/.test(runId))throw new Error('Missing Actions run identity');
 if(repo!=='farbotkol/butterbox'||process.env.GITHUB_REF!=='refs/heads/copilot/Development')throw new Error('Autonomy restricted to Butterbox Development');
 if(!ghToken)throw new Error('Missing actions repository token');
 if(!agentToken){report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is not configured; no task started.');process.exit(0);}
@@ -48,7 +49,7 @@ if(current){
    // Only the original lease owner may release. Another run cannot impersonate it:
    // verified GitHub task + issue + PR evidence authorises the recovery operation.
    // Our lease helper requires matching run ID and an externally verified stopped writer.
-   await releaseLease(leaseApi,{runId:current.runId,confirmedWriterStopped:true});
+   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
    report('LEASE_RELEASED after independently confirmed task '+result.taskId+' PR #'+result.pr+' merge '+result.mergeSha);
    report('Next eligible issue will be considered on the next scheduled run; not in this run.');
  }else{
@@ -64,31 +65,42 @@ const [prs,allIssues,agentTasks,ref]=await Promise.all([
  gh('/git/ref/heads/copilot/Development')
 ]);
 const issues=allIssues.filter(i=>!i.pull_request);
+const ownerId=11307166; // Repository owner account ID is stable across login changes.
+async function readApprovedIssue(number) {
+ const [issue,events,dependencies]=await Promise.all([
+  gh('/issues/'+number),paged('/issues/'+number+'/events'),
+  paged('/issues/'+number+'/dependencies/blocked_by')
+ ]);
+ const approved=ownerApprovedQueueLabels(events,ownerId) &&
+   dependencies.every(dependency=>dependency.state==='closed'&&dependency.state_reason==='completed');
+ return {issue,approved};
+}
 const selection=selectReadyIssue({issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}});
 if(selection.action!=='SELECT_NEXT_READY'){report(selection.action+': '+selection.reason);process.exit(0);}
 if(ref?.object?.type!=='commit'||!/^[a-f0-9]{40}$/.test(ref.object.sha))throw new Error('Current Development SHA invalid');
-const issue=await gh('/issues/'+selection.issue);
-if(issue.state!=='open'||issue.title!==selection.title)throw new Error('Issue changed since candidate selection');
+const {issue,approved}=await readApprovedIssue(selection.issue);
+if(!approved||issue.state!=='open'||issue.title!==selection.title)throw new Error('Issue changed since candidate selection');
 const recheck=selectReadyIssue({issues:[issue],prs:await paged('/pulls?state=open&base=copilot%2FDevelopment'),activeTasks:activeAgentTasks(await tasksApi.list()),lease:{state:'free'}});
 if(recheck.action!=='SELECT_NEXT_READY'||recheck.issue!==issue.number)throw new Error('Candidate changed while checking; fail closed');
 const acquired=await acquireLease(leaseApi,{issue:issue.number,runId,baseSha:ref.object.sha});
 if(!acquired.acquired){report('LEASE_CONFLICT: another controller owns '+acquired.holder.runId);process.exit(0);}
 report('LEASE_ACQUIRED for #'+issue.number+' by '+runId+'. Dispatch will retain lease on ambiguity.');
 // Recheck after acquiring atomically. Never dispatch while a competing PR or task exists.
-const [finalPrs,finalTasks,finalIssue,finalRef]=await Promise.all([
+const [finalPrs,finalTasks,approval,finalRef]=await Promise.all([
  paged('/pulls?state=open&base=copilot%2FDevelopment'),tasksApi.list(),
- gh('/issues/'+issue.number),gh('/git/ref/heads/copilot/Development')
+ readApprovedIssue(issue.number),gh('/git/ref/heads/copilot/Development')
 ]);
-const finalSelection=selectReadyIssue({issues:[finalIssue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
+const finalSelection=selectReadyIssue({issues:[approval.issue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
 if(finalSelection.action!=='SELECT_NEXT_READY'||finalSelection.issue!==issue.number||
-   finalRef?.object?.sha!==ref.object.sha){
- report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Lease retained for safe manual reconciliation.');
+   !approval.approved||approval.issue.updated_at!==issue.updated_at||
+   finalRef?.object?.type!=='commit'||finalRef?.object?.sha!==ref.object.sha){
+ await releaseLease(leaseApi,{runId,expectedTagSha:acquired.tagSha,confirmedWriterStopped:true});
+ report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Released unused lease before task creation.');
  process.exit(0);
 }
 const prompt=[
  'Implement Butterbox GitHub issue #'+issue.number+' only, against copilot/Development.',
  taskMarker(runId),
- 'Issue: '+issue.title,
  'Read its current GitHub issue description and acceptance criteria before coding.',
  'Respect AGENTS.md, existing CI, tenant isolation, evidence contract and squash merge gates.',
  'Open a DRAFT PR with Refs #'+issue.number+' and canonical issue/evidence markers.',

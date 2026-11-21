@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {selectReadyIssue} from '../tools/delivery-controller/queue.mjs';
+import {ownerApprovedQueueLabels,selectReadyIssue} from '../tools/delivery-controller/queue.mjs';
 import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from '../tools/delivery-controller/agent-tasks-api.mjs';
 const story=(number,overrides={})=>({number,title:'[BB-DEMO-TEST] Ready story '+number,state:'open',labels:[{name:'autonomy-ready'},{name:'p0'},{name:'dependencies-cleared'}],body:'## Acceptance criteria\n- [ ] verified implementation tests',...overrides});
 const input=(overrides={})=>({issues:[story(301),story(302)],prs:[],activeTasks:[],lease:{state:'free'},...overrides});
@@ -33,4 +33,18 @@ test('task API posts only to documented endpoint and verifies a real GET',async(
 test('missing task confirmation or ambiguous state fails closed',()=>{
  assert.throws(()=>verifyCreatedTask({id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890'},{}));
  assert.deepEqual(activeAgentTasks([{state:'completed'},{state:'in_progress'},{state:'waiting_for_user'}]).length,2);
+});
+
+test('direct Xero issue numbers and already assigned issues stay out of the queue',()=>{
+ const issues=[story(268),story(270),story(301,{assignees:[{login:'another-writer'}]})];
+ assert.equal(selectReadyIssue(input({issues})).action,'REPORT_BLOCKED');
+});
+
+test('approval requires the owner to apply each current queue label',()=>{
+ const events=['autonomy-ready','p0','dependencies-cleared'].map(name=>({
+  event:'labeled',label:{name},actor:{id:11307166}
+ }));
+ assert.equal(ownerApprovedQueueLabels(events,11307166),true);
+ assert.equal(ownerApprovedQueueLabels([...events,{...events[0],actor:{id:2}}],11307166),false);
+ assert.equal(ownerApprovedQueueLabels([...events,{...events[0],event:'unlabeled'}],11307166),false);
 });

@@ -3,7 +3,7 @@ import {test} from 'node:test';
 import {assessHandoff,taskMarker} from '../tools/delivery-controller/handoff.mjs';
 const lease={runId:'actions_123',issue:301};
 const pr={number:401,base:{ref:'copilot/Development'},merged_at:'2026-11-22T00:00:00Z',merge_commit_sha:'a'.repeat(40),body:'Refs #301\n<!-- butterbox-issue: 301 -->\n<!-- butterbox-evidence: docs/agent-work/issues/issue-301/pr-401/attempt-01.evidence.json -->'};
-const task={id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890',state:'completed',artifacts:[{type:'pull',data:{id:401}}],sessions:[{state:'completed',prompt:'Work '+taskMarker(lease.runId)}]};
+const task={id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890',state:'completed',session_count:1,artifacts:[{provider:'github',type:'pull',data:{id:401}}],sessions:[{state:'completed',task_id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890',base_ref:'copilot/Development',prompt:'Work\n'+taskMarker(lease.runId)}]};
 const good=(overrides={})=>({lease,tasks:[task],prs:[pr],openPRs:[],issue:{number:301,state:'closed'},...overrides});
 test('confirmed completed session, merged canonical PR and closed issue releases lease',()=>assert.equal(assessHandoff(good()).action,'RELEASE_VERIFIED'));
 test('queued/active task and ambiguous task evidence retain lock',()=>{
@@ -19,4 +19,11 @@ test('not reconciled issue, noncanonical or unlinked PR retains lock',()=>{
 test('another active PR and incomplete API view retain lock',()=>{
  assert.equal(assessHandoff(good({openPRs:[{state:'open',base:{ref:'copilot/Development'}}]})).action,'RETAIN_LEASE');
  assert.equal(assessHandoff(good({openPRs:null})).action,'RETAIN_LEASE');
+});
+
+test('handoff rejects a marker prefix collision or an incomplete session list',()=>{
+ const wrongRun={...task,sessions:[{...task.sessions[0],prompt:taskMarker(lease.runId+'4')}]};
+ for(const candidate of [wrongRun,{...task,session_count:2}]) {
+  assert.equal(assessHandoff(good({tasks:[candidate]})).action,'RETAIN_LEASE');
+ }
 });

@@ -51,12 +51,13 @@ export async function acquireLease(api, {issue, runId, baseSha, startedAt = new 
   }
 }
 
-export async function releaseLease(api, {runId, confirmedWriterStopped = false}) {
+export async function releaseLease(api, {runId, expectedTagSha, confirmedWriterStopped = false}) {
   if (!validRun(runId)) throw new Error('Invalid releasing owner');
   if (confirmedWriterStopped !== true) throw new Error('Writer liveness not verified; retain lease');
   const current = await readLease(api);
   if (!current) throw new Error('Lease missing; ownership cannot be proven');
   if (current.runId !== runId) throw new Error('Lease owned by another controller run');
+  if (expectedTagSha !== undefined && current.tagSha !== expectedTagSha) throw new Error('Lease ref changed; retain lease');
   // Only the single owner may release, after external writer/session checks.
   // This function must not be called by untrusted issue text or on a timer.
   await api.deleteRef(LEASE_REF);
