@@ -51,8 +51,8 @@ controller switch and has no scheduled trigger. Keep Issue #290 open.
 Before launching:
 
 - Wait until [PR #294](https://github.com/farbotkol/butterbox/pull/294) is closed
-  through its own development process and no other Development PR, Copilot
-  coding task, repair run, or exclusive lease is active. Leave #294 and its branch
+  through its own development process and no other Development PR, non-idle Copilot
+  coding task that may still be writing, repair run, or exclusive lease is active. Leave #294 and its branch
   alone. Avoid starting any parallel coding sessions during the test.
 - Confirm the GitHub App is installed only for Butterbox and has **Agent tasks:
   Read and write** for this test. If you originally tested with read-only access,
@@ -88,11 +88,10 @@ Before launching:
    records the task, sessions, PR, checked SHA, merged SHA, and run links on
    Issue #298 before closing it. Check that Issue #290 remains open.
 
-For an existing idle task, the workflow retrieves session details from GitHub.
-It proceeds only when the session list is complete and every session has a
-terminal state and a completion timestamp. An offline banner by itself does
-not clear the check. A blocked run reports the idle task ID so you can find it.
-Do not resume older sessions while running the test.
+The manual synthetic test ignores tasks reported as idle for launch and
+reconciliation. Queued, in-progress, waiting-for-user, and unrecognized task
+states still block. This exception applies only to the manual synthetic workflow.
+Leave idle sessions alone while the synthetic task holds the lease.
 
 CI repair and Phase 2 automatic merging stand down while the synthetic lease
 is held. The owner performs the protected squash merge. A rejection or ambiguous

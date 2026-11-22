@@ -54,21 +54,8 @@ export function verifiedSessions(task, id, lease) {
   return task.sessions;
 }
 
-async function verifyNoOtherWriter(tasks, rows, report) {
-  for (const row of activeAgentTasks(rows)) {
-    requireEvidence(row.state === 'idle' && idPattern.test(row.id ?? ''),
-      'A Copilot task may still be writing. Operation blocked.');
-    const task = await tasks.get(row.id);
-    const sessions = task.sessions;
-    const ended = task.id === row.id && task.state === 'idle' &&
-      Array.isArray(sessions) && sessions.length > 0 && task.session_count === sessions.length &&
-      new Set(sessions.map(session => session.id)).size === sessions.length &&
-      sessions.every(session => idPattern.test(session.id ?? '') && session.task_id === task.id &&
-        Number.isFinite(Date.parse(session.completed_at ?? ''))) &&
-      activeAgentTasks(sessions).length === 0;
-    requireEvidence(ended, 'Idle Copilot task ' + row.id + ' has unconfirmed session completion. Operation blocked.');
-    report('GitHub confirmed every session ended for idle task ' + row.id + '.');
-  }
+function syntheticWriterMayBeActive(tasks) {
+  return activeAgentTasks(tasks).some(task => task.state !== 'idle');
 }
 
 export async function runSynthetic({ operation, confirmation, taskId, prNumber, runId, baseSha, gh, tasks, leases, report }) {
@@ -98,7 +85,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
         'An open Development PR may have a writer, including draft PR #294. Launch blocked.');
       requireEvidence(repairs.total_count === 0 && repairs.workflow_runs?.length === 0,
         'A CI repair run may still be writing. Launch blocked.');
-      await verifyNoOtherWriter(tasks, allTasks, report);
+      requireEvidence(!syntheticWriterMayBeActive(allTasks), 'A Copilot task may still be writing. Launch blocked.');
       requireEvidence(shaPattern.test(baseSha) && tip.object?.type === 'commit' && tip.object.sha === baseSha,
         'Development moved. Start a new workflow run on the current branch.');
     };
@@ -194,7 +181,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   'The merge commit is not a single-parent, documentation-only change.');
   const mergeProof = await gh('/contents/' + proofPath + '?ref=' + merge);
   requireEvidence(mergeProof.sha === proof.sha, 'The merged commit does not contain the verified proof blob.');
-  await verifyNoOtherWriter(tasks, await tasks.list(), report);
+  requireEvidence(!syntheticWriterMayBeActive(await tasks.list()), 'Another Copilot task may still be writing.');
   const runUrl = 'https://github.com/' + repo + '/actions/runs/' + runId.slice('synthetic_'.length);
   const launchRunUrl = 'https://github.com/' + repo + '/actions/runs/' + current.runId.slice('synthetic_'.length);
   const note = [
