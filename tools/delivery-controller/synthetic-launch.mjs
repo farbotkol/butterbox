@@ -54,10 +54,6 @@ export function verifiedSessions(task, id, lease) {
   return task.sessions;
 }
 
-function syntheticWriterMayBeActive(tasks) {
-  return activeAgentTasks(tasks).some(task => task.state !== 'idle');
-}
-
 export async function runSynthetic({ operation, confirmation, taskId, prNumber, runId, baseSha, gh, tasks, leases, report }) {
   requireEvidence(['launch', 'verify', 'reconcile'].includes(operation), 'Unknown synthetic operation.');
   const [issue, current, intent] = await Promise.all([
@@ -85,7 +81,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
         'An open Development PR may have a writer, including draft PR #294. Launch blocked.');
       requireEvidence(repairs.total_count === 0 && repairs.workflow_runs?.length === 0,
         'A CI repair run may still be writing. Launch blocked.');
-      requireEvidence(!syntheticWriterMayBeActive(allTasks), 'A Copilot task may still be writing. Launch blocked.');
+      requireEvidence(activeAgentTasks(allTasks).length === 0, 'A Copilot task may still be writing. Launch blocked.');
       requireEvidence(shaPattern.test(baseSha) && tip.object?.type === 'commit' && tip.object.sha === baseSha,
         'Development moved. Start a new workflow run on the current branch.');
     };
@@ -181,7 +177,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   'The merge commit is not a single-parent, documentation-only change.');
   const mergeProof = await gh('/contents/' + proofPath + '?ref=' + merge);
   requireEvidence(mergeProof.sha === proof.sha, 'The merged commit does not contain the verified proof blob.');
-  requireEvidence(!syntheticWriterMayBeActive(await tasks.list()), 'Another Copilot task may still be writing.');
+  requireEvidence(activeAgentTasks(await tasks.list()).length === 0, 'Another Copilot task may still be writing.');
   const runUrl = 'https://github.com/' + repo + '/actions/runs/' + runId.slice('synthetic_'.length);
   const launchRunUrl = 'https://github.com/' + repo + '/actions/runs/' + current.runId.slice('synthetic_'.length);
   const note = [
