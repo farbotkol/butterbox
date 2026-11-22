@@ -1,0 +1,58 @@
+name: Controlled Copilot synthetic test
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation to run
+        type: choice
+        options:
+          - verify
+          - launch
+          - reconcile
+        default: verify
+      task_id:
+        description: Copilot task ID for verify or reconcile
+        type: string
+      pr_number:
+        description: Synthetic PR number for verify or reconcile
+        type: string
+      confirmation:
+        description: Type LAUNCH-298 to authorize the one-time launch
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: read
+  checks: read
+  actions: read
+
+concurrency:
+  group: butterbox-delivery-controller
+  cancel-in-progress: false
+
+jobs:
+  synthetic:
+    if: >-
+      github.repository == 'farbotkol/butterbox' &&
+      github.ref == 'refs/heads/copilot/Development' &&
+      github.actor_id == '11307166' &&
+      github.triggering_actor == 'farbotkol' &&
+      github.run_attempt == '1'
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Run selected synthetic operation
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
+          SYNTHETIC_OPERATION: ${{ inputs.operation }}
+          SYNTHETIC_TASK_ID: ${{ inputs.task_id }}
+          SYNTHETIC_PR_NUMBER: ${{ inputs.pr_number }}
+          SYNTHETIC_CONFIRMATION: ${{ inputs.confirmation }}
+          BUTTERBOX_AUTONOMY_ENABLED: ${{ vars.BUTTERBOX_AUTONOMY_ENABLED }}
+        run: node tools/delivery-controller/synthetic-launch.mjs
