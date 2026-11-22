@@ -8,6 +8,7 @@ const head = 'b'.repeat(40);
 const merge = 'c'.repeat(40);
 const tagSha = 'd'.repeat(40);
 const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const idleId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567892';
 const sessionId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567891';
 const file = 'docs/agent-work/synthetic-copilot-proof.md';
 const repo = 'farbotkol/butterbox';
@@ -20,7 +21,7 @@ function fixture() {
   const seen = { creates: 0, gets: 0, deletes: 0, writes: [], reports: [], preflight: 0 };
   const state = {
     didCreate: false, draftOpen: false, openAfterLease: false, inProgressRepair: false,
-    sessions: true, active: false, errorOnCreate: false, merged: false, badFile: false, badCheck: false,
+    sessions: true, active: false, idleTask: null, errorOnCreate: false, merged: false, badFile: false, badCheck: false,
     issue: {
       number: 298, title: 'Synthetic Copilot launch proof for #290', state: 'open',
       assignees: [], labels: [], body: 'Refs #290.',
@@ -41,7 +42,10 @@ function fixture() {
     async deleteRef(ref) { seen.deletes++; refs.delete(ref); },
   };
   const tasks = {
-    async list() { return state.active ? [{ state: 'in_progress' }] : []; },
+    async list() {
+      if (state.active) return [{ state: 'in_progress' }];
+      return state.idleTask ? [{ id: idleId, state: 'idle' }] : [];
+    },
     async create({ prompt }) {
       seen.creates++;
       assert.match(prompt, /BUTTERBOX_LEASE_RUN=synthetic_123/);
@@ -51,6 +55,7 @@ function fixture() {
       return { id: taskId };
     },
     async get(id) {
+      if (id === idleId) return state.idleTask;
       seen.gets++;
       assert.equal(id, taskId);
       const completed = state.merged ? 'completed' : 'in_progress';
@@ -162,4 +167,32 @@ test('reconcile checks the task, exact PR scope, CI, merge and issue before rele
   assert.equal(seen.writes.length, 1);
   assert.match(seen.writes[0].body, /synthetic-298-reconciled/);
   assert.equal(state.issue.state, 'closed');
+});
+
+test('idle clears only when GitHub independently reports complete terminal session evidence', async () => {
+  const session = {
+    id: sessionId, task_id: idleId, state: 'completed',
+    completed_at: '2026-11-22T00:00:00Z',
+  };
+  const detail = { id: idleId, state: 'idle', session_count: 1, sessions: [session] };
+  const ended = fixture();
+  ended.state.idleTask = detail;
+  await ended.run();
+  assert.equal(ended.seen.creates, 1);
+  assert.equal(ended.seen.reports.filter(line => line.includes('confirmed every session ended')).length, 2);
+
+  for (const incomplete of [
+    { ...detail, sessions: [] },
+    { ...detail, session_count: 2 },
+    { ...detail, sessions: [{ ...session, completed_at: null }] },
+    { ...detail, sessions: [{ ...session, state: 'idle' }] },
+    { ...detail, sessions: [{ ...session, task_id: taskId }] },
+    { ...detail, state: 'in_progress' },
+  ]) {
+    const blocked = fixture();
+    blocked.state.idleTask = incomplete;
+    await assert.rejects(blocked.run(), /unconfirmed session completion/);
+    assert.equal(blocked.seen.creates, 0);
+    assert.equal(blocked.refs.size, 0);
+  }
 });

@@ -88,6 +88,12 @@ Before launching:
    records the task, sessions, PR, checked SHA, merged SHA, and run links on
    Issue #298 before closing it. Check that Issue #290 remains open.
 
+For an existing idle task, the workflow retrieves session details from GitHub.
+It proceeds only when the session list is complete and every session has a
+terminal state and a completion timestamp. An offline banner by itself does
+not clear the check. A blocked run reports the idle task ID so you can find it.
+Do not resume older sessions while running the test.
+
 CI repair and Phase 2 automatic merging stand down while the synthetic lease
 is held. The owner performs the protected squash merge. A rejection or ambiguous
 launch after the one-time intent is recorded deliberately retains the lease and
