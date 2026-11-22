@@ -14,6 +14,8 @@ on:
       - tests/delivery-controller-dependencies.test.mjs
       - tests/delivery-controller-lease.test.mjs
       - tests/delivery-controller-live-gate.test.mjs
+      - tests/delivery-controller-autonomy.test.mjs
+      - tests/delivery-controller-handoff.test.mjs
 
 permissions:
   contents: read
@@ -30,7 +32,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - run: node --test tests/delivery-controller-actions.test.mjs tests/delivery-controller-dependencies.test.mjs tests/delivery-controller-lease.test.mjs tests/delivery-controller-live-gate.test.mjs
+      - run: node --test tests/delivery-controller-actions.test.mjs tests/delivery-controller-dependencies.test.mjs tests/delivery-controller-lease.test.mjs tests/delivery-controller-live-gate.test.mjs tests/delivery-controller-autonomy.test.mjs tests/delivery-controller-handoff.test.mjs
 
   act:
     if: github.event_name != 'pull_request'
@@ -93,3 +95,26 @@ jobs:
           gh workflow run phase2-automerge-development.yml --repo "$REPO" \
             --ref copilot/Development -f pull_number="$PR" -f dry_run=false
           echo "Requested guarded merge evaluation for PR #$PR on $SHA." >> "$GITHUB_STEP_SUMMARY"
+
+  autonomous-dispatch:
+    # Disabled by default. The owner must explicitly enable the repository variable
+    # and supply a user-to-server Copilot token as a GitHub Actions secret.
+    needs: act
+    if: github.event_name != 'pull_request' && needs.act.result == 'success' && vars.BUTTERBOX_AUTONOMY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: copilot/Development
+          persist-credentials: false
+      - name: Select, acquire lease, launch and verify real Copilot task
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
+          BUTTERBOX_AUTONOMY_ENABLED: ${{ vars.BUTTERBOX_AUTONOMY_ENABLED }}
+        run: node tools/delivery-controller/run-autonomy.mjs

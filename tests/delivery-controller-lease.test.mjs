@@ -1,20 +1,19 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {acquireLease,readLease,releaseLease,LEASE_REF} from '../tools/delivery-controller/lease.mjs';
+import {acquireLease,readLease,releaseLease,isParked,recordParking,LEASE_REF} from '../tools/delivery-controller/lease.mjs';
 const sha='a'.repeat(40);
 function fakeApi() {
-  const tags = new Map(); let ref=null; let n=0;
+  const tags = new Map(); const refs=new Map(); let n=0;
   return {
     async createTag(tag) {const id=(++n).toString(16).padStart(40,'0');tags.set(id,tag);return {sha:id};},
     async createRef({ref:requested,sha:tagSha}) {
-      assert.equal(requested,LEASE_REF);
-      if (ref) throw Object.assign(new Error('already exists'),{status:422});
-      ref={object:{type:'tag',sha:tagSha}};return ref;
+      if (refs.has(requested)) throw Object.assign(new Error('already exists'),{status:422});
+      const ref={object:{type:'tag',sha:tagSha}};refs.set(requested,ref);return ref;
     },
-    async getRef() {if (!ref) throw Object.assign(new Error('not found'),{status:404});return ref;},
+    async getRef(requested) {const ref=refs.get(requested);if (!ref) throw Object.assign(new Error('not found'),{status:404});return ref;},
     async getTag(id) {return tags.get(id);},
-    async deleteRef() {ref=null;},
-    tamper(value) {ref=value;}
+    async deleteRef(requested) {refs.delete(requested);},
+    tamper(value) {refs.set(LEASE_REF,value);}
   };
 }
 const args=(runId,issue=300)=>({runId,issue,baseSha:sha,startedAt:'2026-11-21T00:00:00Z'});
@@ -56,4 +55,18 @@ test('invalid issue and SHA never create a lease',async()=>{
  await assert.rejects(acquireLease(api,{...args('owner'),baseSha:'bad'}),/Invalid/);
  await assert.rejects(acquireLease(api,args('owner',0)),/Invalid/);
  assert.equal(await readLease(api),null);
+});
+
+test('parking survives release and replays without overwriting the blocker record',async()=>{
+ const api=fakeApi();
+ const lease=await acquireLease(api,args('owner'));
+ assert.equal(await isParked(api,lease.issue),false);
+ await assert.rejects(recordParking(api,{...lease,tagSha:sha},{action:'PARK_VERIFIED'}),/unchanged/);
+ const evidence={action:'PARK_VERIFIED',taskId:'task-1234',taskState:'failed',sessionCount:1};
+ await recordParking(api,lease,evidence);
+ await recordParking(api,lease,evidence);
+ await releaseLease(api,{runId:lease.runId,expectedTagSha:lease.tagSha,confirmedWriterStopped:true});
+ assert.equal(await isParked(api,lease.issue),true);
+ assert.equal(await isParked(api,lease.issue+1),false);
+ assert.ok((await acquireLease(api,args('next',lease.issue+1))).acquired);
 });

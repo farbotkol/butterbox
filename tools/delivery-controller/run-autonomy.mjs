@@ -1,0 +1,129 @@
+// Cloud-only autonomous issue dispatcher. No unverified coding session is ever claimed.
+import {appendFileSync} from 'node:fs';
+import {githubLeaseApi} from './github-lease-api.mjs';
+import {readLease,acquireLease,releaseLease,isParked,recordParking} from './lease.mjs';
+import {ownerApprovedQueueLabels,selectReadyIssue} from './queue.mjs';
+import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from './agent-tasks-api.mjs';
+import {assessHandoff,taskMarker} from './handoff.mjs';
+const repo=process.env.GITHUB_REPOSITORY;
+const ghToken=process.env.GITHUB_TOKEN;
+const agentToken=process.env.COPILOT_AGENT_USER_TOKEN;
+const runId='actions_'+process.env.GITHUB_RUN_ID+'_'+process.env.GITHUB_RUN_ATTEMPT;
+const summary=process.env.GITHUB_STEP_SUMMARY;
+const report=message=>{console.log(message);if(summary)appendFileSync(summary,message+'\n');};
+if(!/^actions_[1-9][0-9]*_[1-9][0-9]*$/.test(runId))throw new Error('Missing Actions run identity');
+if(repo!=='farbotkol/butterbox'||process.env.GITHUB_REF!=='refs/heads/copilot/Development')throw new Error('Autonomy restricted to Butterbox Development');
+if(!ghToken)throw new Error('Missing actions repository token');
+if(!agentToken){report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is not configured; no task started.');process.exit(0);}
+if(process.env.BUTTERBOX_AUTONOMY_ENABLED!=='true'){report('DISPATCH_DISABLED: owner opt-in switch is not enabled.');process.exit(0);}
+const headers={Accept:'application/vnd.github+json',Authorization:'Bearer '+ghToken,'X-GitHub-Api-Version':'2022-11-28'};
+async function gh(path) {
+ const response=await fetch('https://api.github.com/repos/'+repo+path,{headers});
+ if(!response.ok)throw new Error('GitHub snapshot HTTP '+response.status+' for '+path);
+ return response.json();
+}
+async function paged(path) {
+ const all=[];
+ for(let page=1;page<=10;page++){
+   const rows=await gh(path+(path.includes('?')?'&':'?')+'per_page=100&page='+page);
+   if(!Array.isArray(rows))throw new Error('GitHub paged snapshot not array');
+   all.push(...rows);
+   if(rows.length<100)return all;
+ }
+ throw new Error('GitHub page cap reached; fail closed');
+}
+const leaseApi=githubLeaseApi({token:ghToken,repository:repo});
+const tasksApi=agentTasksApi({token:agentToken,repository:repo});
+const current=await readLease(leaseApi);
+if(current){
+ const ageHours=(Date.now()-Date.parse(current.startedAt))/3600000;
+ report('LEASE_HELD issue #'+current.issue+' run '+current.runId+' age '+ageHours.toFixed(1)+'h. Verifying independently.');
+ const [taskRows,openPrRows,closedPrRows,issueRow]=await Promise.all([
+  tasksApi.list(),paged('/pulls?state=open&base=copilot%2FDevelopment'),
+  paged('/pulls?state=closed&base=copilot%2FDevelopment'),gh('/issues/'+current.issue)
+ ]);
+ // Read each task independently: list responses omit full session prompt information.
+ const taskDetails=await Promise.all(taskRows.map(t=>tasksApi.get(t.id)));
+ const result=assessHandoff({lease:current,tasks:taskDetails,prs:closedPrRows,openPRs:openPrRows,issue:issueRow});
+ if(result.action==='PARK_VERIFIED'){
+   await recordParking(leaseApi,current,result);
+   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
+   report('PARKED issue #'+current.issue+' after task '+result.taskId+' ended '+result.taskState+
+    '; the next run can select another issue.');
+ }else if(result.action==='RELEASE_VERIFIED'){
+   // Only the original lease owner may release. Another run cannot impersonate it:
+   // verified GitHub task + issue + PR evidence authorises the recovery operation.
+   // Our lease helper requires matching run ID and an externally verified stopped writer.
+   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
+   report('LEASE_RELEASED after independently confirmed task '+result.taskId+' PR #'+result.pr+' merge '+result.mergeSha);
+   report('Next eligible issue will be considered on the next scheduled run; not in this run.');
+ }else{
+   report('RETAIN_LEASE: '+result.reason);
+   if(ageHours>=12) report('PARK_REVIEW_REQUIRED: age >= 12 hours; do not steal or release while writer status is uncertain.');
+ }
+ process.exit(0);
+}
+const [prs,allIssues,agentTasks,ref]=await Promise.all([
+ paged('/pulls?state=open&base=copilot%2FDevelopment'),
+ paged('/issues?state=open'),
+ tasksApi.list(),
+ gh('/git/ref/heads/copilot/Development')
+]);
+const issues=allIssues.filter(i=>!i.pull_request);
+const ownerId=11307166; // Repository owner account ID is stable across login changes.
+async function readApprovedIssue(number) {
+ const [issue,events,dependencies]=await Promise.all([
+  gh('/issues/'+number),paged('/issues/'+number+'/events'),
+  paged('/issues/'+number+'/dependencies/blocked_by')
+ ]);
+ const approved=ownerApprovedQueueLabels(events,ownerId) &&
+   dependencies.every(dependency=>dependency.state==='closed'&&dependency.state_reason==='completed');
+ return {issue,approved};
+}
+const queue={issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}};
+let selection=selectReadyIssue(queue);
+while(selection.action==='SELECT_NEXT_READY'&&await isParked(leaseApi,selection.issue)){
+ queue.issues=queue.issues.filter(candidate=>candidate.number!==selection.issue);
+ selection=selectReadyIssue(queue);
+}
+if(selection.action!=='SELECT_NEXT_READY'){report(selection.action+': '+selection.reason);process.exit(0);}
+if(ref?.object?.type!=='commit'||!/^[a-f0-9]{40}$/.test(ref.object.sha))throw new Error('Current Development SHA invalid');
+const {issue,approved}=await readApprovedIssue(selection.issue);
+if(!approved||issue.state!=='open'||issue.title!==selection.title)throw new Error('Issue changed since candidate selection');
+const recheck=selectReadyIssue({issues:[issue],prs:await paged('/pulls?state=open&base=copilot%2FDevelopment'),activeTasks:activeAgentTasks(await tasksApi.list()),lease:{state:'free'}});
+if(recheck.action!=='SELECT_NEXT_READY'||recheck.issue!==issue.number)throw new Error('Candidate changed while checking; fail closed');
+const acquired=await acquireLease(leaseApi,{issue:issue.number,runId,baseSha:ref.object.sha});
+if(!acquired.acquired){report('LEASE_CONFLICT: another controller owns '+acquired.holder.runId);process.exit(0);}
+report('LEASE_ACQUIRED for #'+issue.number+' by '+runId+'. Dispatch will retain lease on ambiguity.');
+// Recheck after acquiring atomically. Never dispatch while a competing PR or task exists.
+const [finalPrs,finalTasks,approval,finalRef]=await Promise.all([
+ paged('/pulls?state=open&base=copilot%2FDevelopment'),tasksApi.list(),
+ readApprovedIssue(issue.number),gh('/git/ref/heads/copilot/Development')
+]);
+const finalSelection=selectReadyIssue({issues:[approval.issue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
+if(finalSelection.action!=='SELECT_NEXT_READY'||finalSelection.issue!==issue.number||
+   await isParked(leaseApi,issue.number)||!approval.approved||approval.issue.updated_at!==issue.updated_at||
+   finalRef?.object?.type!=='commit'||finalRef?.object?.sha!==ref.object.sha){
+ await releaseLease(leaseApi,{runId,expectedTagSha:acquired.tagSha,confirmedWriterStopped:true});
+ report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Released unused lease before task creation.');
+ process.exit(0);
+}
+const prompt=[
+ 'Implement Butterbox GitHub issue #'+issue.number+' only, against copilot/Development.',
+ taskMarker(runId),
+ 'Read its current GitHub issue description and acceptance criteria before coding.',
+ 'Respect AGENTS.md, existing CI, tenant isolation, evidence contract and squash merge gates.',
+ 'Open a DRAFT PR with Refs #'+issue.number+' and canonical issue/evidence markers.',
+ 'Do not access production, perform database writes, change branch rules, or initiate external OAuth.',
+ 'Never begin another issue. This session is the sole authorised coding writer.'
+].join('\n');
+let created;
+try{
+ created=await tasksApi.create({prompt});
+ const confirmed=await tasksApi.get(created.id);
+ const live=verifyCreatedTask(created,confirmed);
+ report('COPILOT_LAUNCHED: issue #'+issue.number+' task '+live.id+' state='+live.state+' '+live.url+' sessionIds='+JSON.stringify(live.sessionIds));
+}catch(error){
+ report('DISPATCH_UNCERTAIN: '+error.message+'; lease deliberately retained. Inspect GitHub agent tasks before any retry.');
+ throw error;
+}
