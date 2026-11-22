@@ -12,6 +12,23 @@ const issueTitle = 'Synthetic Copilot launch proof for #290';
 const intentRef = 'refs/tags/butterbox-synthetic-launch-298';
 const proofPath = 'docs/agent-work/synthetic-copilot-proof.md';
 const proofText = '# Synthetic Copilot launch proof\n\nThis file verifies a controlled Copilot documentation change.\n';
+// Immutable evidence from PR #302 and failed reconciliation run 45010717756.
+const deviation = {
+  number: 302,
+  taskId: '82d93745-533d-426d-8863-c51eaff764fc',
+  head: 'b97669035f08092e0e287ec1d37dcb8f8528eb32',
+  merge: '6de8ea9868424320413454c6a47cb2ff3b89b538',
+  blob: '72500c8676657a6936f24acb279d6ed2c37132d4',
+  run: '45010717756',
+};
+const requiredChecks = ['verify', 'database-smoke'];
+const correctivePaths = [
+  proofPath,
+  '.github/workflows/copilot-synthetic-launch.yml',
+  'docs/agent-work/autonomous-controller-operations.md',
+  'tests/delivery-controller-synthetic.test.mjs',
+  'tools/delivery-controller/synthetic-launch.mjs',
+];
 const reconciledMarker = '<!-- synthetic-298-reconciled -->';
 const shaPattern = /^[0-9a-f]{40}$/;
 const idPattern = /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i;
@@ -54,8 +71,95 @@ export function verifiedSessions(task, id, lease) {
   return task.sessions;
 }
 
-export async function runSynthetic({ operation, confirmation, taskId, prNumber, runId, baseSha, gh, tasks, leases, report }) {
+function exactProof(proof) {
+  return proof.type === 'file' && proof.encoding === 'base64' &&
+    Buffer.from(proof.content, 'base64').equals(Buffer.from(proofText));
+}
+
+const branchRef = encodeURIComponent(branch);
+const proofAt = (gh, sha) => gh('/contents/' + proofPath + '?ref=' + sha);
+const prLink = number => 'https://github.com/' + repo + '/pull/' + number;
+
+async function checkedHead(gh, head, mergedAt) {
+  const filter = mergedAt ? 'all' : 'latest';
+  const checks = await gh('/commits/' + head + '/check-runs?filter=' + filter + '&per_page=100');
+  requireEvidence(Array.isArray(checks.check_runs) && Number.isSafeInteger(checks.total_count) &&
+    checks.total_count <= checks.check_runs.length, 'CI evidence is incomplete.');
+  const evidence = [];
+  for (const name of requiredChecks) {
+    const candidates = checks.check_runs.filter(row => row.name === name && row.app?.slug === 'github-actions' &&
+      row.head_sha === head).sort((a, b) => b.id - a.id);
+    // For a historical merge, inspect the latest check started at the time of merge.
+    // Keep later activity in the audit record without letting it rewrite that decision.
+    const check = mergedAt ? candidates.find(row => Date.parse(row.started_at) <= mergedAt) : candidates[0];
+    requireEvidence(check?.status === 'completed' && check.conclusion === 'success' &&
+      (!mergedAt || Date.parse(check.completed_at) <= mergedAt), 'Missing successful exact-head check: ' + name);
+    evidence.push(name + ' ' + check.html_url);
+    if (mergedAt) {
+      for (const later of candidates.filter(row => Date.parse(row.started_at) > mergedAt)) {
+        evidence.push('post-merge ' + name + ' ' + (later.conclusion ?? later.status) + ' ' + later.html_url);
+      }
+    }
+  }
+  return 'PR head ' + head + ' · ' + evidence.join(' · ');
+}
+
+async function verifyCorrection({ gh, number, original, baseSha }) {
+  const pr = await gh('/pulls/' + number);
+  requireEvidence(pr.number === Number(number) && pr.merged === true && pr.state === 'closed' &&
+    pr.base?.ref === branch && pr.base?.repo?.full_name === repo && pr.head?.repo?.full_name === repo &&
+    /^Refs #298\s*$/mi.test(pr.body ?? '') && shaPattern.test(pr.head?.sha ?? '') &&
+    shaPattern.test(pr.merge_commit_sha ?? '') && pr.merge_commit_sha !== original.merge_commit_sha &&
+    Date.parse(pr.merged_at) > Date.parse(original.merged_at),
+  'The corrective PR must reference #298 and have a distinct, later merge into Development.');
+
+  const head = pr.head.sha;
+  const merge = pr.merge_commit_sha;
+  const limit = '?per_page=' + (correctivePaths.length + 1);
+  const [files, commit, ancestry, tip, rules, headProof, mergeProof] = await Promise.all([
+    gh('/pulls/' + number + '/files' + limit),
+    gh('/commits/' + merge + limit),
+    gh('/compare/' + original.merge_commit_sha + '...' + merge),
+    gh('/git/ref/heads/' + branch),
+    gh('/rules/branches/' + branchRef),
+    proofAt(gh, head),
+    proofAt(gh, merge),
+  ]);
+  requireEvidence(tip.object?.type === 'commit' && tip.object.sha === baseSha && shaPattern.test(baseSha),
+    'Development moved. Start a new workflow run on the current branch.');
+  requireEvidence(ancestry.status === 'ahead', 'The correction does not descend from the original merge.');
+  const reachable = await gh('/compare/' + merge + '...' + baseSha);
+  requireEvidence(['ahead', 'identical'].includes(reachable.status), 'The corrective merge is not reachable from Development.');
+  requireEvidence(Array.isArray(rules) && rules.some(rule => rule.type === 'pull_request' &&
+    rule.parameters?.allowed_merge_methods?.includes('squash')) &&
+    requiredChecks.every(name => rules.some(rule => rule.type === 'required_status_checks' &&
+      rule.parameters?.required_status_checks?.some(check => check.context === name && check.integration_id === 15368))),
+  'Development protection or required GitHub Actions checks could not be verified.');
+
+  requireEvidence(Array.isArray(files) && files.length === correctivePaths.length &&
+    correctivePaths.every(path => files.some(file => file.filename === path && file.status === 'modified' &&
+      shaPattern.test(file.sha ?? ''))) && commit.sha === merge && commit.parents?.length === 1 &&
+    shaPattern.test(commit.parents[0].sha ?? '') && commit.files?.length === files.length &&
+    files.every(file => commit.files.some(merged => merged.filename === file.filename &&
+      merged.status === file.status && merged.sha === file.sha)),
+  'The correction must be a single-parent merge of the reviewed corrective files.');
+  const [before, currentProof] = await Promise.all([proofAt(gh, commit.parents[0].sha), proofAt(gh, baseSha)]);
+  requireEvidence(before.sha === deviation.blob && exactProof(headProof) && exactProof(mergeProof) &&
+    exactProof(currentProof) && shaPattern.test(headProof.sha ?? '') && headProof.sha === mergeProof.sha &&
+    mergeProof.sha === currentProof.sha,
+  'The correction must replace the recorded deviation with the exact approved proof at the PR head, merge and Development tip.');
+  const ci = await checkedHead(gh, head);
+  const mergeCi = await checkedHead(gh, head, Date.parse(pr.merged_at));
+  return 'Correction ' + prLink(number) + ' · ' + ci + ' · pre-merge ' + mergeCi +
+    ' · merge ' + merge + ' · approved proof blob ' + mergeProof.sha + ' · Development ' + baseSha;
+}
+
+export async function runSynthetic({ operation, confirmation, taskId, prNumber, correctionPrNumber, runId, baseSha, gh, tasks, leases, report }) {
   requireEvidence(['launch', 'verify', 'reconcile'].includes(operation), 'Unknown synthetic operation.');
+  requireEvidence(!correctionPrNumber || (operation === 'reconcile' && prNumber === String(deviation.number) &&
+    taskId === deviation.taskId && positiveInteger.test(correctionPrNumber) &&
+    Number.isSafeInteger(Number(correctionPrNumber)) && ![294, deviation.number].includes(Number(correctionPrNumber))),
+  'A corrective PR is allowed only for reconciliation of the recorded PR #302 deviation.');
   const [issue, current, intent] = await Promise.all([
     gh('/issues/' + issueNumber), readLease(leases), optionalRef(leases, intentRef),
   ]);
@@ -144,22 +248,19 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   requireEvidence(Array.isArray(files) && files.length === 1 && files[0].filename === proofPath && files[0].status === 'added',
     'The synthetic PR must add only the approved documentation file.');
   const { head } = pr;
-  const proof = await gh('/contents/' + proofPath + '?ref=' + head.sha);
-  requireEvidence(proof.type === 'file' && proof.encoding === 'base64' &&
-    Buffer.from(proof.content, 'base64').toString('utf8') === proofText, 'The proof file differs from the approved content.');
-  const checks = await gh('/commits/' + head.sha + '/check-runs?filter=latest&per_page=100');
-  requireEvidence(Array.isArray(checks.check_runs) && checks.total_count <= checks.check_runs.length, 'CI evidence is incomplete.');
-  const required = ['verify', 'database-smoke'];
-  for (const name of required) {
-    const check = checks.check_runs.filter(row => row.name === name && row.app?.slug === 'github-actions' &&
-      row.head_sha === head.sha).sort((a, b) => b.id - a.id)[0];
-    requireEvidence(check?.status === 'completed' && check.conclusion === 'success', 'Missing successful exact-head check: ' + name);
+  const proof = await proofAt(gh, head.sha);
+  if (correctionPrNumber) {
+    requireEvidence(pr.merged === true && head.sha === deviation.head && pr.merge_commit_sha === deviation.merge &&
+      Number.isFinite(Date.parse(pr.merged_at)) && proof.type === 'file' && proof.encoding === 'base64' &&
+      proof.sha === deviation.blob && !exactProof(proof),
+    'The original PR does not match the recorded proof deviation.');
+  } else {
+    requireEvidence(exactProof(proof), 'The proof file differs from the approved content.');
   }
+  const ci = await checkedHead(gh, head.sha, correctionPrNumber && Date.parse(pr.merged_at));
   requireEvidence(task.state === 'completed' && sessions.every(session => session.state === 'completed'),
     'The Copilot writer has not independently completed.');
-  const prUrl = 'https://github.com/' + repo + '/pull/' + prNumber;
-  const checksUrl = 'https://github.com/' + repo + '/commit/' + head.sha + '/checks';
-  const evidence = 'PR ' + prUrl + ' · head ' + head.sha + ' · verified checks ' + checksUrl;
+  const evidence = 'PR ' + prLink(prNumber) + ' · ' + ci;
   report(evidence);
   if (operation === 'verify') {
     requireEvidence(pr.state === 'open', 'Use reconcile for a merged synthetic PR.');
@@ -177,13 +278,29 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   'The merge commit is not a single-parent, documentation-only change.');
   const mergeProof = await gh('/contents/' + proofPath + '?ref=' + merge);
   requireEvidence(mergeProof.sha === proof.sha, 'The merged commit does not contain the verified proof blob.');
+  const correctionEvidence = [];
+  if (correctionPrNumber) {
+    const failureUrl = 'https://github.com/' + repo + '/actions/runs/' + deviation.run;
+    const deviationEvidence = 'Original content criterion failed · ' + failureUrl + ' · PR #' + deviation.number +
+      ' copied task instructions into proof blob ' + deviation.blob + ' · original merge ' + merge;
+    report(deviationEvidence);
+    const corrected = await verifyCorrection({ gh, number: correctionPrNumber, original: pr, baseSha });
+    report(corrected);
+    correctionEvidence.push(deviationEvidence, corrected);
+    const parentIssue = await gh('/issues/290');
+    requireEvidence(parentIssue.number === 290 && parentIssue.state === 'open' && !parentIssue.pull_request,
+      'Issue #290 must remain open.');
+    const active = await readLease(leases);
+    requireEvidence(active?.tagSha === current.tagSha && active.runId === current.runId,
+      'The synthetic lease changed during verification.');
+  }
   requireEvidence(activeAgentTasks(await tasks.list()).length === 0, 'Another Copilot task may still be writing.');
   const runUrl = 'https://github.com/' + repo + '/actions/runs/' + runId.slice('synthetic_'.length);
   const launchRunUrl = 'https://github.com/' + repo + '/actions/runs/' + current.runId.slice('synthetic_'.length);
   const note = [
     reconciledMarker, '### GitHub-verified synthetic evidence',
     'Task ' + taskLink(taskId) + ' · sessions ' + sessions.map(session => session.id).join(', '),
-    evidence, 'Merge ' + merge, 'Launch ' + launchRunUrl, 'Reconciliation ' + runUrl,
+    evidence, 'Merge ' + merge, ...correctionEvidence, 'Launch ' + launchRunUrl, 'Reconciliation ' + runUrl,
   ].join('\n\n');
   if (issue.state === 'open') {
     const closed = await gh('/issues/' + issueNumber, 'PATCH', {
@@ -193,7 +310,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
       'Issue reconciliation was not confirmed. Lease retained.');
   } else {
     requireEvidence(issue.state === 'closed' && issue.body?.includes(reconciledMarker) &&
-      issue.body.includes(taskLink(taskId)) && issue.body.includes('Merge ' + merge),
+      issue.body.includes(taskLink(taskId)) && issue.body.includes('Merge ' + merge) && correctionEvidence.every(line => issue.body.includes(line)),
     'Synthetic issue was closed without matching evidence. Lease retained.');
   }
   await releaseLease(leases, { runId: current.runId, expectedTagSha: current.tagSha, confirmedWriterStopped: true });
@@ -235,6 +352,7 @@ async function main() {
   await runSynthetic({
     operation: env.SYNTHETIC_OPERATION, confirmation: env.SYNTHETIC_CONFIRMATION,
     taskId: env.SYNTHETIC_TASK_ID, prNumber: env.SYNTHETIC_PR_NUMBER,
+    correctionPrNumber: env.SYNTHETIC_CORRECTION_PR_NUMBER,
     runId: 'synthetic_' + env.GITHUB_RUN_ID, baseSha: env.GITHUB_SHA, report, gh,
     tasks: agentTasksApi({ token: env.COPILOT_AGENT_USER_TOKEN, repository: repo, request: agentRequest }),
     leases: githubLeaseApi({ token: env.GITHUB_TOKEN, repository: repo, request }),

@@ -88,6 +88,27 @@ Before launching:
    records the task, sessions, PR, checked SHA, merged SHA, and run links on
    Issue #298 before closing it. Check that Issue #290 remains open.
 
+### Correcting the recorded PR #302 deviation
+
+[Run 45010717756](https://github.com/farbotkol/butterbox/actions/runs/45010717756)
+confirmed the Copilot task and completed session, then stopped because merged
+[PR #302](https://github.com/farbotkol/butterbox/pull/302) copied launch
+instructions into the proof file. The original content criterion failed.
+
+Keep both issues open, the synthetic lease and intent in place, and unattended
+autonomy disabled while the corrective PR is reviewed. After it passes
+`verify` and `database-smoke` and is squash-merged through the Development
+protections, use a new owner-dispatched **reconcile** run on Development.
+Supply the original **task_id**, **pr_number** of **302**, and the merged
+**correction_pr_number**. Leave **confirmation** empty.
+
+The run checks the original task, sessions, PR, proof deviation, squash merge
+and required CI at merge time. It reports later original-head CI activity
+separately. It also checks the corrective PR's CI, current Development
+protections, ancestry, squash contents and exact approved proof on Development.
+Issue #298 records both the original failure and the correction before lease
+release. Issue #290 stays open.
+
 Both workflows ignore other Copilot tasks reported as idle when checking
 for competing writers. Queued, in-progress, waiting-for-user, and unrecognized
 task states still block. Completion of the task that owns the lease must still
