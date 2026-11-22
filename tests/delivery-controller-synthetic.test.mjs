@@ -20,7 +20,7 @@ function fixture() {
   const seen = { creates: 0, gets: 0, deletes: 0, writes: [], reports: [], preflight: 0 };
   const state = {
     didCreate: false, draftOpen: false, openAfterLease: false, inProgressRepair: false,
-    sessions: true, active: false, errorOnCreate: false, merged: false, badFile: false, badCheck: false,
+    sessions: true, otherTasks: [], errorOnCreate: false, merged: false, badFile: false, badCheck: false,
     issue: {
       number: 298, title: 'Synthetic Copilot launch proof for #290', state: 'open',
       assignees: [], labels: [], body: 'Refs #290.',
@@ -41,7 +41,7 @@ function fixture() {
     async deleteRef(ref) { seen.deletes++; refs.delete(ref); },
   };
   const tasks = {
-    async list() { return state.active ? [{ state: 'in_progress' }] : []; },
+    async list() { return state.otherTasks; },
     async create({ prompt }) {
       seen.creates++;
       assert.match(prompt, /BUTTERBOX_LEASE_RUN=synthetic_123/);
@@ -112,8 +112,8 @@ test('a launch with the one-time intent independently GETs its task and sessions
   assert.ok(refs.has(LEASE_REF) && refs.has(intent));
 });
 
-test('open #294, another Copilot task, and CI repair each block before acquiring', async () => {
-  for (const blocker of ['draftOpen', 'active', 'inProgressRepair']) {
+test('open #294 and CI repair each block before acquiring', async () => {
+  for (const blocker of ['draftOpen', 'inProgressRepair']) {
     const { run, refs, seen, state } = fixture();
     state[blocker] = true;
     await assert.rejects(run(), /blocked/i);
@@ -162,4 +162,20 @@ test('reconcile checks the task, exact PR scope, CI, merge and issue before rele
   assert.equal(seen.writes.length, 1);
   assert.match(seen.writes[0].body, /synthetic-298-reconciled/);
   assert.equal(state.issue.state, 'closed');
+});
+
+test('the manual synthetic test ignores idle tasks and blocks all other nonterminal states', async () => {
+  const idle = fixture();
+  idle.state.otherTasks = [{ state: 'idle' }, { state: 'idle' }];
+  await idle.run();
+  assert.equal(idle.seen.creates, 1);
+  assert.equal(idle.seen.gets, 1);
+
+  for (const state of ['queued', 'in_progress', 'waiting_for_user', 'unknown', undefined]) {
+    const blocked = fixture();
+    blocked.state.otherTasks = [{ state: 'idle' }, { state }];
+    await assert.rejects(blocked.run(), /Launch blocked/);
+    assert.equal(blocked.seen.creates, 0);
+    assert.equal(blocked.refs.size, 0);
+  }
 });
