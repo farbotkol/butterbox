@@ -40,3 +40,56 @@ This check uses the existing repository Actions secret `COPILOT_AGENT_USER_TOKEN
 It makes one GET request and discards the response body. Leave
 `BUTTERBOX_AUTONOMY_ENABLED` off. Keep Issue #290 open for live acceptance.
 See [Manually running a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
+
+## One-time synthetic Copilot task for Issue #298
+
+The owner runs this workflow manually after its implementation PR passes CI
+and merges to `copilot/Development`. The synthetic uses Issue #298 and asks
+Copilot to add one fixed Markdown file. It never changes the unattended
+controller switch and has no scheduled trigger. Keep Issue #290 open.
+
+Before launching:
+
+- Wait until [PR #294](https://github.com/farbotkol/butterbox/pull/294) is closed
+  through its own development process and no other Development PR, Copilot
+  coding task, repair run, or exclusive lease is active. Leave #294 and its branch
+  alone. Avoid starting any parallel coding sessions during the test.
+- Confirm the GitHub App is installed only for Butterbox and has **Agent tasks:
+  Read and write** for this test. If you originally tested with read-only access,
+  update the app, approve the permission change for its installation, obtain a
+  fresh GitHub App user access token, and update the existing
+  `COPILOT_AGENT_USER_TOKEN` under **Settings → Secrets and variables → Actions**.
+  Keep the token private and keep `BUTTERBOX_AUTONOMY_ENABLED` unset or false.
+  The earlier HTTP 200 establishes listing access.
+- Leave Issue #298 open, unassigned and unlabelled.
+
+### Run from a phone
+
+1. In your phone's browser, open [Butterbox Actions](https://github.com/farbotkol/butterbox/actions)
+   while signed in as `farbotkol`. Use **Request Desktop Website** or **Desktop
+   site** if the controls are hidden. Select **Controlled Copilot synthetic
+   test**, then **Run workflow**.
+2. Choose branch **copilot/Development** and operation **launch**. Leave
+   **task_id** and **pr_number** empty. In **confirmation**, type **LAUNCH-298**,
+   then tap **Run workflow**. Use the run's **Summary** to capture the HTTP 201,
+   task ID, independent GET status, session IDs and exclusive lease. If the
+   session is still pending, use a new manual **verify** run with the recorded
+   **task_id** and leave the PR input empty. Use **verify** for status checks.
+3. Once Copilot opens the draft PR and CI finishes, start another manual run on
+   Development with **verify**, the same **task_id**, and the draft's numeric
+   **pr_number**. Leave **confirmation** empty. Review the file and the exact
+   PR head in the Summary. After the verified scope and **verify** and
+   **database-smoke** checks pass, use GitHub to mark the draft ready and
+   squash-merge through the existing protections. Review the latest checks and
+   head again if marking ready starts another CI run or the head changes.
+4. Run the workflow again on Development with **reconcile**, the same **task_id**
+   and **pr_number**. Leave **confirmation** empty. Its Summary confirms the
+   merge, the synthetic issue update and exact lease release. The workflow
+   records the task, sessions, PR, checked SHA, merged SHA, and run links on
+   Issue #298 before closing it. Check that Issue #290 remains open.
+
+CI repair and Phase 2 automatic merging stand down while the synthetic lease
+is held. The owner performs the protected squash merge. A rejection or ambiguous
+launch after the one-time intent is recorded deliberately retains the lease and
+consumes the launch attempt. Keep the intent and lease refs intact while
+investigating. **Verify** and **reconcile** cannot create a second task.

@@ -79,6 +79,15 @@ jobs:
           fi
           echo "Phase 2 event=$EVENT_NAME dry_run=$DRY_RUN"
 
+          if [[ "$REPO" == "farbotkol/butterbox" ]]; then
+            lease_snapshot="$RUNNER_TEMP/synthetic-merge-lease.json"
+            node tools/delivery-controller/observe-lease.mjs "$lease_snapshot"
+            if jq -e '.issue == 298 and (.runId | startswith("synthetic_"))' "$lease_snapshot" >/dev/null; then
+              echo "Synthetic Copilot test holds the exclusive lease. The owner must review and squash-merge its PR."
+              exit 0
+            fi
+          fi
+
           if [[ "$EVENT_NAME" == "workflow_dispatch" && -n "$TARGET_PR" ]]; then
             [[ "$TARGET_PR" =~ ^[0-9]+$ ]] || { echo "::error::Invalid PR number"; exit 1; }
             numbers=("$TARGET_PR")
