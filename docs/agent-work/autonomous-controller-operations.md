@@ -19,3 +19,24 @@ Keep the repository variable off while verifying access. Use the approved user c
 Run `node --test tests/delivery-controller-autonomy.test.mjs` plus existing controller policy tests. Complete standard Verify/database CI. Before opt-in, prove no dispatch with the open draft PR, confirm missing-secret behavior and monitor task API authentication permissions. Then perform an owner-approved synthetic task with exact task ID and session state; do not report the full loop complete until merged evidence and safe lease release are shown.
 
 Official API: https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10
+
+## Validate the stored Copilot token from a phone
+
+Use GitHub in your phone's browser with repository write access. The manual workflow
+becomes available after its file lands on the default branch, `copilot/Development`.
+
+1. Open [Butterbox Actions](https://github.com/farbotkol/butterbox/actions).
+   If the workflow list or **Run workflow** is hidden, use your browser's
+   **Request Desktop Website** or **Desktop site** option.
+2. Select **Check Copilot agent token**, then **Run workflow**.
+3. In the branch picker, select **copilot/Development** and tap **Run workflow** again.
+4. Open the new run and read its **Summary**. The job reports the HTTP status from
+   GitHub. HTTP 200 confirms task-list access. For 401, check whether the stored
+   token is valid and unexpired. For 403, check the app's installation, **Agent
+   tasks** permission and Copilot policy. If the secret is unavailable or GitHub
+   sends no HTTP response, the summary reports that separately.
+
+This check uses the existing repository Actions secret `COPILOT_AGENT_USER_TOKEN`.
+It makes one GET request and discards the response body. Leave
+`BUTTERBOX_AUTONOMY_ENABLED` off. Keep Issue #290 open for live acceptance.
+See [Manually running a workflow](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manually-run-a-workflow).
