@@ -17,6 +17,9 @@ on:
       pr_number:
         description: Synthetic PR number for verify or reconcile
         type: string
+      correction_pr_number:
+        description: Merged corrective PR number for the recorded PR 302 deviation
+        type: string
       confirmation:
         description: Type LAUNCH-298 to authorize the one-time launch
         type: string
@@ -53,6 +56,7 @@ jobs:
           SYNTHETIC_OPERATION: ${{ inputs.operation }}
           SYNTHETIC_TASK_ID: ${{ inputs.task_id }}
           SYNTHETIC_PR_NUMBER: ${{ inputs.pr_number }}
+          SYNTHETIC_CORRECTION_PR_NUMBER: ${{ inputs.correction_pr_number }}
           SYNTHETIC_CONFIRMATION: ${{ inputs.confirmation }}
           BUTTERBOX_AUTONOMY_ENABLED: ${{ vars.BUTTERBOX_AUTONOMY_ENABLED }}
         run: node tools/delivery-controller/synthetic-launch.mjs
