@@ -32,7 +32,7 @@ test('task API posts only to documented endpoint and verifies a real GET',async(
 });
 test('missing task confirmation or ambiguous state fails closed',()=>{
  assert.throws(()=>verifyCreatedTask({id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890'},{}));
- assert.deepEqual(activeAgentTasks([{state:'completed'},{state:'in_progress'},{state:'waiting_for_user'}]).length,2);
+ assert.deepEqual(activeAgentTasks([{state:'completed'},{state:'in_progress'},{state:'waiting_for_user'},{state:'idle'}]).length,2);
 });
 
 test('direct Xero issue numbers and already assigned issues stay out of the queue',()=>{
