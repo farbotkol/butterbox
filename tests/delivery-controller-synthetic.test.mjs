@@ -64,14 +64,14 @@ function fixture({ getOverride, originalNumber = 300, originalTask = taskId } = 
     },
   };
   const description = '# Synthetic Copilot launch proof\n\nThis file verifies a controlled Copilot documentation change.\n';
-  async function gh(path, method = 'GET', body) {
+  async function gh(path, method = 'GET', body, apiVersion) {
     if (method === 'PATCH') {
       assert.equal(path, '/issues/298');
       seen.writes.push(body);
       state.issue = { ...state.issue, ...body };
       return state.issue;
     }
-    const override = getOverride?.(path);
+    const override = getOverride?.(path, apiVersion);
     if (override !== undefined) return override;
     if (path === '/issues/298') return state.issue;
     if (path === '/issues/290') return { number: 290, state: 'open' };
@@ -201,12 +201,16 @@ test('PR 302 correction preserves the recorded failure and releases only after b
     'tests/delivery-controller-synthetic.test.mjs', 'tools/delivery-controller/synthetic-launch.mjs',
   ].map(filename => ({ filename, status: 'modified', sha: tagSha }));
   let block;
-  const evidence = fixture({ originalNumber: 302, originalTask, getOverride(path) {
+  const evidence = fixture({ originalNumber: 302, originalTask, getOverride(path, apiVersion) {
     if (path === '/pulls/302' || path === '/pulls/303') {
       const original = path.endsWith('302');
       return {
         number: original ? 302 : 303, state: 'closed', merged: original || block !== 'unmerged',
-        merged_at: original ? originalAt : correctedAt, merge_commit_sha: original ? originalMerge : merge,
+        merged_at: original ? originalAt : correctedAt,
+        // GitHub omits this field in the 2026-03-10 response for both merged PRs.
+        ...(apiVersion === '2022-11-28' && block !== (original ? 'original SHA missing' : 'correction SHA missing')
+          ? { merge_commit_sha: original ? originalMerge : merge }
+          : {}),
         base: { ref: branch, repo: { full_name: repo } },
         head: { ref: 'copilot/synthetic-proof', sha: original ? originalHead : head, repo: { full_name: repo } },
         body: 'Refs #298',
@@ -247,6 +251,8 @@ test('PR 302 correction preserves the recorded failure and releases only after b
   await assert.rejects(evidence.run(inputs), /differs from the approved content/);
   inputs.correctionPrNumber = '303';
   for (const [failure, message] of [
+    ['original SHA missing', /Original PR merge_commit_sha/],
+    ['correction SHA missing', /Corrective PR merge_commit_sha/],
     ['unmerged', /distinct, later merge/], ['scope', /reviewed corrective files/], ['ancestry', /reachable/],
     ['protection', /protection/], ['tip', /exact approved proof/], ['original CI', /exact-head check/],
     ['correction CI', /exact-head check/],
