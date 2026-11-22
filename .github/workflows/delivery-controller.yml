@@ -105,14 +105,15 @@ jobs:
     timeout-minutes: 8
     permissions:
       contents: write
-      issues: read
-      pull-requests: read
+      issues: write
+      pull-requests: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
           ref: copilot/Development
           persist-credentials: false
-      - name: Select, acquire lease, launch and verify real Copilot task
+      - name: Advance the controlled GitHub acceptance lifecycle
         env:
           GITHUB_TOKEN: ${{ github.token }}
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}

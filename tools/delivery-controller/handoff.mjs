@@ -1,40 +1,54 @@
-// Independent evidence gates for releasing a durable implementation lease.
-// A timer, AI statement, terminal task alone, or merged PR alone is never enough.
+// Identity and liveness checks shared by the unattended handoff and synthetic proof.
 import { activeAgentTasks } from './agent-tasks-api.mjs';
 
-const stoppedStates=new Set(['completed','failed','cancelled','timed_out']);
-const isSha=s=>/^[a-f0-9]{40}$/.test(s??'');
-export const taskMarker=runId=>'BUTTERBOX_LEASE_RUN='+runId;
-export function assessHandoff({lease,tasks,prs,issue,openPRs,now=Date.now()}={}) {
- const blocked=reason=>({action:'RETAIN_LEASE',reason});
- if(!lease || !lease.runId || !Number.isSafeInteger(lease.issue))return blocked('Unverified lease');
- if(!Array.isArray(tasks)||!Array.isArray(prs)||!Array.isArray(openPRs)||!issue)return blocked('Incomplete GitHub evidence');
- const mark=taskMarker(lease.runId);
- const matches=tasks.filter(t=>(t.sessions??[]).some(s=>(s.prompt??'').split(/\r?\n/).includes(mark)));
- if(matches.length!==1)return blocked('Cannot uniquely identify Copilot task from durable lease marker');
- const task=matches[0];
- if(!Array.isArray(task.sessions)||!task.sessions.length||task.session_count!==task.sessions.length||
- task.sessions.some(s=>!stoppedStates.has(s.state)||s.task_id!==task.id||s.base_ref!=='copilot/Development')) {
-  return blocked('Copilot writer not independently confirmed stopped');
- }
- if(openPRs.some(p=>p.state==='open'&&p.base?.ref==='copilot/Development'))return blocked('Another open Development PR exists');
- if(!stoppedStates.has(task.state)||activeAgentTasks(tasks).length)return blocked('A Copilot task may still be writing');
- if(task.state!=='completed') {
-  const elapsed=now-Date.parse(lease.startedAt);
-  if(issue.number===lease.issue&&issue.state==='open'&&elapsed>=12*60*60*1000&&
-    Array.isArray(task.artifacts)&&task.artifacts.length===0) {
-   return {action:'PARK_VERIFIED',taskId:task.id,taskState:task.state,taskUrl:task.html_url??null,sessionCount:task.session_count};
+export const development = 'copilot/Development';
+export const isSha = value => typeof value === 'string' && /^[a-f0-9]{40}$/.test(value);
+const isUuid = value => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
+const stopped = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
+const known = new Set([...stopped, 'idle', 'queued', 'in_progress', 'waiting_for_user']);
+export const taskMarker = runId => 'BUTTERBOX_LEASE_RUN=' + runId;
+
+export function verifyTaskSnapshot(rows) {
+  if (!Array.isArray(rows) || rows.some(row => !isUuid(row.id) || !known.has(row.state)) ||
+      new Set(rows.map(row => row.id)).size !== rows.length) throw new Error('Incomplete or ambiguous Copilot task list');
+  return rows;
+}
+
+export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }) {
+  const blocked = reason => ({ action: 'RETAIN_LEASE', reason });
+  if (!Array.isArray(openPRs) || issue?.number !== lease.issue || issue.pull_request)
+    return blocked('Incomplete PR or issue evidence');
+  verifyTaskSnapshot(tasks);
+  if (tasks.some(task => !Array.isArray(task.sessions) || task.session_count !== task.sessions.length ||
+      task.sessions.some(session => !isUuid(session.id) || session.task_id !== task.id || !known.has(session.state)) ||
+      new Set(task.sessions.map(session => session.id)).size !== task.sessions.length))
+    return blocked('Incomplete or ambiguous Copilot session snapshot');
+
+  const marker = taskMarker(lease.runId);
+  const matches = tasks.filter(task => task.sessions.some(session =>
+    typeof session.prompt === 'string' && session.prompt.split(/\r?\n/).includes(marker)));
+  if (matches.length !== 1) return blocked('Cannot uniquely identify the Copilot task from the exact lease marker');
+  const [task] = matches;
+  if (!stopped.has(task.state) || task.sessions.some(session => !stopped.has(session.state) ||
+      session.base_ref !== development))
+    return blocked('Lease owner may still be writing');
+  const others = tasks.filter(row => row.id !== task.id);
+  if (activeAgentTasks(others).length || others.some(row =>
+    row.sessions.some(session => session.state !== 'idle' && !stopped.has(session.state))))
+    return blocked('A competing Copilot session may still be writing');
+
+  if (task.state !== 'completed') {
+    if (issue.state === 'open' && now - Date.parse(lease.startedAt) >= 12 * 60 * 60 * 1000 &&
+        openPRs.length === 0 && Array.isArray(task.artifacts) && task.artifacts.length === 0)
+      return { action: 'PARK_VERIFIED', taskId: task.id, taskState: task.state, sessionCount: task.session_count };
+    return blocked('Stopped task has PR artifacts, uncertain issue state or is under 12 hours old');
   }
-  return blocked('Stopped task has PR artifacts, uncertain issue state or is under 12 hours old');
- }
- if(task.sessions.some(s=>s.state!=='completed'))return blocked('Copilot sessions did not all complete');
- if(issue.number!==lease.issue||issue.state!=='closed')return blocked('Issue completion not reconciled');
- const issueMarker='<!-- butterbox-issue: '+lease.issue+' -->';
- const merged=prs.filter(pr=>pr.merged_at&&isSha(pr.merge_commit_sha)&&pr.base?.ref==='copilot/Development'&&
- (pr.body??'').includes(issueMarker)&&/<!-- butterbox-evidence: docs\/agent-work\/issues\/issue-\d+\/pr-\d+\/attempt-\d+\.evidence\.json -->/.test(pr.body??''));
- if(merged.length!==1)return blocked('No unique merged PR with canonical issue/evidence markers');
- // Require a GitHub pull request artifact from the confirmed task.
- const artifacts=(task.artifacts??[]).filter(x=>x.provider==='github'&&x.type==='pull').map(x=>Number(x.data?.id)).filter(Number.isSafeInteger);
- if(!artifacts.includes(merged[0].number) && !artifacts.includes(merged[0].id))return blocked('Merged PR does not match confirmed Copilot task artifact');
- return {action:'RELEASE_VERIFIED',taskId:task.id,pr:merged[0].number,mergeSha:merged[0].merge_commit_sha};
+
+  if (task.sessions.some(session => session.state !== 'completed'))
+    return blocked('Copilot sessions did not all complete');
+  if (!Array.isArray(task.artifacts)) return blocked('Missing Copilot PR artifacts');
+  const artifacts = task.artifacts.filter(artifact => artifact.provider === 'github' && artifact.type === 'pull');
+  if (artifacts.length !== 1 || !Number.isSafeInteger(artifacts[0].data?.id) || artifacts[0].data.id < 1)
+    return blocked('Missing or ambiguous Copilot PR artifact');
+  return { action: 'VERIFY_PR', task, artifact: artifacts[0].data.id };
 }

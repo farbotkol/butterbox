@@ -1,41 +1,278 @@
 import assert from 'node:assert/strict';
-import {test} from 'node:test';
-import {assessHandoff,taskMarker} from '../tools/delivery-controller/handoff.mjs';
-const lease={runId:'actions_123',issue:301};
-const pr={number:401,base:{ref:'copilot/Development'},merged_at:'2026-11-22T00:00:00Z',merge_commit_sha:'a'.repeat(40),body:'Refs #301\n<!-- butterbox-issue: 301 -->\n<!-- butterbox-evidence: docs/agent-work/issues/issue-301/pr-401/attempt-01.evidence.json -->'};
-const task={id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890',state:'completed',session_count:1,artifacts:[{provider:'github',type:'pull',data:{id:401}}],sessions:[{state:'completed',task_id:'a1b2c3d4-e5f6-7890-abcd-ef1234567890',base_ref:'copilot/Development',prompt:'Work\n'+taskMarker(lease.runId)}]};
-const good=(overrides={})=>({lease,tasks:[task],prs:[pr],openPRs:[],issue:{number:301,state:'closed'},...overrides});
-test('confirmed completed session, merged canonical PR and closed issue releases lease',()=>assert.equal(assessHandoff(good()).action,'RELEASE_VERIFIED'));
-test('queued/active task and ambiguous task evidence retain lock',()=>{
- assert.equal(assessHandoff(good({tasks:[{...task,state:'in_progress'}]})).action,'RETAIN_LEASE');
- assert.equal(assessHandoff(good({tasks:[]})).action,'RETAIN_LEASE');
- assert.equal(assessHandoff(good({tasks:[task,task]})).action,'RETAIN_LEASE');
-});
-test('not reconciled issue, noncanonical or unlinked PR retains lock',()=>{
- assert.equal(assessHandoff(good({issue:{number:301,state:'open'}})).action,'RETAIN_LEASE');
- assert.equal(assessHandoff(good({prs:[{...pr,body:'Refs #301'}]})).action,'RETAIN_LEASE');
- assert.equal(assessHandoff(good({tasks:[{...task,artifacts:[]}]})).action,'RETAIN_LEASE');
-});
-test('another active PR and incomplete API view retain lock',()=>{
- assert.equal(assessHandoff(good({openPRs:[{state:'open',base:{ref:'copilot/Development'}}]})).action,'RETAIN_LEASE');
- assert.equal(assessHandoff(good({openPRs:null})).action,'RETAIN_LEASE');
+import { test } from 'node:test';
+import { assessHandoff, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
+import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor } from '../tools/delivery-controller/acceptance.mjs';
+import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
+
+const repository = 'farbotkol/butterbox';
+const { path, bytes } = proofFor(305);
+const base = 'a'.repeat(40);
+const head = 'b'.repeat(40);
+const merge = 'c'.repeat(40);
+const blob = 'd'.repeat(40);
+const tagSha = 'e'.repeat(40);
+const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+const sessionId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567891';
+const at = '2026-11-22T00:00:00Z';
+const ended = '2026-11-22T00:05:00Z';
+const mergedAt = '2026-11-22T00:10:00Z';
+const issue = { number: 305, state: 'open', title: 'Test A', body: '## Acceptance criteria', updated_at: at };
+const record = { version: 1, runId: 'actions_123_1', issue: 305, issueDigest: issueDigest(issue), baseSha: base, startedAt: at };
+const lease = { ...record, tagSha };
+const task = {
+  id: taskId, state: 'completed', session_count: 1, artifacts: [{ provider: 'github', type: 'pull', data: { id: 9999 } }],
+  sessions: [{ id: sessionId, state: 'completed', task_id: taskId, base_ref: development, head_ref: 'copilot/proof',
+    prompt: 'Work\n' + taskMarker(lease.runId) }],
+};
+
+function fixture(overrides = {}) {
+  let currentTag = tagSha;
+  let reads = 0;
+  const events = [];
+  const effects = [];
+  const reports = [];
+  const state = {
+    issue: { ...issue },
+    task: structuredClone(task),
+    pr: {
+      id: 9999, number: 401, changed_files: 1, state: 'open', merged: false, draft: true,
+      mergeable: true, mergeable_state: 'clean', node_id: 'pr-node',
+      body: 'Refs #305\n<!-- butterbox-issue: 305 -->\n<!-- butterbox-evidence: ' + path + ' -->',
+      title: 'Add proof', auto_merge: null, requested_reviewers: [], requested_teams: [],
+      base: { ref: development, sha: base, repo: { full_name: repository } },
+      head: { ref: 'copilot/proof', sha: head, repo: { full_name: repository } },
+    },
+    checks: ['verify', 'database-smoke'].map((name, index) => ({
+      id: 100 + index, name, app: { slug: 'github-actions', id: 15368 },
+      status: 'completed', conclusion: 'success', head_sha: head, started_at: at, completed_at: ended,
+      html_url: 'https://github.com/' + repository + '/actions/runs/123/job/' + (100 + index),
+    })),
+    tip: base,
+    proof: { type: 'file', encoding: 'base64', content: bytes.toString('base64'), sha: blob },
+    files: [{ filename: path, status: 'added', sha: blob }],
+    ...overrides,
+  };
+  const gh = async (route, method = 'GET', data) => {
+    if (method === 'PUT' && route === '/pulls/401/merge') {
+      assert.equal(data.sha, head);
+      assert.equal(data.merge_method, 'squash');
+      effects.push('merge');
+      Object.assign(state.pr, { state: 'closed', merged: true, merged_at: mergedAt, merge_commit_sha: merge,
+        merged_by: { id: 41898282 } });
+      state.tip = merge;
+      return { merged: true, sha: merge };
+    }
+    if (method === 'PATCH' && route === '/issues/305') {
+      effects.push('close');
+      Object.assign(state.issue, data);
+      events.push({ event: 'closed', actor: { id: 41898282 }, commit_id: null });
+      if (state.losePatchResponse) throw new Error('PATCH response lost');
+      return structuredClone(state.issue);
+    }
+    assert.equal(method, 'GET');
+    if (route === '/issues/305') return structuredClone(state.issue);
+    if (route === '/pulls/401') return structuredClone(state.pr);
+    if (route === '/pulls/401/files?per_page=2') return state.files;
+    if (route.startsWith('/contents/' + path)) return state.proof;
+    if (route.startsWith('/commits/' + head + '/check-runs')) return {
+      total_count: state.checkCount ?? state.checks.length, check_runs: state.checks,
+    };
+    if (route.startsWith('/commits/' + merge)) return { sha: merge, parents: [{ sha: base }], files: state.files };
+    if (route.startsWith('/git/ref/heads/')) return { object: { sha: state.tip, type: 'commit' } };
+    if (route.startsWith('/compare/')) return { status: 'ahead', merge_base_commit: { sha: base } };
+    if (route.startsWith('/rules/branches/')) return [
+      { type: 'pull_request', parameters: { allowed_merge_methods: ['squash'] } },
+      { type: 'required_status_checks', parameters: { required_status_checks: ['verify', 'database-smoke']
+        .map(context => ({ context, integration_id: 15368 })) } },
+    ];
+    throw new Error('Unexpected route ' + route);
+  };
+  const paged = async route => {
+    if (route === '/issues/305/events') return events;
+    if (route.startsWith('/pulls?state=open')) return state.openPRs ?? (state.pr.state === 'open' ? [state.pr] : []);
+    if (route.startsWith('/pulls?state=closed')) return [state.pr];
+    throw new Error('Unexpected paged route ' + route);
+  };
+  const leaseApi = {
+    async getRef(ref) {
+      assert.equal(ref, LEASE_REF);
+      reads++;
+      if (state.replaceLease && reads > 1) currentTag = 'f'.repeat(40);
+      if (!currentTag) throw Object.assign(new Error('not found'), { status: 404 });
+      return { object: { sha: currentTag, type: 'tag' } };
+    },
+    async getTag() { return { tag: 'butterbox-controller-lease', message: JSON.stringify(record) }; },
+    async deleteRef() { effects.push('release'); currentTag = null; },
+  };
+  const run = () => advanceAcceptance({
+    repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
+    tasksApi: {
+      list: async () => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])],
+      get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
+    },
+    approval: async () => ({ issue: { ...state.issue }, approved: !state.revoked }),
+    repairBusy: async () => Boolean(state.repair),
+    readyPull: async (id, sha) => {
+      assert.equal(id, 'pr-node');
+      assert.equal(sha, head);
+      state.pr.draft = false;
+      effects.push('ready');
+    },
+    report: line => reports.push(line),
+  });
+  return { run, effects, reports, state, events };
+}
+
+test('draft, exact-head protected squash, audited close, then release in order', async () => {
+  const { run, effects, state, events } = fixture();
+  assert.equal(firstAcceptanceCompleted(state.issue, events), false);
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge']);
+  assert.equal(firstAcceptanceCompleted(state.issue, events), false);
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+  assert.equal(firstAcceptanceCompleted(state.issue, events), true);
+  assert.match(state.issue.body, /Completed sessions .*\nPR #401.*squash/);
+  assert.equal(firstAcceptanceCompleted(state.issue, []), false);
 });
 
-test('handoff rejects a marker prefix collision or an incomplete session list',()=>{
- const wrongRun={...task,sessions:[{...task.sessions[0],prompt:taskMarker(lease.runId+'4')}]};
- for(const candidate of [wrongRun,{...task,session_count:2}]) {
-  assert.equal(assessHandoff(good({tasks:[candidate]})).action,'RETAIN_LEASE');
- }
+test('a lost closure response is recoverable with the same audit and exact lease', async () => {
+  const { run, effects, state } = fixture();
+  await run();
+  await run();
+  state.losePatchResponse = true;
+  await assert.rejects(run(), /PATCH response lost/);
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
 });
 
-test('12-hour parking requires fully stopped sessions, an open issue and no PR artifact',()=>{
- const startedAt='2026-11-21T00:00:00Z';
- const now=Date.parse('2026-11-21T12:00:00Z');
- const failed={...task,state:'failed',artifacts:[],sessions:[{...task.sessions[0],state:'failed'}]};
- const snapshot=good({lease:{...lease,startedAt},tasks:[failed],issue:{number:301,state:'open'},now});
- assert.equal(assessHandoff(snapshot).action,'PARK_VERIFIED');
- assert.equal(assessHandoff({...snapshot,now:now-1}).action,'RETAIN_LEASE');
- assert.equal(assessHandoff({...snapshot,tasks:[{...failed,artifacts:task.artifacts}]}).action,'RETAIN_LEASE');
- assert.equal(assessHandoff({...snapshot,tasks:[failed,{state:'waiting_for_user',sessions:[]}]}).action,'RETAIN_LEASE');
- assert.equal(assessHandoff({...snapshot,openPRs:[{state:'open',base:{ref:'copilot/Development'}}]}).action,'RETAIN_LEASE');
+test('absent merge SHA in the newer REST representation, unverified close and wrong merge actor retain lease', async () => {
+  for (const mutate of [
+    ({ pr }) => { delete pr.merge_commit_sha; },
+    ({ pr }) => { pr.merged_by.id = 11307166; },
+    ({ issue: row }) => { row.state = 'closed'; },
+  ]) {
+    const { run, effects, state } = fixture();
+    await run();
+    await run();
+    mutate(state);
+    await assert.rejects(run(), /merge_commit_sha|closure and audit evidence/);
+    assert.deepEqual(effects, ['ready', 'merge']);
+  }
+});
+
+test('base drift, missing proof, truncation, failed or pending retry and competing writers stop mutations', async () => {
+  const invalid = [
+    [s => { s.tip = merge; }, /pinned Development SHA/],
+    [s => { s.proof = null; }, /approved proof/],
+    [s => { s.checkCount = 101; }, /Incomplete check-run/],
+    [s => { s.checks[0].head_sha = base; }, /exact-head check/],
+    [s => { s.checks.push({ ...s.checks[0], id: 109, conclusion: 'failure' }); }, /exact-head check/],
+    [s => { s.checks.push({ ...s.checks[1], id: 109, status: 'in_progress' }); }, /exact-head check/],
+    [s => { s.openPRs = [...[s.pr], { ...s.pr, number: 402, id: 10000 }]; }, /Competing Development PR/],
+    [s => { s.openPRs = [{ number: 401 }]; }, /Incomplete open Development PR/],
+    [s => { s.replaceLease = true; }, /lease changed/],
+    [s => { s.repair = true; }, /CI repair/],
+    [s => { s.revoked = true; }, /approval/],
+    [s => { s.pr.body += '\nFixes #290'; }, /closing reference/],
+  ];
+  for (const [mutate, expected] of invalid) {
+    const { run, effects, state } = fixture();
+    mutate(state);
+    await assert.rejects(run(), expected);
+    assert.deepEqual(effects, []);
+  }
+});
+
+test('later successful CI retry is accepted, later historical failures stay separate from merge-time CI', async () => {
+  const { run, state, effects } = fixture();
+  state.checks.push({ ...state.checks[0], id: 109, conclusion: 'failure' }, { ...state.checks[0], id: 110 });
+  await run();
+  await run();
+  state.checks.push({ ...state.checks[0], id: 111, started_at: '2026-11-22T00:11:00Z', conclusion: 'failure' });
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+});
+
+test('stalled, idle owner, ambiguous sessions, missing artifact and competing tasks retain the lease', () => {
+  const assess = (tasks, now) => assessHandoff({ lease, tasks, openPRs: [], issue, now });
+  const copy = id => ({ ...task, id, sessions: [{ ...task.sessions[0], task_id: id }] });
+  const otherId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567892';
+  for (const tasks of [
+    [{ ...task, state: 'in_progress' }], [{ ...task, state: 'idle' }], [task, copy(otherId)],
+    [{ ...task, session_count: 2 }], [{ ...task, artifacts: [] }],
+    [{ ...task, sessions: [{ ...task.sessions[0], prompt: taskMarker(lease.runId + '4') }] }],
+    [task, { id: otherId, state: 'waiting_for_user', sessions: [], session_count: 0 }],
+  ]) assert.equal(assess(tasks, Date.parse(at) + 13 * 3600000).action, 'RETAIN_LEASE');
+  assert.equal(assess([task, { id: otherId, state: 'idle', sessions: [], session_count: 0 }]).action, 'VERIFY_PR');
+  const failed = { ...task, state: 'failed', artifacts: [], sessions: [{ ...task.sessions[0], state: 'failed' }] };
+  assert.equal(assess([failed], Date.parse(at) + 12 * 3600000 - 1).action, 'RETAIN_LEASE');
+  assert.equal(assess([failed], Date.parse(at) + 12 * 3600000).action, 'PARK_VERIFIED');
+});
+
+test('controller cycles serialize competing launches and gate B on audited A closure and lease release', async () => {
+  const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
+  const labels = ['autonomy-ready', 'p0', 'dependencies-cleared'].map(name => ({ name }));
+  const rows = new Map([305, 306].map(number => [number, { ...issue, number, labels, title: 'Acceptance ' + number }]));
+  const events = [];
+  const tags = new Map();
+  const launched = [];
+  let activeRef;
+  const leaseApi = {
+    async getRef(ref) {
+      if (ref !== LEASE_REF || !activeRef) throw Object.assign(new Error('missing'), { status: 404 });
+      return { object: { type: 'tag', sha: activeRef } };
+    },
+    async getTag(sha) { return tags.get(sha); },
+    async createTag(payload) {
+      const sha = String(tags.size + 1).repeat(40);
+      tags.set(sha, payload);
+      return { sha };
+    },
+    async createRef({ sha }) {
+      if (activeRef) throw Object.assign(new Error('conflict'), { status: 422 });
+      activeRef = sha;
+    },
+  };
+  const gh = async route => {
+    if (route.startsWith('/git/ref/heads/')) return { object: { type: 'commit', sha: base } };
+    if (route.startsWith('/issues/')) return rows.get(Number(route.split('/').at(-1)));
+    throw new Error('Unexpected ' + route);
+  };
+  const tasksApi = {
+    list: async () => launched.length ? [{ id: taskId, state: 'completed' }] : [],
+    get: async () => ({
+      ...task, state: 'completed', // POST is acknowledged, but the task is not live yet.
+    }),
+    create: async ({ prompt }) => { launched.push(prompt); return { id: taskId }; },
+  };
+  const run = number => runAcceptanceCycle({
+    repository, gh, paged: async route => route.startsWith('/issues/305/events') ? events : [],
+    tasksApi, leaseApi, runId: 'actions_' + number + '_1', report: () => {},
+    approval: async number => ({ issue: rows.get(number), approved: true }), repairBusy: async () => false,
+  });
+  rows.get(305).labels = [];
+  await run(120);
+  assert.deepEqual(launched, []);
+  rows.get(305).labels = labels;
+  const concurrent = await Promise.allSettled([run(121), run(122)]);
+  assert.equal(concurrent.filter(result => result.status === 'rejected').length, 1);
+  assert.equal(launched.length, 1);
+  assert.match(launched[0], /issue #305 only/);
+  assert.ok(activeRef); // An ambiguous independent GET must preserve the lease.
+  const first = rows.get(305);
+  const owningRun = JSON.parse(tags.get(activeRef).message).runId;
+  first.state = 'closed';
+  first.state_reason = 'completed';
+  first.body += '\n\n<!-- butterbox-autonomy-reconciled:v1 -->\n\nIssue #305 · lease ' +
+    owningRun + ' · task ' + taskId + '\n';
+  events.push({ event: 'closed', actor: { id: 41898282 }, commit_id: null });
+  await run(123);
+  assert.equal(launched.length, 1);
+  activeRef = null; // The protected closure-to-release transition is verified in the lifecycle test above.
+  await assert.rejects(run(124), /not confirmed active/);
+  assert.equal(launched.length, 2);
+  assert.match(launched[1], /issue #306 only/);
 });
