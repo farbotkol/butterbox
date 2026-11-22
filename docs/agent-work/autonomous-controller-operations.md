@@ -88,10 +88,11 @@ Before launching:
    records the task, sessions, PR, checked SHA, merged SHA, and run links on
    Issue #298 before closing it. Check that Issue #290 remains open.
 
-The manual synthetic test ignores tasks reported as idle for launch and
-reconciliation. Queued, in-progress, waiting-for-user, and unrecognized task
-states still block. This exception applies only to the manual synthetic workflow.
-Leave idle sessions alone while the synthetic task holds the lease.
+Both workflows ignore other Copilot tasks reported as idle when checking
+for competing writers. Queued, in-progress, waiting-for-user, and unrecognized
+task states still block. Completion of the task that owns the lease must still
+be verified before release. Leave idle sessions alone while a task holds the
+lease.
 
 CI repair and Phase 2 automatic merging stand down while the synthetic lease
 is held. The owner performs the protected squash merge. A rejection or ambiguous

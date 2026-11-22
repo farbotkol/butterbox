@@ -1,5 +1,7 @@
 // Independent evidence gates for releasing a durable implementation lease.
 // A timer, AI statement, terminal task alone, or merged PR alone is never enough.
+import { activeAgentTasks } from './agent-tasks-api.mjs';
+
 const stoppedStates=new Set(['completed','failed','cancelled','timed_out']);
 const isSha=s=>/^[a-f0-9]{40}$/.test(s??'');
 export const taskMarker=runId=>'BUTTERBOX_LEASE_RUN='+runId;
@@ -16,7 +18,7 @@ export function assessHandoff({lease,tasks,prs,issue,openPRs,now=Date.now()}={})
   return blocked('Copilot writer not independently confirmed stopped');
  }
  if(openPRs.some(p=>p.state==='open'&&p.base?.ref==='copilot/Development'))return blocked('Another open Development PR exists');
- if(tasks.some(t=>!stoppedStates.has(t.state)))return blocked('A Copilot task may still be writing');
+ if(!stoppedStates.has(task.state)||activeAgentTasks(tasks).length)return blocked('A Copilot task may still be writing');
  if(task.state!=='completed') {
   const elapsed=now-Date.parse(lease.startedAt);
   if(issue.number===lease.issue&&issue.state==='open'&&elapsed>=12*60*60*1000&&
