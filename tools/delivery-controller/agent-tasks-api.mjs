@@ -5,10 +5,17 @@ export function agentTasksApi({token,repository,request=fetch}={}) {
   async function call(method,path,body) {
     const response=await request(root+path,{method,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2026-03-10',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
     if(!response.ok) {const error=new Error('Copilot task API '+method+' returned HTTP '+response.status);error.status=response.status;throw error;}
-    return response.json();
+    const result = await response.json();
+    if (!path || !path.startsWith('?')) return result;
+    if (!Array.isArray(result.tasks) || result.tasks.length >= 100 ||
+        (Object.hasOwn(result, 'total_count') && result.total_count !== result.tasks.length) ||
+        /rel="?next"?/.test(response.headers?.get('link') ?? '')) {
+      throw new Error('Copilot task list incomplete; fail closed');
+    }
+    return result;
   }
   return {
-    list:async()=>{const result=await call('GET','?per_page=100');if(!Array.isArray(result.tasks) || result.tasks.length>=100)throw new Error('Copilot task list incomplete; fail closed');return result.tasks;},
+    list:async()=>(await call('GET','?per_page=100')).tasks,
     get:id=>{if(!/^[A-Za-z0-9-]{8,96}$/.test(id??''))throw new Error('Invalid task id');return call('GET','/'+id);},
     create:({prompt})=>{if(typeof prompt!=='string'||prompt.length<50||prompt.length>6000)throw new Error('Invalid prompt');return call('POST','',{prompt,base_ref:'copilot/Development',create_pull_request:true});}
   };

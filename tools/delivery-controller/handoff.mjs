@@ -14,15 +14,24 @@ export function verifyTaskSnapshot(rows) {
   return rows;
 }
 
+function completeSessions(tasks) {
+  return tasks.every(task => Array.isArray(task.sessions) && task.session_count === task.sessions.length &&
+    task.sessions.every(session => isUuid(session.id) && session.task_id === task.id && known.has(session.state)) &&
+    new Set(task.sessions.map(session => session.id)).size === task.sessions.length);
+}
+
+export function competingWriters(tasks) {
+  if (!completeSessions(tasks)) throw new Error('Incomplete or ambiguous Copilot session snapshot');
+  return activeAgentTasks(tasks).length > 0 || tasks.some(task =>
+    task.sessions.some(session => session.state !== 'idle' && !stopped.has(session.state)));
+}
+
 export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }) {
   const blocked = reason => ({ action: 'RETAIN_LEASE', reason });
   if (!Array.isArray(openPRs) || issue?.number !== lease.issue || issue.pull_request)
     return blocked('Incomplete PR or issue evidence');
   verifyTaskSnapshot(tasks);
-  if (tasks.some(task => !Array.isArray(task.sessions) || task.session_count !== task.sessions.length ||
-      task.sessions.some(session => !isUuid(session.id) || session.task_id !== task.id || !known.has(session.state)) ||
-      new Set(task.sessions.map(session => session.id)).size !== task.sessions.length))
-    return blocked('Incomplete or ambiguous Copilot session snapshot');
+  if (!completeSessions(tasks)) return blocked('Incomplete or ambiguous Copilot session snapshot');
 
   const marker = taskMarker(lease.runId);
   const matches = tasks.filter(task => task.sessions.some(session =>
@@ -33,8 +42,7 @@ export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }
       session.base_ref !== development))
     return blocked('Lease owner may still be writing');
   const others = tasks.filter(row => row.id !== task.id);
-  if (activeAgentTasks(others).length || others.some(row =>
-    row.sessions.some(session => session.state !== 'idle' && !stopped.has(session.state))))
+  if (competingWriters(others))
     return blocked('A competing Copilot session may still be writing');
 
   if (task.state !== 'completed') {

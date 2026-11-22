@@ -48,3 +48,19 @@ test('approval requires the owner to apply each current queue label',()=>{
  assert.equal(ownerApprovedQueueLabels([...events,{...events[0],actor:{id:2}}],11307166),false);
  assert.equal(ownerApprovedQueueLabels([...events,{...events[0],event:'unlabeled'}],11307166),false);
 });
+
+test('Copilot keeps its own API version and rejects an incomplete page before dispatch', async () => {
+ const api = response => agentTasksApi({
+  token: 'fixture', repository: 'farbotkol/butterbox',
+  request: async (url, options) => {
+   assert.equal(options.headers['X-GitHub-Api-Version'], '2026-03-10');
+   return { ok: true, ...response };
+  },
+ });
+ await assert.rejects(api({ json: async () => ({ tasks: [], total_count: 1 }) }).list(), /incomplete/);
+ await assert.rejects(api({
+  headers: new Headers({ Link: '<https://api.github.com/next>; rel="next"' }),
+  json: async () => ({ tasks: [] }),
+ }).list(), /incomplete/);
+ assert.deepEqual(await api({ json: async () => ({ tasks: [], total_count: 0 }) }).list(), []);
+});

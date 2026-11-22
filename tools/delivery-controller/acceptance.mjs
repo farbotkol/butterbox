@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { verifyTaskSnapshot, assessHandoff, development, isSha } from './handoff.mjs';
+import { verifyTaskSnapshot, assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
 import { canonicalIssueNumber } from '../agent-evidence/evidence.mjs';
 
@@ -8,6 +8,7 @@ export const ownerId = 11307166;
 const actionsBot = 41898282;
 const requiredChecks = ['verify', 'database-smoke'];
 export const proofFor = issue => {
+  if (!acceptanceIssues.includes(issue)) throw new Error('Issue is outside the controlled acceptance scope');
   const letter = issue === 305 ? 'A' : 'B';
   const order = issue === 305 ? 'first' : 'second';
   return {
@@ -37,8 +38,12 @@ export function closedByController(issue, events) {
 }
 
 export function firstAcceptanceCompleted(issue, events) {
-  return issue.number === 305 && !issue.pull_request && closedByController(issue, events) &&
-    /<!-- butterbox-autonomy-reconciled:v1 -->\n\nIssue #305 · lease actions_[1-9]\d*_[1-9]\d* · task [0-9a-f-]{36}\n/.test(issue.body ?? '');
+  const note = (issue.body ?? '').split('\n\n' + marker + '\n\n');
+  return issue.number === 305 && !issue.pull_request && closedByController(issue, events) && note.length === 2 &&
+    /^Issue #305 · lease actions_[1-9]\d*_[1-9]\d* · task [0-9a-f-]{36}\n/.test(note[1]) &&
+    /^Completed sessions [0-9a-f-]{36}(?:, [0-9a-f-]{36})*$/m.test(note[1]) &&
+    /^PR #[1-9]\d* · head [0-9a-f]{40} · squash [0-9a-f]{40} · proof blob [0-9a-f]{40}$/m.test(note[1]) &&
+    /^Reconciliation https:\/\/github\.com\/farbotkol\/butterbox\/actions\/runs\/\d+$/m.test(note[1]);
 }
 
 export function compareProof(file, approved, blob) {
@@ -133,7 +138,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   assert(pr.number === number && (pr.id === artifact || pr.number === artifact) &&
     pr.base?.ref === development && pr.base.repo?.full_name === repository &&
     pr.head?.repo?.full_name === repository && pr.head.ref?.startsWith('copilot/') && isSha(head) &&
-    task.sessions.some(session => session.head_ref === pr.head.ref), 'PR identity or session head does not match the artifact');
+    task.sessions.some(session => session.head_ref === pr.head.ref && typeof session.prompt === 'string' &&
+      session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
   const body = pr.body ?? '';
   assert(canonicalIssueNumber(body) === lease.issue && (body.match(/<!--\s*butterbox-issue:/g) ?? []).length === 1 && body.split(/\r?\n/).includes('Refs #' + lease.issue) &&
     body.split(/\r?\n/).filter(line => line.startsWith('<!-- butterbox-evidence:')).join() ===
@@ -177,7 +183,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       freshPR.merge_commit_sha === pr.merge_commit_sha && freshPR.auto_merge === null &&
       Array.isArray(freshPR.requested_reviewers) && !freshPR.requested_reviewers.length &&
       Array.isArray(freshPR.requested_teams) && !freshPR.requested_teams.length &&
-      approved.approved && approved.issue.updated_at === fresh.issue.updated_at,
+      approved.approved && Number.isFinite(time(fresh.issue.updated_at)) &&
+      approved.issue.updated_at === fresh.issue.updated_at,
     'PR, Development, approval or writer evidence changed during handoff');
     return fresh.issue;
   };

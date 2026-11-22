@@ -3,10 +3,10 @@ import { pathToFileURL } from 'node:url';
 import { githubLeaseApi } from './github-lease-api.mjs';
 import { readLease, acquireLease, releaseLease, isParked } from './lease.mjs';
 import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
-import { agentTasksApi, activeAgentTasks, verifyCreatedTask } from './agent-tasks-api.mjs';
-import { taskMarker, development, verifyTaskSnapshot } from './handoff.mjs';
-import { acceptanceIssues, ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
-  openDevelopmentPRs, advanceAcceptance } from './acceptance.mjs';
+import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
+import { taskMarker, development, competingWriters } from './handoff.mjs';
+import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
+  openDevelopmentPRs, readTaskDetails, advanceAcceptance } from './acceptance.mjs';
 
 const repo = process.env.GITHUB_REPOSITORY;
 const ghToken = process.env.GITHUB_TOKEN;
@@ -113,17 +113,16 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
 
   const secondAllowed = async () => firstAcceptanceCompleted(
     await gh('/issues/305'), await paged('/issues/305/events'));
-  const scope = await secondAllowed() ? acceptanceIssues : [305];
+  const scope = await secondAllowed() ? 306 : 305;
   const candidateSnapshot = async () => {
     const [prs, rows, repair, ref] = await Promise.all([
-      openDevelopmentPRs(paged, repository), tasksApi.list(), repairBusy(), gh('/git/ref/heads/' + development),
+      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
     ]);
-    const activeTasks = activeAgentTasks(verifyTaskSnapshot(rows));
-    if (repair) activeTasks.push({ state: 'CI repair running' });
+    const activeTasks = competingWriters(rows) || repair ? ['Competing GitHub writer'] : [];
     return { prs, activeTasks, lease: { state: 'free' }, baseSha: developmentSha(ref) };
   };
   const initial = await candidateSnapshot();
-  const queue = { ...initial, issues: await Promise.all(scope.map(number => gh('/issues/' + number))) };
+  const queue = { ...initial, issues: [await gh('/issues/' + scope)] };
   const selection = selectReadyIssue(queue);
   if (selection.action !== 'SELECT_NEXT_READY') {
     report(selection.action + ': ' + selection.reason);
@@ -135,7 +134,8 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
   const { issue, approved } = await approval(number);
-  if (!approved || issue.number !== number || issue.state !== 'open' || issue.title !== selection.title)
+  if (!approved || issue.number !== number || issue.state !== 'open' || issue.title !== selection.title ||
+      !Number.isFinite(Date.parse(issue.updated_at)))
     throw new Error('Issue approval or identity changed since selection');
   const acquired = await acquireLease(leaseApi, {
     issue: number, runId, baseSha: initial.baseSha, issueDigest: issueDigest(issue),

@@ -13,9 +13,9 @@ const blob = 'd'.repeat(40);
 const tagSha = 'e'.repeat(40);
 const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
 const sessionId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567891';
-const at = '2026-11-22T00:00:00Z';
-const ended = '2026-11-22T00:05:00Z';
-const mergedAt = '2026-11-22T00:10:00Z';
+const at = '2024-11-22T00:00:00Z';
+const ended = '2024-11-22T00:05:00Z';
+const mergedAt = '2024-11-22T00:10:00Z';
 const issue = { number: 305, state: 'open', title: 'Test A', body: '## Acceptance criteria', updated_at: at };
 const record = { version: 1, runId: 'actions_123_1', issue: 305, issueDigest: issueDigest(issue), baseSha: base, startedAt: at };
 const lease = { ...record, tagSha };
@@ -191,7 +191,7 @@ test('later successful CI retry is accepted, later historical failures stay sepa
   state.checks.push({ ...state.checks[0], id: 109, conclusion: 'failure' }, { ...state.checks[0], id: 110 });
   await run();
   await run();
-  state.checks.push({ ...state.checks[0], id: 111, started_at: '2026-11-22T00:11:00Z', conclusion: 'failure' });
+  state.checks.push({ ...state.checks[0], id: 111, started_at: '2024-11-22T00:11:00Z', conclusion: 'failure' });
   await run();
   assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
 });
@@ -267,7 +267,9 @@ test('controller cycles serialize competing launches and gate B on audited A clo
   first.state = 'closed';
   first.state_reason = 'completed';
   first.body += '\n\n<!-- butterbox-autonomy-reconciled:v1 -->\n\nIssue #305 · lease ' +
-    owningRun + ' · task ' + taskId + '\n';
+    owningRun + ' · task ' + taskId + '\nCompleted sessions ' + sessionId + '\nPR #401 · head ' + head +
+    ' · squash ' + merge + ' · proof blob ' + blob +
+    '\nReconciliation https://github.com/farbotkol/butterbox/actions/runs/124';
   events.push({ event: 'closed', actor: { id: 41898282 }, commit_id: null });
   await run(123);
   assert.equal(launched.length, 1);
