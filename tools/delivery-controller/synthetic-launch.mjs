@@ -79,6 +79,8 @@ function exactProof(proof) {
 const branchRef = encodeURIComponent(branch);
 const proofAt = (gh, sha) => gh('/contents/' + proofPath + '?ref=' + sha);
 const prLink = number => 'https://github.com/' + repo + '/pull/' + number;
+// The 2026-03-10 REST response omits merge_commit_sha, which both merge checks require.
+const pullAt = (gh, number) => gh('/pulls/' + number, 'GET', undefined, '2022-11-28');
 
 async function checkedHead(gh, head, mergedAt) {
   const filter = mergedAt ? 'all' : 'latest';
@@ -105,11 +107,12 @@ async function checkedHead(gh, head, mergedAt) {
 }
 
 async function verifyCorrection({ gh, number, original, baseSha }) {
-  const pr = await gh('/pulls/' + number);
+  const pr = await pullAt(gh, number);
+  requireEvidence(shaPattern.test(pr.merge_commit_sha ?? ''), 'Corrective PR merge_commit_sha is missing or invalid.');
   requireEvidence(pr.number === Number(number) && pr.merged === true && pr.state === 'closed' &&
     pr.base?.ref === branch && pr.base?.repo?.full_name === repo && pr.head?.repo?.full_name === repo &&
     /^Refs #298\s*$/mi.test(pr.body ?? '') && shaPattern.test(pr.head?.sha ?? '') &&
-    shaPattern.test(pr.merge_commit_sha ?? '') && pr.merge_commit_sha !== original.merge_commit_sha &&
+    pr.merge_commit_sha !== original.merge_commit_sha &&
     Date.parse(pr.merged_at) > Date.parse(original.merged_at),
   'The corrective PR must reference #298 and have a distinct, later merge into Development.');
 
@@ -236,7 +239,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   if (operation === 'verify' && !prNumber) return;
   requireEvidence(positiveInteger.test(prNumber) && Number.isSafeInteger(Number(prNumber)),
     'Enter the synthetic PR number.');
-  const pr = await gh('/pulls/' + prNumber);
+  const pr = await pullAt(gh, prNumber);
   const githubArtifact = task.artifacts?.some(artifact => artifact.provider === 'github' &&
     artifact.type === 'pull' && [pr.number, pr.id].includes(artifact.data?.id));
   requireEvidence(pr.number === Number(prNumber) && pr.number !== 294 && githubArtifact &&
@@ -250,10 +253,16 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   const { head } = pr;
   const proof = await proofAt(gh, head.sha);
   if (correctionPrNumber) {
-    requireEvidence(pr.merged === true && head.sha === deviation.head && pr.merge_commit_sha === deviation.merge &&
-      Number.isFinite(Date.parse(pr.merged_at)) && proof.type === 'file' && proof.encoding === 'base64' &&
-      proof.sha === deviation.blob && !exactProof(proof),
-    'The original PR does not match the recorded proof deviation.');
+    requireEvidence(pr.merged === true, 'Original PR merged must be true.');
+    requireEvidence(head.sha === deviation.head, 'Original PR head.sha differs from the recorded deviation.');
+    requireEvidence(pr.merge_commit_sha === deviation.merge,
+      'Original PR merge_commit_sha is missing or differs from the recorded deviation.');
+    requireEvidence(Number.isFinite(Date.parse(pr.merged_at)), 'Original PR merged_at is missing or invalid.');
+    requireEvidence(proof.type === 'file', 'Original proof type must be file.');
+    requireEvidence(proof.encoding === 'base64', 'Original proof encoding must be base64.');
+    requireEvidence(proof.sha === deviation.blob, 'Original proof sha differs from the recorded deviation.');
+    requireEvidence(typeof proof.content === 'string', 'Original proof content is missing or invalid.');
+    requireEvidence(!exactProof(proof), 'Original proof content matches the approved text instead of the recorded deviation.');
   } else {
     requireEvidence(exactProof(proof), 'The proof file differs from the approved content.');
   }
@@ -268,7 +277,8 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
     return;
   }
 
-  requireEvidence(pr.merged === true && shaPattern.test(pr.merge_commit_sha ?? ''), 'Synthetic PR has no verified merge.');
+  requireEvidence(pr.merged === true, 'Synthetic PR merged must be true.');
+  requireEvidence(shaPattern.test(pr.merge_commit_sha ?? ''), 'Synthetic PR merge_commit_sha is missing or invalid.');
   const merge = pr.merge_commit_sha;
   const comparison = await gh('/compare/' + merge + '...copilot%2FDevelopment');
   requireEvidence(['ahead', 'identical'].includes(comparison.status), 'Merge is not reachable from Development.');
@@ -329,12 +339,12 @@ async function main() {
     appendFileSync(env.GITHUB_STEP_SUMMARY, line + '\n\n');
   };
   const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
-  const gh = async (path, method = 'GET', body) => {
+  const gh = async (path, method = 'GET', body, apiVersion = '2026-03-10') => {
     const response = await request('https://api.github.com/repos/' + repo + path, {
       method,
       headers: {
         Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + env.GITHUB_TOKEN,
-        'X-GitHub-Api-Version': '2026-03-10', 'Content-Type': 'application/json',
+        'X-GitHub-Api-Version': apiVersion, 'Content-Type': 'application/json',
       },
       body: body && JSON.stringify(body),
     });
