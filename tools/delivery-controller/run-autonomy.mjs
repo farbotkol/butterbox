@@ -114,12 +114,28 @@ async function main() {
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
     const readRunLog = async (id, attempt) => {
       try {
-        const { stdout } = await exec('gh', ['run', 'view', id, '--repo', repo, '--attempt', attempt, '--log'], {
-          env: { ...process.env, GH_TOKEN: ghToken }, timeout: 30000,
-        });
-        return stdout;
+        const api = async path => {
+          const { stdout } = await exec('gh', ['api', path], {
+            env: { ...process.env, GH_TOKEN: ghToken }, timeout: 30000,
+            maxBuffer: 10 * 1024 * 1024,
+          });
+          return stdout;
+        };
+        const result = JSON.parse(await api('repos/' + repo +
+          '/actions/runs/' + id + '/attempts/' + attempt + '/jobs?per_page=100'));
+        if (!Number.isSafeInteger(result.total_count) ||
+            !Array.isArray(result.jobs) || result.total_count !== result.jobs.length)
+          throw new Error('Incomplete original attempt job inventory');
+        const jobs = result.jobs.filter(job => job.name === 'autonomous-dispatch' &&
+          String(job.run_id) === id && job.run_attempt === Number(attempt) &&
+          job.status === 'completed' && job.conclusion === 'failure' &&
+          Number.isSafeInteger(job.id));
+        if (jobs.length !== 1) throw new Error('Original dispatch job is not uniquely verified');
+        const output = await api('repos/' + repo + '/actions/jobs/' + jobs[0].id + '/logs');
+        if (!output.trim()) throw new Error('Original dispatch job returned an empty log');
+        return output;
       } catch {
-        throw new Error('Cannot independently read the original controller attempt log');
+        throw new Error('Cannot independently read the exact original dispatch job log');
       }
     };
     await verifyStoppedAttempt({ lease, gh, readRunLog });
