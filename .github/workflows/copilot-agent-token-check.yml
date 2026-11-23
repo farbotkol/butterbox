@@ -7,44 +7,46 @@ permissions: {}
 
 jobs:
   check-token:
-    if: github.repository == 'farbotkol/butterbox' && github.ref == 'refs/heads/copilot/Development'
+    if: github.repository == 'farbotkol/butterbox' && github.ref == 'refs/heads/diagnose/45104980678-copilot-readonly' && github.actor_id == '11307166'
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
-      - name: Report Copilot task-list HTTP status
-        shell: bash
+      - name: Inspect Copilot task and session states using GET only
         env:
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
         run: |
-          set -euo pipefail
-
-          report() {
-            printf '%s\n' "$1" | tee -a "$GITHUB_STEP_SUMMARY"
+          node --input-type=module <<'JS'
+          const token = process.env.COPILOT_AGENT_USER_TOKEN;
+          if (!token) throw new Error('Approved Copilot credential unavailable');
+          const root = 'https://api.github.com/agents/repos/farbotkol/butterbox/tasks';
+          const id = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value) ? value : null;
+          const state = value => ['completed', 'failed', 'cancelled', 'timed_out', 'idle', 'queued', 'in_progress', 'waiting_for_user'].includes(value) ? value : 'unknown';
+          const time = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+          async function get(path) {
+            const response = await fetch(root + path, {
+              method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
+              headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2026-03-10' },
+            });
+            if (!response.ok) throw new Error('Copilot GET returned HTTP ' + response.status);
+            if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Copilot list is paginated');
+            return response.json();
           }
-
-          if [[ -z "$COPILOT_AGENT_USER_TOKEN" ]]; then
-            report 'COPILOT_AGENT_USER_TOKEN is unavailable. No request was sent.'
-            exit 1
-          fi
-
-          # Only GitHub token characters can enter the curl configuration on stdin.
-          if [[ ! "$COPILOT_AGENT_USER_TOKEN" =~ ^[A-Za-z0-9_]+$ ]]; then
-            report 'COPILOT_AGENT_USER_TOKEN has an unexpected format. No request was sent.'
-            exit 1
-          fi
-
-          if ! status=$(
-            printf 'header = "Authorization: Bearer %s"\n' "$COPILOT_AGENT_USER_TOKEN" |
-              curl --disable --config - --silent --output /dev/null \
-                --write-out '%{http_code}' --connect-timeout 10 --max-time 30 \
-                --request GET \
-                --header 'Accept: application/vnd.github+json' \
-                --header 'X-GitHub-Api-Version: 2026-03-10' \
-                'https://api.github.com/agents/repos/farbotkol/butterbox/tasks'
-          ) || [[ ! "$status" =~ ^[1-5][0-9][0-9]$ ]]; then
-            report 'No HTTP status was received from GitHub.'
-            exit 1
-          fi
-
-          report "GitHub Copilot task list returned HTTP $status."
-          [[ "$status" == 200 ]]
+          const list = await get('?per_page=100');
+          if (!Array.isArray(list.tasks) || list.tasks.length >= 100 ||
+              (Object.hasOwn(list, 'total_count') && list.total_count !== list.tasks.length)) throw new Error('Incomplete task list');
+          console.log(JSON.stringify({ taskCount: list.tasks.length }));
+          for (const row of list.tasks) {
+            const taskId = id(row.id);
+            if (!taskId) throw new Error('Unexpected task identity');
+            const task = await get('/' + taskId);
+            console.log(JSON.stringify({
+              taskId, detailTaskId: id(task.id), listState: state(row.state), state: state(task.state),
+              created: time(task.created_at), updated: time(task.updated_at), completed: time(task.completed_at),
+              sessionCount: task.session_count, sessions: task.sessions?.map(session => ({
+                id: id(session.id), taskId: id(session.task_id), state: state(session.state),
+                created: time(session.created_at), updated: time(session.updated_at),
+                started: time(session.started_at), completed: time(session.completed_at),
+              })),
+            }));
+          }
+          JS
