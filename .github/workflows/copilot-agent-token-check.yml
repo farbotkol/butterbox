@@ -32,55 +32,53 @@ jobs:
             if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Paginated task evidence');
             return response.json();
           }
-          async function list() {
-            const data = await get('?per_page=100');
+          async function list(archived) {
+            const data = await get('?per_page=100&is_archived=' + archived);
             if (!Array.isArray(data.tasks) || data.tasks.length >= 100 ||
                 (Object.hasOwn(data, 'total_count') && data.tasks.length !== data.total_count) ||
                 data.tasks.some(task => !uuid(task.id) || !known.has(task.state)) ||
                 new Set(data.tasks.map(task => task.id)).size !== data.tasks.length) throw new Error('Incomplete task inventory');
             return data.tasks;
           }
-          const rows = await list();
-          const tasks = [];
-          for (let i = 0; i < rows.length; i += 8) {
-            tasks.push(...await Promise.all(rows.slice(i, i + 8).map(async row => {
-              const task = await get('/' + row.id);
-              if (task.id !== row.id || task.state !== row.state) throw new Error('Task list and detail disagree');
-              return task;
-            })));
-          }
-          const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
-          if (states(rows) !== states(await list())) throw new Error('Task inventory changed');
-          const acquiredAt = Date.parse('2026-11-23T06:02:50.607Z');
-          const records = tasks.map(task => {
-            const sessions = Array.isArray(task.sessions) ? task.sessions : [];
-            const shape = Array.isArray(task.sessions) && task.session_count === sessions.length &&
-              sessions.every(session => uuid(session.id) && session.task_id === task.id && known.has(session.state)) &&
-              new Set(sessions.map(session => session.id)).size === sessions.length;
-            const evidence = sessions.map(session => {
-              const reasons = [];
-              if (!uuid(session.id) || session.task_id !== task.id || !known.has(session.state)) reasons.push('invalid_identity_or_state');
-              if (!stopped.has(session.state) && session.state !== 'idle') reasons.push('writer_session');
-              if (typeof session.prompt !== 'string' || !session.prompt.trim()) reasons.push('missing_prompt');
-              else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) reasons.push('lease_marker');
-              return { id: uuid(session.id) ? session.id : null, state: known.has(session.state) ? session.state : 'unknown',
-                predatesLease: Date.parse(session.created_at) < acquiredAt, reasons };
-            });
-            const normalWriter = (!stopped.has(task.state) && task.state !== 'idle') ||
-              evidence.some(session => session.reasons.includes('writer_session'));
-            const oldRecoveryRejects = !stopped.has(task.state) || !sessions.length ||
-              evidence.some(session => !stopped.has(session.state) || session.reasons.includes('missing_prompt') || session.reasons.includes('lease_marker'));
-            const idlePair = task.state === 'idle' && sessions.length > 0 && sessions.every(session => session.state === 'idle');
-            return { id: task.id, state: task.state, shape, normalWriter, oldRecoveryRejects, idlePair, sessions: evidence };
-          });
-          console.log(JSON.stringify({ taskCount: records.length,
-            badShape: records.filter(task => !task.shape).length,
-            normalWriters: records.filter(task => task.normalWriter).length,
-            firstOldRecoveryReject: records.find(task => task.oldRecoveryRejects)?.id ?? null,
-            idlePairs: records.filter(task => task.idlePair).length,
-            missingPromptRecords: records.filter(task => task.sessions.some(session => session.reasons.includes('missing_prompt'))).length,
-            matchingRecords: records.filter(task => task.sessions.some(session => session.reasons.includes('lease_marker'))).length }));
-          for (const task of records.filter(task => task.oldRecoveryRejects || !task.shape || task.normalWriter)) {
-            console.log(JSON.stringify(task));
+          for (const archived of [false, true]) {
+            const rows = await list(archived);
+            const tasks = [];
+            for (let i = 0; i < rows.length; i += 8) {
+              tasks.push(...await Promise.all(rows.slice(i, i + 8).map(async row => {
+                const task = await get('/' + row.id);
+                if (task.id !== row.id || task.state !== row.state) throw new Error('Task list and detail disagree');
+                return task;
+              })));
+            }
+            const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
+            if (states(rows) !== states(await list(archived))) throw new Error('Task inventory changed');
+            const findings = { archived, tasks: tasks.length, missingPromptSessions: 0,
+              missingPromptByState: {}, badShape: [], writers: [], idlePairs: [], matching: [], sessionKeys: [] };
+            const sessionKeys = new Set();
+            for (const task of tasks) {
+              const sessions = Array.isArray(task.sessions) ? task.sessions : [];
+              if (!sessions.length || task.session_count !== sessions.length ||
+                  sessions.some(s => !uuid(s.id) || s.task_id !== task.id || !known.has(s.state)) ||
+                  new Set(sessions.map(s => s.id)).size !== sessions.length) findings.badShape.push(task.id);
+              if (task.state === 'idle' && sessions.length && sessions.every(s => s.state === 'idle')) {
+                findings.idlePairs.push({ taskId: task.id, sessionIds: sessions.map(s => s.id).filter(uuid) });
+              }
+              const active = sessions.filter(s => !stopped.has(s.state) && s.state !== 'idle');
+              if ((!stopped.has(task.state) && task.state !== 'idle') || active.length) {
+                findings.writers.push({ taskId: task.id, state: task.state, sessionIds: active.map(s => s.id).filter(uuid) });
+              }
+              for (const session of sessions) {
+                for (const key of Object.keys(session)) sessionKeys.add(key);
+                if (typeof session.prompt !== 'string' || !session.prompt.trim()) {
+                  findings.missingPromptSessions++;
+                  const state = known.has(session.state) ? session.state : 'unknown';
+                  findings.missingPromptByState[state] = (findings.missingPromptByState[state] ?? 0) + 1;
+                } else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) {
+                  findings.matching.push({ taskId: task.id, sessionId: uuid(session.id) ? session.id : null });
+                }
+              }
+            }
+            findings.sessionKeys = [...sessionKeys].sort();
+            console.log(JSON.stringify(findings));
           }
           JS
