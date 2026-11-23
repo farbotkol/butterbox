@@ -242,7 +242,13 @@ test('controller cycles serialize competing launches and gate B on audited A clo
     throw new Error('Unexpected ' + route);
   };
   const tasksApi = {
-    list: async () => launched.length ? [{ id: taskId, state: 'completed' }] : [],
+    list: async ({ states } = {}) => {
+      if (states) {
+        assert.deepEqual(states, ['queued', 'in_progress']);
+        return [];
+      }
+      return launched.length ? [{ id: taskId, state: 'completed' }] : [];
+    },
     get: async () => ({
       ...task, state: 'completed', // POST is acknowledged, but the task is not live yet.
     }),
@@ -365,7 +371,9 @@ test('the task list and detail must agree before writer classification', async (
 
 test('task inventory avoids safe full snapshots but fetches uncertain and contradictory summaries', async () => {
   const known = structuredClone(task);
-  const failed = { ...known, state: 'failed', sessions: [{ ...known.sessions[0], state: 'queued' }] };
+  const failedId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567893';
+  const failed = { ...known, id: failedId, state: 'failed',
+    sessions: [{ ...known.sessions[0], task_id: failedId, state: 'queued' }] };
   const pending = { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567892', state: 'in_progress' };
   const fetched = [];
   const rows = [known, failed, pending];
