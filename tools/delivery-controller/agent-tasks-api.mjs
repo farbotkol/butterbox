@@ -15,7 +15,17 @@ export function agentTasksApi({token,repository,request=fetch}={}) {
     return result;
   }
   return {
-    list:async()=>(await call('GET','?per_page=100')).tasks,
+    list:async({states}={})=>{
+      const allowed=['queued','in_progress'];
+      if(states!==undefined && (!Array.isArray(states)||!states.length||
+          states.some(state=>!allowed.includes(state))||new Set(states).size!==states.length))
+        throw new Error('Unsupported Copilot writer state filter');
+      const query='?per_page=100'+(states?'&state='+states.join(','):'');
+      const tasks=(await call('GET',query)).tasks;
+      if(states && tasks.some(task=>!states.includes(task.state)))
+        throw new Error('Copilot server returned task outside requested writer states');
+      return tasks;
+    },
     get:id=>{if(!/^[A-Za-z0-9-]{8,96}$/.test(id??''))throw new Error('Invalid task id');return call('GET','/'+id);},
     create:({prompt})=>{if(typeof prompt!=='string'||prompt.length<50||prompt.length>6000)throw new Error('Invalid prompt');return call('POST','',{prompt,base_ref:'copilot/Development',create_pull_request:true});}
   };
