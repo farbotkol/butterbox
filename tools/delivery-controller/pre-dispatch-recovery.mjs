@@ -24,38 +24,36 @@ export async function verifyStoppedAttempt({ lease, gh, readRunLog }) {
     throw new Error('Controller attempt identity or conclusion is unverified');
   }
 
-  // Require the checked-out code and explicit stop point in the exact attempt's
-  // GitHub job log. The old controller emitted only the final GET error.
+  // Read only the autonomous-dispatch job's GitHub job-log endpoint, not the
+  // combined 'gh run view --log' output. Raw job logs have timestamped records,
+  // but no tab-separated job/step prefixes.
   const lines = (await readRunLog(id, attempt)).split(/\r?\n/);
-  // 'gh run view --log' prefixes each record with a job and step label.
-  // Match that structure, but do not assume formatting is identical to the
-  // raw GitHub job log or that each step contains only one output record.
-  const entries = lines.flatMap(line => {
-    const first = line.indexOf('\t');
-    const second = first < 0 ? -1 : line.indexOf('\t', first + 1);
-    if (second < 0) return [];
-    const job = line.slice(0, first).trim();
-    const step = line.slice(first + 1, second).trim();
-    if (job !== 'autonomous-dispatch' && !job.endsWith('/autonomous-dispatch')) return [];
-    const message = line.slice(second + 1).replace(/^\d{4}-\d\d-\d\dT\S+Z\s+/, '').trim();
-    return [{ step, message }];
-  });
-  const messages = step => entries.filter(entry => entry.step === step).map(entry => entry.message);
-  const output = messages(logStep);
+  const clean = line => line.replace(/^\d{4}-\d\d-\d\dT\S+Z\s+/, '').trim();
+  const entries = lines.map(clean);
   const acquire = 'LEASE_ACQUIRED for #' + lease.issue + ' by ' + lease.runId;
   const legacy = lease.issue === 305 && lease.runId === 'actions_45121500090_1' &&
     lease.baseSha === legacyBase && lease.tagSha === legacyTag;
   const stop = legacy ? 'STOPPED: Copilot task API GET returned HTTP 403' : preDispatchStop(lease);
-  const checkoutMessages = messages('Run actions/checkout@v4');
+  const positions = value => entries.flatMap((line, index) => line === value ? [index] : []);
+  const acquired = positions(acquire);
+  const stoppedAt = positions(stop);
+  const checkout = entries.flatMap((line, index) =>
+    line === lease.baseSha && index > 0 &&
+    entries[index - 1] === '[command]/usr/bin/git log -1 --format=%H' ? [index] : []);
   const failures = [];
-  if (!checkoutMessages.includes(lease.baseSha)) failures.push('checkout_sha');
-  if (output.filter(line => line === acquire).length !== 1) failures.push('lease_acquisition');
-  if (output.filter(line => line === stop).length !== 1) failures.push('pre_dispatch_stop');
-  if (output.indexOf(stop) <= output.indexOf(acquire)) failures.push('stop_order');
-  // A legacy run must stop directly after acquiring the lease. There must be
-  // no other controller output between those two explicit events.
-  if (legacy && output.indexOf(stop) !== output.indexOf(acquire) + 1) failures.push('legacy_stop_sequence');
-  if (output.some(line => /^(COPILOT_LAUNCHED|DISPATCH_UNCERTAIN):? /.test(line))) failures.push('task_dispatch_evidence');
+  if (checkout.length !== 1) failures.push('checkout_sha');
+  if (acquired.length !== 1) failures.push('lease_acquisition');
+  if (stoppedAt.length !== 1) failures.push('pre_dispatch_stop');
+  if (checkout.length !== 1 || acquired.length !== 1 || stoppedAt.length !== 1 ||
+      checkout[0] >= acquired[0] || acquired[0] >= stoppedAt[0]) failures.push('stop_order');
+  // For the historical 403, the stop was the next controller message,
+  // allowing GitHub's ordinary runner output to occur between them.
+  const controllerMessages = entries.filter(line =>
+    /^(LEASE_ACQUIRED|STOPPED:|COPILOT_LAUNCHED|DISPATCH_UNCERTAIN|PRE_DISPATCH_)/.test(line));
+  if (legacy && controllerMessages.indexOf(stop) !== controllerMessages.indexOf(acquire) + 1)
+    failures.push('legacy_stop_sequence');
+  if (entries.some(line => /^(COPILOT_LAUNCHED|DISPATCH_UNCERTAIN)(:|\s)/.test(line)))
+    failures.push('task_dispatch_evidence');
   if (failures.length) {
     throw new Error('No positive pre-dispatch stop evidence in the controller attempt: ' +
       failures.join(', '));
