@@ -97,6 +97,41 @@ are the evidence of live autonomous acceptance.
 
 Official API: https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10
 
+## Recover a failed task with a queued session
+
+GitHub's Agent Tasks REST API exposes list, get and start operations. Its task
+state is derived from the most recent session. The API does not document that a
+\`failed\` task prevents a session still reported as \`queued\` from executing,
+and it exposes no stop, cancel, or session-state reconciliation endpoint.
+An old timestamp, an empty artifact list and the task badge in the UI
+are insufficient evidence to clear the writer gate.
+[Agent Tasks REST API](https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10)
+
+1. On your phone, sign in to GitHub in a browser and open the task from the
+   controller's \`COPILOT_WRITER_BLOCK\` log. Use **Request Desktop Website**
+   or **Desktop site** if needed. For run
+   [45111540786](https://github.com/farbotkol/butterbox/actions/runs/45111540786),
+   open [the failed task](https://github.com/farbotkol/butterbox/copilot/tasks/e80f0b14-620a-4914-8dac-f12059f2421f)
+   and locate session \`5bc5755a-3f75-4017-a460-d76dbf1c558d\`.
+2. If the exact session's log viewer offers **Stop session**, the owner can
+   choose it after confirming the session is safe to stop. GitHub documents
+   that this ends the session's Actions run and preserves pushed commits.
+   **Archive session** removes a stopped session from the list and does not
+   establish that a contradictory API record is stopped.
+   [GitHub's Stop session instructions](https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/track-copilot-sessions#stop-a-session)
+3. If the control is absent, or independent REST reads still disagree, contact
+   [GitHub Support](https://support.github.com/contact). Include the repository,
+   task and session IDs, the controller run, and the
+   [sanitized API recheck](https://github.com/farbotkol/butterbox/actions/runs/45112245720).
+   Ask GitHub to confirm and reconcile the child session's state. Share neither
+   credentials nor prompts.
+4. After GitHub resolves the record, recheck the task list and the task detail
+   with the approved Copilot credential. Confirm the two task reads agree,
+   the session snapshot is complete, and the affected session reports a
+   stopped state. Let the next scheduled controller run apply the normal
+   writer, lease, and PR gates. Keep #305, #306, and #290 open while recovery
+   is pending.
+
 ## Validate the stored Copilot token from a phone
 
 Use GitHub in your phone's browser with repository write access. The manual workflow
