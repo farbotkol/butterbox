@@ -51,31 +51,36 @@ jobs:
           }
           const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
           if (states(rows) !== states(await list())) throw new Error('Task inventory changed');
-          const reasonCounts = {};
           const acquiredAt = Date.parse('2026-11-23T06:02:50.607Z');
-          const incomplete = tasks.filter(task => {
-            const reasons = [];
-            if (!Array.isArray(task.sessions) || !task.sessions.length) reasons.push('missing_sessions');
-            if (task.session_count !== task.sessions?.length) reasons.push('session_count');
+          const records = tasks.map(task => {
             const sessions = Array.isArray(task.sessions) ? task.sessions : [];
-            if (new Set(sessions.map(session => session.id)).size !== sessions.length) reasons.push('duplicate_session');
-            if (sessions.some(session => !uuid(session.id) || session.task_id !== task.id || !known.has(session.state))) reasons.push('invalid_identity_or_state');
-            if (sessions.some(session => typeof session.prompt !== 'string' || !session.prompt.trim())) {
-              reasons.push(sessions.every(session => Date.parse(session.created_at) < acquiredAt) ? 'prompt_missing_predates_lease' : 'prompt_missing_possible_overlap');
-            }
-            for (const reason of reasons) reasonCounts[reason] = (reasonCounts[reason] ?? 0) + 1;
-            return reasons.length > 0;
+            const shape = Array.isArray(task.sessions) && task.session_count === sessions.length &&
+              sessions.every(session => uuid(session.id) && session.task_id === task.id && known.has(session.state)) &&
+              new Set(sessions.map(session => session.id)).size === sessions.length;
+            const evidence = sessions.map(session => {
+              const reasons = [];
+              if (!uuid(session.id) || session.task_id !== task.id || !known.has(session.state)) reasons.push('invalid_identity_or_state');
+              if (!stopped.has(session.state) && session.state !== 'idle') reasons.push('writer_session');
+              if (typeof session.prompt !== 'string' || !session.prompt.trim()) reasons.push('missing_prompt');
+              else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) reasons.push('lease_marker');
+              return { id: uuid(session.id) ? session.id : null, state: known.has(session.state) ? session.state : 'unknown',
+                predatesLease: Date.parse(session.created_at) < acquiredAt, reasons };
+            });
+            const normalWriter = (!stopped.has(task.state) && task.state !== 'idle') ||
+              evidence.some(session => session.reasons.includes('writer_session'));
+            const oldRecoveryRejects = !stopped.has(task.state) || !sessions.length ||
+              evidence.some(session => !stopped.has(session.state) || session.reasons.includes('missing_prompt') || session.reasons.includes('lease_marker'));
+            const idlePair = task.state === 'idle' && sessions.length > 0 && sessions.every(session => session.state === 'idle');
+            return { id: task.id, state: task.state, shape, normalWriter, oldRecoveryRejects, idlePair, sessions: evidence };
           });
-          const matches = tasks.filter(task => task.sessions?.some(session =>
-            typeof session.prompt === 'string' && session.prompt.split(/\r?\n/).some(line => line.trim() === marker)));
-          const writers = tasks.flatMap(task => {
-            const sessions = task.sessions?.filter(session => !stopped.has(session.state)) ?? [];
-            return stopped.has(task.state) && !sessions.length ? [] : [{
-              id: task.id, state: task.state,
-              sessions: sessions.map(session => ({ id: uuid(session.id) ? session.id : null, state: known.has(session.state) ? session.state : 'unknown' })),
-            }];
-          });
-          console.log(JSON.stringify({ taskDetails: tasks.length, incomplete: incomplete.length, reasonCounts,
-            leaseMarkerMatches: matches.map(task => task.id), writers }));
-          if (incomplete.length || matches.length || writers.length) process.exitCode = 1;
+          console.log(JSON.stringify({ taskCount: records.length,
+            badShape: records.filter(task => !task.shape).length,
+            normalWriters: records.filter(task => task.normalWriter).length,
+            firstOldRecoveryReject: records.find(task => task.oldRecoveryRejects)?.id ?? null,
+            idlePairs: records.filter(task => task.idlePair).length,
+            missingPromptRecords: records.filter(task => task.sessions.some(session => session.reasons.includes('missing_prompt'))).length,
+            matchingRecords: records.filter(task => task.sessions.some(session => session.reasons.includes('lease_marker'))).length }));
+          for (const task of records.filter(task => task.oldRecoveryRejects || !task.shape || task.normalWriter)) {
+            console.log(JSON.stringify(task));
+          }
           JS
