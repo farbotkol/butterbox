@@ -359,3 +359,50 @@ test('the task list and detail must agree before writer classification', async (
     get: async () => assert.fail('ambiguous list should halt before detail requests'),
   }), /ambiguous Copilot task list/);
 });
+
+test('task inventory avoids safe full snapshots but fetches uncertain and contradictory summaries', async () => {
+  const known = structuredClone(task);
+  const failed = { ...known, state: 'failed', sessions: [{ ...known.sessions[0], state: 'queued' }] };
+  const pending = { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567892', state: 'in_progress' };
+  const fetched = [];
+  const rows = [known, failed, pending];
+  const details = await readTaskDetails({
+    list: async () => rows,
+    get: async id => {
+      fetched.push(id);
+      return id === failed.id ? failed : { ...pending, session_count: 0, sessions: [], artifacts: [] };
+    },
+  });
+  assert.deepEqual(fetched.sort(), [failed.id, pending.id].sort());
+  assert.equal(details[0], known);
+  assert.deepEqual(competingWriters(details).map(row => row.taskId), [failed.id, pending.id]);
+});
+
+test('task inventory fetches terminal summaries without child evidence and fails closed on GET errors', async () => {
+  const rows = [{ id: taskId, state: 'completed' }];
+  await assert.rejects(readTaskDetails({
+    list: async () => rows,
+    get: async () => { throw Object.assign(new Error('HTTP 403'), { status: 403 }); },
+  }), /HTTP 403/);
+});
+
+test('task inventory never runs more than three simultaneous detail calls', async () => {
+  const rows = Array.from({ length: 10 }, (_, index) => ({
+    id: 'a1b2c3d4-e5f6-7890-abcd-' + String(index + 1).padStart(12, '0'),
+    state: 'in_progress',
+  }));
+  let active = 0;
+  let peak = 0;
+  const result = await readTaskDetails({
+    list: async () => rows,
+    get: async id => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active--;
+      return { id, state: 'in_progress', sessions: [], session_count: 0, artifacts: [] };
+    },
+  });
+  assert.equal(result.length, 10);
+  assert.equal(peak, 3);
+});
