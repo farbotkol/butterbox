@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { assessHandoff, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
+import { assessHandoff, competingWriters, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
 import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor } from '../tools/delivery-controller/acceptance.mjs';
 import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
 
@@ -277,4 +277,49 @@ test('controller cycles serialize competing launches and gate B on audited A clo
   await assert.rejects(run(124), /not confirmed active/);
   assert.equal(launched.length, 2);
   assert.match(launched[1], /issue #306 only/);
+});
+
+
+test('a failed parent with a stale-looking queued session still blocks and reports only IDs and states', () => {
+  const candidate = {
+    ...task, state: 'failed', updated_at: '2026-11-12T21:50:55.109Z',
+    sessions: [{ ...task.sessions[0], state: 'queued', created_at: '2026-11-12T21:50:54.530Z',
+      updated_at: '2026-11-12T21:50:54.530Z', completed_at: null, prompt: 'private prompt' }],
+  };
+  assert.deepEqual(competingWriters([candidate]), [{
+    taskId, state: 'failed', reason: 'conflicting_task_and_session_states',
+    sessions: [{ id: sessionId, state: 'queued' }],
+  }]);
+  assert.deepEqual(competingWriters([{ ...candidate, state: 'idle',
+    sessions: [{ ...candidate.sessions[0], state: 'idle' }] }]), []);
+  assert.deepEqual(competingWriters([{ ...candidate, state: 'in_progress', sessions: [], session_count: 0 }]),
+    [{ taskId, state: 'in_progress', reason: 'active_task', sessions: [] }]);
+  assert.throws(() => competingWriters([{ ...candidate, session_count: 2 }]), /session snapshot/);
+});
+
+test('dispatch reports the conflicting IDs before acquiring a lease', async () => {
+  const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
+  const reports = [];
+  const row = { id: taskId, state: 'failed' };
+  await runAcceptanceCycle({
+    repository,
+    gh: async route => route.startsWith('/git/ref/heads/') ? { object: { type: 'commit', sha: base } } : issue,
+    paged: async () => [],
+    tasksApi: {
+      list: async () => [row],
+      get: async () => ({ ...task, ...row,
+        sessions: [{ ...task.sessions[0], state: 'queued', prompt: 'private prompt' }] }),
+      create: async () => assert.fail('dispatch attempted'),
+    },
+    leaseApi: {
+      getRef: async () => { throw Object.assign(new Error('not found'), { status: 404 }); },
+      createTag: async () => assert.fail('lease acquisition attempted'),
+    },
+    runId: 'actions_124_1', repairBusy: async () => false, report: line => reports.push(line),
+  });
+  const [diagnostic, blocked] = reports;
+  assert.match(diagnostic, /COPILOT_WRITER_BLOCK: .*conflicting_task_and_session_states/);
+  assert.ok(diagnostic.includes(taskId) && diagnostic.includes(sessionId));
+  assert.ok(!diagnostic.includes('private prompt'));
+  assert.equal(blocked, 'REPORT_BLOCKED: Existing Copilot task may still be writing');
 });

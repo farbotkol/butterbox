@@ -21,9 +21,19 @@ function completeSessions(tasks) {
 }
 
 export function competingWriters(tasks) {
+  verifyTaskSnapshot(tasks);
   if (!completeSessions(tasks)) throw new Error('Incomplete or ambiguous Copilot session snapshot');
-  return activeAgentTasks(tasks).length > 0 || tasks.some(task =>
-    task.sessions.some(session => session.state !== 'idle' && !stopped.has(session.state)));
+  return tasks.flatMap(task => {
+    const taskActive = activeAgentTasks([task]).length > 0;
+    const sessions = task.sessions.filter(session => session.state !== 'idle' && !stopped.has(session.state));
+    if (!taskActive && !sessions.length) return [];
+    return [{
+      taskId: task.id,
+      state: task.state,
+      reason: taskActive ? 'active_task' : 'conflicting_task_and_session_states',
+      sessions: sessions.map(({ id, state }) => ({ id, state })),
+    }];
+  });
 }
 
 export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }) {
@@ -42,8 +52,9 @@ export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }
       session.base_ref !== development))
     return blocked('Lease owner may still be writing');
   const others = tasks.filter(row => row.id !== task.id);
-  if (competingWriters(others))
-    return blocked('A competing Copilot session may still be writing');
+  const writers = competingWriters(others);
+  if (writers.length)
+    return blocked('A competing Copilot session may still be writing: ' + JSON.stringify(writers));
 
   if (task.state !== 'completed') {
     if (issue.state === 'open' && now - Date.parse(lease.startedAt) >= 12 * 60 * 60 * 1000 &&
