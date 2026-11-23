@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessHandoff, competingWriters, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
-import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor } from '../tools/delivery-controller/acceptance.mjs';
+import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor, readTaskDetails } from '../tools/delivery-controller/acceptance.mjs';
 import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
 
 const repository = 'farbotkol/butterbox';
@@ -322,4 +322,40 @@ test('dispatch reports the conflicting IDs before acquiring a lease', async () =
   assert.ok(diagnostic.includes(taskId) && diagnostic.includes(sessionId));
   assert.ok(!diagnostic.includes('private prompt'));
   assert.equal(blocked, 'REPORT_BLOCKED: Existing Copilot task may still be writing');
+});
+
+
+test('writer gate distinguishes stopped and idle pairs from resumable sessions and multiple competing agents', () => {
+  const withStates = (taskState, sessionState) => ({
+    ...task, state: taskState, sessions: [{ ...task.sessions[0], state: sessionState }],
+  });
+  for (const state of ['failed', 'completed', 'idle']) {
+    assert.deepEqual(competingWriters([withStates(state, state)]), []);
+  }
+  for (const state of ['queued', 'waiting_for_user', 'in_progress']) {
+    const [blocker] = competingWriters([withStates('failed', state)]);
+    assert.equal(blocker.reason, 'conflicting_task_and_session_states');
+    assert.equal(blocker.sessions[0].state, state);
+  }
+  const otherTaskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567892';
+  const otherSessionId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567893';
+  const other = {
+    ...task, id: otherTaskId, state: 'in_progress',
+    sessions: [{ ...task.sessions[0], id: otherSessionId, task_id: otherTaskId, state: 'in_progress' }],
+  };
+  assert.deepEqual(competingWriters([withStates('failed', 'queued'), other]).map(row => row.taskId),
+    [taskId, otherTaskId]);
+});
+
+test('the task list and detail must agree before writer classification', async () => {
+  for (const detail of [{ ...task, state: 'failed' }, { ...task, id: sessionId }]) {
+    await assert.rejects(readTaskDetails({
+      list: async () => [{ id: taskId, state: 'completed' }],
+      get: async () => detail,
+    }), /changed during independent verification/);
+  }
+  await assert.rejects(readTaskDetails({
+    list: async () => [task, task],
+    get: async () => assert.fail('ambiguous list should halt before detail requests'),
+  }), /ambiguous Copilot task list/);
 });
