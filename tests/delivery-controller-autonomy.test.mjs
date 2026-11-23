@@ -194,6 +194,52 @@ test('owner recovery requires positive stop evidence from the exact completed at
  await assert.rejects(verify([preDispatchStop(lease)], { status: 'in_progress' }), /attempt identity/);
 });
 
+test('original GitHub CLI log format proves pre-dispatch stop without requiring raw job-log formatting', async () => {
+ const { verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const lease = {
+  issue: 305, runId: 'actions_45121500090_1',
+  baseSha: 'e8c7a42209e497e1c415a422e3343f9b43851fbb',
+  tagSha: '7dd255f68cff1cf7a3774c980836ce8d010ac122',
+  startedAt: '2026-11-23T06:02:50.607Z',
+ };
+ const run = {
+  id: 45121500090, run_attempt: 1, head_sha: lease.baseSha,
+  head_branch: 'copilot/Development', path: '.github/workflows/delivery-controller.yml',
+  event: 'workflow_dispatch', status: 'completed', conclusion: 'failure',
+  run_started_at: '2026-11-23T06:02:30Z', updated_at: '2026-11-23T06:03:00Z',
+ };
+ const record = (step, time, message) =>
+  'autonomous-dispatch\t' + step + '\t' + time + ' ' + message;
+ const checkout = record('Run actions/checkout@v4', '2026-11-23T06:02:44.1528367Z', lease.baseSha);
+ const acquire = record('Advance the controlled GitHub acceptance lifecycle',
+  '2026-11-23T06:02:51.5412874Z', 'LEASE_ACQUIRED for #305 by ' + lease.runId);
+ const stop = record('Advance the controlled GitHub acceptance lifecycle',
+  '2026-11-23T06:02:52.1803064Z', 'STOPPED: Copilot task API GET returned HTTP 403');
+ const check = lines => verifyStoppedAttempt({
+  lease,
+  gh: async path => {
+   assert.equal(path, '/actions/runs/45121500090/attempts/1');
+   return run;
+  },
+  readRunLog: async () => lines.join('\n'),
+ });
+ await check([checkout, acquire, stop]);
+ await check([
+  record('Run actions/checkout@v4', '2026-11-23T06:02:44.1506953Z',
+   '[command]/usr/bin/git log -1 --format=%H'),
+  checkout,
+  acquire,
+  stop,
+ ]);
+ await assert.rejects(check([checkout, acquire]), /pre_dispatch_stop/);
+ await assert.rejects(check([acquire, stop]), /checkout_sha/);
+ await assert.rejects(check([checkout, stop, acquire]), /stop_order/);
+ await assert.rejects(check([checkout, acquire,
+  record('Advance the controlled GitHub acceptance lifecycle',
+   '2026-11-23T06:02:51.8000000Z', 'DISPATCH_UNCERTAIN: request failed'), stop]),
+  /task_dispatch_evidence/);
+});
+
 test('recovery accepts stopped and idle sessions without prompts but detects visible lease markers', async () => {
  const { recoveryTaskBlockers } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
