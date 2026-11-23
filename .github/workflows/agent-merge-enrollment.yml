@@ -72,18 +72,12 @@ jobs:
             exit 1
           fi
 
-          # A controlled synthetic cloud task is the exclusive coding writer.
-          # Check before any Copilot CLI repair. The launcher also checks for active repair runs.
+          # A controller-owned cloud task is the exclusive coding writer.
           if [[ "$REPO" == "farbotkol/butterbox" ]]; then
             leases="$(gh api "repos/$REPO/git/matching-refs/tags/butterbox-controller-active")"
-            lease_sha="$(jq -r '.[] | select(.ref == "refs/tags/butterbox-controller-active") | .object.sha' <<< "$leases")"
-            if [[ -n "$lease_sha" ]]; then
-              [[ "$lease_sha" =~ ^[0-9a-f]{40}$ ]] || exit 1
-              lease="$(gh api "repos/$REPO/git/tags/$lease_sha" | jq -ec '.message | fromjson')"
-              if jq -e '.issue == 298 and (.runId | startswith("synthetic_"))' <<< "$lease" >/dev/null; then
-                echo "Synthetic Copilot test holds the exclusive lease. Skipping CI repair."
-                exit 0
-              fi
+            if jq -e 'any(.[]; .ref == "refs/tags/butterbox-controller-active")' <<< "$leases" >/dev/null; then
+              echo "The delivery controller lease is held. Skipping CI repair."
+              exit 0
             fi
           fi
 

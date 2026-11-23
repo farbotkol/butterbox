@@ -111,6 +111,14 @@ export async function reconcilePullRequest({ repository, pullRequest, api }) {
     result.reason = 'PR body lacks the canonical <!-- butterbox-issue: N --> marker';
     return result;
   }
+  // The controlled controller records the byte-for-byte proof and closes these two issues itself.
+  const acceptanceProof = { 305: 'a', 306: 'b' }[issueNumber];
+  if (acceptanceProof && pullRequest.body.split(/\r?\n/).includes(
+    '<!-- butterbox-evidence: docs/agent-work/autonomy-acceptance-' + acceptanceProof + '.md -->')) {
+    result.reason = 'Controlled two-task acceptance is reconciled by the delivery controller';
+    return result;
+  }
+
   if (!referencesCanonicalIssue(pullRequest.body, issueNumber)) {
     result.status = 'blocked';
     result.reason = `PR body must visibly reference its canonical issue with Refs #${issueNumber}`;

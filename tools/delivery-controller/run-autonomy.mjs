@@ -1,129 +1,186 @@
-// Cloud-only autonomous issue dispatcher. No unverified coding session is ever claimed.
-import {appendFileSync} from 'node:fs';
-import {githubLeaseApi} from './github-lease-api.mjs';
-import {readLease,acquireLease,releaseLease,isParked,recordParking} from './lease.mjs';
-import {ownerApprovedQueueLabels,selectReadyIssue} from './queue.mjs';
-import {agentTasksApi,activeAgentTasks,verifyCreatedTask} from './agent-tasks-api.mjs';
-import {assessHandoff,taskMarker} from './handoff.mjs';
-const repo=process.env.GITHUB_REPOSITORY;
-const ghToken=process.env.GITHUB_TOKEN;
-const agentToken=process.env.COPILOT_AGENT_USER_TOKEN;
-const runId='actions_'+process.env.GITHUB_RUN_ID+'_'+process.env.GITHUB_RUN_ATTEMPT;
-const summary=process.env.GITHUB_STEP_SUMMARY;
-const report=message=>{console.log(message);if(summary)appendFileSync(summary,message+'\n');};
-if(!/^actions_[1-9][0-9]*_[1-9][0-9]*$/.test(runId))throw new Error('Missing Actions run identity');
-if(repo!=='farbotkol/butterbox'||process.env.GITHUB_REF!=='refs/heads/copilot/Development')throw new Error('Autonomy restricted to Butterbox Development');
-if(!ghToken)throw new Error('Missing actions repository token');
-if(!agentToken){report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is not configured; no task started.');process.exit(0);}
-if(process.env.BUTTERBOX_AUTONOMY_ENABLED!=='true'){report('DISPATCH_DISABLED: owner opt-in switch is not enabled.');process.exit(0);}
-const headers={Accept:'application/vnd.github+json',Authorization:'Bearer '+ghToken,'X-GitHub-Api-Version':'2022-11-28'};
-async function gh(path) {
- const response=await fetch('https://api.github.com/repos/'+repo+path,{headers});
- if(!response.ok)throw new Error('GitHub snapshot HTTP '+response.status+' for '+path);
- return response.json();
+import { appendFileSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
+import { githubLeaseApi } from './github-lease-api.mjs';
+import { readLease, acquireLease, releaseLease, isParked } from './lease.mjs';
+import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
+import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
+import { taskMarker, development, competingWriters } from './handoff.mjs';
+import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
+  openDevelopmentPRs, readTaskDetails, advanceAcceptance } from './acceptance.mjs';
+
+const repo = process.env.GITHUB_REPOSITORY;
+const ghToken = process.env.GITHUB_TOKEN;
+const agentToken = process.env.COPILOT_AGENT_USER_TOKEN;
+const runId = 'actions_' + process.env.GITHUB_RUN_ID + '_' + process.env.GITHUB_RUN_ATTEMPT;
+const summary = process.env.GITHUB_STEP_SUMMARY;
+const report = message => {
+  console.log(message);
+  if (summary) appendFileSync(summary, message + '\n');
+};
+
+async function main() {
+  if (!/^actions_[1-9][0-9]*_[1-9][0-9]*$/.test(runId)) throw new Error('Missing Actions run identity');
+  if (repo !== 'farbotkol/butterbox' || process.env.GITHUB_REF !== 'refs/heads/' + development ||
+      !['schedule', 'workflow_dispatch'].includes(process.env.GITHUB_EVENT_NAME))
+    throw new Error('Autonomy restricted to Butterbox Development schedules and owner dispatch');
+  if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' && process.env.GITHUB_ACTOR_ID !== String(ownerId))
+    throw new Error('Only the owner can manually run autonomous acceptance');
+  if (process.env.BUTTERBOX_AUTONOMY_ENABLED !== 'true') {
+    report('DISPATCH_DISABLED: owner opt-in switch is not enabled.');
+    return;
+  }
+  if (!ghToken) throw new Error('Missing Actions repository token');
+  if (!agentToken) {
+    report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
+    return;
+  }
+
+  const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    Authorization: 'Bearer ' + ghToken,
+    // The newer REST representation omits merge_commit_sha. Copilot uses its own API version.
+    'X-GitHub-Api-Version': '2022-11-28',
+    'Content-Type': 'application/json',
+  };
+  async function gh(path, method = 'GET', body) {
+    const response = await request('https://api.github.com/repos/' + repo + path, {
+      headers, method, body: body && JSON.stringify(body),
+    });
+    if (!response.ok) throw new Error('GitHub ' + method + ' HTTP ' + response.status + ' for ' + path);
+    return response.json();
+  }
+  async function paged(path) {
+    const all = [];
+    for (let page = 1; page <= 10; page++) {
+      const rows = await gh(path + (path.includes('?') ? '&' : '?') + 'per_page=100&page=' + page);
+      if (!Array.isArray(rows)) throw new Error('GitHub paged snapshot is not an array');
+      all.push(...rows);
+      if (rows.length < 100) return all;
+    }
+    throw new Error('GitHub page cap reached');
+  }
+  const repairBusy = async () => {
+    const states = ['queued', 'in_progress', 'waiting', 'pending', 'requested'];
+    const snapshots = await Promise.all(states.map(status =>
+      gh('/actions/workflows/agent-merge-enrollment.yml/runs?status=' + status + '&per_page=1')));
+    if (snapshots.some(data => !Number.isSafeInteger(data.total_count) || data.total_count < 0 ||
+      !Array.isArray(data.workflow_runs) || data.workflow_runs.length !== Math.min(1, data.total_count))) {
+      throw new Error('Incomplete CI repair snapshot');
+    }
+    return snapshots.some(data => data.total_count > 0);
+  };
+  const readyPull = async (nodeId, head) => {
+    const response = await request('https://api.github.com/graphql', {
+      method: 'POST', headers, body: JSON.stringify({
+        query: 'mutation($id: ID!) { markPullRequestReadyForReview(input: {pullRequestId: $id}) { pullRequest { isDraft headRefOid } } }',
+        variables: { id: nodeId },
+      }),
+    });
+    if (!response.ok) throw new Error('GitHub draft promotion returned HTTP ' + response.status);
+    const json = await response.json();
+    const pr = json.data?.markPullRequestReadyForReview?.pullRequest;
+    if (json.errors?.length || pr?.isDraft !== false || pr.headRefOid !== head)
+      throw new Error('GitHub did not confirm draft promotion at the verified head');
+  };
+  async function approval(number) {
+    const [issue, events, dependencies] = await Promise.all([
+      gh('/issues/' + number), paged('/issues/' + number + '/events'),
+      paged('/issues/' + number + '/dependencies/blocked_by'),
+    ]);
+    const approved = ownerApprovedQueueLabels(events, ownerId) && Array.isArray(issue.labels) &&
+      ['autonomy-ready', 'p0', 'dependencies-cleared'].every(label =>
+        issue.labels.some(row => row.name.toLowerCase() === label)) &&
+      dependencies.every(row => row.state === 'closed' && row.state_reason === 'completed');
+    return { issue, approved };
+  }
+
+  const leaseApi = githubLeaseApi({ token: ghToken, repository: repo, request });
+  const tasksApi = agentTasksApi({ token: agentToken, repository: repo, request });
+  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull });
 }
-async function paged(path) {
- const all=[];
- for(let page=1;page<=10;page++){
-   const rows=await gh(path+(path.includes('?')?'&':'?')+'per_page=100&page='+page);
-   if(!Array.isArray(rows))throw new Error('GitHub paged snapshot not array');
-   all.push(...rows);
-   if(rows.length<100)return all;
- }
- throw new Error('GitHub page cap reached; fail closed');
+
+export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
+  repairBusy, readyPull }) {
+  const current = await readLease(leaseApi);
+  if (current) {
+    report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
+      ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
+    await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
+      approval, repairBusy, readyPull });
+    return;
+  }
+
+  const secondAllowed = async () => firstAcceptanceCompleted(
+    await gh('/issues/305'), await paged('/issues/305/events'));
+  const scope = await secondAllowed() ? 306 : 305;
+  const candidateSnapshot = async () => {
+    const [prs, rows, repair, ref] = await Promise.all([
+      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
+    ]);
+    const activeTasks = competingWriters(rows) || repair ? ['Competing GitHub writer'] : [];
+    return { prs, activeTasks, lease: { state: 'free' }, baseSha: developmentSha(ref) };
+  };
+  const initial = await candidateSnapshot();
+  const queue = { ...initial, issues: [await gh('/issues/' + scope)] };
+  const selection = selectReadyIssue(queue);
+  if (selection.action !== 'SELECT_NEXT_READY') {
+    report(selection.action + ': ' + selection.reason);
+    return;
+  }
+  const number = selection.issue;
+  if (await isParked(leaseApi, number)) {
+    report('REPORT_BLOCKED: acceptance issue #' + number + ' is parked');
+    return;
+  }
+  const { issue, approved } = await approval(number);
+  if (!approved || issue.number !== number || issue.state !== 'open' || issue.title !== selection.title ||
+      !Number.isFinite(Date.parse(issue.updated_at)))
+    throw new Error('Issue approval or identity changed since selection');
+  const acquired = await acquireLease(leaseApi, {
+    issue: number, runId, baseSha: initial.baseSha, issueDigest: issueDigest(issue),
+  });
+  if (!acquired.acquired) {
+    report('LEASE_CONFLICT: another controller owns ' + acquired.holder.runId);
+    return;
+  }
+  report('LEASE_ACQUIRED for #' + number + ' by ' + runId);
+  const [final, checked, held] = await Promise.all([candidateSnapshot(), approval(number), readLease(leaseApi)]);
+  if (held?.tagSha !== acquired.tagSha || held.runId !== runId) throw new Error('Lease changed before dispatch');
+  const finalSelection = selectReadyIssue({ ...final, issues: [checked.issue] });
+  if (finalSelection.issue !== number || await isParked(leaseApi, number) || !checked.approved ||
+      checked.issue.updated_at !== issue.updated_at || issueDigest(checked.issue) !== held.issueDigest ||
+      final.baseSha !== initial.baseSha || (number === 306 && !await secondAllowed())) {
+    await releaseLease(leaseApi, { runId, expectedTagSha: acquired.tagSha, confirmedWriterStopped: true });
+    report('POST_LEASE_BLOCK: GitHub evidence changed. Released the unused lease before task creation.');
+    return;
+  }
+
+  const proof = proofFor(number);
+  const prompt = [
+    'Implement Butterbox GitHub issue #' + number + ' only, against ' + development + '.',
+    taskMarker(runId),
+    'Read its issue and AGENTS.md. Add only ' + proof.path + ' with exactly the content in the issue.',
+    'Open a draft PR. Use this body with one marker per line and no GitHub issue closing keywords:',
+    'Refs #' + number,
+    '<!-- butterbox-issue: ' + number + ' -->',
+    '<!-- butterbox-evidence: ' + proof.path + ' -->',
+    'Leave CI and merge to GitHub. Do not access external systems, change other files, or begin another issue.',
+  ].join('\n');
+  try {
+    const created = await tasksApi.create({ prompt });
+    const live = verifyCreatedTask(created, await tasksApi.get(created.id));
+    report('COPILOT_LAUNCHED issue #' + number + ' task ' + live.id + ' state=' + live.state +
+      ' ' + live.url + ' sessions=' + JSON.stringify(live.sessionIds));
+  } catch (error) {
+    report('DISPATCH_UNCERTAIN: ' + error.message + '; lease retained for independent verification.');
+    throw error;
+  }
 }
-const leaseApi=githubLeaseApi({token:ghToken,repository:repo});
-const tasksApi=agentTasksApi({token:agentToken,repository:repo});
-const current=await readLease(leaseApi);
-if(current){
- const ageHours=(Date.now()-Date.parse(current.startedAt))/3600000;
- report('LEASE_HELD issue #'+current.issue+' run '+current.runId+' age '+ageHours.toFixed(1)+'h. Verifying independently.');
- const [taskRows,openPrRows,closedPrRows,issueRow]=await Promise.all([
-  tasksApi.list(),paged('/pulls?state=open&base=copilot%2FDevelopment'),
-  paged('/pulls?state=closed&base=copilot%2FDevelopment'),gh('/issues/'+current.issue)
- ]);
- // Read each task independently: list responses omit full session prompt information.
- const taskDetails=await Promise.all(taskRows.map(t=>tasksApi.get(t.id)));
- const result=assessHandoff({lease:current,tasks:taskDetails,prs:closedPrRows,openPRs:openPrRows,issue:issueRow});
- if(result.action==='PARK_VERIFIED'){
-   await recordParking(leaseApi,current,result);
-   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
-   report('PARKED issue #'+current.issue+' after task '+result.taskId+' ended '+result.taskState+
-    '; the next run can select another issue.');
- }else if(result.action==='RELEASE_VERIFIED'){
-   // Only the original lease owner may release. Another run cannot impersonate it:
-   // verified GitHub task + issue + PR evidence authorises the recovery operation.
-   // Our lease helper requires matching run ID and an externally verified stopped writer.
-   await releaseLease(leaseApi,{runId:current.runId,expectedTagSha:current.tagSha,confirmedWriterStopped:true});
-   report('LEASE_RELEASED after independently confirmed task '+result.taskId+' PR #'+result.pr+' merge '+result.mergeSha);
-   report('Next eligible issue will be considered on the next scheduled run; not in this run.');
- }else{
-   report('RETAIN_LEASE: '+result.reason);
-   if(ageHours>=12) report('PARK_REVIEW_REQUIRED: age >= 12 hours; do not steal or release while writer status is uncertain.');
- }
- process.exit(0);
-}
-const [prs,allIssues,agentTasks,ref]=await Promise.all([
- paged('/pulls?state=open&base=copilot%2FDevelopment'),
- paged('/issues?state=open'),
- tasksApi.list(),
- gh('/git/ref/heads/copilot/Development')
-]);
-const issues=allIssues.filter(i=>!i.pull_request);
-const ownerId=11307166; // Repository owner account ID is stable across login changes.
-async function readApprovedIssue(number) {
- const [issue,events,dependencies]=await Promise.all([
-  gh('/issues/'+number),paged('/issues/'+number+'/events'),
-  paged('/issues/'+number+'/dependencies/blocked_by')
- ]);
- const approved=ownerApprovedQueueLabels(events,ownerId) &&
-   dependencies.every(dependency=>dependency.state==='closed'&&dependency.state_reason==='completed');
- return {issue,approved};
-}
-const queue={issues,prs,activeTasks:activeAgentTasks(agentTasks),lease:{state:'free'}};
-let selection=selectReadyIssue(queue);
-while(selection.action==='SELECT_NEXT_READY'&&await isParked(leaseApi,selection.issue)){
- queue.issues=queue.issues.filter(candidate=>candidate.number!==selection.issue);
- selection=selectReadyIssue(queue);
-}
-if(selection.action!=='SELECT_NEXT_READY'){report(selection.action+': '+selection.reason);process.exit(0);}
-if(ref?.object?.type!=='commit'||!/^[a-f0-9]{40}$/.test(ref.object.sha))throw new Error('Current Development SHA invalid');
-const {issue,approved}=await readApprovedIssue(selection.issue);
-if(!approved||issue.state!=='open'||issue.title!==selection.title)throw new Error('Issue changed since candidate selection');
-const recheck=selectReadyIssue({issues:[issue],prs:await paged('/pulls?state=open&base=copilot%2FDevelopment'),activeTasks:activeAgentTasks(await tasksApi.list()),lease:{state:'free'}});
-if(recheck.action!=='SELECT_NEXT_READY'||recheck.issue!==issue.number)throw new Error('Candidate changed while checking; fail closed');
-const acquired=await acquireLease(leaseApi,{issue:issue.number,runId,baseSha:ref.object.sha});
-if(!acquired.acquired){report('LEASE_CONFLICT: another controller owns '+acquired.holder.runId);process.exit(0);}
-report('LEASE_ACQUIRED for #'+issue.number+' by '+runId+'. Dispatch will retain lease on ambiguity.');
-// Recheck after acquiring atomically. Never dispatch while a competing PR or task exists.
-const [finalPrs,finalTasks,approval,finalRef]=await Promise.all([
- paged('/pulls?state=open&base=copilot%2FDevelopment'),tasksApi.list(),
- readApprovedIssue(issue.number),gh('/git/ref/heads/copilot/Development')
-]);
-const finalSelection=selectReadyIssue({issues:[approval.issue],prs:finalPrs,activeTasks:activeAgentTasks(finalTasks),lease:{state:'free'}});
-if(finalSelection.action!=='SELECT_NEXT_READY'||finalSelection.issue!==issue.number||
-   await isParked(leaseApi,issue.number)||!approval.approved||approval.issue.updated_at!==issue.updated_at||
-   finalRef?.object?.type!=='commit'||finalRef?.object?.sha!==ref.object.sha){
- await releaseLease(leaseApi,{runId,expectedTagSha:acquired.tagSha,confirmedWriterStopped:true});
- report('POST_LEASE_BLOCK: PR, session, issue authorisation or Development SHA changed. Released unused lease before task creation.');
- process.exit(0);
-}
-const prompt=[
- 'Implement Butterbox GitHub issue #'+issue.number+' only, against copilot/Development.',
- taskMarker(runId),
- 'Read its current GitHub issue description and acceptance criteria before coding.',
- 'Respect AGENTS.md, existing CI, tenant isolation, evidence contract and squash merge gates.',
- 'Open a DRAFT PR with Refs #'+issue.number+' and canonical issue/evidence markers.',
- 'Do not access production, perform database writes, change branch rules, or initiate external OAuth.',
- 'Never begin another issue. This session is the sole authorised coding writer.'
-].join('\n');
-let created;
-try{
- created=await tasksApi.create({prompt});
- const confirmed=await tasksApi.get(created.id);
- const live=verifyCreatedTask(created,confirmed);
- report('COPILOT_LAUNCHED: issue #'+issue.number+' task '+live.id+' state='+live.state+' '+live.url+' sessionIds='+JSON.stringify(live.sessionIds));
-}catch(error){
- report('DISPATCH_UNCERTAIN: '+error.message+'; lease deliberately retained. Inspect GitHub agent tasks before any retry.');
- throw error;
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch(error => {
+    report('STOPPED: ' + error.message);
+    process.exitCode = 1;
+  });
 }

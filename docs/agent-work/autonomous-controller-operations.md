@@ -12,11 +12,88 @@ Before launching, the dispatcher fetches paginated GitHub Issues and open Develo
 
 Keep the repository variable off while verifying access. Use the approved user credential for a read-only `GET /agents/repos/farbotkol/butterbox/tasks` and confirm the account's Copilot seat and repository policy separately. A successful GET establishes read access only. Keep expiring app credentials and any refresh material in the approved secret store. The current workflow reads `COPILOT_AGENT_USER_TOKEN` and has no token refresh mechanism.
 
-**Lease release.** The controller requires an exact lease marker on a uniquely matched task, completed sessions for that task against Development, a matching GitHub PR artifact, a canonical merged PR, a closed issue and an empty Development PR queue. Missing evidence keeps the lease held. After 12 hours the controller can park a failed, cancelled or timed-out task when all sessions have stopped, GitHub reports no PR artifact, and the Development PR queue is empty. It records the failure and task reference in an annotated parking tag before releasing the lease. The parked issue remains open and is skipped by later runs. To retry it, independently confirm no writer or PR remains, then remove the issue-specific parking tag and review its queue labels. Ambiguous outcomes keep the lease held and are reported for review. Live handoff and parking still need runtime acceptance. PR #294 blocks dispatch while open.
+**Controlled unattended scope.** The dispatcher only selects #305 and #306.
+Each issue permits one fixed Markdown file with exact bytes. The controller
+checks the exact lease marker against independently fetched task and session
+records, finds the sole GitHub PR artifact, and verifies the session head,
+canonical issue and proof markers, and PR diff. It requires the latest
+successful GitHub Actions `verify` and `database-smoke` on the same head
+before marking a draft ready. On a later run it repeats validation and
+requests a native squash merge with GitHub's expected-head guard. GitHub
+enforces configured review, conversation and status-check protections.
+There is no pending auto-merge request that can run on a later head.
 
-## Validation
+On a subsequent run, the controller confirms GitHub Actions performed the
+squash and checks pre-merge CI, the squash parent, merged file and bytes, and
+the Development tip. It verifies the issue and approval again. It closes
+the issue and appends the audit record in one API call. On restart it verifies
+the same audit record and GitHub's closure event before releasing the exact
+lease. Only a later run can select another issue. #306 also requires verified
+controller closure of #305. Neither manual closure nor parking #305 advances
+the pair.
 
-Run `node --test tests/delivery-controller-autonomy.test.mjs` plus existing controller policy tests. Complete standard Verify/database CI. Before opt-in, prove no dispatch with the open draft PR, confirm missing-secret behavior and monitor task API authentication permissions. Then perform an owner-approved synthetic task with exact task ID and session state; do not report the full loop complete until merged evidence and safe lease release are shown.
+GitHub Actions CI repair and the general Phase 2 merge workflow stand down
+while any delivery lease is held. A missing result, another writer or PR,
+a moving base, failed CI, or an ambiguous response keeps the lease held.
+After 12 hours, a uniquely identified failed, cancelled or timed-out task can
+be parked only when all its sessions have stopped, it produced no PR artifact,
+and there are no other writers or open Development PRs. Inspect the Actions
+summary and leave the lease in place when writer status is uncertain.
+
+**Blockers addressed in #307.** The hourly controller previously deferred all
+PR activity for held leases, and the general Phase 2 merge path required a
+non-draft PR without independently verifying its task. The handoff waited for
+an issue to be closed, but the separate merged-evidence workflow records
+comments and expects a human canonical review. It does not close issues.
+PR REST details use version `2022-11-28` to obtain `merge_commit_sha`; the
+Copilot task API still uses `2026-03-10`. The controlled proof and audit record
+apply only to #305 and #306. The separate evidence workflow retains its
+existing requirements for other PRs.
+
+## Controlled two-task acceptance from a phone
+
+1. After #307 has passed CI and its PR has been merged, sign in as
+   `farbotkol` in your phone's browser and open [Butterbox Actions](https://github.com/farbotkol/butterbox/actions).
+   Use **Request Desktop Website** or **Desktop site** if GitHub hides menus.
+   Confirm Development has no open PR, active repair or delivery lease.
+   Confirm both issues are open and unassigned. Use the token check below
+   while the autonomy variable is off.
+2. Open [#305](https://github.com/farbotkol/butterbox/issues/305) and then
+   [#306](https://github.com/farbotkol/butterbox/issues/306). Use each issue's
+   **Labels** control to apply `autonomy-ready`, `p0`, and
+   `dependencies-cleared` yourself. The controller checks the actor of the
+   latest event for each current label and checks linked blockers. Label both
+   issues before enabling the test so the queue demonstrates automatic handoff.
+3. Open **Settings → Secrets and variables → Actions → Variables** in the
+   [repository settings](https://github.com/farbotkol/butterbox/settings/variables/actions).
+   Add or edit the repository variable `BUTTERBOX_AUTONOMY_ENABLED` with
+   value `true`. Leave secrets as configured. Select the **Butterbox
+   action-based delivery controller (phase 1)** workflow. Wait for the hourly
+   schedule, or tap **Run workflow**, choose `copilot/Development` and tap
+   **Run workflow** to start the first controller evaluation. Leave subsequent
+   transitions and selection to the hourly schedule.
+4. In each run's **Summary**, track #305's `LEASE_ACQUIRED`, `COPILOT_LAUNCHED`,
+   `PR_READY`, `MERGE_CONFIRMED`, `ISSUE_RECONCILED` and `LEASE_RELEASED`.
+   Match the task ID, completed session IDs, PR, exact head SHA, check links,
+   squash SHA and proof blob in the closed issue's audit. Open the PR
+   **Checks** tab and confirm `verify` and `database-smoke` succeeded on
+   that head before merge. The draft promotion, merge and reconciliation
+   can occur on separate runs.
+5. Confirm #306's `LEASE_ACQUIRED` and independently fetched task appear on
+   a later scheduled run after #305's release. Verify #306's own draft,
+   exact-head checks, squash, completed closure, evidence and lease release.
+   Both issues must have one proof file each. Use the Actions run links
+   and timestamps to show the tasks did not overlap.
+6. Set the variable back to `false` after both releases or to pause on an
+   unexpected result. On a stop, review the exact error and GitHub evidence.
+   Leave failed CI, unclear writer status, issue closure and held leases for
+   investigation without force-merging, relaunching, or manually releasing a
+   lease. Keep #290 open until both autonomous runs meet these criteria.
+
+Before opt-in, run `node --test tests/delivery-controller-*.test.mjs` and
+verify `verify` and `database-smoke` on the implementation PR. Local tests
+exercise the sequence against simulated GitHub APIs. The scheduled run records
+are the evidence of live autonomous acceptance.
 
 Official API: https://docs.github.com/en/rest/agent-tasks/agent-tasks?apiVersion=2026-03-10
 

@@ -80,10 +80,10 @@ jobs:
           echo "Phase 2 event=$EVENT_NAME dry_run=$DRY_RUN"
 
           if [[ "$REPO" == "farbotkol/butterbox" ]]; then
-            lease_snapshot="$RUNNER_TEMP/synthetic-merge-lease.json"
+            lease_snapshot="$RUNNER_TEMP/merge-lease.json"
             node tools/delivery-controller/observe-lease.mjs "$lease_snapshot"
-            if jq -e '.issue == 298 and (.runId | startswith("synthetic_"))' "$lease_snapshot" >/dev/null; then
-              echo "Synthetic Copilot test holds the exclusive lease. The owner must review and squash-merge its PR."
+            if jq -e '.state == "held"' "$lease_snapshot" >/dev/null; then
+              echo "The delivery controller lease is held. The general merge gate will stand down."
               exit 0
             fi
           fi
