@@ -1,5 +1,5 @@
 import { developmentSha, issueDigest, openDevelopmentPRs, readTaskDetails } from './acceptance.mjs';
-import { competingWriters, development, isSha, taskMarker, verifyTaskSnapshot } from './handoff.mjs';
+import { development, isSha, sessionSnapshotProblems, taskMarker, verifyTaskSnapshot } from './handoff.mjs';
 import { readLease, releaseLease } from './lease.mjs';
 
 const workflowPath = '.github/workflows/delivery-controller.yml';
@@ -47,6 +47,32 @@ export async function verifyStoppedAttempt({ lease, gh, readRunLog }) {
   }
 }
 
+export function recoveryTaskBlockers(tasks, runId) {
+  const marker = taskMarker(runId);
+  return verifyTaskSnapshot(tasks).flatMap(task => {
+    const problems = sessionSnapshotProblems(task);
+    const block = (reason, sessionId) => problems.push({ reason, ...(sessionId ? { sessionId } : {}) });
+    if (!problems.length) {
+      if (!task.sessions.length) block('no_sessions');
+      if (task.state !== 'idle' && !stopped.has(task.state)) block('active_task');
+
+      for (const session of task.sessions) {
+        if (session.state !== 'idle' && !stopped.has(session.state)) {
+          block('active_session', session.id);
+        } else if ((task.state === 'idle') !== (session.state === 'idle')) {
+          block('inconsistent_idle_state', session.id);
+        }
+        if (typeof session.prompt !== 'string' || !session.prompt.trim()) {
+          block('missing_prompt_marker_evidence', session.id);
+        } else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) {
+          block('matching_lease_marker', session.id);
+        }
+      }
+    }
+    return problems.map(problem => ({ taskId: task.id, ...problem }));
+  });
+}
+
 export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh, paged, tasksApi,
   repairBusy, report, verifyOnly = false }) {
   if (![305, 306].includes(lease?.issue) || !isSha(lease.tagSha) ||
@@ -68,11 +94,11 @@ export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh,
     if (comparison.status !== 'ahead' || comparison.merge_base_commit?.sha !== lease.baseSha)
       throw new Error('Development no longer descends from the leased base');
   }
-  const marker = taskMarker(lease.runId);
-  if (repair || prs.length || competingWriters(tasks).length || tasks.some(task =>
-    !stopped.has(task.state) || !task.sessions.length || task.sessions.some(session =>
-      !stopped.has(session.state) || typeof session.prompt !== 'string' || !session.prompt.trim() ||
-      session.prompt.split(/\r?\n/).some(line => line.trim() === marker)))) {
+  const blockers = recoveryTaskBlockers(tasks, lease.runId);
+  for (const blocker of blockers) report('PRE_DISPATCH_RECOVERY_BLOCK: ' + JSON.stringify(blocker));
+  if (repair) report('PRE_DISPATCH_RECOVERY_BLOCK: CI repair may still be writing');
+  if (prs.length) report('PRE_DISPATCH_RECOVERY_BLOCK: open Development PRs ' + prs.map(pr => '#' + pr.number).join(', '));
+  if (repair || prs.length || blockers.length) {
     throw new Error('Writer, matching task, or incomplete task/session/PR evidence; retain lease');
   }
   const latest = verifyTaskSnapshot(await tasksApi.list());

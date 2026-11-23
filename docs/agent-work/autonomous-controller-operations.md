@@ -263,9 +263,12 @@ and lands on `copilot/Development`:
    checks the original attempt and checkout, live tag and issue, Development
    ancestry, open Development PRs and active CI repair. It checks the
    Copilot task list, every task's details and sessions, and re-reads the list
-   for inventory changes. A matching lease marker, a nonterminal task or
-   session (including idle), missing session prompts, incomplete snapshots,
-   other writers, or an open Development PR blocks recovery.
+   for inventory changes. A matching lease marker, an active task or session,
+   an inconsistent idle state, missing session prompts, incomplete snapshots,
+   other writers, or an open Development PR blocks recovery. A task and all
+   its sessions may be idle when their evidence is complete and no session
+   matches the lease. The summary records blocking IDs and reasons without
+   including prompt text.
 4. To release, repeat the owner dispatch with `release` and the same tag SHA.
    It repeats the checks and uses a Git compare-and-delete against that SHA.
    Require `PRE_DISPATCH_LEASE_RELEASED` and independently confirm the active
