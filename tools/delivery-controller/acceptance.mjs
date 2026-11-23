@@ -97,8 +97,10 @@ function trustworthyStoppedSummary(row) {
   return true;
 }
 
-export async function readTaskDetails(api) {
-  const rows = verifyTaskSnapshot(await api.list());
+export async function readTaskDetails(api, { states } = {}) {
+  const rows = verifyTaskSnapshot(await api.list(states ? { states } : undefined));
+  if (states && rows.some(row => !states.includes(row.state)))
+    throw new Error('Copilot task inventory does not match requested states');
   const details = Array(rows.length);
   // Keep concurrency low; Promise.all over every historical task can hit
   // GitHub's secondary rate limits. Never convert a failed GET to success.
