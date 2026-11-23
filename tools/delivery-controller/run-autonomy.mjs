@@ -177,7 +177,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   const scope = await secondAllowed() ? 306 : 305;
   const candidateSnapshot = async () => {
     const [prs, rows, repair, ref] = await Promise.all([
-      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
+      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi, { states: ['queued', 'in_progress'] }), repairBusy(), gh('/git/ref/heads/' + development),
     ]);
     const writers = competingWriters(rows);
     for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
