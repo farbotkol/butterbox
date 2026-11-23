@@ -6,6 +6,15 @@ on:
   schedule:
     - cron: "7 * * * *"
   workflow_dispatch:
+    inputs:
+      lease_recovery:
+        description: Inspect or release a proven pre-dispatch lease without launching
+        type: choice
+        options: [none, verify, release]
+        default: none
+      expected_lease_tag_sha:
+        description: Exact annotated tag SHA for a recovery operation
+        type: string
   pull_request:
     paths:
       - .github/workflows/delivery-controller.yml
@@ -35,7 +44,7 @@ jobs:
       - run: node --test tests/delivery-controller-actions.test.mjs tests/delivery-controller-dependencies.test.mjs tests/delivery-controller-lease.test.mjs tests/delivery-controller-live-gate.test.mjs tests/delivery-controller-autonomy.test.mjs tests/delivery-controller-handoff.test.mjs
 
   act:
-    if: github.event_name != 'pull_request'
+    if: github.event_name != 'pull_request' && (github.event_name != 'workflow_dispatch' || inputs.lease_recovery == 'none')
     runs-on: ubuntu-latest
     timeout-minutes: 8
     permissions:
@@ -118,4 +127,25 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
           BUTTERBOX_AUTONOMY_ENABLED: ${{ vars.BUTTERBOX_AUTONOMY_ENABLED }}
+        run: node tools/delivery-controller/run-autonomy.mjs
+
+  recover-pre-dispatch:
+    if: github.event_name == 'workflow_dispatch' && inputs.lease_recovery != 'none' && github.ref == 'refs/heads/copilot/Development' && github.actor_id == '11307166' && github.triggering_actor == 'farbotkol'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    permissions:
+      contents: write
+      issues: read
+      pull-requests: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the stopped controller attempt and current writer evidence
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
+          LEASE_RECOVERY: ${{ inputs.lease_recovery }}
+          EXPECTED_LEASE_TAG_SHA: ${{ inputs.expected_lease_tag_sha }}
         run: node tools/delivery-controller/run-autonomy.mjs

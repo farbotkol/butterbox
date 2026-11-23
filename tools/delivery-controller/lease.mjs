@@ -6,7 +6,7 @@ const validSha = sha => /^[a-f0-9]{40}$/.test(sha ?? '');
 const validRun = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,96}$/.test(value);
 const validIssue = value => Number.isSafeInteger(value) && value > 0;
 
-export async function readLease(api) {
+export async function readLease(api, { verifyTarget = false } = {}) {
   let ref;
   try {
     ref = await api.getRef(LEASE_REF);
@@ -23,7 +23,8 @@ export async function readLease(api) {
   try { record = JSON.parse(tag.message); } catch { throw new Error('Invalid lease metadata; fail closed'); }
   if (record?.version !== 1 || !validIssue(record.issue) || !validRun(record.runId) ||
       !validSha(record.baseSha) || !Number.isFinite(Date.parse(record.startedAt)) ||
-      tag.tag !== 'butterbox-controller-lease') {
+      tag.tag !== 'butterbox-controller-lease' || (verifyTarget &&
+      (tag.sha !== ref.object.sha || tag.object?.type !== 'commit' || tag.object.sha !== record.baseSha))) {
     throw new Error('Invalid lease owner; fail closed');
   }
   return { ...record, tagSha: ref.object.sha };
@@ -51,7 +52,7 @@ export async function acquireLease(api, {issue, runId, baseSha, issueDigest, sta
   }
 }
 
-export async function releaseLease(api, {runId, expectedTagSha, confirmedWriterStopped = false}) {
+export async function releaseLease(api, {runId, expectedTagSha, confirmedWriterStopped = false, compareAndDelete = false}) {
   if (!validRun(runId)) throw new Error('Invalid releasing owner');
   if (confirmedWriterStopped !== true) throw new Error('Writer liveness not verified; retain lease');
   const current = await readLease(api);
@@ -60,7 +61,12 @@ export async function releaseLease(api, {runId, expectedTagSha, confirmedWriterS
   if (expectedTagSha !== undefined && current.tagSha !== expectedTagSha) throw new Error('Lease ref changed; retain lease');
   // Only the single owner may release, after external writer/session checks.
   // This function must not be called by untrusted issue text or on a timer.
-  await api.deleteRef(LEASE_REF);
+  if (compareAndDelete) {
+    if (!validSha(expectedTagSha)) throw new Error('Recovery requires the exact lease tag SHA');
+    await api.compareAndDeleteRef(LEASE_REF, expectedTagSha);
+  } else {
+    await api.deleteRef(LEASE_REF);
+  }
   return {released:true,issue:current.issue};
 }
 

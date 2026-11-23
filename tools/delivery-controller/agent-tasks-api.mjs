@@ -4,7 +4,7 @@ export function agentTasksApi({token,repository,request=fetch}={}) {
   const root='https://api.github.com/agents/repos/'+repository+'/tasks';
   async function call(method,path,body) {
     const response=await request(root+path,{method,headers:{Accept:'application/vnd.github+json',Authorization:'Bearer '+token,'X-GitHub-Api-Version':'2026-03-10',...(body?{'Content-Type':'application/json'}:{})},...(body?{body:JSON.stringify(body)}:{})});
-    if(!response.ok) {const error=new Error('Copilot task API '+method+' returned HTTP '+response.status);error.status=response.status;throw error;}
+    if(!response.ok) {const error=new Error('Copilot task API '+method+' returned HTTP '+response.status);error.status=response.status;error.code='COPILOT_TASK_'+method;throw error;}
     const result = await response.json();
     if (!path || !path.startsWith('?')) return result;
     if (!Array.isArray(result.tasks) || result.tasks.length >= 100 ||

@@ -232,3 +232,59 @@ is held. The owner performs the protected squash merge. A rejection or ambiguous
 launch after the one-time intent is recorded deliberately retains the lease and
 consumes the launch attempt. Keep the intent and lease refs intact while
 investigating. **Verify** and **reconcile** cannot create a second task.
+
+## Recover a lease retained before task dispatch
+
+The controller never retries a task-creation POST. If the final preflight's
+Copilot GET returns 403 after acquisition, the same run makes one fresh
+recovery check. It can release the exact unused lease and exit. Another
+evaluation runs the normal queue and approval checks before it can dispatch.
+If the fresh check fails, the lease stays held and the job summary records
+the point at which it stopped before POST. A missing task, an HTTP 200 token
+probe, and the age of the lease cannot prove that a POST never reached GitHub.
+
+For a retained lease, the repository owner can use the delivery controller's
+manual `lease_recovery` input after the recovery code passes required checks
+and lands on `copilot/Development`:
+
+1. Review the exact acquisition run and attempt in GitHub Actions. Match the
+   annotated tag's run ID, issue number, issue digest, tag SHA and commit
+   target to the failed run and its checkout. The run must have a specific
+   pre-dispatch stop in its logs. A run with `DISPATCH_UNCERTAIN` stays on the
+   existing task reconciliation path. For an unknown outcome with no unique
+   task, request GitHub Support confirmation and retain the lease.
+2. Confirm that nobody is assigning a coding agent or allowing an existing
+   session to resume while recovery is in progress. In **Butterbox
+   action-based delivery controller (phase 1)**, select **Run workflow** on
+   `copilot/Development`. Set **lease_recovery** to `verify` and
+   **expected_lease_tag_sha** to the annotated tag SHA. This uses the stored
+   Copilot credential for read-only task inventory and task detail requests.
+3. Require `PRE_DISPATCH_RECOVERY_VERIFIED` in the run summary. The workflow
+   checks the original attempt and checkout, live tag and issue, Development
+   ancestry, open Development PRs and active CI repair. It checks the
+   Copilot task list, every task's details and sessions, and re-reads the list
+   for inventory changes. A matching lease marker, a nonterminal task or
+   session (including idle), missing session prompts, incomplete snapshots,
+   other writers, or an open Development PR blocks recovery.
+4. To release, repeat the owner dispatch with `release` and the same tag SHA.
+   It repeats the checks and uses a Git compare-and-delete against that SHA.
+   Require `PRE_DISPATCH_LEASE_RELEASED` and independently confirm the active
+   tag is absent. Both recovery modes bypass the normal controller jobs and
+   skip dispatch, merge and issue mutation. If Git cannot confirm the result,
+   inspect the live ref before any further action. Leave the lease held for
+   failed or ambiguous checks, including unavailable attempt logs or task data.
+5. Before a normal evaluation of #305, confirm the issue is open and
+   unassigned, the owner approvals and blockers still pass, and the normal
+   live writer, PR and CI-repair gates are clear. A subsequent normal
+   evaluation uses the current Development SHA and acquires a fresh lease.
+
+For [run 45121500090, attempt 1](https://github.com/farbotkol/butterbox/actions/runs/45121500090/attempts/1),
+the reviewed historical stop is the GET 403 immediately after acquisition.
+At its pinned checkout, that error could end the final preflight before the
+only POST call. The recovery workflow recognizes this historical evidence
+only for issue #305, run `actions_45121500090_1`, annotated tag
+`7dd255f68cff1cf7a3774c980836ce8d010ac122` and base
+`e8c7a42209e497e1c415a422e3343f9b43851fbb`. The later
+[HTTP 200 token check](https://github.com/farbotkol/butterbox/actions/runs/45121783414)
+discarded its body. Recovery still requires full current task and writer
+evidence.
