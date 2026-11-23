@@ -51,10 +51,21 @@ jobs:
           }
           const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
           if (states(rows) !== states(await list())) throw new Error('Task inventory changed');
-          const incomplete = tasks.filter(task => !Array.isArray(task.sessions) || !task.sessions.length ||
-            task.session_count !== task.sessions.length || new Set(task.sessions.map(session => session.id)).size !== task.sessions.length ||
-            task.sessions.some(session => !uuid(session.id) || session.task_id !== task.id || !known.has(session.state) ||
-              typeof session.prompt !== 'string' || !session.prompt.trim()));
+          const reasonCounts = {};
+          const acquiredAt = Date.parse('2026-11-23T06:02:50.607Z');
+          const incomplete = tasks.filter(task => {
+            const reasons = [];
+            if (!Array.isArray(task.sessions) || !task.sessions.length) reasons.push('missing_sessions');
+            if (task.session_count !== task.sessions?.length) reasons.push('session_count');
+            const sessions = Array.isArray(task.sessions) ? task.sessions : [];
+            if (new Set(sessions.map(session => session.id)).size !== sessions.length) reasons.push('duplicate_session');
+            if (sessions.some(session => !uuid(session.id) || session.task_id !== task.id || !known.has(session.state))) reasons.push('invalid_identity_or_state');
+            if (sessions.some(session => typeof session.prompt !== 'string' || !session.prompt.trim())) {
+              reasons.push(sessions.every(session => Date.parse(session.created_at) < acquiredAt) ? 'prompt_missing_predates_lease' : 'prompt_missing_possible_overlap');
+            }
+            for (const reason of reasons) reasonCounts[reason] = (reasonCounts[reason] ?? 0) + 1;
+            return reasons.length > 0;
+          });
           const matches = tasks.filter(task => task.sessions?.some(session =>
             typeof session.prompt === 'string' && session.prompt.split(/\r?\n/).some(line => line.trim() === marker)));
           const writers = tasks.flatMap(task => {
@@ -64,7 +75,7 @@ jobs:
               sessions: sessions.map(session => ({ id: uuid(session.id) ? session.id : null, state: known.has(session.state) ? session.state : 'unknown' })),
             }];
           });
-          console.log(JSON.stringify({ taskDetails: tasks.length, incomplete: incomplete.map(task => task.id),
+          console.log(JSON.stringify({ taskDetails: tasks.length, incomplete: incomplete.length, reasonCounts,
             leaseMarkerMatches: matches.map(task => task.id), writers }));
           if (incomplete.length || matches.length || writers.length) process.exitCode = 1;
           JS
