@@ -242,7 +242,13 @@ test('controller cycles serialize competing launches and gate B on audited A clo
     throw new Error('Unexpected ' + route);
   };
   const tasksApi = {
-    list: async () => launched.length ? [{ id: taskId, state: 'completed' }] : [],
+    list: async ({ states } = {}) => {
+      if (states) {
+        assert.deepEqual(states, ['queued', 'in_progress']);
+        return [];
+      }
+      return launched.length ? [{ id: taskId, state: 'completed' }] : [];
+    },
     get: async () => ({
       ...task, state: 'completed', // POST is acknowledged, but the task is not live yet.
     }),
@@ -297,16 +303,19 @@ test('a failed parent with a stale-looking queued session still blocks and repor
   assert.throws(() => competingWriters([{ ...candidate, session_count: 2 }]), /session snapshot/);
 });
 
-test('dispatch reports the conflicting IDs before acquiring a lease', async () => {
+test('dispatch checks only queued and in-progress tasks before acquiring a lease', async () => {
   const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
   const reports = [];
-  const row = { id: taskId, state: 'failed' };
+  const row = { id: taskId, state: 'queued' };
   await runAcceptanceCycle({
     repository,
     gh: async route => route.startsWith('/git/ref/heads/') ? { object: { type: 'commit', sha: base } } : issue,
     paged: async () => [],
     tasksApi: {
-      list: async () => [row],
+      list: async options => {
+        assert.deepEqual(options, { states: ['queued', 'in_progress'] });
+        return [row];
+      },
       get: async () => ({ ...task, ...row,
         sessions: [{ ...task.sessions[0], state: 'queued', prompt: 'private prompt' }] }),
       create: async () => assert.fail('dispatch attempted'),
@@ -318,7 +327,7 @@ test('dispatch reports the conflicting IDs before acquiring a lease', async () =
     runId: 'actions_124_1', repairBusy: async () => false, report: line => reports.push(line),
   });
   const [diagnostic, blocked] = reports;
-  assert.match(diagnostic, /COPILOT_WRITER_BLOCK: .*conflicting_task_and_session_states/);
+  assert.match(diagnostic, /COPILOT_WRITER_BLOCK: .*active_task/);
   assert.ok(diagnostic.includes(taskId) && diagnostic.includes(sessionId));
   assert.ok(!diagnostic.includes('private prompt'));
   assert.equal(blocked, 'REPORT_BLOCKED: Existing Copilot task may still be writing');
@@ -358,4 +367,91 @@ test('the task list and detail must agree before writer classification', async (
     list: async () => [task, task],
     get: async () => assert.fail('ambiguous list should halt before detail requests'),
   }), /ambiguous Copilot task list/);
+});
+
+test('task inventory avoids safe full snapshots but fetches uncertain and contradictory summaries', async () => {
+  const known = structuredClone(task);
+  const failedId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567893';
+  const failed = { ...known, id: failedId, state: 'failed',
+    sessions: [{ ...known.sessions[0], task_id: failedId, state: 'queued' }] };
+  const pending = { id: 'a1b2c3d4-e5f6-7890-abcd-ef1234567892', state: 'in_progress' };
+  const fetched = [];
+  const rows = [known, failed, pending];
+  const details = await readTaskDetails({
+    list: async () => rows,
+    get: async id => {
+      fetched.push(id);
+      return id === failed.id ? failed : { ...pending, session_count: 0, sessions: [], artifacts: [] };
+    },
+  });
+  assert.deepEqual(fetched.sort(), [failed.id, pending.id].sort());
+  assert.equal(details[0], known);
+  assert.deepEqual(competingWriters(details).map(row => row.taskId), [failed.id, pending.id]);
+});
+
+test('task inventory fetches terminal summaries without child evidence and fails closed on GET errors', async () => {
+  const rows = [{ id: taskId, state: 'completed' }];
+  await assert.rejects(readTaskDetails({
+    list: async () => rows,
+    get: async () => { throw Object.assign(new Error('HTTP 403'), { status: 403 }); },
+  }), /HTTP 403/);
+});
+
+test('task inventory never runs more than three simultaneous detail calls', async () => {
+  const rows = Array.from({ length: 10 }, (_, index) => ({
+    id: 'a1b2c3d4-e5f6-7890-abcd-' + String(index + 1).padStart(12, '0'),
+    state: 'in_progress',
+  }));
+  let active = 0;
+  let peak = 0;
+  const result = await readTaskDetails({
+    list: async () => rows,
+    get: async id => {
+      active++;
+      peak = Math.max(peak, active);
+      await new Promise(resolve => setTimeout(resolve, 2));
+      active--;
+      return { id, state: 'in_progress', sessions: [], session_count: 0, artifacts: [] };
+    },
+  });
+  assert.equal(result.length, 10);
+  assert.equal(peak, 3);
+});
+
+test('writer inventory applies requested states before any task detail reads', async () => {
+  const rows = [{ id: taskId, state: 'queued' }];
+  let reads = 0;
+  const result = await readTaskDetails({
+    list: async ({ states }) => {
+      assert.deepEqual(states, ['queued', 'in_progress']);
+      return rows;
+    },
+    get: async id => {
+      reads++;
+      return { id, state: 'queued', session_count: 0, sessions: [], artifacts: [] };
+    },
+  }, { states: ['queued', 'in_progress'] });
+  assert.equal(reads, 1);
+  assert.equal(result.length, 1);
+  await assert.rejects(readTaskDetails({
+    list: async () => [{ id: taskId, state: 'failed' }],
+    get: async () => assert.fail('must not fetch excluded task'),
+  }, { states: ['queued', 'in_progress'] }), /does not match requested states/);
+});
+
+test('Copilot API lists only queued and in-progress from server, rejects out-of-filter results', async () => {
+  const { agentTasksApi } = await import('../tools/delivery-controller/agent-tasks-api.mjs');
+  const urls = [];
+  const api = agentTasksApi({
+    token: 'test-token', repository,
+    request: async url => {
+      urls.push(url);
+      return { ok: true, json: async () => ({ tasks: [{ id: taskId, state: 'queued' }] }),
+        headers: { get: () => null } };
+    },
+  });
+  const tasks = await api.list({ states: ['queued', 'in_progress'] });
+  assert.equal(tasks.length, 1);
+  assert.match(urls[0], /[?&]state=queued,in_progress/);
+  await assert.rejects(api.list({ states: ['completed'] }), /Unsupported Copilot writer state filter/);
 });

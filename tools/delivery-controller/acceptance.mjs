@@ -79,9 +79,38 @@ export async function openDevelopmentPRs(paged, repository) {
   return prs;
 }
 
-export async function readTaskDetails(api) {
-  const rows = verifyTaskSnapshot(await api.list());
-  const details = await Promise.all(rows.map(row => api.get(row.id)));
+// A list status alone does not prove its child sessions stopped. Only use a
+// summary directly if it already provides a complete and consistent snapshot.
+function trustworthyStoppedSummary(row) {
+  if (!['completed', 'cancelled', 'failed', 'timed_out', 'idle'].includes(row.state) ||
+      !Array.isArray(row.sessions) || !Number.isSafeInteger(row.session_count) ||
+      row.session_count !== row.sessions.length ||
+      !Array.isArray(row.artifacts)) return false;
+  const seen = new Set();
+  for (const session of row.sessions) {
+    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(session?.id ?? '') ||
+        seen.has(session.id) || session.task_id !== row.id) return false;
+    seen.add(session.id);
+    if (row.state === 'idle' ? session.state !== 'idle' :
+        !['completed', 'cancelled', 'failed', 'timed_out'].includes(session.state)) return false;
+  }
+  return true;
+}
+
+export async function readTaskDetails(api, { states } = {}) {
+  const rows = verifyTaskSnapshot(await api.list(states ? { states } : undefined));
+  if (states && rows.some(row => !states.includes(row.state)))
+    throw new Error('Copilot task inventory does not match requested states');
+  const details = Array(rows.length);
+  // Keep concurrency low; Promise.all over every historical task can hit
+  // GitHub's secondary rate limits. Never convert a failed GET to success.
+  const workers = Array.from({ length: Math.min(3, rows.length) }, async (_, worker) => {
+    for (let index = worker; index < rows.length; index += 3) {
+      const row = rows[index];
+      details[index] = trustworthyStoppedSummary(row) ? row : await api.get(row.id);
+    }
+  });
+  await Promise.all(workers);
   assert(details.every((task, index) => task?.id === rows[index].id && task.state === rows[index].state),
     'Copilot task list changed during independent verification');
   return details;
