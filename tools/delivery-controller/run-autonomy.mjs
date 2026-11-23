@@ -113,6 +113,7 @@ async function main() {
     const lease = await readLease(leaseApi, { verifyTarget: true });
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
     const readRunLog = async (id, attempt) => {
+      let stage = 'job_inventory_request';
       try {
         const api = async path => {
           const { stdout } = await exec('gh', ['api', path], {
@@ -121,21 +122,33 @@ async function main() {
           });
           return stdout;
         };
-        const result = JSON.parse(await api('repos/' + repo +
-          '/actions/runs/' + id + '/attempts/' + attempt + '/jobs?per_page=100'));
+        const raw = await api('repos/' + repo +
+          '/actions/runs/' + id + '/attempts/' + attempt + '/jobs?per_page=100');
+        stage = 'job_inventory_json';
+        const result = JSON.parse(raw);
+        stage = 'job_inventory_completeness';
         if (!Number.isSafeInteger(result.total_count) ||
             !Array.isArray(result.jobs) || result.total_count !== result.jobs.length)
-          throw new Error('Incomplete original attempt job inventory');
+          throw new Error('incomplete_inventory');
+        stage = 'dispatch_job_identity';
         const jobs = result.jobs.filter(job => job.name === 'autonomous-dispatch' &&
           String(job.run_id) === id && job.run_attempt === Number(attempt) &&
           job.status === 'completed' && job.conclusion === 'failure' &&
           Number.isSafeInteger(job.id));
-        if (jobs.length !== 1) throw new Error('Original dispatch job is not uniquely verified');
+        if (jobs.length !== 1) throw new Error('ambiguous_job');
+        stage = 'job_log_request';
         const output = await api('repos/' + repo + '/actions/jobs/' + jobs[0].id + '/logs');
-        if (!output.trim()) throw new Error('Original dispatch job returned an empty log');
+        stage = 'job_log_nonempty';
+        if (!output.trim()) throw new Error('empty_log');
         return output;
-      } catch {
-        throw new Error('Cannot independently read the exact original dispatch job log');
+      } catch (error) {
+        // Do not expose command output, HTTP bodies, prompts or credentials.
+        const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
+        const http = stderr.match(/\bHTTP (?:[1-5]\d\d)\b/)?.[0] ?? 'unknown';
+        const code = ['job_inventory_request', 'job_log_request'].includes(stage) ?
+          ' http=' + http : '';
+        throw new Error('Cannot independently read the exact original dispatch job log' +
+          ' stage=' + stage + code);
       }
     };
     await verifyStoppedAttempt({ lease, gh, readRunLog });
