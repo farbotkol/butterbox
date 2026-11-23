@@ -194,7 +194,7 @@ test('owner recovery requires positive stop evidence from the exact completed at
  await assert.rejects(verify([preDispatchStop(lease)], { status: 'in_progress' }), /attempt identity/);
 });
 
-test('recovery permits only complete idle pairs and retains independent marker evidence checks', async () => {
+test('recovery accepts stopped and idle sessions without prompts but detects visible lease markers', async () => {
  const { recoveryTaskBlockers } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
  const sessionId = 'b1b2c3d4-e5f6-7890-abcd-ef1234567890';
@@ -207,8 +207,10 @@ test('recovery permits only complete idle pairs and retains independent marker e
 
  assert.deepEqual(blockers(task('idle', 'idle')), []);
  assert.deepEqual(blockers(task('completed', 'completed')), []);
- assert.deepEqual(blockers(task('idle', 'idle', ' ')), sessionBlock('missing_prompt_marker_evidence'));
- assert.deepEqual(blockers(task('completed', 'completed', ' ')), sessionBlock('missing_prompt_marker_evidence'));
+ assert.deepEqual(blockers(task('idle', 'idle', ' ')), []);
+ assert.deepEqual(blockers(task('completed', 'completed', ' ')), []);
+ assert.deepEqual(blockers(task('cancelled', 'cancelled', undefined)), []);
+ assert.deepEqual(blockers(task('failed', 'failed', null)), []);
  assert.deepEqual(blockers(task('idle', 'idle', 'private text\n BUTTERBOX_LEASE_RUN=' + runId)),
   sessionBlock('matching_lease_marker'));
  assert.deepEqual(blockers(task('failed', 'queued')), sessionBlock('active_session'));
@@ -220,6 +222,9 @@ test('recovery permits only complete idle pairs and retains independent marker e
   [{ taskId, reason: 'no_sessions' }]);
  assert.deepEqual(blockers({ ...task('idle', 'idle'), session_count: 2 }),
   [{ taskId, reason: 'session_count_mismatch' }]);
+ const absentPrompt = task('idle', 'idle');
+ delete absentPrompt.sessions[0].prompt;
+ assert.deepEqual(blockers(absentPrompt), []);
  const wrongParent = task('idle', 'idle');
  wrongParent.sessions[0].task_id = sessionId;
  assert.deepEqual(blockers(wrongParent), sessionBlock('invalid_session_identity_or_state'));

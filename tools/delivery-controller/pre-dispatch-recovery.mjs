@@ -62,9 +62,11 @@ export function recoveryTaskBlockers(tasks, runId) {
         } else if ((task.state === 'idle') !== (session.state === 'idle')) {
           block('inconsistent_idle_state', session.id);
         }
-        if (typeof session.prompt !== 'string' || !session.prompt.trim()) {
-          block('missing_prompt_marker_evidence', session.id);
-        } else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) {
+        // The original attempt is independently proven to have stopped before POST.
+        // Historical tasks need complete lifecycle evidence, not retained prompt text.
+        // An explicitly visible matching marker still contradicts that proof.
+        if (typeof session.prompt === 'string' &&
+            session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) {
           block('matching_lease_marker', session.id);
         }
       }
