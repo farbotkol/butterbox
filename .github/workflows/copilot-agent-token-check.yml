@@ -35,14 +35,16 @@ jobs:
           if (!Array.isArray(list.tasks) || list.tasks.length >= 100 ||
               (Object.hasOwn(list, 'total_count') && list.total_count !== list.tasks.length)) throw new Error('Incomplete task list');
           console.log(JSON.stringify({ taskCount: list.tasks.length }));
-          for (const row of list.tasks) {
+          for (const row of list.tasks.filter(row => row.id === "e80f0b14-620a-4914-8dac-f12059f2421f")) {
             const taskId = id(row.id);
             if (!taskId) throw new Error('Unexpected task identity');
             const task = await get('/' + taskId);
             console.log(JSON.stringify({
               taskId, detailTaskId: id(task.id), listState: state(row.state), state: state(task.state),
               created: time(task.created_at), updated: time(task.updated_at), completed: time(task.completed_at),
+              archived: time(task.archived_at), artifactCount: Array.isArray(task.artifacts) ? task.artifacts.length : null,
               sessionCount: task.session_count, sessions: task.sessions?.map(session => ({
+                hasHeadRef: Boolean(session.head_ref), hasBaseRef: Boolean(session.base_ref),
                 id: id(session.id), taskId: id(session.task_id), state: state(session.state),
                 created: time(session.created_at), updated: time(session.updated_at),
                 started: time(session.started_at), completed: time(session.completed_at),
