@@ -1,13 +1,18 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { githubLeaseApi } from './github-lease-api.mjs';
 import { readLease, acquireLease, releaseLease, isParked } from './lease.mjs';
 import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
 import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
-import { taskMarker, development, competingWriters } from './handoff.mjs';
+import { taskMarker, development, competingWriters, isSha } from './handoff.mjs';
 import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
   openDevelopmentPRs, readTaskDetails, advanceAcceptance } from './acceptance.mjs';
 
+import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
+
+const exec = promisify(execFile);
 const repo = process.env.GITHUB_REPOSITORY;
 const ghToken = process.env.GITHUB_TOKEN;
 const agentToken = process.env.COPILOT_AGENT_USER_TOKEN;
@@ -25,12 +30,19 @@ async function main() {
     throw new Error('Autonomy restricted to Butterbox Development schedules and owner dispatch');
   if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' && process.env.GITHUB_ACTOR_ID !== String(ownerId))
     throw new Error('Only the owner can manually run autonomous acceptance');
-  if (process.env.BUTTERBOX_AUTONOMY_ENABLED !== 'true') {
+  const recovery = process.env.LEASE_RECOVERY || 'none';
+  if (!['none', 'verify', 'release'].includes(recovery)) throw new Error('Invalid recovery mode');
+  if (recovery !== 'none' && (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
+      process.env.GITHUB_TRIGGERING_ACTOR !== 'farbotkol' || !isSha(process.env.EXPECTED_LEASE_TAG_SHA))) {
+    throw new Error('Recovery requires owner workflow dispatch and the exact tag SHA');
+  }
+  if (recovery === 'none' && process.env.BUTTERBOX_AUTONOMY_ENABLED !== 'true') {
     report('DISPATCH_DISABLED: owner opt-in switch is not enabled.');
     return;
   }
   if (!ghToken) throw new Error('Missing Actions repository token');
   if (!agentToken) {
+    if (recovery !== 'none') throw new Error('Missing Copilot credential for recovery');
     report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
     return;
   }
@@ -97,6 +109,24 @@ async function main() {
 
   const leaseApi = githubLeaseApi({ token: ghToken, repository: repo, request });
   const tasksApi = agentTasksApi({ token: agentToken, repository: repo, request });
+  if (recovery !== 'none') {
+    const lease = await readLease(leaseApi, { verifyTarget: true });
+    if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
+    const readRunLog = async (id, attempt) => {
+      try {
+        const { stdout } = await exec('gh', ['run', 'view', id, '--repo', repo, '--attempt', attempt, '--log'], {
+          env: { ...process.env, GH_TOKEN: ghToken }, timeout: 30000,
+        });
+        return stdout;
+      } catch {
+        throw new Error('Cannot independently read the original controller attempt log');
+      }
+    };
+    await verifyStoppedAttempt({ lease, gh, readRunLog });
+    await recoverPreDispatchLease({ repository: repo, lease, leaseApi, gh, paged, tasksApi, repairBusy,
+      report, verifyOnly: recovery === 'verify' });
+    return;
+  }
   await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull });
 }
 
@@ -148,7 +178,16 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
   report('LEASE_ACQUIRED for #' + number + ' by ' + runId);
-  const [final, checked, held] = await Promise.all([candidateSnapshot(), approval(number), readLease(leaseApi)]);
+  let final, checked, held;
+  try {
+    [final, checked, held] = await Promise.all([candidateSnapshot(), approval(number), readLease(leaseApi)]);
+  } catch (error) {
+    // This path returns or throws before the only call that can create a task.
+    report(preDispatchStop(acquired));
+    if (error.code !== 'COPILOT_TASK_GET' || error.status !== 403) throw error;
+    await recoverPreDispatchLease({ repository, lease: acquired, leaseApi, gh, paged, tasksApi, repairBusy, report });
+    return;
+  }
   if (held?.tagSha !== acquired.tagSha || held.runId !== runId) throw new Error('Lease changed before dispatch');
   const finalSelection = selectReadyIssue({ ...final, issues: [checked.issue] });
   if (finalSelection.issue !== number || await isParked(leaseApi, number) || !checked.approved ||

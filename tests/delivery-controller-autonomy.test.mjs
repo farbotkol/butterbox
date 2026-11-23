@@ -64,3 +64,132 @@ test('Copilot keeps its own API version and rejects an incomplete page before di
  }).list(), /incomplete/);
  assert.deepEqual(await api({ json: async () => ({ tasks: [], total_count: 0 }) }).list(), []);
 });
+
+const repository = 'farbotkol/butterbox';
+const baseSha = 'e'.repeat(40);
+const tagSha = 'a'.repeat(40);
+const recoveryIssue = story(305, { assignees: [] });
+const runId = 'actions_123_1';
+const taskGet403 = () => Object.assign(new Error('Copilot task API GET returned HTTP 403'),
+ { code: 'COPILOT_TASK_GET', status: 403 });
+
+async function recoveryFixture({ list, create, repairBusy = async () => false, race = false } = {}) {
+ const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
+ const { recoverPreDispatchLease } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const { LEASE_REF, readLease } = await import('../tools/delivery-controller/lease.mjs');
+ let ref;
+ let tag;
+ const seen = { lists: 0, posts: 0, releases: 0, reports: [] };
+ const leaseApi = {
+  async getRef(name) {
+   if (name !== LEASE_REF || !ref) throw Object.assign(new Error('missing'), { status: 404 });
+   return { object: { type: 'tag', sha: ref } };
+  },
+  async getTag(sha) { return { ...tag, sha }; },
+  async createTag(value) {
+   tag = { ...value, object: { type: value.type, sha: value.object } };
+   return { sha: tagSha };
+  },
+  async createRef({ sha }) { ref = sha; },
+  async compareAndDeleteRef(name, expected) {
+   assert.equal(name, LEASE_REF);
+   if (race) ref = 'c'.repeat(40);
+   if (ref !== expected) throw new Error('stale expected SHA');
+   seen.releases++;
+   ref = undefined;
+  },
+  async deleteRef() { assert.fail('recovery used unconditional deletion'); },
+ };
+ const params = {
+  repository, runId, leaseApi,
+  gh: async path => path.startsWith('/git/ref/') ? { object: { type: 'commit', sha: baseSha } } : recoveryIssue,
+  paged: async () => [], repairBusy,
+  approval: async () => ({ issue: { ...recoveryIssue, updated_at: '2026-11-23T06:00:00Z' }, approved: true }),
+  tasksApi: {
+   list: async () => { seen.lists++; return list ? list(seen.lists) : []; },
+   create: async () => { seen.posts++; return create(); },
+   get: async id => ({ id, state: 'failed', session_count: 1, sessions: [{
+    id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', task_id: id, state: 'queued', prompt: 'other task',
+   }] }),
+  },
+  report: text => seen.reports.push(text),
+ };
+ return { seen, read: () => readLease(leaseApi), run: () => runAcceptanceCycle(params),
+  recover: async verifyOnly => recoverPreDispatchLease({ ...params, verifyOnly, lease: await readLease(leaseApi) }) };
+}
+
+test('a transient post-acquisition GET 403 requires fresh evidence and releases without dispatch', async () => {
+ const fixture = await recoveryFixture({ list: async n => { if (n === 2) throw taskGet403(); return []; } });
+ await fixture.run();
+ assert.equal(fixture.seen.lists, 4);
+ assert.equal(fixture.seen.posts, 0);
+ assert.equal(fixture.seen.releases, 1);
+ assert.match(fixture.seen.reports.at(-1), /^PRE_DISPATCH_LEASE_RELEASED/);
+ assert.equal(await fixture.read(), null);
+});
+
+test('persistent 403, incomplete inventory and queued child sessions all retain the lease', async () => {
+ const id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ for (const late of [
+  () => { throw taskGet403(); },
+  () => [{ id, state: 'unknown' }],
+  () => [{ id, state: 'failed' }],
+ ]) {
+  const fixture = await recoveryFixture({ list: async n => {
+   if (n === 2) throw taskGet403();
+   return n > 2 ? late() : [];
+  } });
+  await assert.rejects(fixture.run());
+  assert.equal(fixture.seen.posts, 0);
+  assert.equal(fixture.seen.releases, 0);
+  assert.equal((await fixture.read()).tagSha, tagSha);
+ }
+});
+
+test('a replacement ref defeats recovery and verification makes no ref changes', async () => {
+ const fixture = await recoveryFixture({ race: true, list: async n => {
+  if (n === 2 || n === 3) throw taskGet403();
+  return [];
+ } });
+ await assert.rejects(fixture.run(), /HTTP 403/);
+ await fixture.recover(true);
+ assert.equal((await fixture.read()).tagSha, tagSha);
+ await assert.rejects(fixture.recover(false), /stale expected SHA/);
+ assert.equal((await fixture.read()).tagSha, 'c'.repeat(40));
+ assert.equal(fixture.seen.posts, 0);
+ assert.equal(fixture.seen.releases, 0);
+});
+
+test('an ambiguous POST receives no retry or pre-dispatch recovery evidence', async () => {
+ const fixture = await recoveryFixture({ create: () => { throw new Error('connection lost after sending POST'); } });
+ await assert.rejects(fixture.run(), /after sending POST/);
+ await fixture.run();
+ assert.equal(fixture.seen.posts, 1);
+ assert.equal(fixture.seen.releases, 0);
+ assert.equal((await fixture.read()).tagSha, tagSha);
+ assert.ok(fixture.seen.reports.some(text => text.startsWith('DISPATCH_UNCERTAIN')));
+ assert.ok(!fixture.seen.reports.some(text => text.startsWith('PRE_DISPATCH_')));
+});
+
+test('owner recovery requires positive stop evidence from the exact completed attempt', async () => {
+ const { preDispatchStop, verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const lease = { issue: 305, runId, baseSha, tagSha, startedAt: '2026-11-23T06:00:01Z' };
+ const run = { id: 123, run_attempt: 1, head_sha: baseSha, head_branch: 'copilot/Development',
+  path: '.github/workflows/delivery-controller.yml', event: 'workflow_dispatch', status: 'completed',
+  conclusion: 'failure', run_started_at: '2026-11-23T06:00:00Z', updated_at: '2026-11-23T06:00:02Z' };
+ const log = message => 'autonomous-dispatch\tAdvance the controlled GitHub acceptance lifecycle\t2026-11-23T06:00:01Z ' + message;
+ const checkout = 'autonomous-dispatch\tRun actions/checkout@v4\t2026-11-23T06:00:00Z ' + baseSha;
+ const acquire = log('LEASE_ACQUIRED for #305 by ' + runId);
+ const verify = (output, override = {}) => verifyStoppedAttempt({ lease,
+  gh: async path => {
+   assert.equal(path, '/actions/runs/123/attempts/1');
+   return { ...run, ...override };
+  },
+  readRunLog: async () => [checkout, acquire, ...output.map(log)].join('\n'),
+ });
+ await verify([preDispatchStop(lease)]);
+ await assert.rejects(verify(['DISPATCH_UNCERTAIN: POST timed out']), /pre-dispatch stop evidence/);
+ await assert.rejects(verify([preDispatchStop(lease), 'DISPATCH_UNCERTAIN: POST timed out']), /pre-dispatch stop evidence/);
+ await assert.rejects(verify([preDispatchStop(lease)], { run_attempt: 2 }), /attempt identity/);
+ await assert.rejects(verify([preDispatchStop(lease)], { status: 'in_progress' }), /attempt identity/);
+});
