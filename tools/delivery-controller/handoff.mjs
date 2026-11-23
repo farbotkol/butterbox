@@ -14,11 +14,23 @@ export function verifyTaskSnapshot(rows) {
   return rows;
 }
 
-function completeSessions(tasks) {
-  return tasks.every(task => Array.isArray(task.sessions) && task.session_count === task.sessions.length &&
-    task.sessions.every(session => isUuid(session.id) && session.task_id === task.id && known.has(session.state)) &&
-    new Set(task.sessions.map(session => session.id)).size === task.sessions.length);
+export function sessionSnapshotProblems(task) {
+  if (!Array.isArray(task.sessions)) return [{ reason: 'missing_session_list' }];
+  const problems = [];
+  if (task.session_count !== task.sessions.length) problems.push({ reason: 'session_count_mismatch' });
+  const seen = new Set();
+  for (const session of task.sessions) {
+    const sessionId = isUuid(session?.id) ? session.id : null;
+    if (!sessionId || session.task_id !== task.id || !known.has(session.state)) {
+      problems.push({ reason: 'invalid_session_identity_or_state', sessionId });
+    }
+    if (sessionId && seen.has(sessionId)) problems.push({ reason: 'duplicate_session', sessionId });
+    seen.add(sessionId);
+  }
+  return problems;
 }
+
+const completeSessions = tasks => tasks.every(task => !sessionSnapshotProblems(task).length);
 
 export function competingWriters(tasks) {
   verifyTaskSnapshot(tasks);

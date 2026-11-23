@@ -193,3 +193,50 @@ test('owner recovery requires positive stop evidence from the exact completed at
  await assert.rejects(verify([preDispatchStop(lease)], { run_attempt: 2 }), /attempt identity/);
  await assert.rejects(verify([preDispatchStop(lease)], { status: 'in_progress' }), /attempt identity/);
 });
+
+test('recovery permits only complete idle pairs and retains independent marker evidence checks', async () => {
+ const { recoveryTaskBlockers } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ const sessionId = 'b1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ const task = (state, sessionState, prompt = 'unrelated private text') => ({
+  id: taskId, state, session_count: 1,
+  sessions: [{ id: sessionId, task_id: taskId, state: sessionState, prompt }],
+ });
+ const blockers = (...tasks) => recoveryTaskBlockers(tasks, runId);
+ const sessionBlock = reason => [{ taskId, sessionId, reason }];
+
+ assert.deepEqual(blockers(task('idle', 'idle')), []);
+ assert.deepEqual(blockers(task('completed', 'completed')), []);
+ assert.deepEqual(blockers(task('idle', 'idle', ' ')), sessionBlock('missing_prompt_marker_evidence'));
+ assert.deepEqual(blockers(task('completed', 'completed', ' ')), sessionBlock('missing_prompt_marker_evidence'));
+ assert.deepEqual(blockers(task('idle', 'idle', 'private text\n BUTTERBOX_LEASE_RUN=' + runId)),
+  sessionBlock('matching_lease_marker'));
+ assert.deepEqual(blockers(task('failed', 'queued')), sessionBlock('active_session'));
+ assert.deepEqual(blockers(task('idle', 'in_progress')), sessionBlock('active_session'));
+ assert.deepEqual(blockers(task('idle', 'completed')), sessionBlock('inconsistent_idle_state'));
+ assert.deepEqual(blockers(task('completed', 'idle')), sessionBlock('inconsistent_idle_state'));
+ assert.ok(blockers(task('queued', 'queued')).some(blocker => blocker.reason === 'active_task'));
+ assert.deepEqual(blockers({ ...task('idle', 'idle'), sessions: [], session_count: 0 }),
+  [{ taskId, reason: 'no_sessions' }]);
+ assert.deepEqual(blockers({ ...task('idle', 'idle'), session_count: 2 }),
+  [{ taskId, reason: 'session_count_mismatch' }]);
+ const wrongParent = task('idle', 'idle');
+ wrongParent.sessions[0].task_id = sessionId;
+ assert.deepEqual(blockers(wrongParent), sessionBlock('invalid_session_identity_or_state'));
+});
+
+test('recovery reports sanitized blocking task and session IDs and retains the exact lease', async () => {
+ const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ const sessionId = 'b1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ const fixture = await recoveryFixture({ list: async n => {
+  if (n === 2) throw taskGet403();
+  return n > 2 ? [{ id: taskId, state: 'failed' }] : [];
+ } });
+ await assert.rejects(fixture.run(), /retain lease/);
+ const report = fixture.seen.reports.find(value => value.startsWith('PRE_DISPATCH_RECOVERY_BLOCK: '));
+ assert.deepEqual(JSON.parse(report.split(': ')[1]), { taskId, reason: 'active_session', sessionId });
+ assert.ok(!report.includes('other task'));
+ assert.equal(fixture.seen.posts, 0);
+ assert.equal(fixture.seen.releases, 0);
+ assert.equal((await fixture.read()).tagSha, tagSha);
+});
