@@ -27,23 +27,38 @@ export async function verifyStoppedAttempt({ lease, gh, readRunLog }) {
   // Require the checked-out code and explicit stop point in the exact attempt's
   // GitHub job log. The old controller emitted only the final GET error.
   const lines = (await readRunLog(id, attempt)).split(/\r?\n/);
-  const messages = step => lines.flatMap(line => {
-    const [job, name, output] = line.split('\t', 3);
-    return job === 'autonomous-dispatch' && name === step && output ?
-      [output.replace(/^\S+Z /, '')] : [];
+  // 'gh run view --log' prefixes each record with a job and step label.
+  // Match that structure, but do not assume formatting is identical to the
+  // raw GitHub job log or that each step contains only one output record.
+  const entries = lines.flatMap(line => {
+    const first = line.indexOf('\t');
+    const second = first < 0 ? -1 : line.indexOf('\t', first + 1);
+    if (second < 0) return [];
+    const job = line.slice(0, first).trim();
+    const step = line.slice(first + 1, second).trim();
+    if (job !== 'autonomous-dispatch' && !job.endsWith('/autonomous-dispatch')) return [];
+    const message = line.slice(second + 1).replace(/^\d{4}-\d\d-\d\dT\S+Z\s+/, '').trim();
+    return [{ step, message }];
   });
+  const messages = step => entries.filter(entry => entry.step === step).map(entry => entry.message);
   const output = messages(logStep);
   const acquire = 'LEASE_ACQUIRED for #' + lease.issue + ' by ' + lease.runId;
   const legacy = lease.issue === 305 && lease.runId === 'actions_45121500090_1' &&
     lease.baseSha === legacyBase && lease.tagSha === legacyTag;
   const stop = legacy ? 'STOPPED: Copilot task API GET returned HTTP 403' : preDispatchStop(lease);
-  if (!messages('Run actions/checkout@v4').includes(lease.baseSha) ||
-      output.filter(line => line === acquire).length !== 1 ||
-      output.filter(line => line === stop).length !== 1 ||
-      output.indexOf(stop) <= output.indexOf(acquire) ||
-      (legacy && output.indexOf(stop) !== output.indexOf(acquire) + 1) ||
-      output.some(line => /^(COPILOT_LAUNCHED|DISPATCH_UNCERTAIN):? /.test(line))) {
-    throw new Error('No positive pre-dispatch stop evidence in the controller attempt');
+  const checkoutMessages = messages('Run actions/checkout@v4');
+  const failures = [];
+  if (!checkoutMessages.includes(lease.baseSha)) failures.push('checkout_sha');
+  if (output.filter(line => line === acquire).length !== 1) failures.push('lease_acquisition');
+  if (output.filter(line => line === stop).length !== 1) failures.push('pre_dispatch_stop');
+  if (output.indexOf(stop) <= output.indexOf(acquire)) failures.push('stop_order');
+  // A legacy run must stop directly after acquiring the lease. There must be
+  // no other controller output between those two explicit events.
+  if (legacy && output.indexOf(stop) !== output.indexOf(acquire) + 1) failures.push('legacy_stop_sequence');
+  if (output.some(line => /^(COPILOT_LAUNCHED|DISPATCH_UNCERTAIN):? /.test(line))) failures.push('task_dispatch_evidence');
+  if (failures.length) {
+    throw new Error('No positive pre-dispatch stop evidence in the controller attempt: ' +
+      failures.join(', '));
   }
 }
 
