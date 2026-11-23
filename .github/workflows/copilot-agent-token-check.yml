@@ -28,19 +28,20 @@ jobs:
               method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
               headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2026-03-10' },
             });
-            if (!response.ok) throw new Error('Copilot GET returned HTTP ' + response.status);
+            if (!response.ok) throw new Error('Copilot GET ' + path + ' returned HTTP ' + response.status);
             if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Paginated task evidence');
             return response.json();
           }
           async function list(archived) {
-            const data = await get('?per_page=100&is_archived=' + archived);
+            const data = await get('?per_page=100' + (archived === null ? '' : '&is_archived=' + archived));
             if (!Array.isArray(data.tasks) || data.tasks.length >= 100 ||
                 (Object.hasOwn(data, 'total_count') && data.tasks.length !== data.total_count) ||
                 data.tasks.some(task => !uuid(task.id) || !known.has(task.state)) ||
                 new Set(data.tasks.map(task => task.id)).size !== data.tasks.length) throw new Error('Incomplete task inventory');
             return data.tasks;
           }
-          for (const archived of [false, true]) {
+          for (const archived of [null, false, true]) {
+            try {
             const rows = await list(archived);
             const tasks = [];
             for (let i = 0; i < rows.length; i += 8) {
@@ -80,5 +81,9 @@ jobs:
             }
             findings.sessionKeys = [...sessionKeys].sort();
             console.log(JSON.stringify(findings));
+            } catch (error) {
+              console.log(JSON.stringify({ archived, error: error.message }));
+              process.exitCode = 1;
+            }
           }
           JS
