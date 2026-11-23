@@ -7,48 +7,64 @@ permissions: {}
 
 jobs:
   check-token:
-    if: github.repository == 'farbotkol/butterbox' && github.ref == 'refs/heads/diagnose/45104980678-copilot-readonly' && github.actor_id == '11307166'
+    if: github.repository == 'farbotkol/butterbox' && github.ref == 'refs/heads/diagnose/305-retained-lease' && github.actor_id == '11307166' && github.triggering_actor == 'farbotkol'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 4
     steps:
-      - name: Inspect Copilot task and session states using GET only
+      - name: Read current Copilot writer evidence for Issue 305
         env:
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
         run: |
           node --input-type=module <<'JS'
           const token = process.env.COPILOT_AGENT_USER_TOKEN;
-          if (!token) throw new Error('Approved Copilot credential unavailable');
+          if (!token) throw new Error('Copilot credential unavailable');
           const root = 'https://api.github.com/agents/repos/farbotkol/butterbox/tasks';
-          const id = value => typeof value === 'string' && /^[a-f0-9-]{36}$/i.test(value) ? value : null;
-          const state = value => ['completed', 'failed', 'cancelled', 'timed_out', 'idle', 'queued', 'in_progress', 'waiting_for_user'].includes(value) ? value : 'unknown';
-          const time = value => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? new Date(value).toISOString() : null;
+          const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
+          const stopped = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
+          const known = new Set([...stopped, 'idle', 'queued', 'in_progress', 'waiting_for_user']);
+          const marker = 'BUTTERBOX_LEASE_RUN=actions_45121500090_1';
           async function get(path) {
             const response = await fetch(root + path, {
               method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
               headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2026-03-10' },
             });
             if (!response.ok) throw new Error('Copilot GET returned HTTP ' + response.status);
-            if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Copilot list is paginated');
+            if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Paginated task evidence');
             return response.json();
           }
-          const list = await get('?per_page=100');
-          if (!Array.isArray(list.tasks) || list.tasks.length >= 100 ||
-              (Object.hasOwn(list, 'total_count') && list.total_count !== list.tasks.length)) throw new Error('Incomplete task list');
-          console.log(JSON.stringify({ taskCount: list.tasks.length }));
-          for (const row of list.tasks.filter(row => row.id === "e80f0b14-620a-4914-8dac-f12059f2421f")) {
-            const taskId = id(row.id);
-            if (!taskId) throw new Error('Unexpected task identity');
-            const task = await get('/' + taskId);
-            console.log(JSON.stringify({
-              taskId, detailTaskId: id(task.id), listState: state(row.state), state: state(task.state),
-              created: time(task.created_at), updated: time(task.updated_at), completed: time(task.completed_at),
-              archived: time(task.archived_at), artifactCount: Array.isArray(task.artifacts) ? task.artifacts.length : null,
-              sessionCount: task.session_count, sessions: task.sessions?.map(session => ({
-                hasHeadRef: Boolean(session.head_ref), hasBaseRef: Boolean(session.base_ref),
-                id: id(session.id), taskId: id(session.task_id), state: state(session.state),
-                created: time(session.created_at), updated: time(session.updated_at),
-                started: time(session.started_at), completed: time(session.completed_at),
-              })),
-            }));
+          async function list() {
+            const data = await get('?per_page=100');
+            if (!Array.isArray(data.tasks) || data.tasks.length >= 100 ||
+                (Object.hasOwn(data, 'total_count') && data.tasks.length !== data.total_count) ||
+                data.tasks.some(task => !uuid(task.id) || !known.has(task.state)) ||
+                new Set(data.tasks.map(task => task.id)).size !== data.tasks.length) throw new Error('Incomplete task inventory');
+            return data.tasks;
           }
+          const rows = await list();
+          const tasks = [];
+          for (let i = 0; i < rows.length; i += 8) {
+            tasks.push(...await Promise.all(rows.slice(i, i + 8).map(async row => {
+              const task = await get('/' + row.id);
+              if (task.id !== row.id || task.state !== row.state) throw new Error('Task list and detail disagree');
+              return task;
+            })));
+          }
+          const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
+          if (states(rows) !== states(await list())) throw new Error('Task inventory changed');
+          const incomplete = tasks.filter(task => !Array.isArray(task.sessions) || !task.sessions.length ||
+            task.session_count !== task.sessions.length || new Set(task.sessions.map(session => session.id)).size !== task.sessions.length ||
+            task.sessions.some(session => !uuid(session.id) || session.task_id !== task.id || !known.has(session.state) ||
+              typeof session.prompt !== 'string' || !session.prompt.trim()));
+          const matches = tasks.filter(task => task.sessions?.some(session =>
+            typeof session.prompt === 'string' && session.prompt.split(/\r?\n/).some(line => line.trim() === marker)));
+          const writers = tasks.flatMap(task => {
+            const sessions = task.sessions?.filter(session => !stopped.has(session.state)) ?? [];
+            return stopped.has(task.state) && !sessions.length ? [] : [{
+              id: task.id, state: task.state,
+              sessions: sessions.map(session => ({ id: uuid(session.id) ? session.id : null, state: known.has(session.state) ? session.state : 'unknown' })),
+            }];
+          });
+          console.log(JSON.stringify({ taskDetails: tasks.length, incomplete: incomplete.map(task => task.id),
+            leaseMarkerMatches: matches.map(task => task.id), writers }));
+          if (incomplete.length || matches.length || writers.length) process.exitCode = 1;
           JS
