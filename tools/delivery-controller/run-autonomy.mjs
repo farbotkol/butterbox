@@ -118,7 +118,10 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     const [prs, rows, repair, ref] = await Promise.all([
       openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
     ]);
-    const activeTasks = competingWriters(rows) || repair ? ['Competing GitHub writer'] : [];
+    const writers = competingWriters(rows);
+    for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
+    if (repair) report('CI_REPAIR_BLOCK: A CI repair run may still be writing.');
+    const activeTasks = repair ? [...writers, { source: 'CI repair' }] : writers;
     return { prs, activeTasks, lease: { state: 'free' }, baseSha: developmentSha(ref) };
   };
   const initial = await candidateSnapshot();
