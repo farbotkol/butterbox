@@ -11,6 +11,7 @@ import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceComplete
   openDevelopmentPRs, readTaskDetails, advanceAcceptance } from './acceptance.mjs';
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
+import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
 const repo = process.env.GITHUB_REPOSITORY;
@@ -137,14 +138,15 @@ async function main() {
           Number.isSafeInteger(job.id));
         if (jobs.length !== 1) throw new Error('ambiguous_job');
         stage = 'job_log_request';
-        const output = await api('repos/' + repo + '/actions/jobs/' + jobs[0].id + '/logs');
+        const output = await downloadJobLog({ repository: repo, jobId: jobs[0].id, token: ghToken });
         stage = 'job_log_nonempty';
         if (!output.trim()) throw new Error('empty_log');
         return output;
       } catch (error) {
         // Do not expose command output, HTTP bodies, prompts or credentials.
         const stderr = typeof error?.stderr === 'string' ? error.stderr : '';
-        const http = stderr.match(/\bHTTP (?:[1-5]\d\d)\b/)?.[0] ?? 'unknown';
+        const http = stderr.match(/\bHTTP (?:[1-5]\d\d)\b/)?.[0] ??
+          String(error?.message ?? '').match(/\bHTTP (?:[1-5]\d\d)\b/)?.[0] ?? 'unknown';
         const code = ['job_inventory_request', 'job_log_request'].includes(stage) ?
           ' http=' + http : '';
         throw new Error('Cannot independently read the exact original dispatch job log' +
