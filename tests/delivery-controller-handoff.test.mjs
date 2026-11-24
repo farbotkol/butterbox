@@ -9,6 +9,7 @@ const { path, bytes } = proofFor(305);
 const base = 'a'.repeat(40);
 const head = 'b'.repeat(40);
 const merge = 'c'.repeat(40);
+const moved = 'f'.repeat(40);
 const blob = 'd'.repeat(40);
 const tagSha = 'e'.repeat(40);
 const taskId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
@@ -48,6 +49,7 @@ function fixture(overrides = {}) {
       html_url: 'https://github.com/' + repository + '/actions/runs/123/job/' + (100 + index),
     })),
     tip: base,
+    parent: base,
     proof: { type: 'file', encoding: 'base64', content: bytes.toString('base64'), sha: blob },
     files: [{ filename: path, status: 'added', sha: blob }],
     ...overrides,
@@ -67,6 +69,7 @@ function fixture(overrides = {}) {
       effects.push('merge');
       Object.assign(state.pr, { state: 'closed', merged: true, merged_at: mergedAt, merge_commit_sha: merge,
         merged_by: { id: 41898282 } });
+      state.parent = state.tip;
       state.tip = merge;
       return { merged: true, sha: merge };
     }
@@ -85,9 +88,15 @@ function fixture(overrides = {}) {
     if (route.startsWith('/commits/' + head + '/check-runs')) return {
       total_count: state.checkCount ?? state.checks.length, check_runs: state.checks,
     };
-    if (route.startsWith('/commits/' + merge)) return { sha: merge, parents: [{ sha: base }], files: state.files };
+    if (route.startsWith('/commits/' + merge)) return { sha: merge, parents: [{ sha: state.parent }], files: state.files };
     if (route.startsWith('/git/ref/heads/')) return { object: { sha: state.tip, type: 'commit' } };
-    if (route.startsWith('/compare/')) return { status: 'ahead', merge_base_commit: { sha: base } };
+    if (route.startsWith('/compare/')) {
+      const target = route.split('/').at(-1).split('?')[0].split('...')[1];
+      if (target === head) return { status: 'ahead', merge_base_commit: { sha: base } };
+      return state.comparison ?? { status: 'ahead', base_commit: { sha: base },
+        merge_base_commit: { sha: base }, ahead_by: 1, total_commits: 1,
+        commits: [{ sha: moved }], files: [{ filename: 'tools/delivery-controller/acceptance.mjs', status: 'modified' }] };
+    }
     if (route.startsWith('/rules/branches/')) return [
       { type: 'pull_request', parameters: { allowed_merge_methods: ['squash'] } },
       { type: 'required_status_checks', parameters: { required_status_checks: ['verify', 'database-smoke']
@@ -243,7 +252,7 @@ test('absent merge SHA in the newer REST representation, unverified close and wr
 
 test('base drift, missing proof, truncation, failed or pending retry and competing writers stop mutations', async () => {
   const invalid = [
-    [s => { s.tip = merge; }, /pinned Development SHA/],
+    [s => { s.tip = moved; s.pr.base.sha = moved; s.comparison = { status: 'diverged' }; }, /Unsafe Development movement/],
     [s => { s.proof = null; }, /approved proof/],
     [s => { s.checkCount = 101; }, /Incomplete check-run/],
     [s => { s.checks[0].head_sha = base; }, /exact-head check/],
@@ -532,4 +541,34 @@ test('Copilot API lists only queued and in-progress from server, rejects out-of-
   assert.equal(tasks.length, 1);
   assert.match(urls[0], /[?&]state=queued,in_progress/);
   await assert.rejects(api.list({ states: ['completed'] }), /Unsupported Copilot writer state filter/);
+});
+
+
+test('safe forward Development drift resumes draft, merge and audited close over scheduled runs', async () => {
+  const { run, effects, state, reports } = fixture();
+  state.tip = moved;
+  state.pr.base.sha = moved;
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  assert(reports.some(line => line.startsWith('DEVELOPMENT_DRIFT_VALIDATED')));
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge']);
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+  assert.match(state.issue.body, /Original base .*verified squash parent/);
+});
+
+test('drift with proof overlap, truncated compare, or moving tip never mutates PR', async () => {
+  for (const comparison of [
+    { status: 'diverged' },
+    { status: 'ahead', base_commit: { sha: base }, merge_base_commit: { sha: base },
+      ahead_by: 2, total_commits: 2, commits: [{ sha: moved }], files: [] },
+    { status: 'ahead', base_commit: { sha: base }, merge_base_commit: { sha: base },
+      ahead_by: 1, total_commits: 1, commits: [{ sha: moved }], files: [{ filename: path, status: 'added' }] },
+  ]) {
+    const { run, state, effects } = fixture({ tip: moved, comparison });
+    state.pr.base.sha = moved;
+    await assert.rejects(run(), /Unsafe Development movement/);
+    assert.deepEqual(effects, []);
+  }
 });
