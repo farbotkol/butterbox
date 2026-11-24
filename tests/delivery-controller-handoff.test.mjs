@@ -252,7 +252,7 @@ test('absent merge SHA in the newer REST representation, unverified close and wr
 
 test('base drift, missing proof, truncation, failed or pending retry and competing writers stop mutations', async () => {
   const invalid = [
-    [s => { s.tip = moved; s.comparison = { status: 'diverged' }; }, /Unsafe Development movement/],
+    [s => { s.tip = moved; s.pr.base.sha = moved; s.comparison = { status: 'diverged' }; }, /Unsafe Development movement/],
     [s => { s.proof = null; }, /approved proof/],
     [s => { s.checkCount = 101; }, /Incomplete check-run/],
     [s => { s.checks[0].head_sha = base; }, /exact-head check/],
