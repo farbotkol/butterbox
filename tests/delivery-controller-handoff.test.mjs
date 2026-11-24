@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessHandoff, competingWriters, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
-import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor, readTaskDetails } from '../tools/delivery-controller/acceptance.mjs';
+import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor, readTaskDetails, planAcceptancePrMetadata } from '../tools/delivery-controller/acceptance.mjs';
 import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
 
 const repository = 'farbotkol/butterbox';
@@ -53,6 +53,14 @@ function fixture(overrides = {}) {
     ...overrides,
   };
   const gh = async (route, method = 'GET', data) => {
+    if (method === 'PATCH' && route === '/pulls/401') {
+      effects.push('metadata');
+      if (state.failMetadataPatch) throw new Error('PR metadata PATCH failed');
+      if (state.mutateBeforeMetadataPatch) state.mutateBeforeMetadataPatch(state);
+      state.pr.body = data.body;
+      if (state.corruptMetadataReply) return { ...state.pr, body: 'unexpected' };
+      return structuredClone(state.pr);
+    }
     if (method === 'PUT' && route === '/pulls/401/merge') {
       assert.equal(data.sha, head);
       assert.equal(data.merge_method, 'squash');
@@ -136,6 +144,76 @@ test('draft, exact-head protected squash, audited close, then release in order',
   assert.equal(firstAcceptanceCompleted(state.issue, events), true);
   assert.match(state.issue.body, /Completed sessions .*\nPR #401.*squash/);
   assert.equal(firstAcceptanceCompleted(state.issue, []), false);
+});
+
+
+test('accepts a prose issue reference without requiring a standalone Refs line', async () => {
+  const { run, effects, state } = fixture();
+  state.pr.body = '## Issue closure\n\nRefs #305. No closing keyword; runtime acceptance is pending.\n' +
+    '<!-- butterbox-issue: 305 -->\n<!-- butterbox-evidence: ' + path + ' -->';
+  await run();
+  assert.deepEqual(effects, ['ready']);
+});
+
+test('repairs missing metadata only after verified task, file, CI, lease and approval; rechecks then returns', async () => {
+  const { run, effects, state, reports } = fixture();
+  state.pr.body = '## Issue closure\n\nRefs #305. No closing keyword; runtime acceptance is pending.';
+  await run();
+  assert.deepEqual(effects, ['metadata']);
+  assert.match(state.pr.body, /<!-- butterbox-issue: 305 -->/);
+  assert.match(state.pr.body, /<!-- butterbox-evidence: docs\/agent-work\/autonomy-acceptance-a.md -->/);
+  assert.equal((state.pr.body.match(/Refs #305/g) ?? []).length, 1);
+  assert.match(reports[0], /^PR_METADATA_REPAIRED #401/);
+  await run();
+  assert.deepEqual(effects, ['metadata', 'ready']);
+  await run();
+  assert.deepEqual(effects, ['metadata', 'ready', 'merge']);
+  await run();
+  assert.deepEqual(effects, ['metadata', 'ready', 'merge', 'close', 'release']);
+});
+
+test('repairs missing references using independently verified lease issue when body has no issue reference', async () => {
+  const { run, effects, state } = fixture();
+  state.pr.body = 'Only the approved proof file changed.';
+  await run();
+  assert.deepEqual(effects, ['metadata']);
+  assert.match(state.pr.body, /\nRefs #305\n/);
+  assert.equal(planAcceptancePrMetadata(state.pr.body, 305, path).changed, false);
+});
+
+test('rejects contradictory or duplicated metadata, closing references, and nonapproved proof paths', async () => {
+  for (const body of [
+    'Refs #306', 'Related to #306, Refs #305', 'Fixes #305',
+    'Refs #305\n<!-- butterbox-issue: 306 -->',
+    'Refs #305\n<!-- butterbox-evidence: docs/agent-work/autonomy-acceptance-b.md -->',
+    'Refs #305\n<!-- butterbox-issue: 305 -->\n<!-- butterbox-issue: 305 -->',
+    'Refs #305\n<!-- butterbox-evidence: missing -->\n<!-- butterbox-evidence: ' + path + ' -->',
+    'Refs #305\n<!-- butterbox-issue: 305',
+  ]) {
+    const { run, effects, state } = fixture();
+    state.pr.body = body;
+    await assert.rejects(run(), /conflicting|duplicate|malformed|closing/);
+    assert.deepEqual(effects, []);
+  }
+  assert.throws(() => planAcceptancePrMetadata('Refs #305', 305,
+    'docs/agent-work/autonomy-acceptance-b.md'), /Unapproved/);
+});
+
+test('metadata repair fails closed if independent evidence changes or the PATCH is not confirmed', async () => {
+  for (const [mutate, error] of [
+    [s => { s.proof = null; }, /approved proof/],
+    [s => { s.checks[0].conclusion = 'failure'; }, /exact-head check/],
+    [s => { s.revoked = true; }, /approval/],
+    [s => { s.openPRs = [s.pr, { ...s.pr, id: 10001, number: 402 }]; }, /Competing/],
+    [s => { s.corruptMetadataReply = true; }, /exact metadata repair/],
+    [s => { s.failMetadataPatch = true; }, /PATCH failed/],
+  ]) {
+    const { run, effects, state } = fixture();
+    state.pr.body = 'Refs #305. Existing prose reference.';
+    mutate(state);
+    await assert.rejects(run(), error);
+    assert(!effects.includes('ready') && !effects.includes('merge'));
+  }
 });
 
 test('a lost closure response is recoverable with the same audit and exact lease', async () => {
