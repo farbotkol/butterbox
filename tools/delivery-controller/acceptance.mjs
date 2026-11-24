@@ -247,7 +247,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
       freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
       freshPR.head?.ref === pr.head.ref && freshPR.head?.repo?.full_name === repository &&
-      (!expectedOpen || freshPR.base?.sha === tip) &&
+      (!expectedOpen || freshPR.base?.sha === pr.base.sha) &&
       freshPR.base?.ref === development && freshPR.base?.repo?.full_name === repository &&
       freshPR.merge_commit_sha === pr.merge_commit_sha && freshPR.auto_merge === null &&
       Array.isArray(freshPR.requested_reviewers) && !freshPR.requested_reviewers.length &&
@@ -260,9 +260,17 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
 
   if (pr.state === 'open') {
     assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
-      !issue.body?.includes(marker) && pr.base.sha === tip,
-    'Open PR or current Development base changed');
+      !issue.body?.includes(marker) && isSha(pr.base?.sha),
+    'Open PR or reported Development base is invalid');
     const movement = await checkedAncestry(lease.baseSha, tip);
+    // GitHub may retain the original PR base SHA after the target branch advances.
+    // Independently prove the reported base lies on the verified forward path.
+    // A fresh snapshot must still match both the reported base and live tip.
+    if (pr.base.sha !== tip) {
+      await checkedAncestry(lease.baseSha, pr.base.sha);
+      await checkedAncestry(pr.base.sha, tip);
+      report('STALE_PR_BASE_VALIDATED #' + number + ' reported ' + pr.base.sha + ' current ' + tip);
+    }
     if (movement.kind === 'candidate') report('DEVELOPMENT_DRIFT_VALIDATED #' + number + ' original ' + lease.baseSha + ' current ' + tip);
     const comparison = await gh('/compare/' + lease.baseSha + '...' + head + '?per_page=1');
     assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === lease.baseSha,
