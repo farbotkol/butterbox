@@ -69,6 +69,38 @@ export function verifiedChecks(checks, head, boundary = Date.now()) {
 }
 
 const closesIssue = /\b(?:close[sd]?|fix(?:es|ed)?|resolve[sd]?)\s*:?\s*(?:#\d+|[\w.-]+\/[\w.-]+#\d+|https?:\/\/[^\s]+\/issues\/\d+)/i;
+
+// PR text is not identity evidence. Only fill missing annotations once independent
+// lease, task, artifact, exact proof and CI checks have passed.
+export function planAcceptancePrMetadata(body, issueNumber, proofPath, title = '') {
+  assert(typeof body === 'string' && typeof title === 'string' && body.length <= 60000,
+    'Invalid PR metadata');
+  assert(acceptanceIssues.includes(issueNumber) && proofFor(issueNumber).path === proofPath,
+    'Unapproved issue or proof identity');
+  assert(!closesIssue.test(body) && !closesIssue.test(title),
+    'PR uses a GitHub issue closing reference');
+  const references = [...body.matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)]
+    .map(match => Number(match[1]));
+  assert(references.every(number => number === issueNumber),
+    'PR contains a conflicting issue reference');
+  const issueTags = [...body.matchAll(/<!--\s*butterbox-issue\s*:\s*([^>]*?)\s*-->/g)];
+  const proofTags = [...body.matchAll(/<!--\s*butterbox-evidence\s*:\s*([^>]*?)\s*-->/g)];
+  // Malformed or duplicated annotations must never be silently overwritten.
+  assert((body.match(/<!--\s*butterbox-issue\s*:/g) ?? []).length === issueTags.length &&
+    (body.match(/<!--\s*butterbox-evidence\s*:/g) ?? []).length === proofTags.length &&
+    issueTags.length <= 1 && proofTags.length <= 1 &&
+    (!issueTags.length || issueTags[0][1].trim() === String(issueNumber)) &&
+    (!proofTags.length || proofTags[0][1].trim() === proofPath),
+  'PR contains conflicting, duplicate or malformed identity markers');
+  const additions = [];
+  if (!references.length) additions.push('Refs #' + issueNumber);
+  if (!issueTags.length) additions.push('<!-- butterbox-issue: ' + issueNumber + ' -->');
+  if (!proofTags.length) additions.push('<!-- butterbox-evidence: ' + proofPath + ' -->');
+  const repaired = additions.length ? body.trimEnd() + '\n\n' + additions.join('\n') : body;
+  assert(repaired.length <= 60000, 'Repaired PR description exceeds safety limit');
+  return { body: repaired, changed: additions.length > 0 };
+}
+
 const contentsAt = (gh, path, sha) => gh('/contents/' + path + '?ref=' + sha);
 
 export async function openDevelopmentPRs(paged, repository) {
@@ -169,11 +201,10 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     pr.head?.repo?.full_name === repository && pr.head.ref?.startsWith('copilot/') && isSha(head) &&
     task.sessions.some(session => session.head_ref === pr.head.ref && typeof session.prompt === 'string' &&
       session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
-  const body = pr.body ?? '';
-  assert(canonicalIssueNumber(body) === lease.issue && (body.match(/<!--\s*butterbox-issue:/g) ?? []).length === 1 && body.split(/\r?\n/).includes('Refs #' + lease.issue) &&
-    body.split(/\r?\n/).filter(line => line.startsWith('<!-- butterbox-evidence:')).join() ===
-      '<!-- butterbox-evidence: ' + path + ' -->' && !closesIssue.test(body) && !closesIssue.test(pr.title ?? ''),
-  'PR lacks canonical issue/proof markers or uses a GitHub issue closing reference');
+  const metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
+  // Closed/merged PRs cannot be repaired after the fact.
+  if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
+    'Merged PR lacks verified metadata');
   assert(Array.isArray(pr.requested_reviewers) && !pr.requested_reviewers.length &&
     Array.isArray(pr.requested_teams) && !pr.requested_teams.length, 'PR still has pending reviews or missing review evidence');
 
@@ -195,7 +226,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const tip = developmentSha(ref);
   const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
     [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
-  const confirm = async expectedOpen => {
+  const confirm = async (expectedOpen, expectedBody = pr.body) => {
     const [fresh, freshPR, freshTip, approved] = await Promise.all([
       checkIdentity(), gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
     ]);
@@ -203,7 +234,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
       fresh.result.artifact === artifact && fresh.openPRs.length === (expectedOpen ? 1 : 0) &&
       (!expectedOpen || (fresh.openPRs[0].number === number && fresh.openPRs[0].head.sha === head)) &&
-      developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === pr.body &&
+      developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
       freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
       freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
       freshPR.head?.ref === pr.head.ref && freshPR.head?.repo?.full_name === repository &&
@@ -229,6 +260,18 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       'PR mergeability, draft state or native auto-merge is unverified');
     const currentIssue = await confirm(true);
     assert(currentIssue.state === 'open' && !currentIssue.body?.includes(marker), 'Issue changed before merge');
+    if (metadata.changed) {
+      // Separate, reverified stage. Never promote or merge in the repair run.
+      const updated = await gh(endpoint, 'PATCH', { body: metadata.body });
+      assert(updated.number === number && updated.head?.sha === head &&
+        updated.body === metadata.body && updated.state === 'open' &&
+        updated.draft === pr.draft && updated.merged === false,
+      'GitHub did not confirm exact metadata repair');
+      await confirm(true, metadata.body);
+      report('PR_METADATA_REPAIRED #' + number + ' head ' + head +
+        ' · independently verified issue #' + lease.issue + ' proof ' + path);
+      return;
+    }
     const latest = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
     verifiedChecks(latest, head);
     if (pr.draft) {
