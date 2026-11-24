@@ -5,7 +5,7 @@ import { assessDevelopmentDrift } from '../tools/delivery-controller/development
 const a='a'.repeat(40), b='b'.repeat(40);
 const proofPath='docs/agent-work/autonomy-acceptance-a.md';
 const evidence={pinnedSha:a,currentSha:b,proofPath,comparison:{
-  status:'ahead',base_commit:{sha:a},merge_base_commit:{sha:a},ahead_by:1,
+  status:'ahead',base_commit:{sha:a},merge_base_commit:{sha:a},ahead_by:1,total_commits:1,
   commits:[{sha:b}],files:[{filename:'tools/delivery-controller/acceptance.mjs',status:'modified'}],
 }};
 
@@ -19,7 +19,8 @@ test('verified ancestry is only a candidate, never automatic merge authorization
 test('fail closed on missing, truncated, unrelated, and ambiguous commit evidence',()=>{
   const cases=[
     {status:'diverged'}, {base_commit:{sha:b}}, {merge_base_commit:{sha:b}},
-    {too_large:true}, {ahead_by:2}, {commits:[]}, {files:null},
+    {too_large:true}, {ahead_by:2}, {total_commits:2}, {commits:[]}, {files:null},
+    {commits:[{sha:a}]}, {files:[{filename:'other.md',status:'mystery'}]},
     {files:[{filename:proofPath,status:'modified'}]},
     {files:[{filename:'other.md',previous_filename:proofPath,status:'renamed'}]},
   ];
