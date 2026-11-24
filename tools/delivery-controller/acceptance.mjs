@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { verifyTaskSnapshot, assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
 import { canonicalIssueNumber } from '../agent-evidence/evidence.mjs';
+import { assessDevelopmentDrift } from './development-drift.mjs';
 
 export const acceptanceIssues = [305, 306];
 export const ownerId = 11307166;
@@ -224,6 +225,14 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const mergedAt = time(pr.merged_at);
   const ci = verifiedChecks(checks, head, pr.merged === true ? mergedAt : Date.now());
   const tip = developmentSha(ref);
+  // Validate only bounded, complete forward ancestry. The original lease remains immutable.
+  const checkedAncestry = async (from, to) => {
+    if (from === to) return { kind: 'unchanged', safe: true };
+    const comparison = await gh('/compare/' + from + '...' + to + '?per_page=100');
+    const verdict = assessDevelopmentDrift({ pinnedSha: from, currentSha: to, comparison, proofPath: path });
+    assert(verdict.kind === 'candidate', 'Unsafe Development movement: ' + verdict.reason);
+    return verdict;
+  };
   const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
     [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
   const confirm = async (expectedOpen, expectedBody = pr.body) => {
@@ -251,11 +260,13 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
 
   if (pr.state === 'open') {
     assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
-      !issue.body?.includes(marker) && tip === lease.baseSha && pr.base.sha === tip,
-    'Open PR or pinned Development SHA changed');
-    const comparison = await gh('/compare/' + tip + '...' + head + '?per_page=1');
-    assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === tip,
-      'PR head is not based on the leased Development commit');
+      !issue.body?.includes(marker) && pr.base.sha === tip,
+    'Open PR or current Development base changed');
+    const movement = await checkedAncestry(lease.baseSha, tip);
+    if (movement.kind === 'candidate') report('DEVELOPMENT_DRIFT_VALIDATED #' + number + ' original ' + lease.baseSha + ' current ' + tip);
+    const comparison = await gh('/compare/' + lease.baseSha + '...' + head + '?per_page=1');
+    assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === lease.baseSha,
+      'PR head is not based on the original leased Development commit');
     assert(pr.auto_merge === null && typeof pr.draft === 'boolean' && pr.mergeable === true,
       'PR mergeability, draft state or native auto-merge is unverified');
     const currentIssue = await confirm(true);
@@ -297,17 +308,19 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const [commit, mergedProof] = await Promise.all([
     gh('/commits/' + merge + '?per_page=2'), contentsAt(gh, path, merge),
   ]);
-  assert(commit.sha === merge && commit.parents?.length === 1 && commit.parents[0].sha === lease.baseSha &&
+  assert(commit.sha === merge && commit.parents?.length === 1 && isSha(commit.parents[0].sha) &&
     commit.files?.length === 1 && commit.files[0].status === 'added' && commit.files[0].filename === path &&
     commit.files[0].sha === files[0].sha && compareProof(mergedProof, bytes, files[0].sha),
   'Squash commit parent, changed file or proof bytes do not match the verified PR');
-
+  const parent = commit.parents[0].sha;
+  await checkedAncestry(lease.baseSha, parent);
   const record = [
     marker, '',
     'Issue #' + lease.issue + ' · lease ' + lease.runId + ' · task ' + task.id,
     'Task https://github.com/' + repository + '/copilot/tasks/' + task.id,
     'Completed sessions ' + task.sessions.map(session => session.id).sort().join(', '),
     'PR #' + number + ' · head ' + head + ' · squash ' + merge + ' · proof blob ' + files[0].sha,
+    'Original base ' + lease.baseSha + ' · verified squash parent ' + parent,
     ...ci,
     'Launch https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1],
   ].join('\n');
