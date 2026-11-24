@@ -4,7 +4,7 @@ name: Butterbox action-based delivery controller (phase 1)
 # GitHub's native rules and existing merge workflow remain authoritative.
 on:
   schedule:
-    - cron: "7 * * * *"
+    - cron: "7,22,37,52 * * * *"
   workflow_dispatch:
     inputs:
       lease_recovery:
