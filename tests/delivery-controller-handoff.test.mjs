@@ -572,3 +572,29 @@ test('drift with proof overlap, truncated compare, or moving tip never mutates P
     assert.deepEqual(effects, []);
   }
 });
+
+
+test('stale PR base at original lease permits verified forward drift and full handoff', async () => {
+  const { run, effects, state, reports } = fixture({ tip: moved });
+  assert.equal(state.pr.base.sha, base);
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  assert(reports.some(line => line.startsWith('STALE_PR_BASE_VALIDATED')));
+  await run();
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+});
+
+test('stale PR base outside verified ancestry cannot promote or merge', async () => {
+  const { run, effects, state } = fixture({ tip: moved });
+  state.pr.base.sha = '9'.repeat(40);
+  await assert.rejects(run(), /Unsafe Development movement/);
+  assert.deepEqual(effects, []);
+});
+
+test('invalid reported PR base fails closed', async () => {
+  const { run, effects, state } = fixture({ tip: moved });
+  state.pr.base.sha = null;
+  await assert.rejects(run(), /reported Development base is invalid/);
+  assert.deepEqual(effects, []);
+});
