@@ -124,7 +124,7 @@ function fixture(overrides = {}) {
   const run = () => advanceAcceptance({
     repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
     tasksApi: {
-      list: async () => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])],
+      list: async ({ states } = {}) => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
     },
     approval: async () => ({ issue: { ...state.issue }, approved: !state.revoked }),
@@ -331,7 +331,7 @@ test('controller cycles serialize competing launches and gate B on audited A clo
   const tasksApi = {
     list: async ({ states } = {}) => {
       if (states) {
-        assert.deepEqual(states, ['queued', 'in_progress']);
+        assert.deepEqual(states, ['queued', 'in_progress', 'waiting_for_user']);
         return [];
       }
       return launched.length ? [{ id: taskId, state: 'completed' }] : [];
@@ -390,7 +390,7 @@ test('a failed parent with a stale-looking queued session still blocks and repor
   assert.throws(() => competingWriters([{ ...candidate, session_count: 2 }]), /session snapshot/);
 });
 
-test('dispatch checks only queued and in-progress tasks before acquiring a lease', async () => {
+test('dispatch checks all potentially active task states before acquiring a lease', async () => {
   const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
   const reports = [];
   const row = { id: taskId, state: 'queued' };
@@ -400,7 +400,7 @@ test('dispatch checks only queued and in-progress tasks before acquiring a lease
     paged: async () => [],
     tasksApi: {
       list: async options => {
-        assert.deepEqual(options, { states: ['queued', 'in_progress'] });
+        assert.deepEqual(options, { states: ['queued', 'in_progress', 'waiting_for_user'] });
         return [row];
       },
       get: async () => ({ ...task, ...row,
@@ -510,14 +510,14 @@ test('writer inventory applies requested states before any task detail reads', a
   let reads = 0;
   const result = await readTaskDetails({
     list: async ({ states }) => {
-      assert.deepEqual(states, ['queued', 'in_progress']);
+      assert.deepEqual(states, ['queued', 'in_progress', 'waiting_for_user']);
       return rows;
     },
     get: async id => {
       reads++;
       return { id, state: 'queued', session_count: 0, sessions: [], artifacts: [] };
     },
-  }, { states: ['queued', 'in_progress'] });
+  }, { states: ['queued', 'in_progress', 'waiting_for_user'] });
   assert.equal(reads, 1);
   assert.equal(result.length, 1);
   await assert.rejects(readTaskDetails({
@@ -597,4 +597,36 @@ test('invalid reported PR base fails closed', async () => {
   state.pr.base.sha = null;
   await assert.rejects(run(), /reported Development base is invalid/);
   assert.deepEqual(effects, []);
+});
+
+test('scoped lease discovery excludes historical detail calls and deduplicates active candidates', async () => {
+  const { readLeaseCandidates, readTaskDetails } = await import('../tools/delivery-controller/task-inventory.mjs');
+  const old = Array.from({ length: 59 }, (_, i) => ({
+    id: 'a1b2c3d4-e5f6-7890-abcd-' + String(i + 1).padStart(12, '0'),
+    state: 'completed', session_count: 0, sessions: [], artifacts: [],
+  }));
+  const owner = { ...task, state: 'completed' };
+  const waiting = { id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890',
+    state: 'waiting_for_user', session_count: 0, sessions: [], artifacts: [] };
+  const calls = [];
+  const api = {
+    list: async options => {
+      calls.push(options);
+      if (options?.states) return [waiting];
+      if (options?.since) return [{ id: owner.id, state: owner.state }, waiting];
+      return [...old, owner, waiting];
+    },
+    get: async id => {
+      calls.push(id);
+      return id === owner.id ? owner : waiting;
+    },
+  };
+  const scoped = await readLeaseCandidates(api, { startedAt: '2026-11-24T00:00:00.000Z' });
+  assert.equal(scoped.length, 2);
+  assert.deepEqual(calls[0], { since: '2026-11-23T23:55:00.000Z' });
+  assert.deepEqual(calls[1], { states: ['queued', 'in_progress', 'waiting_for_user'] });
+  assert.equal(calls.length, 4);
+  const audited = await readTaskDetails(api);
+  assert.equal(audited.length, 61);
+  assert.equal(competingWriters(audited).length, 1);
 });

@@ -1,6 +1,7 @@
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { agentTasksApi, activeAgentTasks } from './agent-tasks-api.mjs';
+import { listWriterTasks } from './task-inventory.mjs';
 import { githubLeaseApi } from './github-lease-api.mjs';
 import { acquireLease, readLease, releaseLease } from './lease.mjs';
 import { taskMarker } from './handoff.mjs';
@@ -179,7 +180,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
       const [prs, allTasks, tip, draft, repairs] = await Promise.all([
         // Any row is enough to block. No second page is needed if the first is empty.
         gh('/pulls?state=open&base=copilot%2FDevelopment&per_page=1'),
-        tasks.list(),
+        listWriterTasks(tasks),
         gh('/git/ref/heads/copilot/Development'),
         gh('/pulls/294'),
         gh('/actions/workflows/agent-merge-enrollment.yml/runs?status=in_progress&per_page=1'),
@@ -304,7 +305,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
     requireEvidence(active?.tagSha === current.tagSha && active.runId === current.runId,
       'The synthetic lease changed during verification.');
   }
-  requireEvidence(activeAgentTasks(await tasks.list()).length === 0, 'Another Copilot task may still be writing.');
+  requireEvidence(activeAgentTasks(await listWriterTasks(tasks)).length === 0, 'Another Copilot task may still be writing.');
   const runUrl = 'https://github.com/' + repo + '/actions/runs/' + runId.slice('synthetic_'.length);
   const launchRunUrl = 'https://github.com/' + repo + '/actions/runs/' + current.runId.slice('synthetic_'.length);
   const note = [

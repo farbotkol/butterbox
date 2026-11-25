@@ -41,7 +41,7 @@ function fixture({ getOverride, originalNumber = 300, originalTask = taskId } = 
     async deleteRef(ref) { seen.deletes++; refs.delete(ref); },
   };
   const tasks = {
-    async list() { return state.otherTasks; },
+    async list({ states } = {}) { return state.otherTasks.filter(row => !states || !['completed','failed','cancelled','timed_out','idle'].includes(row.state)); },
     async create({ prompt }) {
       seen.creates++;
       assert.match(prompt, /BUTTERBOX_LEASE_RUN=synthetic_123/);
@@ -169,15 +169,15 @@ test('reconcile checks the task, exact PR scope, CI, merge and issue before rele
 
 test('the manual synthetic test ignores idle tasks and blocks all other nonterminal states', async () => {
   const idle = fixture();
-  idle.state.otherTasks = [{ state: 'idle' }, { state: 'idle' }];
+  idle.state.otherTasks = [{ id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', state: 'idle' }, { id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567891', state: 'idle' }];
   await idle.run();
   assert.equal(idle.seen.creates, 1);
   assert.equal(idle.seen.gets, 1);
 
   for (const state of ['queued', 'in_progress', 'waiting_for_user', 'unknown', undefined]) {
     const blocked = fixture();
-    blocked.state.otherTasks = [{ state: 'idle' }, { state }];
-    await assert.rejects(blocked.run(), /Launch blocked/);
+    blocked.state.otherTasks = [{ id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', state: 'idle' }, { id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567891', state }];
+    await assert.rejects(blocked.run(), /Launch blocked|Copilot task list|Copilot task inventory/);
     assert.equal(blocked.seen.creates, 0);
     assert.equal(blocked.refs.size, 0);
   }
@@ -263,7 +263,7 @@ test('PR 302 correction preserves the recorded failure and releases only after b
     assert.ok(evidence.refs.has(LEASE_REF));
   }
   block = undefined;
-  evidence.state.otherTasks = [{ state: 'in_progress' }];
+  evidence.state.otherTasks = [{ id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', state: 'in_progress' }];
   await assert.rejects(evidence.run(inputs), /still be writing/);
   assert.ok(evidence.refs.has(LEASE_REF));
   assert.equal(evidence.seen.writes.length, 0);

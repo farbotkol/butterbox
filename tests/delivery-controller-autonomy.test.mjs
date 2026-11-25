@@ -336,3 +336,40 @@ test('Copilot diagnostic handles permission denial and non-JSON failures without
  assert.equal(calls, 2);
  assert.ok(!logs.join(' ').includes('Implement only'));
 });
+
+test('shared Copilot API queue respects 60-request windows across 125 GETs', async () => {
+ let clock = 1700000000000, used = 0, total = 0, windowEnd = clock + 60000;
+ const waits = [];
+ const api = agentTasksApi({ token: 'fixture', repository: 'test/repo',
+  now: () => clock, sleep: async ms => { waits.push(ms); clock += ms; }, report: () => {},
+  request: async () => {
+   if (clock >= windowEnd) { used = 0; windowEnd = clock + 60000; }
+   assert.ok(++used <= 60, 'quota exceeded');
+   total++;
+   return { ok: true, headers: new Headers({ 'x-ratelimit-remaining': String(60 - used),
+    'x-ratelimit-reset': String(windowEnd / 1000) }), json: async () => ({ tasks: [] }) };
+  },
+ });
+ for (let i = 0; i < 125; i++) await api.list({ states: ['queued','in_progress','waiting_for_user'] });
+ assert.equal(total, 125);
+ assert.deepEqual(waits, [61000, 61000]);
+});
+
+test('primary rate-limit GET can retry once at reset; POST cannot replay', async () => {
+ let clock = 1700000000000;
+ let calls = 0;
+ const api = agentTasksApi({ token: 'fixture', repository: 'test/repo',
+  now: () => clock, sleep: async ms => { clock += ms; }, report: () => {},
+  request: async () => {
+   calls++;
+   if (calls === 2) return { ok: true, json: async () => ({ tasks: [] }) };
+   return { ok: false, status: 403, headers: new Headers({
+    'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(clock / 1000 + 1),
+   }), json: async () => ({ message: 'API rate limit exceeded' }) };
+  },
+ });
+ await api.list();
+ assert.equal(calls, 2);
+ await assert.rejects(api.create({ prompt: 'Implement only the authorised issue and preserve all existing repository controls.' }), /HTTP 403/);
+ assert.equal(calls, 3);
+});
