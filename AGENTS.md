@@ -219,3 +219,7 @@ This version has breaking changes — APIs, conventions, and file structure may 
 This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
 
 <!-- END:nextjs-agent-rules -->
+
+## Cross-cutting consistency and API budgets
+
+When fixing a shared API, state filter, retry, authorization, or lifecycle rule, audit every caller and equivalent execution path (dispatch, reconciliation, recovery, synthetic and manual workflows) in the same PR. Centralize common policy; document intentional exceptions and their safety rationale. Add regression coverage for each affected path, failure modes, and realistic inventory sizes. Bound API requests and respect provider quotas; never weaken evidence or replay ambiguous mutations to work around throttling. Report any remaining inconsistency explicitly before declaring the fix complete.
