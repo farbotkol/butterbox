@@ -243,6 +243,11 @@ If the fresh check fails, the lease stays held and the job summary records
 the point at which it stopped before POST. A missing task, an HTTP 200 token
 probe, and the age of the lease cannot prove that a POST never reached GitHub.
 
+For an evidenced primary quota reset, Copilot requests wait until the reset
+deadline even if a timer wakes early. The existing per-wait and cumulative
+limits still apply; an excessive wait or a backwards clock retains the lease.
+This does not authorize replaying an ambiguous task-creation POST.
+
 For a retained lease, the repository owner can use the delivery controller's
 manual `lease_recovery` input after the recovery code passes required checks
 and lands on `copilot/Development`:
