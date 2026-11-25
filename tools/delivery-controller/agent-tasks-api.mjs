@@ -7,7 +7,7 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
   const counts = { LIST_TASKS: 0, GET_TASK_DETAIL: 0, CREATE_TASK: 0 };
   let sequence = 0;
   // One shared queue and quota clock for all Copilot operations, including concurrent callers.
-  let tail = Promise.resolve(), resetAt = 0, waited = 0, stopped = false;
+  let tail = Promise.resolve(), resetAt = 0, waited = 0, generation = 0;
   async function waitForQuota() {
     const delay = resetAt - now();
     if (delay <= 0) return;
@@ -19,10 +19,11 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
     if (now() < resetAt) throw new Error('Copilot API quota reset not reached; retain lease');
   }
   function call(method,path,body) {
+    const queuedGeneration = generation;
     const next = tail.then(async () => {
-      if (stopped) throw new Error('Copilot API request queue halted after a failed operation');
+      if (queuedGeneration !== generation) throw new Error('Copilot API request cancelled after a failed operation');
       try { return await execute(method,path,body); }
-      catch (error) { stopped = true; throw error; }
+      catch (error) { generation++; throw error; }
     });
     tail = next.catch(() => {});
     return next;
