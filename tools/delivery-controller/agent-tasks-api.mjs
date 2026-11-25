@@ -15,8 +15,13 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
       throw new Error('Copilot API quota reset exceeds bounded wait; retain lease');
     waited += delay;
     report('COPILOT_API_QUOTA_WAIT ms=' + delay);
-    await sleep(delay);
-    if (now() < resetAt) throw new Error('Copilot API quota reset not reached; retain lease');
+    let remaining = delay;
+    while (remaining > 0) {
+      await sleep(remaining);
+      remaining = resetAt - now();
+      if (remaining > delay)
+        throw new Error('Copilot API quota clock moved backwards; retain lease');
+    }
   }
   function call(method,path,body) {
     const queuedGeneration = generation;
