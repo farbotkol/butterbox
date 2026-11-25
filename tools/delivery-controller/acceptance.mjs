@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
-import { verifyTaskSnapshot, assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
+import { assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
 import { canonicalIssueNumber } from '../agent-evidence/evidence.mjs';
 import { assessDevelopmentDrift } from './development-drift.mjs';
+import { readTaskDetails, readLeaseCandidates } from './task-inventory.mjs';
+export { readTaskDetails } from './task-inventory.mjs';
 
 export const acceptanceIssues = [305, 306];
 export const ownerId = 11307166;
@@ -112,43 +114,6 @@ export async function openDevelopmentPRs(paged, repository) {
   return prs;
 }
 
-// A list status alone does not prove its child sessions stopped. Only use a
-// summary directly if it already provides a complete and consistent snapshot.
-function trustworthyStoppedSummary(row) {
-  if (!['completed', 'cancelled', 'failed', 'timed_out', 'idle'].includes(row.state) ||
-      !Array.isArray(row.sessions) || !Number.isSafeInteger(row.session_count) ||
-      row.session_count !== row.sessions.length ||
-      !Array.isArray(row.artifacts)) return false;
-  const seen = new Set();
-  for (const session of row.sessions) {
-    if (!/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(session?.id ?? '') ||
-        seen.has(session.id) || session.task_id !== row.id) return false;
-    seen.add(session.id);
-    if (row.state === 'idle' ? session.state !== 'idle' :
-        !['completed', 'cancelled', 'failed', 'timed_out'].includes(session.state)) return false;
-  }
-  return true;
-}
-
-export async function readTaskDetails(api, { states } = {}) {
-  const rows = verifyTaskSnapshot(await api.list(states ? { states } : undefined));
-  if (states && rows.some(row => !states.includes(row.state)))
-    throw new Error('Copilot task inventory does not match requested states');
-  const details = Array(rows.length);
-  // Keep concurrency low; Promise.all over every historical task can hit
-  // GitHub's secondary rate limits. Never convert a failed GET to success.
-  const workers = Array.from({ length: Math.min(3, rows.length) }, async (_, worker) => {
-    for (let index = worker; index < rows.length; index += 3) {
-      const row = rows[index];
-      details[index] = trustworthyStoppedSummary(row) ? row : await api.get(row.id);
-    }
-  });
-  await Promise.all(workers);
-  assert(details.every((task, index) => task?.id === rows[index].id && task.state === rows[index].state),
-    'Copilot task list changed during independent verification');
-  return details;
-}
-
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
   approval, repairBusy, readyPull }) {
   const release = () => releaseLease(leaseApi, {
@@ -159,9 +124,10 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     report('RETAIN_LEASE: No controlled acceptance scope for the active lease.');
     return;
   }
-  const checkIdentity = async () => {
-    const [current, issue, tasks, openPRs, repair] = await Promise.all([
-      readLease(leaseApi), gh('/issues/' + lease.issue), readTaskDetails(tasksApi),
+  const checkIdentity = async ({ discovery = false } = {}) => {
+    const tasks = await (discovery ? readLeaseCandidates(tasksApi, lease) : readTaskDetails(tasksApi));
+    const [current, issue, openPRs, repair] = await Promise.all([
+      readLease(leaseApi), gh('/issues/' + lease.issue),
       openDevelopmentPRs(paged, repository), repairBusy(),
     ]);
     assert(current?.tagSha === lease.tagSha && current.runId === lease.runId, 'Exclusive lease changed');
@@ -170,14 +136,17 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     return { issue, openPRs, result: assessHandoff({ lease, tasks, openPRs, issue }) };
   };
 
-  const snapshot = await checkIdentity();
+  const snapshot = await checkIdentity({ discovery: true });
   const { issue, result, openPRs } = snapshot;
   if (result.action === 'RETAIN_LEASE') {
     report('RETAIN_LEASE: ' + result.reason);
     return;
   }
   if (result.action === 'PARK_VERIFIED') {
-    await recordParking(leaseApi, lease, result);
+    const audited = (await checkIdentity()).result;
+    assert(audited.action === result.action && audited.taskId === result.taskId && audited.taskState === result.taskState,
+      'Parking evidence changed during historical writer audit');
+    await recordParking(leaseApi, lease, audited);
     const recheck = (await checkIdentity()).result;
     assert(recheck.action === result.action && recheck.taskId === result.taskId, 'Parking evidence changed');
     await release();
@@ -236,8 +205,9 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
     [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
   const confirm = async (expectedOpen, expectedBody = pr.body) => {
-    const [fresh, freshPR, freshTip, approved] = await Promise.all([
-      checkIdentity(), gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
+    const fresh = await checkIdentity();
+    const [freshPR, freshTip, approved] = await Promise.all([
+      gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
     ]);
     assert(fresh.result.action === 'VERIFY_PR' && fresh.result.task.id === task.id &&
       sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
