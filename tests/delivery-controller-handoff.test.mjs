@@ -124,7 +124,7 @@ function fixture(overrides = {}) {
   const run = () => advanceAcceptance({
     repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
     tasksApi: {
-      list: async () => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])],
+      list: async ({ states } = {}) => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
     },
     approval: async () => ({ issue: { ...state.issue }, approved: !state.revoked }),
@@ -331,7 +331,7 @@ test('controller cycles serialize competing launches and gate B on audited A clo
   const tasksApi = {
     list: async ({ states } = {}) => {
       if (states) {
-        assert.deepEqual(states, ['queued', 'in_progress']);
+        assert.deepEqual(states, ['queued', 'in_progress', 'waiting_for_user']);
         return [];
       }
       return launched.length ? [{ id: taskId, state: 'completed' }] : [];
@@ -510,14 +510,14 @@ test('writer inventory applies requested states before any task detail reads', a
   let reads = 0;
   const result = await readTaskDetails({
     list: async ({ states }) => {
-      assert.deepEqual(states, ['queued', 'in_progress']);
+      assert.deepEqual(states, ['queued', 'in_progress', 'waiting_for_user']);
       return rows;
     },
     get: async id => {
       reads++;
       return { id, state: 'queued', session_count: 0, sessions: [], artifacts: [] };
     },
-  }, { states: ['queued', 'in_progress'] });
+  }, { states: ['queued', 'in_progress', 'waiting_for_user'] });
   assert.equal(reads, 1);
   assert.equal(result.length, 1);
   await assert.rejects(readTaskDetails({
