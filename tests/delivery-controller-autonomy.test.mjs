@@ -278,3 +278,61 @@ test('recovery reports sanitized blocking task and session IDs and retains the e
  assert.equal(fixture.seen.releases, 0);
  assert.equal((await fixture.read()).tagSha, tagSha);
 });
+
+test('Copilot failure diagnostics identify request and classify denial without leaking response text', async () => {
+ const logs = [];
+ const token = 'secret-fixture-token';
+ const id = 'a1b2c3d4-e5f6-7890-abcd-ef1234567890';
+ let calls = 0;
+ const api = agentTasksApi({ token, repository: 'farbotkol/butterbox', report: message => logs.push(message),
+  request: async () => ++calls === 1
+   ? { ok: true, json: async () => ({ tasks: [], total_count: 0 }) }
+   : { ok: false, status: 403, headers: new Headers({
+      'x-github-request-id': 'ABCD:1234',
+      'x-accepted-github-permissions': 'agent_tasks=read',
+      'x-ratelimit-remaining': '4999', 'retry-after': '60',
+      'x-ratelimit-resource': token,
+     }), json: async () => ({ message: 'You have exceeded a secondary rate limit. ' + token }) },
+ });
+ await api.list();
+ await assert.rejects(api.get(id), error =>
+  error.message === 'Copilot task API GET returned HTTP 403' &&
+  error.status === 403 && error.code === 'COPILOT_TASK_GET');
+ assert.equal(calls, 2);
+ assert.equal(logs.length, 1);
+ const d = JSON.parse(logs[0].slice('COPILOT_API_FAILURE '.length));
+ assert.equal(d.operation, 'GET_TASK_DETAIL');
+ assert.equal(d.requestNumber, 2);
+ assert.deepEqual(d.counts, { LIST_TASKS: 1, GET_TASK_DETAIL: 1, CREATE_TASK: 0 });
+ assert.equal(d.endpoint, 'https://api.github.com/agents/repos/farbotkol/butterbox/tasks/:task_id');
+ assert.equal(d.reason, 'secondary_rate_limit');
+ assert.equal(d.acceptedPermissions, 'agent_tasks=read');
+ assert.equal(d.rateLimitRemaining, '4999');
+ assert.equal(d.retryAfter, '60');
+ assert.equal(d.requestId, 'ABCD:1234');
+ assert.equal(d.rateLimitResource, null);
+ assert.ok(!logs[0].includes(token));
+ assert.ok(!logs[0].includes(id));
+});
+
+test('Copilot diagnostic handles permission denial and non-JSON failures without retrying POST', async () => {
+ const logs = [];
+ let calls = 0;
+ const api = agentTasksApi({ token: 'fixture', repository: 'test/repo', report: message => logs.push(message),
+  request: async () => ({ ok: false, status: 403, json: async () => {
+   if (++calls === 1) return { message: 'Resource not accessible by integration' };
+   throw new Error('non-JSON response');
+  } }),
+ });
+ await assert.rejects(api.list({ states: ['queued', 'in_progress'] }), /HTTP 403/);
+ await assert.rejects(api.create({ prompt: 'Implement only authorised issue #305 without production operations or other edits.' }), /HTTP 403/);
+ const [list, post] = logs.map(line => JSON.parse(line.slice('COPILOT_API_FAILURE '.length)));
+ assert.equal(list.reason, 'access_denied');
+ assert.equal(list.operation, 'LIST_TASKS');
+ assert.match(list.endpoint, /state=queued,in_progress$/);
+ assert.equal(post.reason, 'unclassified');
+ assert.equal(post.operation, 'CREATE_TASK');
+ assert.equal(post.counts.CREATE_TASK, 1);
+ assert.equal(calls, 2);
+ assert.ok(!logs.join(' ').includes('Implement only'));
+});
