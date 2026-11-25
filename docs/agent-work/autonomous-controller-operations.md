@@ -243,6 +243,25 @@ If the fresh check fails, the lease stays held and the job summary records
 the point at which it stopped before POST. A missing task, an HTTP 200 token
 probe, and the age of the lease cannot prove that a POST never reached GitHub.
 
+For an evidenced primary quota reset, Copilot requests wait until the reset
+deadline even if a timer wakes early. The existing per-wait and cumulative
+limits still apply; an excessive wait or a backwards clock retains the lease.
+This does not authorize replaying an ambiguous task-creation POST.
+
+For an already merged and controller-reconciled acceptance proof, the owner
+may use `lease_recovery=merged-verify` with the exact annotated lease tag SHA
+after this change has passed review and required CI and been merged to
+Development. Verification is read-only. It requires the exact stopped task,
+proof PR and merge, required checks, issue closure and audit, unchanged lease,
+current branch ancestry and the existing full writer and repair checks.
+An unrelated open PR alone does not prevent this merged-proof verification.
+If it reports `MERGED_RECOVERY_VERIFIED`, the owner may run
+`lease_recovery=merged-release` with the same tag SHA; it repeats the checks and
+uses compare-and-delete. A changed or missing tag, live or ambiguous writer,
+incomplete inventory or failed evidence retains the lease. Neither mode
+launches another task. This path remains limited to the historical acceptance
+proofs and has not been exercised on the live #306 lease.
+
 For a retained lease, the repository owner can use the delivery controller's
 manual `lease_recovery` input after the recovery code passes required checks
 and lands on `copilot/Development`:

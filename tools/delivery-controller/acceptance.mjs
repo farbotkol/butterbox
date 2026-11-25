@@ -115,9 +115,10 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull }) {
+  approval, repairBusy, readyPull, mergedRecovery = 'none' }) {
+  assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
-    runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true,
+    runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
   });
   if (!acceptanceIssues.includes(lease.issue) || !/^actions_\d+_\d+$/.test(lease.runId) ||
       !/^[a-f0-9]{64}$/.test(lease.issueDigest ?? '')) {
@@ -138,6 +139,10 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
 
   const snapshot = await checkIdentity({ discovery: true });
   const { issue, result, openPRs } = snapshot;
+  if (mergedRecovery !== 'none') {
+    assert(issue.state === 'closed' && result.action === 'VERIFY_PR',
+      'Merged recovery requires a closed issue and a uniquely stopped task');
+  }
   if (result.action === 'RETAIN_LEASE') {
     report('RETAIN_LEASE: ' + result.reason);
     return;
@@ -157,7 +162,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const { task, artifact } = result;
   const { path, bytes } = proofFor(lease.issue);
   const matching = openPRs.filter(pr => pr.id === artifact || pr.number === artifact);
-  assert(openPRs.length === matching.length && matching.length <= 1, 'Competing Development PR exists');
+  assert(matching.length <= 1, 'Ambiguous task PR exists');
   // A Copilot artifact can be either the PR number or the numeric REST database ID.
   const candidates = matching.length ? matching : (await paged('/pulls?state=closed&base=copilot%2FDevelopment'))
     .filter(pr => pr.number === artifact || pr.id === artifact);
@@ -165,12 +170,16 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const number = candidates[0].number;
   const endpoint = '/pulls/' + number;
   const pr = await gh(endpoint);
+  if (mergedRecovery !== 'none') assert(pr.state === 'closed' && pr.merged === true,
+    'Merged recovery requires the task PR to be merged');
   const head = pr.head?.sha;
   assert(pr.number === number && (pr.id === artifact || pr.number === artifact) &&
     pr.base?.ref === development && pr.base.repo?.full_name === repository &&
     pr.head?.repo?.full_name === repository && pr.head.ref?.startsWith('copilot/') && isSha(head) &&
     task.sessions.some(session => session.head_ref === pr.head.ref && typeof session.prompt === 'string' &&
       session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
+  assert(!openPRs.some(row => row.number !== number && row.head?.repo?.full_name === repository &&
+    row.head?.ref === pr.head.ref), 'Competing Development PR uses the leased task branch');
   const metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
   // Closed/merged PRs cannot be repaired after the fact.
   if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
@@ -211,8 +220,11 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     ]);
     assert(fresh.result.action === 'VERIFY_PR' && fresh.result.task.id === task.id &&
       sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
-      fresh.result.artifact === artifact && fresh.openPRs.length === (expectedOpen ? 1 : 0) &&
-      (!expectedOpen || (fresh.openPRs[0].number === number && fresh.openPRs[0].head.sha === head)) &&
+      fresh.result.artifact === artifact &&
+      (expectedOpen ? fresh.openPRs.length === 1 && fresh.openPRs[0].number === number &&
+        fresh.openPRs[0].head.sha === head :
+        !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
+          (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
       developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
       freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
       freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
@@ -229,6 +241,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   };
 
   if (pr.state === 'open') {
+    assert(openPRs.length === 1, 'Competing Development PR exists');
     assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
       !issue.body?.includes(marker) && isSha(pr.base?.sha),
     'Open PR or reported Development base is invalid');
@@ -281,8 +294,13 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
 
   const merge = pr.merge_commit_sha;
   assert(pr.state === 'closed' && pr.merged === true && Number.isFinite(mergedAt) && isSha(merge) &&
-    pr.merged_by?.id === actionsBot && tip === merge && !openPRs.length,
-  'Missing controller merge_commit_sha, bot merge identity, or matching Development tip');
+    pr.merged_by?.id === actionsBot && matching.length === 0,
+  'Missing controller merge_commit_sha, bot merge identity, or task PR remains open');
+  if (tip !== merge) {
+    const ancestry = await gh('/compare/' + merge + '...' + tip + '?per_page=1');
+    assert(ancestry.status === 'ahead' && ancestry.base_commit?.sha === merge &&
+      ancestry.merge_base_commit?.sha === merge, 'Merged proof is not an ancestor of Development');
+  }
   const [commit, mergedProof] = await Promise.all([
     gh('/commits/' + merge + '?per_page=2'), contentsAt(gh, path, merge),
   ]);
@@ -317,6 +335,10 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   const [closed, events] = await Promise.all([confirm(false), paged('/issues/' + lease.issue + '/events')]);
   assert(closedByController(closed, events) && closed.body?.includes(record + '\nReconciliation '),
     'Missing matching controller closure and audit evidence');
+  if (mergedRecovery === 'verify') {
+    report('MERGED_RECOVERY_VERIFIED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge);
+    return;
+  }
   await release();
   report('LEASE_RELEASED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge +
     ' · next selection is a separate run');

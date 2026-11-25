@@ -373,3 +373,24 @@ test('primary rate-limit GET can retry once at reset; POST cannot replay', async
  await assert.rejects(api.create({ prompt: 'Implement only the authorised issue and preserve all existing repository controls.' }), /HTTP 403/);
  assert.equal(calls, 3);
 });
+
+test('quota wait resumes after an early timer wakeup without double-counting the wait', async () => {
+ let clock = 1700000000000, calls = 0;
+ const waits = [];
+ const api = agentTasksApi({ token: 'fixture', repository: 'test/repo',
+  now: () => clock, sleep: async ms => {
+   waits.push(ms);
+   clock += waits.length === 1 ? ms - 1 : ms;
+  }, report: () => {},
+  request: async () => {
+   calls++;
+   if (calls === 1) return { ok: false, status: 403, headers: new Headers({
+    'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(clock / 1000 + 1),
+   }), json: async () => ({ message: 'API rate limit exceeded' }) };
+   return { ok: true, json: async () => ({ tasks: [] }) };
+  },
+ });
+ await api.list();
+ assert.deepEqual(waits, [2000, 1]);
+ assert.equal(calls, 2);
+});

@@ -33,7 +33,8 @@ async function main() {
   if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' && process.env.GITHUB_ACTOR_ID !== String(ownerId))
     throw new Error('Only the owner can manually run autonomous acceptance');
   const recovery = process.env.LEASE_RECOVERY || 'none';
-  if (!['none', 'verify', 'release'].includes(recovery)) throw new Error('Invalid recovery mode');
+  if (!['none', 'verify', 'release', 'merged-verify', 'merged-release'].includes(recovery))
+    throw new Error('Invalid recovery mode');
   if (recovery !== 'none' && (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       process.env.GITHUB_TRIGGERING_ACTOR !== 'farbotkol' || !isSha(process.env.EXPECTED_LEASE_TAG_SHA))) {
     throw new Error('Recovery requires owner workflow dispatch and the exact tag SHA');
@@ -114,6 +115,11 @@ async function main() {
   if (recovery !== 'none') {
     const lease = await readLease(leaseApi, { verifyTarget: true });
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
+    if (recovery.startsWith('merged-')) {
+      await advanceAcceptance({ repository: repo, gh, paged, tasksApi, leaseApi, lease, runId, report,
+        approval, repairBusy, readyPull, mergedRecovery: recovery.slice('merged-'.length) });
+      return;
+    }
     const readRunLog = async (id, attempt) => {
       let stage = 'job_inventory_request';
       try {
