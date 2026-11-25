@@ -1,5 +1,6 @@
-import { developmentSha, issueDigest, openDevelopmentPRs, readTaskDetails } from './acceptance.mjs';
+import { developmentSha, issueDigest, openDevelopmentPRs } from './acceptance.mjs';
 import { development, isSha, sessionSnapshotProblems, taskMarker, verifyTaskSnapshot } from './handoff.mjs';
+import { readTaskDetails, listTaskSummaries } from './task-inventory.mjs';
 import { readLease, releaseLease } from './lease.mjs';
 
 const workflowPath = '.github/workflows/delivery-controller.yml';
@@ -116,7 +117,7 @@ export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh,
   if (repair || prs.length || blockers.length) {
     throw new Error('Writer, matching task, or incomplete task/session/PR evidence; retain lease');
   }
-  const latest = verifyTaskSnapshot(await tasksApi.list());
+  const latest = await listTaskSummaries(tasksApi);
   const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
   if (states(latest) !== states(tasks)) throw new Error('Copilot task inventory changed during recovery');
   const origin = 'https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1];
