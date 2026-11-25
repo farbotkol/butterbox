@@ -68,12 +68,12 @@ test('Copilot keeps its own API version and rejects an incomplete page before di
 const repository = 'farbotkol/butterbox';
 const baseSha = 'e'.repeat(40);
 const tagSha = 'a'.repeat(40);
-const recoveryIssue = story(305, { assignees: [] });
+const recoveryIssue = story(305, { assignees: [], updated_at: '2026-11-23T06:00:00Z' });
 const runId = 'actions_123_1';
 const taskGet403 = () => Object.assign(new Error('Copilot task API GET returned HTTP 403'),
  { code: 'COPILOT_TASK_GET', status: 403 });
 
-async function recoveryFixture({ list, create, repairBusy = async () => false, race = false } = {}) {
+async function recoveryFixture({ list, create, repairBusy = async () => false, race = false, queuePage, approve } = {}) {
  const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
  const { recoverPreDispatchLease } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const { LEASE_REF, readLease } = await import('../tools/delivery-controller/lease.mjs');
@@ -103,8 +103,8 @@ async function recoveryFixture({ list, create, repairBusy = async () => false, r
  const params = {
   repository, runId, leaseApi,
   gh: async path => path.startsWith('/git/ref/') ? { object: { type: 'commit', sha: baseSha } } : recoveryIssue,
-  paged: async () => [], repairBusy,
-  approval: async () => ({ issue: { ...recoveryIssue, updated_at: '2026-11-23T06:00:00Z' }, approved: true }),
+  paged: async path => path.startsWith('/issues?') ? (queuePage?.() ?? [recoveryIssue]) : [], repairBusy,
+  approval: async number => approve ? approve(number) : ({ issue: recoveryIssue, approved: true }),
   tasksApi: {
    list: async () => { seen.lists++; return list ? list(seen.lists) : []; },
    create: async () => { seen.posts++; return create(); },
@@ -393,4 +393,69 @@ test('quota wait resumes after an early timer wakeup without double-counting the
  await api.list();
  assert.deepEqual(waits, [2000, 1]);
  assert.equal(calls, 2);
+});
+
+test('numeric priorities sort all 1,100 values with case-insensitive labels and deterministic ties', () => {
+ const issues = Array.from({ length: 1100 }, (_, index) => {
+  const label = 'P' + Math.floor(index / 100) + '.' + String(index % 100).padStart(2, '0');
+  return story(2000 - index, { labels: ['autonomy-ready', label, 'dependencies-cleared'] });
+ }).reverse();
+ for (let index = 0; index < issues.length; index++) {
+  assert.equal(selectReadyIssue(input({ issues: issues.slice(0, issues.length - index) })).issue, 2000 - index);
+ }
+ const tied = story(304, { labels: ['autonomy-ready', 'p0.00', 'dependencies-cleared'] });
+ assert.equal(selectReadyIssue(input({ issues: [tied, story(303)] })).issue, 303);
+});
+
+test('malformed, duplicate and parked priority candidates are skipped', () => {
+ const candidates = [['P0.1'], ['P11.00'], ['P0', 'P0.00'], ['P0.00', 'p0.00'], ['P0.00', 'parked']];
+ const issues = candidates.map((priority, index) => story(index + 1, {
+  labels: ['autonomy-ready', 'dependencies-cleared', ...priority],
+ }));
+ assert.equal(selectReadyIssue(input({ issues: [...issues, story(301)] })).issue, 301);
+});
+
+test('fractional priority requires owner provenance for the exact current label', () => {
+ const issue = story(301, { labels: ['autonomy-ready', 'dependencies-cleared', 'P3.01'] });
+ const events = ['autonomy-ready', 'dependencies-cleared', 'p3.01'].map(name => ({
+  event: 'labeled', actor: { id: 11307166 }, label: { name },
+ }));
+ assert.equal(ownerApprovedQueueLabels(events, 11307166, issue), true);
+ assert.equal(ownerApprovedQueueLabels(events.slice(0, 2), 11307166, issue), false);
+ assert.equal(ownerApprovedQueueLabels([...events, { ...events[2], actor: { id: 2 } }], 11307166, issue), false);
+});
+
+test('Copilot task list traverses bounded pagination for 60, 100 and 1,000 task summaries', async () => {
+ const root = 'https://api.github.com/agents/repos/farbotkol/butterbox/tasks';
+ for (const total of [60, 100, 1000]) {
+  let requests = 0;
+  const api = agentTasksApi({ token: 'fixture', repository, request: async url => {
+   requests++;
+   const page = Number(new URL(url).searchParams.get('page') ?? 1);
+   const offset = (page - 1) * 100;
+   const tasks = Array.from({ length: Math.min(total - offset, 100) }, (_, index) => ({
+    id: String(offset + index), state: 'completed',
+   }));
+   const link = offset + tasks.length < total ? '<' + root + '?per_page=100&page=' + (page + 1) + '>; rel="next"' : '';
+   return { ok: true, headers: new Headers({ Link: link }), json: async () => ({ tasks, total_count: total }) };
+  } });
+  assert.equal((await api.list()).length, total);
+  assert.equal(requests, Math.ceil(total / 100));
+ }
+});
+
+test('a higher-priority arrival invalidates the unused reservation before any POST', async () => {
+ const first = { ...recoveryIssue, labels: ['autonomy-ready', 'dependencies-cleared', 'P5.00'] };
+ const arrival = story(309, { updated_at: recoveryIssue.updated_at,
+  labels: ['autonomy-ready', 'dependencies-cleared', 'P2.01'] });
+ let snapshots = 0;
+ const fixture = await recoveryFixture({
+  queuePage: () => ++snapshots === 1 ? [first] : [first, arrival],
+  approve: number => ({ issue: number === first.number ? first : arrival, approved: true }),
+ });
+ await fixture.run();
+ assert.equal(snapshots, 2);
+ assert.equal(fixture.seen.posts, 0);
+ assert.equal(fixture.seen.releases, 1);
+ assert.equal(await fixture.read(), null);
 });

@@ -17,7 +17,7 @@ const sessionId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567891';
 const at = '2024-11-22T00:00:00Z';
 const ended = '2024-11-22T00:05:00Z';
 const mergedAt = '2024-11-22T00:10:00Z';
-const issue = { number: 305, state: 'open', title: 'Test A', body: '## Acceptance criteria', updated_at: at };
+const issue = { number: 305, state: 'open', title: 'Test A', body: '## Acceptance criteria\n- Verify the approved proof.', updated_at: at };
 const record = { version: 1, runId: 'actions_123_1', issue: 305, issueDigest: issueDigest(issue), baseSha: base, startedAt: at };
 const lease = { ...record, tagSha };
 const task = {
@@ -349,7 +349,7 @@ test('later successful CI retry is accepted, later historical failures stay sepa
 });
 
 test('stalled, idle owner, ambiguous sessions, missing artifact and competing tasks retain the lease', () => {
-  const assess = (tasks, now) => assessHandoff({ lease, tasks, openPRs: [], issue, now });
+  const assess = tasks => assessHandoff({ lease, tasks, openPRs: [], issue });
   const copy = id => ({ ...task, id, sessions: [{ ...task.sessions[0], task_id: id }] });
   const otherId = 'a1b2c3d4-e5f6-7890-abcd-ef1234567892';
   for (const tasks of [
@@ -357,11 +357,17 @@ test('stalled, idle owner, ambiguous sessions, missing artifact and competing ta
     [{ ...task, session_count: 2 }], [{ ...task, artifacts: [] }],
     [{ ...task, sessions: [{ ...task.sessions[0], prompt: taskMarker(lease.runId + '4') }] }],
     [task, { id: otherId, state: 'waiting_for_user', sessions: [], session_count: 0 }],
-  ]) assert.equal(assess(tasks, Date.parse(at) + 13 * 3600000).action, 'RETAIN_LEASE');
+  ]) assert.equal(assess(tasks).action, 'RETAIN_LEASE');
   assert.equal(assess([task, { id: otherId, state: 'idle', sessions: [], session_count: 0 }]).action, 'VERIFY_PR');
-  const failed = { ...task, state: 'failed', artifacts: [], sessions: [{ ...task.sessions[0], state: 'failed' }] };
-  assert.equal(assess([failed], Date.parse(at) + 12 * 3600000 - 1).action, 'RETAIN_LEASE');
-  assert.equal(assess([failed], Date.parse(at) + 12 * 3600000).action, 'PARK_VERIFIED');
+  for (const state of ['failed', 'cancelled', 'timed_out']) {
+    const failed = { ...task, state, artifacts: [], sessions: [{ ...task.sessions[0], state }] };
+    assert.equal(assess([failed]).action, 'PARK_VERIFIED');
+    assert.equal(assess([{ ...failed, artifacts: task.artifacts }]).action, 'RETAIN_LEASE');
+    assert.equal(assessHandoff({ lease, tasks: [failed], issue,
+      openPRs: [{ head: { ref: 'human/unrelated' } }] }).action, 'PARK_VERIFIED');
+    assert.equal(assessHandoff({ lease, tasks: [failed], issue,
+      openPRs: [{ head: { ref: task.sessions[0].head_ref } }] }).action, 'RETAIN_LEASE');
+  }
 });
 
 test('controller cycles serialize competing launches and gate B on audited A closure and lease release', async () => {
@@ -407,7 +413,10 @@ test('controller cycles serialize competing launches and gate B on audited A clo
     create: async ({ prompt }) => { launched.push(prompt); return { id: taskId }; },
   };
   const run = number => runAcceptanceCycle({
-    repository, gh, paged: async route => route.startsWith('/issues/305/events') ? events : [],
+    repository, gh, paged: async route => {
+      if (route.startsWith('/issues?')) return [...rows.values()].filter(row => row.state === 'open');
+      return route.startsWith('/issues/305/events') ? events : [];
+    },
     tasksApi, leaseApi, runId: 'actions_' + number + '_1', report: () => {},
     approval: async number => ({ issue: rows.get(number), approved: true }), repairBusy: async () => false,
   });
@@ -465,7 +474,7 @@ test('dispatch checks all potentially active task states before acquiring a leas
     paged: async () => [],
     tasksApi: {
       list: async options => {
-        assert.deepEqual(options, { states: ['queued', 'in_progress', 'waiting_for_user'] });
+        assert.equal(options, undefined);
         return [row];
       },
       get: async () => ({ ...task, ...row,

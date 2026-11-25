@@ -7,11 +7,11 @@ import { readLease, acquireLease, releaseLease, isParked } from './lease.mjs';
 import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
 import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
 import { taskMarker, development, competingWriters, isSha } from './handoff.mjs';
-import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
+import { ownerId, acceptanceIssues, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
   openDevelopmentPRs, advanceAcceptance } from './acceptance.mjs';
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
-import { readWriterTasks } from './task-inventory.mjs';
+import { readTaskDetails } from './task-inventory.mjs';
 import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
@@ -103,8 +103,12 @@ async function main() {
       gh('/issues/' + number), paged('/issues/' + number + '/events'),
       paged('/issues/' + number + '/dependencies/blocked_by'),
     ]);
-    const approved = ownerApprovedQueueLabels(events, ownerId) && Array.isArray(issue.labels) &&
-      ['autonomy-ready', 'p0', 'dependencies-cleared'].every(label =>
+    if (issue.number !== number || issue.pull_request || !Array.isArray(issue.labels) ||
+        !Array.isArray(issue.assignees) || !Number.isFinite(Date.parse(issue.updated_at)) ||
+        dependencies.some(row => !Number.isSafeInteger(row.number) || !['open', 'closed'].includes(row.state)))
+      throw new Error('Incomplete canonical issue or dependency evidence for #' + number);
+    const approved = ownerApprovedQueueLabels(events, ownerId, issue) &&
+      ['autonomy-ready', 'dependencies-cleared'].every(label =>
         issue.labels.some(row => row.name.toLowerCase() === label)) &&
       dependencies.every(row => row.state === 'closed' && row.state_reason === 'completed');
     return { issue, approved };
@@ -179,35 +183,50 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
 
-  const secondAllowed = async () => firstAcceptanceCompleted(
-    await gh('/issues/305'), await paged('/issues/305/events'));
-  const scope = await secondAllowed() ? 306 : 305;
   const candidateSnapshot = async () => {
-    const [prs, rows, repair, ref] = await Promise.all([
-      openDevelopmentPRs(paged, repository), readWriterTasks(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
+    const [prs, rows, repair, ref, issues] = await Promise.all([
+      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(),
+      gh('/git/ref/heads/' + development), paged('/issues?state=open&sort=created&direction=asc'),
     ]);
+    if (issues.some(row => !Number.isSafeInteger(row.number) || row.state !== 'open') ||
+        new Set(issues.map(row => row.number)).size !== issues.length)
+      throw new Error('Incomplete or inconsistent open GitHub issue snapshot');
     const writers = competingWriters(rows);
     for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
     if (repair) report('CI_REPAIR_BLOCK: A CI repair run may still be writing.');
     const activeTasks = repair ? [...writers, { source: 'CI repair' }] : writers;
-    return { prs, activeTasks, lease: { state: 'free' }, baseSha: developmentSha(ref) };
+    const queue = { prs, activeTasks, lease: { state: 'free' } };
+    const eligible = [];
+    for (const row of issues) {
+      if (!selectReadyIssue({ ...queue, issues: [row] }).issue) continue;
+      const { issue, approved } = await approval(row.number);
+      if (issue.updated_at !== row.updated_at || issueDigest(issue) !== issueDigest(row))
+        throw new Error('Issue snapshot changed during queue evaluation for #' + row.number);
+      if (!approved || await isParked(leaseApi, row.number)) {
+        report('QUEUE_SKIPPED #' + row.number + ': owner approval, dependencies or parking gate');
+        continue;
+      }
+      if (row.number === 306 && !firstAcceptanceCompleted(
+        await gh('/issues/305'), await paged('/issues/305/events'))) {
+        report('QUEUE_SKIPPED #306: historical proof #305 lacks verified completion');
+        continue;
+      }
+      eligible.push(issue);
+    }
+    const selection = selectReadyIssue({ ...queue, issues: eligible });
+    return { selection, issue: eligible.find(row => row.number === selection.issue), baseSha: developmentSha(ref) };
   };
   const initial = await candidateSnapshot();
-  const queue = { ...initial, issues: [await gh('/issues/' + scope)] };
-  const selection = selectReadyIssue(queue);
-  if (selection.action !== 'SELECT_NEXT_READY') {
+  const { selection, issue } = initial;
+  if (!issue) {
     report(selection.action + ': ' + selection.reason);
     return;
   }
-  const number = selection.issue;
-  if (await isParked(leaseApi, number)) {
-    report('REPORT_BLOCKED: acceptance issue #' + number + ' is parked');
+  const number = issue.number;
+  if (!acceptanceIssues.includes(number)) {
+    report('PRODUCT_DISPATCH_BLOCKED #' + number + ': product acceptance and owner review are pending.');
     return;
   }
-  const { issue, approved } = await approval(number);
-  if (!approved || issue.number !== number || issue.state !== 'open' || issue.title !== selection.title ||
-      !Number.isFinite(Date.parse(issue.updated_at)))
-    throw new Error('Issue approval or identity changed since selection');
   const acquired = await acquireLease(leaseApi, {
     issue: number, runId, baseSha: initial.baseSha, issueDigest: issueDigest(issue),
   });
@@ -216,9 +235,10 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
   report('LEASE_ACQUIRED for #' + number + ' by ' + runId);
-  let final, checked, held;
+  let final, held;
   try {
-    [final, checked, held] = await Promise.all([candidateSnapshot(), approval(number), readLease(leaseApi)]);
+    final = await candidateSnapshot();
+    held = await readLease(leaseApi);
   } catch (error) {
     // This path returns or throws before the only call that can create a task.
     report(preDispatchStop(acquired));
@@ -227,11 +247,10 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
   if (held?.tagSha !== acquired.tagSha || held.runId !== runId) throw new Error('Lease changed before dispatch');
-  const finalSelection = selectReadyIssue({ ...final, issues: [checked.issue] });
-  if (finalSelection.issue !== number || await isParked(leaseApi, number) || !checked.approved ||
-      checked.issue.updated_at !== issue.updated_at || issueDigest(checked.issue) !== held.issueDigest ||
-      final.baseSha !== initial.baseSha || (number === 306 && !await secondAllowed())) {
-    await releaseLease(leaseApi, { runId, expectedTagSha: acquired.tagSha, confirmedWriterStopped: true });
+  if (final.selection.issue !== number || final.issue.updated_at !== issue.updated_at ||
+      issueDigest(final.issue) !== held.issueDigest || final.baseSha !== initial.baseSha) {
+    await releaseLease(leaseApi, { runId, expectedTagSha: acquired.tagSha, confirmedWriterStopped: true,
+      compareAndDelete: true });
     report('POST_LEASE_BLOCK: GitHub evidence changed. Released the unused lease before task creation.');
     return;
   }

@@ -48,7 +48,7 @@ export function competingWriters(tasks) {
   });
 }
 
-export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }) {
+export function assessHandoff({ lease, tasks, openPRs, issue }) {
   const blocked = reason => ({ action: 'RETAIN_LEASE', reason });
   if (!Array.isArray(openPRs) || issue?.number !== lease.issue || issue.pull_request)
     return blocked('Incomplete PR or issue evidence');
@@ -62,17 +62,21 @@ export function assessHandoff({ lease, tasks, openPRs, issue, now = Date.now() }
   const [task] = matches;
   if (!stopped.has(task.state) || task.sessions.some(session => !stopped.has(session.state) ||
       session.base_ref !== development))
-    return blocked('Lease owner may still be writing');
+    return { ...blocked('Lease owner may still be writing'), taskId: task.id,
+      lastActivity: Math.max(Date.parse(lease.startedAt), ...[task, ...task.sessions]
+        .flatMap(row => [row.updated_at, row.created_at, row.completed_at])
+        .map(value => Date.parse(value)).filter(Number.isFinite)) };
   const others = tasks.filter(row => row.id !== task.id);
   const writers = competingWriters(others);
   if (writers.length)
     return blocked('A competing Copilot session may still be writing: ' + JSON.stringify(writers));
 
   if (task.state !== 'completed') {
-    if (issue.state === 'open' && now - Date.parse(lease.startedAt) >= 12 * 60 * 60 * 1000 &&
-        openPRs.length === 0 && Array.isArray(task.artifacts) && task.artifacts.length === 0)
+    const heads = new Set(task.sessions.map(session => session.head_ref).filter(Boolean));
+    if (issue.state === 'open' && Array.isArray(task.artifacts) && task.artifacts.length === 0 &&
+        openPRs.every(pr => heads.size === task.sessions.length && pr.head?.ref && !heads.has(pr.head.ref)))
       return { action: 'PARK_VERIFIED', taskId: task.id, taskState: task.state, sessionCount: task.session_count };
-    return blocked('Stopped task has PR artifacts, uncertain issue state or is under 12 hours old');
+    return blocked('Stopped task has unresolved artifacts, a session branch PR, or uncertain issue state');
   }
 
   if (task.sessions.some(session => session.state !== 'completed'))

@@ -145,6 +145,13 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   }
   if (result.action === 'RETAIN_LEASE') {
     report('RETAIN_LEASE: ' + result.reason);
+    const age = Date.now() - (result.lastActivity ?? time(lease.startedAt));
+    if (age >= 60 * 60 * 1000) {
+      const level = age >= 2 * 60 * 60 * 1000 ? 'OWNER_ESCALATION' : 'NO_PROGRESS';
+      report(level + ' #' + lease.issue + ': ' + (result.taskId ?
+        'no observed task progress for ' : 'writer identity or state unresolved after ') +
+        Math.floor(age / 60000) + ' minutes; lease retained.');
+    }
     return;
   }
   if (result.action === 'PARK_VERIFIED') {
@@ -152,6 +159,22 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     assert(audited.action === result.action && audited.taskId === result.taskId && audited.taskState === result.taskState,
       'Parking evidence changed during historical writer audit');
     await recordParking(leaseApi, lease, audited);
+    const endpoint = '/issues/' + lease.issue + '/comments';
+    const marker = '<!-- butterbox-parking:' + lease.tagSha + ' -->';
+    const prior = (await paged(endpoint)).filter(comment => comment.user?.id === actionsBot &&
+      comment.body?.startsWith(marker + '\n'));
+    assert(prior.length <= 1, 'Ambiguous canonical parking evidence');
+    if (!prior.length) {
+      const body = [
+        marker, 'Autonomous delivery parked at ' + new Date().toISOString() + '.',
+        'Task ' + audited.taskId + ' ended ' + audited.taskState +
+          '. Its sessions are terminal and no task PR artifact was found.',
+        'Resolve the task failure before asking the repository owner to review and reauthorise dispatch.',
+      ].join('\n');
+      const comment = await gh(endpoint, 'POST', { body });
+      assert(comment.body === body && comment.user?.id === actionsBot && Number.isSafeInteger(comment.id),
+        'GitHub did not confirm canonical parking evidence');
+    }
     const recheck = (await checkIdentity()).result;
     assert(recheck.action === result.action && recheck.taskId === result.taskId, 'Parking evidence changed');
     await release();
