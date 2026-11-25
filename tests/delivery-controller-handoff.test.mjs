@@ -291,6 +291,15 @@ test('retains the lease when the merged proof is not on current Development', as
   assert.deepEqual(effects, ['ready', 'merge']);
 });
 
+test('retains the lease when another open PR uses the leased task branch', async () => {
+  const { run, effects, state } = fixture();
+  await run();
+  await run();
+  state.openPRs = [{ ...structuredClone(state.pr), id: 10001, number: 402, state: 'open' }];
+  await assert.rejects(run(), /leased task branch/);
+  assert.deepEqual(effects, ['ready', 'merge']);
+});
+
 test('absent merge SHA in the newer REST representation, unverified close and wrong merge actor retain lease', async () => {
   for (const mutate of [
     ({ pr }) => { delete pr.merge_commit_sha; },

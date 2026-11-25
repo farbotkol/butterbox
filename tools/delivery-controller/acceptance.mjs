@@ -178,6 +178,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     pr.head?.repo?.full_name === repository && pr.head.ref?.startsWith('copilot/') && isSha(head) &&
     task.sessions.some(session => session.head_ref === pr.head.ref && typeof session.prompt === 'string' &&
       session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
+  assert(!openPRs.some(row => row.number !== number && row.head?.repo?.full_name === repository &&
+    row.head?.ref === pr.head.ref), 'Competing Development PR uses the leased task branch');
   const metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
   // Closed/merged PRs cannot be repaired after the fact.
   if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
@@ -221,7 +223,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       fresh.result.artifact === artifact &&
       (expectedOpen ? fresh.openPRs.length === 1 && fresh.openPRs[0].number === number &&
         fresh.openPRs[0].head.sha === head :
-        !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number)) &&
+        !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
+          (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
       developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
       freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
       freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
