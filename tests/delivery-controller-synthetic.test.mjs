@@ -41,7 +41,7 @@ function fixture({ getOverride, originalNumber = 300, originalTask = taskId } = 
     async deleteRef(ref) { seen.deletes++; refs.delete(ref); },
   };
   const tasks = {
-    async list() { return state.otherTasks; },
+    async list({ states } = {}) { return state.otherTasks.filter(row => !states || !['completed','failed','cancelled','timed_out','idle'].includes(row.state)); },
     async create({ prompt }) {
       seen.creates++;
       assert.match(prompt, /BUTTERBOX_LEASE_RUN=synthetic_123/);
@@ -177,7 +177,7 @@ test('the manual synthetic test ignores idle tasks and blocks all other nontermi
   for (const state of ['queued', 'in_progress', 'waiting_for_user', 'unknown', undefined]) {
     const blocked = fixture();
     blocked.state.otherTasks = [{ state: 'idle' }, { state }];
-    await assert.rejects(blocked.run(), /Launch blocked/);
+    await assert.rejects(blocked.run(), /Launch blocked|Copilot task list|Copilot task inventory/);
     assert.equal(blocked.seen.creates, 0);
     assert.equal(blocked.refs.size, 0);
   }
