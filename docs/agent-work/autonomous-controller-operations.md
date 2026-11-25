@@ -4,7 +4,9 @@
 
 The existing hourly controller observes open PRs and an exclusive Git annotated-tag lease. The opt-in autonomous dispatcher runs only when `BUTTERBOX_AUTONOMY_ENABLED=true` (repository Actions variable) and the `COPILOT_AGENT_USER_TOKEN` Actions secret is present. It only runs against `copilot/Development`; it never runs for PRs.
 
-Queue eligibility is strict: a GitHub Issue must be open, contain `## Acceptance criteria`, carry **all three labels** `autonomy-ready`, `p0`, and `dependencies-cleared`, and have no blocked/hold/external indicators. Epic, parent DEV-FACTORY, Xero #268/#270 dependent and existing-PR work is not eligible. The controller verifies that the owner applied each current queue label, checks GitHub's linked blockers for completed closure, and excludes assigned issues.
+Queue eligibility is strict: a GitHub Issue must be open, contain `## Acceptance criteria`, carry `autonomy-ready`, `dependencies-cleared`, and one priority from
+`P0.00` through `P10.99` (case-insensitive, with `P0` through `P10`
+accepted as aliases for the corresponding .00 values), and have no blocked/hold/external indicators. Epic, parent DEV-FACTORY, Xero #268/#270 dependent and existing-PR work is not eligible. The controller verifies that the owner applied each current queue label, checks GitHub's linked blockers for completed closure, and excludes assigned issues.
 
 Before launching, the dispatcher fetches paginated GitHub Issues and open Development PRs plus Copilot task list. It refuses to start if any Development PR or active Copilot task exists. It rechecks live state, atomically acquires the same proven Git ref lease, checks again, then uses GitHub's documented `POST /agents/repos/{owner}/{repo}/tasks` endpoint with `base_ref=copilot/Development` and confirms the returned ID using `GET`. If the final preflight detects a state change before POST, the run releases its unused lease. If POST or GET is ambiguous, the lease is **retained** and no automatic retry is attempted.
 
@@ -12,7 +14,11 @@ Before launching, the dispatcher fetches paginated GitHub Issues and open Develo
 
 Keep the repository variable off while verifying access. Use the approved user credential for a read-only `GET /agents/repos/farbotkol/butterbox/tasks` and confirm the account's Copilot seat and repository policy separately. A successful GET establishes read access only. Keep expiring app credentials and any refresh material in the approved secret store. The current workflow reads `COPILOT_AGENT_USER_TOKEN` and has no token refresh mechanism.
 
-**Controlled unattended scope.** The dispatcher only selects #305 and #306.
+**Controlled unattended scope.** The dispatcher ranks the open, approved queue
+by major priority, minor priority and issue number and repeats that evaluation
+after reserving a lease. Task creation remains limited to historical proofs
+#305 and #306. If a product issue ranks first, the evaluation reports that
+product acceptance and owner review are pending before taking a lease.
 Each issue permits one fixed Markdown file with exact bytes. The controller
 checks the exact lease marker against independently fetched task and session
 records, finds the sole GitHub PR artifact, and verifies the session head,
@@ -35,9 +41,15 @@ the pair.
 GitHub Actions CI repair and the general Phase 2 merge workflow stand down
 while any delivery lease is held. A missing result, another writer or PR,
 a moving base, failed CI, or an ambiguous response keeps the lease held.
-After 12 hours, a uniquely identified failed, cancelled or timed-out task can
-be parked only when all its sessions have stopped, it produced no PR artifact,
-and there are no other writers or open Development PRs. Inspect the Actions
+A uniquely identified failed, cancelled or timed-out proof task can
+be parked on the next evaluation when all its sessions have stopped, it
+produced no artifacts, and no PR or competing writer can still be acting on
+the lease. A PR with a different verifiable session branch does not delay
+parking. The parking tag and issue comment are recorded before exact-lease
+release. Artifacts that still require reconciliation keep the lease held.
+The run summary flags no observed progress after 60 minutes and escalates
+after two hours. The lease remains held while task or writer evidence is
+unresolved. Automated re-entry is pending. Inspect the Actions
 summary and leave the lease in place when writer status is uncertain.
 
 **Blockers addressed in #307.** The hourly controller previously deferred all
@@ -260,7 +272,9 @@ If it reports `MERGED_RECOVERY_VERIFIED`, the owner may run
 uses compare-and-delete. A changed or missing tag, live or ambiguous writer,
 incomplete inventory or failed evidence retains the lease. Neither mode
 launches another task. This path remains limited to the historical acceptance
-proofs and has not been exercised on the live #306 lease.
+proofs. [Controller run #111](https://github.com/farbotkol/butterbox/actions/runs/45555719592)
+confirmed release of the #306 lease at 4:47:28 pm Melbourne time on
+25 November 2026.
 
 For a retained lease, the repository owner can use the delivery controller's
 manual `lease_recovery` input after the recovery code passes required checks
@@ -310,3 +324,21 @@ only for issue #305, run `actions_45121500090_1`, annotated tag
 [HTTP 200 token check](https://github.com/farbotkol/butterbox/actions/runs/45121783414)
 discarded its body. Recovery still requires full current task and writer
 evidence.
+
+
+## Inventory pagination and product dispatch gate
+
+Task inventory follows validated same-endpoint pagination links for up to
+20 pages. Missing pagination or count evidence on a full page, changing
+counts, malformed links, inconsistent task details and API budget exhaustion
+stop mutations. The bounded historical writer audit is still needed because
+task-state filters do not establish whether a terminal parent's older child
+session can continue or resume. The controller currently uses that audit
+before proof dispatch and before proof handoff mutations. The lease discovery
+poll still checks the recent and active snapshots for a potential match.
+
+Product dispatch requires an approved criterion-level acceptance workflow
+that verifies scope, required exact-head checks and human acceptance.
+General-purpose automation must also have reliable cross-PR work-area
+conflict evidence and authoritative historical child-session coverage.
+The current proof code does not support those decisions for product issues.

@@ -89,12 +89,16 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
     }
     const result = await response.json();
     if (!path || !path.startsWith('?')) return result;
-    if (!Array.isArray(result.tasks) || result.tasks.length >= 100 ||
-        (Object.hasOwn(result, 'total_count') && result.total_count !== result.tasks.length) ||
-        /rel="?next"?/.test(response.headers?.get('link') ?? '')) {
+    const link = response.headers?.get('link') ?? '';
+    const next = link.match(/<([^>]+)>;\s*rel="?next"?(?:\s*[,;]|$)/)?.[1];
+    if (!Array.isArray(result.tasks) || result.tasks.length > 100 ||
+        (Object.hasOwn(result, 'total_count') &&
+          (!Number.isSafeInteger(result.total_count) || result.total_count < result.tasks.length)) ||
+        (!next && /rel="?next"?/.test(link))) {
       throw new Error('Copilot task list incomplete; fail closed');
     }
-    return result;
+    return { rows: result.tasks, total: result.total_count, next };
+
   }
   return {
     list:async({states,since}={})=>{
@@ -106,7 +110,35 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
           new Date(since).toISOString() !== since)) throw new Error('Invalid Copilot inventory time scope');
       const query='?per_page=100'+(states?'&state='+states.join(','):'')+
         (since?'&since='+encodeURIComponent(since):'');
-      const tasks=(await call('GET',query)).tasks;
+      const tasks = [];
+      let path = query;
+      let expectedTotal;
+      const visited = new Set();
+      for (let page = 0; page < 20; page++) {
+        if (visited.has(path)) throw new Error('Copilot task list incomplete: pagination loop');
+        visited.add(path);
+        const { rows, total, next } = await call('GET', path);
+        if (total !== undefined) {
+          if (expectedTotal !== undefined && expectedTotal !== total)
+            throw new Error('Copilot task list incomplete: total changed during pagination');
+          expectedTotal = total;
+        }
+        tasks.push(...rows);
+        if (!next) {
+          if ((expectedTotal !== undefined && tasks.length !== expectedTotal) ||
+              (expectedTotal === undefined && rows.length === 100))
+            throw new Error('Copilot task list incomplete: missing pagination or count evidence');
+          break;
+        }
+        if (!rows.length || page === 19)
+          throw new Error('Copilot task list incomplete: bounded pagination exhausted');
+        const url = new URL(next, root);
+        const original = new URL(root + query);
+        if (url.origin + url.pathname !== root || url.username || url.password || url.hash || !url.search ||
+            ['state', 'since'].some(key => url.searchParams.get(key) !== original.searchParams.get(key)))
+          throw new Error('Copilot task list incomplete: invalid pagination link');
+        path = url.search;
+      }
       if(states && tasks.some(task=>!states.includes(task.state)))
         throw new Error('Copilot server returned task outside requested writer states');
       return tasks;

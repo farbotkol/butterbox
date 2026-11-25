@@ -200,7 +200,9 @@ The default is targeted verification, not a full regression after every story.
 - GitHub auto-close wording (`Fixes #N`, `Closes #N`, `Resolves #N`) may
   close an issue when the PR merges into the default branch. Prefer a reference
   without auto-closing for partial work. Do not intentionally close an issue
-  before the acceptance criteria are complete.
+  before the acceptance criteria are complete. For partial controller work,
+  check the rendered PR description after creation, including any suffix
+  inserted by the coding agent, and remove closing references before review.
 - Existing issue/PR evidence archives may be retained for traceability; do not
   rewrite historical files merely to satisfy legacy formatting conventions.
 - Merged-PR evidence reconciliation may use available structured evidence, but
