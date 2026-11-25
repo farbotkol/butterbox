@@ -119,10 +119,16 @@ function fixture(overrides = {}) {
       return { object: { sha: currentTag, type: 'tag' } };
     },
     async getTag() { return { tag: 'butterbox-controller-lease', message: JSON.stringify(record) }; },
-    async deleteRef() { effects.push('release'); currentTag = null; },
+    async compareAndDeleteRef(ref, expected) {
+      assert.equal(ref, LEASE_REF);
+      if (state.replaceAtDelete) currentTag = 'f'.repeat(40);
+      if (currentTag !== expected) throw new Error('Lease ref changed');
+      effects.push('release'); currentTag = null;
+    },
   };
-  const run = () => advanceAcceptance({
+  const run = (mergedRecovery = 'none') => advanceAcceptance({
     repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
+    mergedRecovery,
     tasksApi: {
       list: async ({ states } = {}) => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
@@ -233,6 +239,56 @@ test('a lost closure response is recoverable with the same audit and exact lease
   await assert.rejects(run(), /PATCH response lost/);
   await run();
   assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+});
+
+test('merged recovery verification is read-only and release is a separate guarded operation', async () => {
+  const { run, effects, state, reports } = fixture();
+  await assert.rejects(run('verify'), /closed issue/);
+  await run();
+  await run();
+  state.losePatchResponse = true;
+  await assert.rejects(run(), /PATCH response lost/);
+  await run('verify');
+  assert.deepEqual(effects, ['ready', 'merge', 'close']);
+  assert.match(reports.at(-1), /MERGED_RECOVERY_VERIFIED/);
+  await run('release');
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+  await assert.rejects(run('release'), /Exclusive lease changed|Lease missing/);
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+});
+
+test('merged recovery refuses a replacement lease at the deletion boundary', async () => {
+  const { run, effects, state } = fixture();
+  await run();
+  await run();
+  state.losePatchResponse = true;
+  await assert.rejects(run(), /PATCH response lost/);
+  state.replaceAtDelete = true;
+  await assert.rejects(run('release'), /Lease ref changed/);
+  assert.deepEqual(effects, ['ready', 'merge', 'close']);
+});
+
+test('reconciles merged proof despite unrelated open PR and later Development commit', async () => {
+  const { run, effects, state } = fixture();
+  await run();
+  await run();
+  const unrelated = { ...structuredClone(state.pr), id: 10001, number: 402,
+    state: 'open', head: { ...state.pr.head, ref: 'human/other', sha: moved } };
+  state.openPRs = [unrelated];
+  state.tip = moved;
+  state.comparison = { status: 'ahead', base_commit: { sha: merge }, merge_base_commit: { sha: merge } };
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+});
+
+test('retains the lease when the merged proof is not on current Development', async () => {
+  const { run, effects, state } = fixture();
+  await run();
+  await run();
+  state.tip = moved;
+  state.comparison = { status: 'diverged', base_commit: { sha: merge }, merge_base_commit: { sha: base } };
+  await assert.rejects(run(), /not an ancestor/);
+  assert.deepEqual(effects, ['ready', 'merge']);
 });
 
 test('absent merge SHA in the newer REST representation, unverified close and wrong merge actor retain lease', async () => {

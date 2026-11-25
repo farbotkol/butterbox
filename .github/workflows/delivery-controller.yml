@@ -8,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       lease_recovery:
-        description: Inspect or release a proven pre-dispatch lease without launching
+        description: Inspect or release a proven pre-dispatch or merged acceptance lease
         type: choice
-        options: [none, verify, release]
+        options: [none, verify, release, merged-verify, merged-release]
         default: none
       expected_lease_tag_sha:
         description: Exact annotated tag SHA for a recovery operation
