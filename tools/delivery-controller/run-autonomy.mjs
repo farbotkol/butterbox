@@ -8,9 +8,10 @@ import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
 import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
 import { taskMarker, development, competingWriters, isSha } from './handoff.mjs';
 import { ownerId, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
-  openDevelopmentPRs, readTaskDetails, advanceAcceptance } from './acceptance.mjs';
+  openDevelopmentPRs, advanceAcceptance } from './acceptance.mjs';
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
+import { readWriterTasks } from './task-inventory.mjs';
 import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
@@ -177,7 +178,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   const scope = await secondAllowed() ? 306 : 305;
   const candidateSnapshot = async () => {
     const [prs, rows, repair, ref] = await Promise.all([
-      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi, { states: ['queued', 'in_progress'] }), repairBusy(), gh('/git/ref/heads/' + development),
+      openDevelopmentPRs(paged, repository), readWriterTasks(tasksApi), repairBusy(), gh('/git/ref/heads/' + development),
     ]);
     const writers = competingWriters(rows);
     for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
