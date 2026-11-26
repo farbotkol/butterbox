@@ -1,6 +1,7 @@
 import { developmentSha, issueDigest, openDevelopmentPRs } from './acceptance.mjs';
 import { development, isSha, sessionSnapshotProblems, taskMarker, verifyTaskSnapshot } from './handoff.mjs';
 import { readTaskDetails, listTaskSummaries, readLeaseCandidates } from './task-inventory.mjs';
+import { productScope } from './product.mjs';
 import { readLease, releaseLease } from './lease.mjs';
 
 const workflowPath = '.github/workflows/delivery-controller.yml';
@@ -90,7 +91,7 @@ export function recoveryTaskBlockers(tasks, runId) {
 
 export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh, paged, tasksApi,
   repairBusy, report, verifyOnly = false }) {
-  if (![305, 306].includes(lease?.issue) || !isSha(lease.tagSha) ||
+  if (!Number.isSafeInteger(lease?.issue) || lease.issue < 1 || !isSha(lease.tagSha) ||
       !/^[a-f0-9]{64}$/.test(lease.issueDigest ?? '')) throw new Error('Unrecognized recovery lease');
   const [issue, ref, tasks, prs, repair, current] = await Promise.all([
     gh('/issues/' + lease.issue), gh('/git/ref/heads/' + development), (tasksApi.inventory ? readLeaseCandidates(tasksApi, lease, { stable: true }) : readTaskDetails(tasksApi)),
@@ -98,6 +99,7 @@ export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh,
   ]);
   if (current?.tagSha !== lease.tagSha || current.runId !== lease.runId ||
       issue.number !== lease.issue || issue.pull_request || issue.state !== 'open' ||
+      (![305, 306].includes(issue.number) && !productScope(issue)) ||
       !Array.isArray(issue.assignees) || issue.assignees.length || issueDigest(issue) !== lease.issueDigest) {
     throw new Error('Lease or issue identity changed, or issue is assigned');
   }

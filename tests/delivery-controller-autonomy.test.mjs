@@ -73,7 +73,7 @@ const runId = 'actions_123_1';
 const taskGet403 = () => Object.assign(new Error('Copilot task API GET returned HTTP 403'),
  { code: 'COPILOT_TASK_GET', status: 403 });
 
-async function recoveryFixture({ list, create, repairBusy = async () => false, race = false, queuePage, approve } = {}) {
+async function recoveryFixture({ list, create, repairBusy = async () => false, race = false, queuePage, approve, proofs } = {}) {
  const { runAcceptanceCycle } = await import('../tools/delivery-controller/run-autonomy.mjs');
  const { recoverPreDispatchLease } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const { LEASE_REF, readLease } = await import('../tools/delivery-controller/lease.mjs');
@@ -102,12 +102,15 @@ async function recoveryFixture({ list, create, repairBusy = async () => false, r
  };
  const params = {
   repository, runId, leaseApi,
-  gh: async path => path.startsWith('/git/ref/') ? { object: { type: 'commit', sha: baseSha } } : recoveryIssue,
-  paged: async path => path.startsWith('/issues?') ? (queuePage?.() ?? [recoveryIssue]) : [], repairBusy,
+  gh: async path => path.startsWith('/git/ref/') ? { object: { type: 'commit', sha: baseSha } } :
+   proofs?.[Number(path.split('/').at(-1))] ?? recoveryIssue,
+  paged: async path => path.startsWith('/issues?') ? (queuePage?.() ?? [recoveryIssue]) :
+   proofs && /events$/.test(path) ? [{ event: 'closed', actor: { id: 41898282 }, commit_id: null }] : [],
+  repairBusy, closingIssues: proofs ? async () => 0 : undefined,
   approval: async number => approve ? approve(number) : ({ issue: recoveryIssue, approved: true }),
   tasksApi: {
    list: async () => { seen.lists++; return list ? list(seen.lists) : []; },
-   create: async () => { seen.posts++; return create(); },
+   create: async args => { seen.posts++; return create(args); },
    get: async id => ({ id, state: 'failed', session_count: 1, sessions: [{
     id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', task_id: id, state: 'queued', prompt: 'other task',
    }] }),
@@ -172,7 +175,7 @@ test('an ambiguous POST receives no retry or pre-dispatch recovery evidence', as
 });
 
 test('owner recovery verifies the exact raw GitHub job log and fails closed on missing proof', async () => {
- const { preDispatchStop, verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const { verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const lease = { issue: 305, runId: 'actions_45121500090_1',
   baseSha: 'e8c7a42209e497e1c415a422e3343f9b43851fbb',
   tagSha: '7dd255f68cff1cf7a3774c980836ce8d010ac122',
@@ -447,10 +450,19 @@ test('Copilot task list traverses bounded pagination for 60, 100 and 1,000 task 
 test('a higher-priority arrival invalidates the unused reservation before any POST', async () => {
  const first = { ...recoveryIssue, labels: ['autonomy-ready', 'dependencies-cleared', 'P5.00'] };
  const arrival = story(309, { updated_at: recoveryIssue.updated_at,
+  body: '## Autonomy scope\n- `src/roster`\n\n## Acceptance criteria\n- Render roster',
   labels: ['autonomy-ready', 'dependencies-cleared', 'P2.01'] });
+ const proofs = Object.fromEntries([305, 306].map(number => [number, {
+  number, state: 'closed', state_reason: 'completed',
+  body: 'Proof\n\n<!-- butterbox-autonomy-reconciled:v1 -->\n\nIssue #' + number +
+    ' · lease actions_123_1 · task a1b2c3d4-e5f6-7890-abcd-ef1234567890\n' +
+    'Completed sessions b1b2c3d4-e5f6-7890-abcd-ef1234567890\n' +
+    'PR #400 · head ' + baseSha + ' · squash ' + baseSha + ' · proof blob ' + baseSha + '\n' +
+    'Reconciliation https://github.com/farbotkol/butterbox/actions/runs/123',
+ }]));
  let snapshots = 0;
  const fixture = await recoveryFixture({
-  queuePage: () => ++snapshots === 1 ? [first] : [first, arrival],
+  proofs, queuePage: () => ++snapshots === 1 ? [first] : [first, arrival],
   approve: number => ({ issue: number === first.number ? first : arrival, approved: true }),
  });
  await fixture.run();
@@ -458,4 +470,17 @@ test('a higher-priority arrival invalidates the unused reservation before any PO
  assert.equal(fixture.seen.posts, 0);
  assert.equal(fixture.seen.releases, 1);
  assert.equal(await fixture.read(), null);
+
+ const launch = await recoveryFixture({
+  proofs, queuePage: () => [arrival], approve: () => ({ issue: arrival, approved: true }),
+  create: ({ prompt }) => {
+   assert.match(prompt, /issue #309 only/);
+   assert.match(prompt, /approved Autonomy scope: src\/roster/);
+   assert.match(prompt, /Refs #309/);
+   throw new Error('simulated ambiguous POST');
+  },
+ });
+ await assert.rejects(launch.run(), /simulated ambiguous POST/);
+ assert.equal(launch.seen.posts, 1);
+ assert.equal((await launch.read()).issue, 309);
 });

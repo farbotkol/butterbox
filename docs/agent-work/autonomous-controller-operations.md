@@ -340,7 +340,7 @@ Product dispatch requires an approved criterion-level acceptance workflow
 that verifies scope, required exact-head checks and human acceptance.
 General-purpose automation must also have reliable cross-PR work-area
 conflict evidence and authoritative historical child-session coverage.
-The current proof code does not support those decisions for product issues.
+The product delivery procedure below defines these gates.
 
 ### Option 2 evidence and rollout gate
 
@@ -389,3 +389,48 @@ apply.
 [REST reference](https://docs.github.com/en/rest/agent-tasks/agent-tasks#list-tasks-for-repository)
 · [Filter probe](https://github.com/farbotkol/butterbox/actions/runs/45736462753)
 · [Lifecycle sample](https://github.com/farbotkol/butterbox/actions/runs/45736527418)
+
+## Product delivery after the controlled proofs
+
+A product candidate needs a canonical BB story, the existing owner-applied
+priority and readiness labels, verified dependencies, and a nonempty
+`## Autonomy scope` section. Specify one repository-relative path per
+Markdown bullet in backticks. The controller limits product changes to the
+declared source, test, documentation, public asset or migration paths.
+Managed files and workflow changes are outside this dispatch path. The
+normal queue skips candidates with missing scope or a known overlapping PR.
+A changed or incomplete PR snapshot blocks the affected decision.
+
+The controller verifies the exact leased task, terminal sessions, its PR
+artifact, canonical issue references, file list, overlap with open PRs and
+intervening Development changes, and required CI. Migration paths share a
+single work area. Unrelated human PRs can stay open. Human edits that have
+not reached GitHub are outside this check, so publish a PR to make those
+changes visible to the controller.
+
+For a product PR, review the evidence and actual tests for each numbered
+criterion in the issue's acceptance section. The repository owner submits an
+**Approve** review on the exact PR head with these lines, using the reported
+scope digest and one line per criterion, in issue order:
+
+```text
+Canonical issue approved: #ISSUE
+Acceptance scope: ISSUE_DIGEST
+Criterion 1 PASS: Actual independent evidence for the first criterion
+Criterion 2 PASS: Actual independent evidence for the second criterion
+```
+
+The controller checks the latest owner decision, exact-head
+`verify` and `database-smoke`, and the absence of GitHub issue-closing
+links before the protected squash. It closes the canonical issue only after
+verifying the merged file manifest, merge ancestry and acceptance again.
+Partial work awaits review. If the task is terminal and its only artifact
+is a verified closed, unmerged PR, the controller can park it, leave the
+issue open and release the exact lease. Uncertain or open artifacts keep
+the lease held.
+
+For owner re-entry, resolve the blocker, restore the original priority
+and current approvals, and dispatch the controller with `lease_recovery=unpark`,
+`parked_issue_number`, and the exact annotated parking tag SHA in
+`expected_lease_tag_sha`. Re-entry clears only that parking tag. Normal
+dispatch runs separately and checks the queue and writer evidence again.

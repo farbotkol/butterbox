@@ -1,7 +1,9 @@
+import { queuePriority } from './queue.mjs';
 import { createHash } from 'node:crypto';
 import { assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
-import { canonicalIssueNumber } from '../agent-evidence/evidence.mjs';
+import { canonicalIssueNumber, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
+import { productScope, scopedProductFiles, readProductDiff, conflictsWithProduct, productReview, sameSquashFiles } from './product.mjs';
 import { assessDevelopmentDrift } from './development-drift.mjs';
 import { readTaskDetails, readLeaseCandidates } from './task-inventory.mjs';
 export { readTaskDetails } from './task-inventory.mjs';
@@ -40,10 +42,10 @@ export function closedByController(issue, events) {
     lastState?.event === 'closed' && lastState.actor?.id === actionsBot && lastState.commit_id === null;
 }
 
-export function firstAcceptanceCompleted(issue, events) {
+export function firstAcceptanceCompleted(issue, events, number = 305) {
   const note = (issue.body ?? '').split('\n\n' + marker + '\n\n');
-  return issue.number === 305 && !issue.pull_request && closedByController(issue, events) && note.length === 2 &&
-    /^Issue #305 · lease actions_[1-9]\d*_[1-9]\d* · task [0-9a-f-]{36}\n/.test(note[1]) &&
+  return acceptanceIssues.includes(number) && issue.number === number && !issue.pull_request && closedByController(issue, events) && note.length === 2 &&
+    new RegExp('^Issue #' + number + ' · lease actions_[1-9][0-9]*_[1-9][0-9]* · task [0-9a-f-]{36}\n').test(note[1]) &&
     /^Completed sessions [0-9a-f-]{36}(?:, [0-9a-f-]{36})*$/m.test(note[1]) &&
     /^PR #[1-9]\d* · head [0-9a-f]{40} · squash [0-9a-f]{40} · proof blob [0-9a-f]{40}$/m.test(note[1]) &&
     /^Reconciliation https:\/\/github\.com\/farbotkol\/butterbox\/actions\/runs\/\d+$/m.test(note[1]);
@@ -115,12 +117,13 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull, mergedRecovery = 'none' }) {
+  approval, repairBusy, readyPull, closingIssues, mergedRecovery = 'none' }) {
   assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
     runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
   });
-  if (!acceptanceIssues.includes(lease.issue) || !/^actions_\d+_\d+$/.test(lease.runId) ||
+  const product = !acceptanceIssues.includes(lease.issue);
+  if (!/^actions_\d+_\d+$/.test(lease.runId) ||
       !/^[a-f0-9]{64}$/.test(lease.issueDigest ?? '')) {
     report('RETAIN_LEASE: No controlled acceptance scope for the active lease.');
     return;
@@ -134,7 +137,9 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     assert(current?.tagSha === lease.tagSha && current.runId === lease.runId, 'Exclusive lease changed');
     assert(!repair, 'CI repair may still be writing');
     assert(issueDigest(issue) === lease.issueDigest, 'Issue requirements changed after lease acquisition');
-    return { issue, openPRs, result: assessHandoff({ lease, tasks, openPRs, issue }) };
+    if (product) assert(productScope(issue) && Array.isArray(issue.assignees) && !issue.assignees.length,
+      'Missing approved product scope or issue has a competing assignee');
+    return { issue, openPRs, result: assessHandoff({ lease, tasks, openPRs, issue, product }) };
   };
 
   const snapshot = await checkIdentity({ discovery: true });
@@ -154,11 +159,11 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     }
     return;
   }
-  if (result.action === 'PARK_VERIFIED') {
-    const audited = (await checkIdentity()).result;
-    assert(audited.action === result.action && audited.taskId === result.taskId && audited.taskState === result.taskState,
-      'Parking evidence changed during writer verification');
-    await recordParking(leaseApi, lease, audited);
+  const park = async (expected, readEvidence) => {
+    const audited = await readEvidence();
+    assert(audited && audited.action === 'PARK_VERIFIED' && audited.taskId === expected.taskId &&
+      audited.taskState === expected.taskState, 'Parking evidence changed during writer verification');
+    await recordParking(leaseApi, lease, { ...audited, priority: lease.priority ?? queuePriority(issue)?.label });
     const endpoint = '/issues/' + lease.issue + '/comments';
     const marker = '<!-- butterbox-parking:' + lease.tagSha + ' -->';
     const prior = (await paged(endpoint)).filter(comment => comment.user?.id === actionsBot &&
@@ -168,22 +173,28 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const body = [
         marker, 'Autonomous delivery parked at ' + new Date().toISOString() + '.',
         'Task ' + audited.taskId + ' ended ' + audited.taskState +
-          '. Its sessions are terminal and no task PR artifact was found.',
+          (audited.taskUrl ? '. Its task PR is closed and unmerged: ' + audited.taskUrl :
+            '. Its sessions are terminal and no task PR artifact was found.'),
         'Resolve the task failure before asking the repository owner to review and reauthorise dispatch.',
       ].join('\n');
       const comment = await gh(endpoint, 'POST', { body });
       assert(comment.body === body && comment.user?.id === actionsBot && Number.isSafeInteger(comment.id),
         'GitHub did not confirm canonical parking evidence');
     }
-    const recheck = (await checkIdentity()).result;
-    assert(recheck.action === result.action && recheck.taskId === result.taskId, 'Parking evidence changed');
+    const recheck = await readEvidence();
+    assert(recheck?.action === 'PARK_VERIFIED' && recheck.taskId === expected.taskId &&
+      recheck.taskState === expected.taskState, 'Parking evidence changed');
     await release();
-    report('PARKED issue #' + lease.issue + ' after task ' + result.taskId + ' ended ' + result.taskState);
+    report('PARKED issue #' + lease.issue + ' after task ' + audited.taskId + ' ended ' + audited.taskState);
+  };
+  if (result.action === 'PARK_VERIFIED') {
+    await park(result, async () => (await checkIdentity()).result);
     return;
   }
 
   const { task, artifact } = result;
-  const { path, bytes } = proofFor(lease.issue);
+  const scope = product && productScope(issue);
+  const { path, bytes } = product ? {} : proofFor(lease.issue);
   const matching = openPRs.filter(pr => pr.id === artifact || pr.number === artifact);
   assert(matching.length <= 1, 'Ambiguous task PR exists');
   // A Copilot artifact can be either the PR number or the numeric REST database ID.
@@ -203,7 +214,31 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
   assert(!openPRs.some(row => row.number !== number && row.head?.repo?.full_name === repository &&
     row.head?.ref === pr.head.ref), 'Competing Development PR uses the leased task branch');
-  const metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
+  if (product && pr.state === 'closed' && pr.merged === false && issue.state === 'open') {
+    const stopped = { action: 'PARK_VERIFIED', taskId: task.id, taskState: 'closed-unmerged',
+      sessionCount: task.session_count, taskUrl: 'https://github.com/' + repository + '/pull/' + number };
+    await park(stopped, async () => {
+      const [fresh, currentPR] = await Promise.all([checkIdentity(), gh(endpoint)]);
+      const verified = fresh.result;
+      return fresh.issue.state === 'open' && verified.action === result.action && verified.task.id === task.id &&
+        verified.artifact === artifact && currentPR.number === number && currentPR.head?.sha === head &&
+        currentPR.state === 'closed' && currentPR.merged === false &&
+        !fresh.openPRs.some(row => row.number === number || row.head?.ref === pr.head.ref) ? stopped : null;
+    });
+    return;
+  }
+  assert(result.action === 'VERIFY_PR', 'Failed product task still has an unresolved PR artifact');
+  let metadata;
+  if (product) {
+    const refs = [...(pr.body ?? '').matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)];
+    assert(refs.every(ref => Number(ref[1]) === lease.issue) && !closesIssue.test(pr.body ?? '') && !closesIssue.test(pr.title ?? '') &&
+      canonicalIssueNumber(pr.body) === lease.issue && referencesCanonicalIssue(pr.body, lease.issue) &&
+      (pr.body.match(/<!--\s*butterbox-issue\s*:/g) ?? []).length === 1,
+    'Product PR lacks unique canonical metadata or uses an issue closing reference');
+    metadata = { changed: false };
+  } else {
+    metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
+  }
   // Closed/merged PRs cannot be repaired after the fact.
   if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
     'Merged PR lacks verified metadata');
@@ -211,7 +246,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     Array.isArray(pr.requested_teams) && !pr.requested_teams.length, 'PR still has pending reviews or missing review evidence');
 
   const [files, headProof, checks, ref, rules] = await Promise.all([
-    gh(endpoint + '/files?per_page=2'), contentsAt(gh, path, head),
+    product ? readProductDiff(paged, gh, pr) : gh(endpoint + '/files?per_page=2'),
+    product ? null : contentsAt(gh, path, head),
     gh('/commits/' + head + '/check-runs?filter=all&per_page=100'), gh('/git/ref/heads/' + development),
     gh('/rules/branches/' + encodeURIComponent(development)),
   ]);
@@ -220,17 +256,26 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     requiredChecks.every(name => rules.some(rule => rule.type === 'required_status_checks' &&
       rule.parameters?.required_status_checks?.some(check => check.context === name && check.integration_id === 15368))),
   'Required Development squash and GitHub Actions rules are unavailable');
-  assert(pr.changed_files === 1 && Array.isArray(files) && files.length === 1 &&
+  const productPaths = product && scopedProductFiles(scope, files);
+  if (product) assert(files.length < 100, 'Product diff exceeds the verifiable squash bound');
+  if (!product) assert(pr.changed_files === 1 && Array.isArray(files) && files.length === 1 &&
     files[0].filename === path && files[0].status === 'added' && isSha(files[0].sha) &&
     compareProof(headProof, bytes, files[0].sha), 'PR does not add exactly the approved proof file and bytes');
   const mergedAt = time(pr.merged_at);
+  const readOwnerReview = async () => productReview(await paged(endpoint + '/reviews'), head,
+    lease.issue, scope.criteria, ownerId, pr.merged === true ? mergedAt : Date.now(), lease.issueDigest);
+  const review = product && (!pr.draft || pr.merged === true) ? await readOwnerReview() : null;
+  if (product && !pr.draft && !review) {
+    report('PRODUCT_ACCEPTANCE_PENDING #' + lease.issue + ' PR #' + number + ' head ' + head + ' scope ' + lease.issueDigest);
+    return;
+  }
   const ci = verifiedChecks(checks, head, pr.merged === true ? mergedAt : Date.now());
   const tip = developmentSha(ref);
   // Validate only bounded, complete forward ancestry. The original lease remains immutable.
   const checkedAncestry = async (from, to) => {
     if (from === to) return { kind: 'unchanged', safe: true };
     const comparison = await gh('/compare/' + from + '...' + to + '?per_page=100');
-    const verdict = assessDevelopmentDrift({ pinnedSha: from, currentSha: to, comparison, proofPath: path });
+    const verdict = assessDevelopmentDrift({ pinnedSha: from, currentSha: to, comparison, proofPath: path, productPaths });
     assert(verdict.kind === 'candidate', 'Unsafe Development movement: ' + verdict.reason);
     return verdict;
   };
@@ -241,11 +286,20 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     const [freshPR, freshTip, approved] = await Promise.all([
       gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
     ]);
+    if (product) {
+      assert(await closingIssues(freshPR) === 0, 'Product PR has linked issue-closing references');
+      if (expectedOpen) assert(!await conflictsWithProduct(paged, gh, fresh.openPRs, scope, number),
+        'Competing Development PR overlaps the product work area');
+      if (review) {
+        const latest = await readOwnerReview();
+        assert(latest?.id === review.id && latest.body === review.body, 'Product acceptance review changed');
+      }
+    }
     assert(fresh.result.action === 'VERIFY_PR' && fresh.result.task.id === task.id &&
       sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
       fresh.result.artifact === artifact &&
-      (expectedOpen ? fresh.openPRs.length === 1 && fresh.openPRs[0].number === number &&
-        fresh.openPRs[0].head.sha === head :
+      (expectedOpen ? (product || fresh.openPRs.length === 1) &&
+        fresh.openPRs.some(row => row.number === number && row.head.sha === head) :
         !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
           (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
       developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
@@ -264,7 +318,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   };
 
   if (pr.state === 'open') {
-    assert(openPRs.length === 1, 'Competing Development PR exists');
+    assert(product || openPRs.length === 1, 'Competing Development PR exists');
     assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
       !issue.body?.includes(marker) && isSha(pr.base?.sha),
     'Open PR or reported Development base is invalid');
@@ -307,7 +361,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     }
     assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
     const merge = await gh(endpoint + '/merge', 'PUT', {
-      sha: head, merge_method: 'squash', commit_title: 'Add controller acceptance proof for #' + lease.issue,
+      sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
       commit_message: 'Refs #' + lease.issue,
     });
     assert(merge.merged === true && isSha(merge.sha), 'GitHub did not confirm the protected squash merge');
@@ -325,11 +379,13 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       ancestry.merge_base_commit?.sha === merge, 'Merged proof is not an ancestor of Development');
   }
   const [commit, mergedProof] = await Promise.all([
-    gh('/commits/' + merge + '?per_page=2'), contentsAt(gh, path, merge),
+    gh('/commits/' + merge + (product ? '?per_page=100' : '?per_page=2')),
+    product ? null : contentsAt(gh, path, merge),
   ]);
   assert(commit.sha === merge && commit.parents?.length === 1 && isSha(commit.parents[0].sha) &&
-    commit.files?.length === 1 && commit.files[0].status === 'added' && commit.files[0].filename === path &&
-    commit.files[0].sha === files[0].sha && compareProof(mergedProof, bytes, files[0].sha),
+    (product ? files.length < 100 && sameSquashFiles(files, commit.files) :
+      commit.files?.length === 1 && commit.files[0].status === 'added' && commit.files[0].filename === path &&
+      commit.files[0].sha === files[0].sha && compareProof(mergedProof, bytes, files[0].sha)),
   'Squash commit parent, changed file or proof bytes do not match the verified PR');
   const parent = commit.parents[0].sha;
   await checkedAncestry(lease.baseSha, parent);
@@ -338,7 +394,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     'Issue #' + lease.issue + ' · lease ' + lease.runId + ' · task ' + task.id,
     'Task https://github.com/' + repository + '/copilot/tasks/' + task.id,
     'Completed sessions ' + task.sessions.map(session => session.id).sort().join(', '),
-    'PR #' + number + ' · head ' + head + ' · squash ' + merge + ' · proof blob ' + files[0].sha,
+    'PR #' + number + ' · head ' + head + ' · squash ' + merge +
+      (product ? ' · owner acceptance review ' + review.id + ' · issue digest ' + lease.issueDigest : ' · proof blob ' + files[0].sha),
     'Original base ' + lease.baseSha + ' · verified squash parent ' + parent,
     ...ci,
     'Launch https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1],

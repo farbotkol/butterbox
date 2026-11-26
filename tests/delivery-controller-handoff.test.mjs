@@ -30,6 +30,7 @@ function fixture(overrides = {}) {
   let currentTag = tagSha;
   let reads = 0;
   const events = [];
+  const comments = [];
   const effects = [];
   const reports = [];
   const state = {
@@ -54,6 +55,8 @@ function fixture(overrides = {}) {
     files: [{ filename: path, status: 'added', sha: blob }],
     ...overrides,
   };
+  const leased = { ...lease, issue: state.issue.number, issueDigest: issueDigest(state.issue) };
+  const issueRoute = '/issues/' + state.issue.number;
   const gh = async (route, method = 'GET', data) => {
     if (method === 'PATCH' && route === '/pulls/401') {
       effects.push('metadata');
@@ -73,22 +76,28 @@ function fixture(overrides = {}) {
       state.tip = merge;
       return { merged: true, sha: merge };
     }
-    if (method === 'PATCH' && route === '/issues/305') {
+    if (method === 'PATCH' && route === issueRoute) {
       effects.push('close');
       Object.assign(state.issue, data);
       events.push({ event: 'closed', actor: { id: 41898282 }, commit_id: null });
       if (state.losePatchResponse) throw new Error('PATCH response lost');
       return structuredClone(state.issue);
     }
+    if (method === 'POST' && route === issueRoute + '/comments') {
+      const comment = { id: 123, body: data.body, user: { id: 41898282 } };
+      comments.push(comment);
+      return comment;
+    }
     assert.equal(method, 'GET');
-    if (route === '/issues/305') return structuredClone(state.issue);
+    if (route === issueRoute) return structuredClone(state.issue);
     if (route === '/pulls/401') return structuredClone(state.pr);
+    if (route === '/pulls/402') return structuredClone(state.humanPR);
     if (route === '/pulls/401/files?per_page=2') return state.files;
     if (route.startsWith('/contents/' + path)) return state.proof;
     if (route.startsWith('/commits/' + head + '/check-runs')) return {
       total_count: state.checkCount ?? state.checks.length, check_runs: state.checks,
     };
-    if (route.startsWith('/commits/' + merge)) return { sha: merge, parents: [{ sha: state.parent }], files: state.files };
+    if (route.startsWith('/commits/' + merge)) return { sha: merge, parents: [{ sha: state.parent }], files: state.mergedFiles ?? state.files };
     if (route.startsWith('/git/ref/heads/')) return { object: { sha: state.tip, type: 'commit' } };
     if (route.startsWith('/compare/')) {
       const target = route.split('/').at(-1).split('?')[0].split('...')[1];
@@ -105,12 +114,26 @@ function fixture(overrides = {}) {
     throw new Error('Unexpected route ' + route);
   };
   const paged = async route => {
-    if (route === '/issues/305/events') return events;
+    if (route === issueRoute + '/comments') return comments;
+    if (route === issueRoute + '/events') return events;
+    if (route === '/pulls/401/reviews') return state.reviews ?? [];
+    if (route === '/pulls/401/files') return state.files;
+    if (route === '/pulls/402/files') return state.humanFiles;
     if (route.startsWith('/pulls?state=open')) return state.openPRs ?? (state.pr.state === 'open' ? [state.pr] : []);
     if (route.startsWith('/pulls?state=closed')) return [state.pr];
     throw new Error('Unexpected paged route ' + route);
   };
   const leaseApi = {
+    async createTag(tag) {
+      assert.match(tag.tag, /^butterbox-controller-parked-/);
+      state.parking = JSON.parse(tag.message);
+      return { sha: blob };
+    },
+    async createRef({ ref, sha }) {
+      assert.equal(ref, 'refs/tags/butterbox-controller-parked-' + state.issue.number);
+      assert.equal(sha, blob);
+      effects.push('park');
+    },
     async getRef(ref) {
       assert.equal(ref, LEASE_REF);
       reads++;
@@ -118,7 +141,7 @@ function fixture(overrides = {}) {
       if (!currentTag) throw Object.assign(new Error('not found'), { status: 404 });
       return { object: { sha: currentTag, type: 'tag' } };
     },
-    async getTag() { return { tag: 'butterbox-controller-lease', message: JSON.stringify(record) }; },
+    async getTag() { return { tag: 'butterbox-controller-lease', message: JSON.stringify(leased) }; },
     async compareAndDeleteRef(ref, expected) {
       assert.equal(ref, LEASE_REF);
       if (state.replaceAtDelete) currentTag = 'f'.repeat(40);
@@ -127,7 +150,7 @@ function fixture(overrides = {}) {
     },
   };
   const run = (mergedRecovery = 'none') => advanceAcceptance({
-    repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
+    repository, gh, paged, leaseApi, lease: leased, closingIssues: async () => state.closingIssues ?? 0, runId: 'actions_124_1',
     mergedRecovery,
     tasksApi: {
       list: async ({ states } = {}) => [{ id: taskId, state: state.task.state, updated_at: state.task.updated_at }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
@@ -143,7 +166,7 @@ function fixture(overrides = {}) {
     },
     report: line => reports.push(line),
   });
-  return { run, effects, reports, state, events };
+  return { run, effects, reports, state, events, comments };
 }
 
 test('draft, exact-head protected squash, audited close, then release in order', async () => {
@@ -871,4 +894,83 @@ test('independent writer gates require a checkpoint and changed recovery snapsho
     writeInventory: async () => assert.fail('changed snapshot cannot advance the checkpoint'),
   }, { now });
   await assert.rejects(readLeaseCandidates(api, undefined, { stable: true }), /changed during recovery/);
+});
+
+function productFixture() {
+  const productIssue = {
+    ...issue, number: 401, title: '[BB-ROSTER-42] Display the roster',
+    assignees: [], labels: ['p2.01', 'autonomy-ready', 'dependencies-cleared'],
+    body: '## Autonomy scope\n- `src/roster`\n- `tests/roster.test.mjs`\n\n## Acceptance criteria\n' +
+      '- Render roster\n- Preserve empty state',
+  };
+  const productFiles = [{ filename: 'src/roster/view.ts', status: 'modified', sha: blob }];
+  const run = fixture({ issue: productIssue, files: productFiles });
+  const { state } = run;
+  state.pr.title = 'Display roster';
+  state.pr.body = 'Refs #401\n<!-- butterbox-issue: 401 -->';
+  state.humanPR = { ...state.pr, number: 402, id: 9998, body: 'Unrelated payroll documentation', head: { ...state.pr.head, sha: moved, ref: 'human/payroll-doc' } };
+  state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
+  state.openPRs = [state.pr, state.humanPR];
+  const ownerReview = {
+    id: 12, user: { id: 11307166, login: 'farbotkol' }, commit_id: head, state: 'APPROVED', submitted_at: ended,
+    body: 'Canonical issue approved: #401\nAcceptance scope: ' + issueDigest(productIssue) + '\n' +
+      'Criterion 1 PASS: Independently ran roster render test\nCriterion 2 PASS: Verified the empty fixture',
+  };
+  return { ...run, ownerReview };
+}
+
+test('product story promotes, waits for exact-head criterion acceptance, merges, reconciles and releases', async () => {
+  const { run, effects, state, ownerReview } = productFixture();
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  state.reviews = [{ ...ownerReview, body: ownerReview.body.split('\n').slice(0, -1).join('\n') }];
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  state.reviews = [ownerReview];
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge']);
+  assert.equal(state.issue.state, 'open');
+  state.openPRs = [state.humanPR];
+  await run();
+  assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
+  assert.match(state.issue.body, /owner acceptance review 12/);
+});
+
+test('product merge blocks linked issue closure, unknown overlap, stale acceptance and wrong squash files', async () => {
+  const { run, effects, state, ownerReview } = productFixture();
+  await run();
+  state.reviews = [ownerReview, { ...ownerReview, id: 13, state: 'CHANGES_REQUESTED' }];
+  await run();
+  assert.deepEqual(effects, ['ready']);
+  state.reviews = [ownerReview];
+  state.closingIssues = 1;
+  await assert.rejects(run(), /linked issue-closing references/);
+  state.closingIssues = 0;
+  state.humanFiles = [{ filename: 'docs/payroll.md', previous_filename: 'src/roster/view.ts', status: 'renamed' }];
+  await assert.rejects(run(), /overlaps the product work area/);
+  state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
+  await run();
+  state.openPRs = [state.humanPR];
+  state.mergedFiles = [{ ...state.files[0], sha: moved }];
+  await assert.rejects(run(), /Squash commit/);
+  assert.deepEqual(effects, ['ready', 'merge']);
+  assert.equal(state.issue.state, 'open');
+});
+
+test('failed product work parks after exact task PR is closed unmerged, with unrelated human PR still open', async () => {
+  const { run, effects, state, comments } = productFixture();
+  state.task.state = 'failed';
+  state.task.sessions[0].state = 'failed';
+  await assert.rejects(run(), /unresolved PR artifact/);
+  assert.deepEqual(effects, []);
+  state.pr.state = 'closed';
+  state.pr.merged = false;
+  state.openPRs = [state.humanPR];
+  await run();
+  assert.deepEqual(effects, ['park', 'release']);
+  assert.equal(state.issue.state, 'open');
+  assert.equal(state.parking.priority, 'p2.01');
+  assert.match(comments[0].body, /closed and unmerged/);
 });
