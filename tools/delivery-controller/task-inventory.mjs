@@ -24,6 +24,9 @@ export async function listTaskSummaries(api, { states, since } = {}) {
   const rows = verifyTaskSnapshot(await api.list(Object.keys(options).length ? options : undefined));
   if (states && rows.some(row => !states.includes(row.state)))
     throw new Error('Copilot task inventory does not match requested states');
+  if (since && rows.some(row => typeof row.updated_at !== 'string' ||
+      !(Date.parse(row.updated_at) >= Date.parse(since))))
+    throw new Error('Copilot recent inventory lacks a valid update time or returned a task before since; retain lease');
   return rows;
 }
 

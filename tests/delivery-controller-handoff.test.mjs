@@ -21,7 +21,7 @@ const issue = { number: 305, state: 'open', title: 'Test A', body: '## Acceptanc
 const record = { version: 1, runId: 'actions_123_1', issue: 305, issueDigest: issueDigest(issue), baseSha: base, startedAt: at };
 const lease = { ...record, tagSha };
 const task = {
-  id: taskId, state: 'completed', session_count: 1, artifacts: [{ provider: 'github', type: 'pull', data: { id: 9999 } }],
+  id: taskId, state: 'completed', updated_at: at, session_count: 1, artifacts: [{ provider: 'github', type: 'pull', data: { id: 9999 } }],
   sessions: [{ id: sessionId, state: 'completed', task_id: taskId, base_ref: development, head_ref: 'copilot/proof',
     prompt: 'Work\n' + taskMarker(lease.runId) }],
 };
@@ -130,7 +130,7 @@ function fixture(overrides = {}) {
     repository, gh, paged, leaseApi, lease, runId: 'actions_124_1',
     mergedRecovery,
     tasksApi: {
-      list: async ({ states } = {}) => [{ id: taskId, state: state.task.state }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
+      list: async ({ states } = {}) => [{ id: taskId, state: state.task.state, updated_at: state.task.updated_at }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
     },
     approval: async () => ({ issue: { ...state.issue }, approved: !state.revoked }),
@@ -405,10 +405,10 @@ test('controller cycles serialize competing launches and gate B on audited A clo
         assert.deepEqual(states, ['queued', 'in_progress', 'waiting_for_user']);
         return [];
       }
-      return launched.length ? [{ id: taskId, state: 'completed' }] : [];
+      return launched.length ? [{ id: taskId, state: 'completed', updated_at: '2099-01-01T00:00:00.000Z' }] : [];
     },
     get: async () => ({
-      ...task, state: 'completed', // POST is acknowledged, but the task is not live yet.
+      ...task, updated_at: '2099-01-01T00:00:00.000Z', state: 'completed', // POST is acknowledged, but the task is not live yet.
     }),
     create: async ({ prompt }) => { launched.push(prompt); return { id: taskId }; },
   };
@@ -679,15 +679,16 @@ test('scoped lease discovery excludes historical detail calls and deduplicates a
     id: 'a1b2c3d4-e5f6-7890-abcd-' + String(i + 1).padStart(12, '0'),
     state: 'completed', session_count: 0, sessions: [], artifacts: [],
   }));
-  const owner = { ...task, state: 'completed' };
+  const updated_at = '2026-11-24T00:01:00.000Z';
+  const owner = { ...task, state: 'completed', updated_at };
   const waiting = { id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890',
-    state: 'waiting_for_user', session_count: 0, sessions: [], artifacts: [] };
+    state: 'waiting_for_user', session_count: 0, sessions: [], artifacts: [], updated_at };
   const calls = [];
   const api = {
     list: async options => {
       calls.push(options);
       if (options?.states) return [waiting];
-      if (options?.since) return [{ id: owner.id, state: owner.state }, waiting];
+      if (options?.since) return [{ id: owner.id, state: owner.state, updated_at }, waiting];
       return [...old, owner, waiting];
     },
     get: async id => {
@@ -703,4 +704,65 @@ test('scoped lease discovery excludes historical detail calls and deduplicates a
   const audited = await readTaskDetails(api);
   assert.equal(audited.length, 61);
   assert.equal(competingWriters(audited).length, 1);
+});
+
+test('filtered read-only discovery uses four HTTP GETs with 60, 100 or 1,000 historical tasks', async () => {
+  const { agentTasksApi } = await import('../tools/delivery-controller/agent-tasks-api.mjs');
+  const { readLeaseCandidates, readTaskDetails } = await import('../tools/delivery-controller/task-inventory.mjs');
+  const since = '2026-11-23T23:55:00.000Z';
+  const lease = { startedAt: '2026-11-24T00:00:00.000Z' };
+  for (const volume of [60, 100, 1000]) {
+    const old = Array.from({ length: volume }, (_, index) => ({
+      id: 'a1b2c3d4-e5f6-7890-abcd-' + String(index + 1).padStart(12, '0'),
+      state: 'completed', updated_at: '2026-11-01T00:00:00.000Z',
+      session_count: 0, sessions: [], artifacts: [],
+    }));
+    const recent = { ...task, updated_at: since };
+    const active = { id: 'b1b2c3d4-e5f6-7890-abcd-ef1234567890', state: 'queued',
+      updated_at: since, session_count: 0, sessions: [], artifacts: [] };
+    // Simulate a child changing without a corresponding parent version change.
+    // This must remain visible to the existing mutation audit.
+    const hidden = { ...old[0], session_count: 1, sessions: [{
+      ...task.sessions[0], task_id: old[0].id, state: 'queued',
+    }] };
+    old[0] = hidden;
+    const history = [...old, recent, active];
+    const requests = [];
+    const api = agentTasksApi({ token: 'fixture', repository, request: async (input, { method }) => {
+      assert.equal(method, 'GET');
+      const url = new URL(input);
+      requests.push(url);
+      if (!url.search) return Response.json(history.find(row => url.pathname.endsWith('/' + row.id)));
+      const cutoff = url.searchParams.get('since');
+      const states = url.searchParams.get('state')?.split(',');
+      const filtered = history.filter(row => (!cutoff || row.updated_at >= cutoff) &&
+        (!states || states.includes(row.state)));
+      const page = Number(url.searchParams.get('page') ?? 1);
+      const rows = filtered.slice((page - 1) * 100, page * 100);
+      const headers = {};
+      if (page * 100 < filtered.length) {
+        url.searchParams.set('page', String(page + 1));
+        headers.link = '<' + url.href + '>; rel="next"';
+      }
+      return Response.json({ total_count: filtered.length, tasks: rows.map(row =>
+        row.id === recent.id ? { id: row.id, state: row.state, updated_at: row.updated_at } : row) }, { headers });
+    } });
+    const scoped = await readLeaseCandidates(api, lease);
+    assert.deepEqual(scoped.map(row => row.id), [recent.id, active.id]);
+    assert.equal(requests.length, 4, 'filtered GETs at ' + volume + ' historical tasks');
+    requests.length = 0;
+    const audited = await readTaskDetails(api);
+    assert.equal(requests.length, Math.ceil(history.length / 100) + 3);
+    assert.ok(competingWriters(audited).some(writer => writer.taskId === hidden.id));
+  }
+});
+
+test('lease discovery rejects missing, invalid or out-of-window modification timestamps', async () => {
+  const { readLeaseCandidates } = await import('../tools/delivery-controller/task-inventory.mjs');
+  for (const updated_at of [undefined, 'unknown', '2026-11-23T23:54:59.999Z']) {
+    await assert.rejects(readLeaseCandidates({
+      list: async () => [{ id: taskId, state: 'completed', updated_at }],
+      get: async () => assert.fail('must reject before hydrating'),
+    }, { startedAt: '2026-11-24T00:00:00.000Z' }), /recent inventory/);
+  }
 });
