@@ -58,13 +58,11 @@ export async function copilotAssessment(system, input, { token, operation = 'Ind
 
 export async function verifyAssessmentConnectivity(token) {
   const result = await copilotAssessment(
-    'Assess this synthetic fact: check test-label is green. Use no tools. ' +
-    'Return exactly one JSON object with keys criterion, pass, evidence, and reason. ' +
-    'Set criterion to the number 1, pass to a boolean and evidence to an array of check-label strings.',
+    'Assess this synthetic fact: check test-label is green. Respond with exactly one JSON object with criterion (1), pass (boolean), and evidence (exact supplied check label). Use no tools.',
     undefined, { token, operation: 'Independent assessment connectivity probe' });
-  if (result.criterion !== 1 || result.pass !== true || !Array.isArray(result.evidence) ||
-      result.evidence.length !== 1 || result.evidence[0] !== 'test-label' ||
-      typeof result.reason !== 'string' || !result.reason.trim()) {
+  const evidence = typeof result.evidence === 'string' ? [result.evidence] : result.evidence;
+  if (result.criterion !== 1 || result.pass !== true || !Array.isArray(evidence) ||
+      evidence.length !== 1 || evidence[0] !== 'test-label') {
     throw integrationFailure('Independent assessment connectivity probe', 'incomplete-evidence');
   }
 }

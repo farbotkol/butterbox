@@ -21,6 +21,10 @@ on:
         description: "Diagnose the historical GitHub Models response"
         type: boolean
         default: false
+      acceptance_probe:
+        description: "Assess the preserved PR 337 and authenticated CI without writing evidence"
+        type: boolean
+        default: false
       repair_probe:
         description: "Exercise scoped Copilot on the preserved PR 336 checkout without publishing"
         type: boolean
@@ -83,6 +87,7 @@ jobs:
       contents: write
       pull-requests: read
       actions: write
+      checks: read
       copilot-requests: write
     steps:
       - name: Select eligible, latest failing Development PR
@@ -272,6 +277,41 @@ jobs:
           import { verifyAssessmentConnectivity } from './tools/delivery-controller/copilot-cli.mjs';
           await verifyAssessmentConnectivity(process.env.GITHUB_TOKEN);
           console.log('Copilot CLI tool-free structured evidence verified');
+          NODE
+
+      - name: Probe acceptance against the preserved #82 head and CI
+        if: always() && inputs.smoke_only == true && inputs.acceptance_probe == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { execFileSync } from 'node:child_process';
+          import { copilotAssessment } from './tools/delivery-controller/copilot-cli.mjs';
+          import { inferProductAcceptance, validFindings } from './tools/delivery-controller/product-acceptance.mjs';
+          import { productScope, scopedProductFiles } from './tools/delivery-controller/product.mjs';
+          const gh = path => JSON.parse(execFileSync('gh', ['api', 'repos/farbotkol/butterbox' + path], { encoding: 'utf8' }));
+          const head = '1d71222d2450c54b4d1b60a74dc15651cf337c22';
+          const pr = gh('/pulls/337');
+          const issue = gh('/issues/82');
+          const files = gh('/pulls/337/files?per_page=100');
+          const checks = gh('/commits/' + head + '/check-runs?per_page=100');
+          assert(pr.state === 'closed' && pr.merged === false && pr.head.sha === head &&
+            files.length === pr.changed_files && checks.total_count === checks.check_runs.length,
+          'Could not verify the complete preserved PR evidence snapshot');
+          const scope = productScope(issue);
+          scopedProductFiles(scope, files);
+          const ci = ['verify', 'database-smoke', 'product-criteria'].map(name => {
+            const check = checks.check_runs.filter(check => check.name === name &&
+              check.head_sha === head && check.app.id === 15368).sort((a, b) => b.id - a.id)[0];
+            assert(check?.conclusion === 'success', 'Missing authenticated successful check for ' + name);
+            return name + ' ' + check.html_url;
+          });
+          const findings = await inferProductAcceptance({ criteria: scope.criteria, files, ci, context: issue.title },
+            { token: process.env.GH_TOKEN, assess: copilotAssessment });
+          assert(validFindings(findings, scope, files, ci), 'Independent acceptance returned incomplete evidence');
+          console.log('Received independently assessed evidence for ' + findings.length +
+            ' criteria on the preserved #82 head. Passed: ' + findings.filter(finding => finding.pass).length + '.');
           NODE
 
       - name: Probe isolated source repair with the preserved #84 CI failure

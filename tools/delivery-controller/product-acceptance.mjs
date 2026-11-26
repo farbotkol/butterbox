@@ -18,7 +18,7 @@ function fullTextDiff(files) {
     patchLines(file.patch, '-').length === file.deletions);
 }
 
-function validFindings(results, scope, files, ci) {
+export function validFindings(results, scope, files, ci) {
   const sources = new Set([...files.map(file => file.filename), ...scope.paths, ...ci]);
   return Array.isArray(results) && results.length === scope.criteria.length &&
     results.every((row, index) => row?.criterion === index + 1 && typeof row.pass === 'boolean' &&
