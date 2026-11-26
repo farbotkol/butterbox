@@ -209,8 +209,12 @@ The default is targeted verification, not a full regression after every story.
 - Use the controller's autonomous Development PR marker and a plain `Refs #N`
   link. The approved work area must cover executable criterion tests in
   `tests/*.test.mjs`. Keep the existing Vercel Git integration. The controller
-  must verify that its project separates the Development branch from production
-  and that the exact squash has a successful Preview deployment. Migration
+  must verify the owner-authorized Vercel project `prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof`,
+  account `team_rXIarTVLEVlIYFY2Kr5rT4W3`, repository and `copilot/Development`
+  primary branch. Butterbox has no commercial production environment; Vercel's
+  `production` target in this project is Development only. Verify the exact
+  squash, READY status and `butterbox.vercel.app` alias. Other projects and
+  branches are not authorized. Migration
   stories also require a successful Development migration job on that squash.
 
 ## Copilot pull request links and evidence
