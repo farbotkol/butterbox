@@ -260,7 +260,6 @@ export default async function OrganisationPage({
                   </p>
                   <div className="mt-4 max-w-md">
                     <VenueSettingsControl name="weekday" label="Planning week starts on"
-                      value={initialVenueSettings.weekday}
                       options={rosterWeekdays.map((day, index) => ({ value: String(index + 1), label: day }))}
                       disabled={rosterWeek.pending_locked || !venueSettingsReady} describedBy="roster-week-help" />
                   </div>
@@ -310,7 +309,7 @@ export default async function OrganisationPage({
               </p>
               {rosterMode ? (
                 <div className="mt-4 max-w-md">
-                  <VenueSettingsControl name="mode" label="Publication mode" value={rosterMode}
+                  <VenueSettingsControl name="mode" label="Publication mode"
                     options={[
                       { value: "direct", label: "Direct publication" },
                       { value: "approval", label: "Approval required" },
@@ -353,19 +352,15 @@ export default async function OrganisationPage({
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-2" aria-describedby="conflict-policy-help">
                 <VenueSettingsControl name="manual_unavailability" label="Manual assignment with unavailable worker"
-                  value={initialVenueSettings.manual_unavailability}
                   options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block assignment" }]}
                   disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
                 <VenueSettingsControl name="publish_unavailability" label="Publish with unavailable worker"
-                  value={initialVenueSettings.publish_unavailability}
                   options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
                   disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
                 <VenueSettingsControl name="publish_overlap" label="Publish with overlapping shifts"
-                  value={initialVenueSettings.publish_overlap}
                   options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
                   disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
                 <VenueSettingsControl name="publish_long_shift" label="Publish a shift longer than 24 hours"
-                  value={initialVenueSettings.publish_long_shift}
                   options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
                   disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
               </div>
@@ -399,18 +394,18 @@ export default async function OrganisationPage({
                 radius. Device-reported location can be spoofed, and raw coordinates are not retained.
               </p>
               <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <VenueSettingsControl name="latitude" label="Latitude" value={initialVenueSettings.latitude}
+                <VenueSettingsControl name="latitude" label="Latitude"
                   type="number" min={-90} max={90} step={0.000001} disabled={!venueSettingsReady}
                   describedBy="geofence-help" />
-                <VenueSettingsControl name="longitude" label="Longitude" value={initialVenueSettings.longitude}
+                <VenueSettingsControl name="longitude" label="Longitude"
                   type="number" min={-180} max={180} step={0.000001} disabled={!venueSettingsReady}
                   describedBy="geofence-help" />
-                <VenueSettingsControl name="radius_meters" label="Radius in metres" value={initialVenueSettings.radius_meters}
+                <VenueSettingsControl name="radius_meters" label="Radius in metres"
                   type="number" min={1} max={10000} step={1} disabled={!venueSettingsReady}
                   describedBy="geofence-help" />
               </div>
               <div className="mt-5 max-w-md">
-                <VenueSettingsControl name="enabled" label="Clock location verification" value={initialVenueSettings.enabled}
+                <VenueSettingsControl name="enabled" label="Clock location verification"
                   options={[{ value: "false", label: "Off" }, { value: "true", label: "On" }]}
                   disabled={!venueSettingsReady} describedBy="geofence-help" />
               </div>

@@ -147,6 +147,8 @@ test("dirty-state protection and save feedback remain accessible", async () => {
   assert.match(component, /state\.status === "partial"/);
   assert.match(component, /router\.refresh\(\)/);
   assert.match(component, /disabled=\{button\.disabled \|\| submitLocked\}/);
+  assert.match(component, /value=\{values\[name\]\}/);
+  assert.match(component, /updateValue\(name, event\.currentTarget\.value\)/);
 });
 
 test("mobile browser coverage checks a single action, multi-section saves and validation", async () => {

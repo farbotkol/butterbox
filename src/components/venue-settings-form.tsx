@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 import { saveVenueSettingsAction } from "@/app/actions";
 import {
-  mergeSavedVenueSettings,
   venueSettingsSaveButtonState,
   type VenueSettingsErrors,
   type VenueSettingsField,
@@ -15,34 +14,17 @@ import {
 
 const initialState: VenueSettingsSaveState = { status: "idle" };
 const fieldClass = "mt-2 block w-full rounded-lg border border-line bg-white p-3 text-ink";
-const SettingsErrorsContext = createContext<VenueSettingsErrors>({});
-
-function readFormValues(form: HTMLFormElement): VenueSettingsValues {
-  const data = new FormData(form);
-  const get = (name: VenueSettingsField) => {
-    const value = data.get(name);
-    return typeof value === "string" ? value : "";
-  };
-  return {
-    weekday: get("weekday"),
-    mode: get("mode"),
-    manual_unavailability: get("manual_unavailability"),
-    publish_unavailability: get("publish_unavailability"),
-    publish_overlap: get("publish_overlap"),
-    publish_long_shift: get("publish_long_shift"),
-    latitude: get("latitude"),
-    longitude: get("longitude"),
-    radius_meters: get("radius_meters"),
-    enabled: get("enabled"),
-  };
-}
+const SettingsErrorsContext = createContext<{
+  errors: VenueSettingsErrors;
+  values: VenueSettingsValues;
+  updateValue: (field: VenueSettingsField, value: string) => void;
+} | null>(null);
 
 export function VenueSettingsControl({
-  name, label, value, options, type = "select", min, max, step, disabled = false, describedBy,
+  name, label, options, type = "select", min, max, step, disabled = false, describedBy,
 }: {
   name: VenueSettingsField;
   label: string;
-  value: string;
   options?: { value: string; label: string }[];
   type?: "select" | "number";
   min?: number;
@@ -51,7 +33,9 @@ export function VenueSettingsControl({
   disabled?: boolean;
   describedBy?: string;
 }) {
-  const errors = useContext(SettingsErrorsContext);
+  const settings = useContext(SettingsErrorsContext);
+  if (!settings) throw new Error("Venue settings controls must be inside the settings form.");
+  const { errors, values, updateValue } = settings;
   const error = errors[name];
   const errorId = `venue-settings-${name}-error`;
   const description = [describedBy, error ? errorId : undefined].filter(Boolean).join(" ") || undefined;
@@ -59,16 +43,18 @@ export function VenueSettingsControl({
     <label className="text-sm">{label}
       {type === "select" ? (
         <>
-          <select id={`venue-settings-${name}`} name={disabled ? undefined : name} defaultValue={value}
+          <select id={`venue-settings-${name}`} name={disabled ? undefined : name} value={values[name]}
             disabled={disabled} aria-invalid={error ? true : undefined} aria-describedby={description}
+            onChange={(event) => updateValue(name, event.currentTarget.value)}
             className={fieldClass}>
             {options?.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
-          {disabled && <input type="hidden" name={name} value={value} />}
+          {disabled && <input type="hidden" name={name} value={values[name]} />}
         </>
       ) : (
         <input id={`venue-settings-${name}`} name={name} type="number" min={min} max={max} step={step}
-          defaultValue={value} disabled={disabled} aria-invalid={error ? true : undefined}
+          value={values[name]} onChange={(event) => updateValue(name, event.currentTarget.value)}
+          disabled={disabled} aria-invalid={error ? true : undefined}
           aria-describedby={description} className={fieldClass} />
       )}
       {error && <span id={errorId} className="mt-1 block text-sm text-red-800">{error}</span>}
@@ -90,27 +76,26 @@ export function VenueSettingsForm({
 }) {
   const router = useRouter();
   const [state, action, pending] = useActionState(saveVenueSettingsAction, initialState);
-  const formRef = useRef<HTMLFormElement>(null);
+  const [values, setValues] = useState(initialValues);
   const baseline = useRef(initialValues);
-  const submittedValues = useRef<VenueSettingsValues | null>(null);
   const [dirty, setDirty] = useState(false);
   const [responseVisible, setResponseVisible] = useState(true);
   const [submitLocked, setSubmitLocked] = useState(false);
   const errors = responseVisible ? state.errors ?? {} : {};
   const button = venueSettingsSaveButtonState(dirty, pending, saveAvailable);
 
-  function updateDirty(form = formRef.current) {
-    if (form) {
-      const current = readFormValues(form);
-      setDirty(Object.keys(current).some((key) =>
-        current[key as VenueSettingsField] !== baseline.current[key as VenueSettingsField]));
-    }
+  function updateValue(field: VenueSettingsField, value: string) {
+    const next = { ...values, [field]: value };
+    setValues(next);
+    setDirty(Object.keys(next).some((key) =>
+      next[key as VenueSettingsField] !== baseline.current[key as VenueSettingsField]));
   }
 
   useEffect(() => {
     baseline.current = initialValues;
-    updateDirty();
-  }, [initialValues]);
+    setDirty(Object.keys(values).some((key) =>
+      values[key as VenueSettingsField] !== initialValues[key as VenueSettingsField]));
+  }, [initialValues, values]);
 
   useEffect(() => {
     if (!pending) setSubmitLocked(false);
@@ -118,10 +103,6 @@ export function VenueSettingsForm({
 
   useEffect(() => {
     if (state.status !== "saved" && state.status !== "partial") return;
-    const submitted = submittedValues.current;
-    if (submitted && state.savedSections?.length) {
-      baseline.current = mergeSavedVenueSettings(baseline.current, submitted, state.savedSections);
-    }
     setResponseVisible(true);
     router.refresh();
   }, [router, state]);
@@ -150,19 +131,15 @@ export function VenueSettingsForm({
   }, [dirty]);
 
   return (
-    <SettingsErrorsContext.Provider value={errors}>
-      <form ref={formRef} action={action} noValidate aria-label="Venue settings"
-        onChangeCapture={() => {
-          setResponseVisible(false);
-          updateDirty();
-        }}
+    <SettingsErrorsContext.Provider value={{ errors, values, updateValue }}>
+      <form action={action} noValidate aria-label="Venue settings"
+        onChangeCapture={() => setResponseVisible(false)}
         onSubmitCapture={(event) => {
           if (submitLocked || pending || !dirty || !saveAvailable) {
             event.preventDefault();
             event.stopPropagation();
             return;
           }
-          submittedValues.current = formRef.current ? readFormValues(formRef.current) : null;
           setSubmitLocked(true);
         }}>
         <input type="hidden" name="business_id" value={businessId} />
