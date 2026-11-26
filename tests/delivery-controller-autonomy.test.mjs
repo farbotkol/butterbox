@@ -212,7 +212,7 @@ test('owner recovery verifies the exact raw GitHub job log and fails closed on m
 });
 
 test('new recovery stops require the original failed run evidence and raw checkout log', async () => {
- const { verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
+ const { preDispatchStop, verifyStoppedAttempt } = await import('../tools/delivery-controller/pre-dispatch-recovery.mjs');
  const lease = { issue: 305, runId: 'actions_123_1',
   baseSha: 'e'.repeat(40), tagSha: 'a'.repeat(40),
   startedAt: '2026-11-23T06:00:01Z' };
