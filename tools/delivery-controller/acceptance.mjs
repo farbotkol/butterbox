@@ -119,7 +119,7 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull, closingIssues, infer, repair, now = Date.now, mergedRecovery = 'none' }) {
+  approval, repairBusy, readyPull, closingIssues, infer, assessor, repair, now = Date.now, mergedRecovery = 'none' }) {
   assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
     runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
@@ -363,7 +363,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const outcome = await repair({ gh, paged, lease, pr, checks, files, scope, failure, confirm: () => confirm(true) });
       if (outcome === 'waiting' && now() - time(lease.startedAt) > 3 * 60 * 60 * 1000)
         throw new Error('Product validation wait exhausted');
-      if (outcome === 'started' || outcome === 'waiting') {
+      if (['started', 'waiting', 'no-change'].includes(outcome)) {
         report('PRODUCT_REPAIR_' + outcome.toUpperCase() + ' #' + lease.issue);
         return true;
       }
@@ -392,7 +392,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         run.path === '.github/workflows/product-criteria.yml' && run.head_repository?.full_name === repository,
       'Exact-head product criteria check is not from the expected workflow');
     }
-    const readAcceptance = ai => productAcceptance({ gh, paged, infer: ai, lease, pr, scope, files, ci: evidence, context: issue.title,
+    const readAcceptance = ai => productAcceptance({ gh, paged, infer: ai, lease, pr, scope, files, ci: evidence, context: issue.title, assessor,
       boundary: pr.merged === true ? mergedAt : now() });
     let acceptance;
     if (metadata.changed) {
@@ -509,7 +509,11 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   try {
     return await verify();
   } catch (error) {
-    if (error.code === 'CONTROLLER_API' || !product || mergedRecovery !== 'none' || issue.state !== 'open') throw error;
+    if (error.code === 'CONTROLLER_API') {
+      report('PRODUCT_INTEGRATION_FAILURE #' + lease.issue + ' PR #' + number + ' head ' + head);
+      throw error;
+    }
+    if (!product || mergedRecovery !== 'none' || issue.state !== 'open') throw error;
     const stoppedAt = Math.max(time(lease.startedAt), time(pr.merged_at) || 0, ...[task, ...task.sessions]
       .flatMap(row => [row.updated_at, row.completed_at])
       .map(time).filter(Number.isFinite));

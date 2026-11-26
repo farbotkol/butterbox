@@ -1,7 +1,9 @@
+import { withFactoryHealth } from './factory-health.mjs';
 import { apiResponse, responseFailure } from './api-response.mjs';
 import { recordRecoverySource, recoveryInstructions } from './parked-product.mjs';
 import { repairProduct } from './product-repair.mjs';
-import { inferProductAcceptance, modelJson } from './product-acceptance.mjs';
+import { copilotAssessment, copilotRepair } from './copilot-cli.mjs';
+import { inferProductAcceptance } from './product-acceptance.mjs';
 import { productScope, conflictsWithProduct, validPath } from './product.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -78,7 +80,7 @@ async function main() {
         checks.push({ name, passed: job.steps?.filter(step => step.conclusion === 'success').map(step => step.name) });
       }
     }
-    return inferProductAcceptance({ ...input, context: { issue: input.context, existing, checks } }, { token: ghToken, request, operation: 'GitHub Models independent acceptance' });
+    return inferProductAcceptance({ ...input, context: { issue: input.context, existing, checks } }, { token: ghToken, assess: copilotAssessment, operation: 'Independent acceptance' });
   };
   const headers = {
     Accept: 'application/vnd.github+json',
@@ -116,61 +118,33 @@ async function main() {
       path, score: terms.filter(term => path.toLowerCase().includes(term)).length,
     })).filter(row => row.score).sort((a, b) => b.score - a.score).slice(0, 100).map(row => row.path);
     if (!candidates.length) return null;
-    const result = await modelJson('Select only the few exact catalog paths needed to implement and test the requested outcome. Return JSON {paths:[]} for vague, ambiguous, broad or sensitive changes. Do not infer scope for credentials, authorization, payroll or database migrations.',
-      { title: issue.title, body: issue.body, candidates }, { token: ghToken, request, operation: 'GitHub Models scope planning' });
+    const result = await copilotAssessment('Select only the few exact catalog paths needed to implement and test the requested outcome. Return JSON {paths:[]} for vague, ambiguous, broad or sensitive changes. Do not infer scope for credentials, authorization, payroll or database migrations.',
+      { title: issue.title, body: issue.body, candidates }, { token: ghToken, operation: 'Scope planning' });
     return Array.isArray(result.paths) && result.paths.every(path => candidates.includes(path) && !path.startsWith('supabase/')) ? result.paths : null;
   }
   const repair = input => repairProduct({ ...input, gh, paged, report,
     logs: jobId => downloadJobLog({ repository: repo, jobId, token: ghToken }),
-    async propose(diagnostic) {
-      const source = [];
-      const paths = new Set([...input.files.filter(file => file.status !== 'removed').map(file => file.filename),
-        ...input.scope.paths, ...(diagnostic.match(/(?:src|tests|docs)\/[a-zA-Z0-9_./-]+/g) ?? [])]);
-      for (const path of [...paths].filter(path => validPath(path) && /\.(?:tsx?|jsx?|mjs|md|css)$/.test(path) &&
-        input.scope.paths.some(area => path === area || path.startsWith(area + '/'))).slice(0, 20)) {
-        let item;
-        try {
-          item = await gh('/contents/' + path + '?ref=' + input.pr.head.sha);
-        } catch (error) {
-          if (!error.message.startsWith('GitHub GET HTTP 404')) throw error;
-          continue;
-        }
-        const changed = input.files.find(file => file.filename === path);
-        if (item.type === 'file' && item.encoding === 'base64' && isSha(item.sha) &&
-          (!changed || item.sha === changed.sha) && item.size <= 48000)
-          source.push({ path, text: Buffer.from(item.content, 'base64').toString('utf8') });
-      }
-      if (!source.length) return [];
-      const selected = source.filter(file => diagnostic.includes(file.path) || diagnostic.includes(file.path.split('/').at(-1)));
-      const files = (selected.length ? selected : source).slice(0, 5);
-      const answer = await modelJson('Repair only the diagnosed failure within these files. Preserve behavior, tenant boundaries, permissions, test intent and assertions. Return JSON with edits of {path, old, replacement}. Each old must be a nonempty exact unique substring. No shell commands or external systems.', { diagnostic, requirements: input.scope.criteria, files }, { token: ghToken, request, operation: 'GitHub Models repair proposal' });
-      if (!Array.isArray(answer.edits) || !answer.edits.length || answer.edits.length > 15) return [];
-      const changed = new Map();
-      for (const edit of answer.edits) {
-        const file = files.find(row => row.path === edit?.path);
-        const text = file && (changed.get(file.path) ?? file.text);
-        if (!file || typeof edit.old !== 'string' || !edit.old || typeof edit.replacement !== 'string' ||
-            text.indexOf(edit.old) < 0 || text.indexOf(edit.old) !== text.lastIndexOf(edit.old)) return [];
-        // Automated source repair leaves test expectations and security enforcement intact.
-        if (/(?:policy|security|payroll)/i.test(file.path) || edit.replacement.length > 10000 ||
-            (file.path.startsWith('tests/') && !edit.replacement.includes(edit.old))) return [];
-        changed.set(file.path, text.replace(edit.old, () => edit.replacement));
-      }
-      return [...changed].map(([path, text]) => ({ path, contents: Buffer.from(text).toString('base64') }));
-    },
-    async publish(additions) {
+    propose: (diagnostic, attempt) => copilotRepair({
+      repository: repo, token: ghToken, head: input.pr.head.sha, scope: input.scope, diagnostic, attempt,
+    }),
+    async publish(fileChanges) {
       const response = await request('https://api.github.com/graphql', {
         method: 'POST', headers, body: JSON.stringify({
           query: 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }',
           variables: { input: { branch: { repositoryNameWithOwner: repo, branchName: input.pr.head.ref },
             expectedHeadOid: input.pr.head.sha, message: { headline: 'Repair verified Development validation failure #' + input.pr.number },
-            fileChanges: { additions } } },
+            fileChanges } },
         }),
       });
       const contract = { operation: 'GitHub publish repair', endpoint: '/graphql' };
       const json = await apiResponse(response, contract);
       if (json.errors?.length || !isSha(json.data?.createCommitOnBranch?.commit?.oid))
         throw responseFailure(response, contract, 'graphql-result', 'unconfirmed');
+      const commit = json.data.createCommitOnBranch.commit.oid;
+      const fresh = await gh('/pulls/' + input.pr.number);
+      if (fresh.head?.sha !== commit || fresh.head?.ref !== input.pr.head.ref)
+        throw responseFailure(response, contract, 'branch-verification', 'unconfirmed');
+      return commit;
     },
   });
   const repairBusy = async () => {
@@ -260,7 +234,7 @@ async function main() {
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
     if (recovery.startsWith('merged-')) {
       await advanceAcceptance({ repository: repo, gh, paged, tasksApi, leaseApi, lease, runId, report,
-        approval, repairBusy, readyPull, closingIssues, mergedRecovery: recovery.slice('merged-'.length) });
+        approval, repairBusy, readyPull, closingIssues, assessor: 'copilot-cli-independent-v1', mergedRecovery: recovery.slice('merged-'.length) });
       return;
     }
     const readRunLog = async (id, attempt) => {
@@ -308,11 +282,26 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer, planScope, repair, recoverySource: issue => recoveryInstructions(paged, issue), p0Only: true });
+  await withFactoryHealth({
+    gh, paged, report, revision: process.env.GITHUB_SHA,
+    async probe() {
+      await gh('/branches/' + development);
+      const evidence = await copilotAssessment('Return JSON with healthy (boolean) based on the supplied fact.',
+        { fact: 'The synthetic health check passed.' }, { token: ghToken, operation: 'Factory Copilot health probe' });
+      if (evidence.healthy !== true) {
+        const error = new Error('Factory Copilot health probe returned no usable evidence');
+        error.code = 'CONTROLLER_API';
+        throw error;
+      }
+    },
+    advance: () => runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report,
+      approval, repairBusy, readyPull, closingIssues, infer, assessor: 'copilot-cli-independent-v1', planScope,
+      repair, recoverySource: issue => recoveryInstructions(paged, issue), p0Only: true }),
+  });
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
-  repairBusy, readyPull, closingIssues, infer, planScope, repair, recoverySource, p0Only = false }) {
+  repairBusy, readyPull, closingIssues, infer, assessor, planScope, repair, recoverySource, p0Only = false }) {
   const current = await readLease(leaseApi);
   if (current) {
     if (p0Only && !/^p0(?:\.\d{2})?$/.test(current.priority ?? '')) {
@@ -322,7 +311,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
       ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
     const outcome = await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
-      approval, repairBusy, readyPull, closingIssues, infer, repair });
+      approval, repairBusy, readyPull, closingIssues, infer, assessor, repair });
     if (outcome !== 'released' || current.runId === runId) return;
   }
 

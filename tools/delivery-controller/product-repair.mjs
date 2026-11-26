@@ -48,14 +48,21 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
       { infrastructure: true } : repairDiagnostic(await logs(Number(source[2])));
   } else if (!failure && !interrupted) return 'waiting';
   const kind = detail.infrastructure || (!failure && interrupted && !failed) ? 'infra' : 'source';
-  if (previous.filter(row => row.kind === kind).length >= (kind === 'source' ? 3 : 2)) return 'exhausted';
+  const attempt = previous.filter(row => row.kind === kind).length + 1;
+  if (attempt > (kind === 'source' ? 5 : 3)) return 'exhausted';
   if (kind === 'source' && !detail.text?.trim()) return 'unsafe';
-  const changes = kind === 'source' ? await propose(detail.text) : null;
-  if (kind === 'source' && !changes?.length) return 'unsafe';
   await confirm();
-  const body = prefix + JSON.stringify({ lease: lease.tagSha, pr: pr.number, head, kind });
+  const changes = kind === 'source' ? await propose(detail.text, attempt) : null;
+  const publishable = Boolean(changes?.additions.length || changes?.deletions.length);
+  const body = prefix + JSON.stringify({
+    lease: lease.tagSha, pr: pr.number, head, kind, attempt,
+    outcome: kind === 'infra' ? 'rerun-reserved' : !changes ? 'out-of-scope' : publishable ? 'executed' : 'no-change',
+    ...(kind === 'infra' && run ? { run: run.id, runAttempt: run.run_attempt } : {}),
+  });
   const receipt = await gh(route, 'POST', { body });
   if (receipt.user?.id !== bot || receipt.body !== body) throw new Error('Repair reservation was not confirmed');
+  if (kind === 'source' && !changes) return 'unsafe';
+  if (kind === 'source' && !publishable) return attempt === 5 ? 'exhausted' : 'no-change';
   if (kind === 'infra' && run && failed.conclusion !== 'cancelled') {
     await gh('/actions/runs/' + run.id + '/rerun-failed-jobs', 'POST');
   } else if (kind === 'source') {

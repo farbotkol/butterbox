@@ -125,12 +125,15 @@ jobs:
       actions: write
       checks: read
       statuses: read
-      models: read
+      copilot-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: copilot/Development
           persist-credentials: false
+      - name: Install Copilot CLI
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @github/copilot
       - name: Advance the controlled GitHub acceptance lifecycle
         env:
           GITHUB_TOKEN: ${{ github.token }}

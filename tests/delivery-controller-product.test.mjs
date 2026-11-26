@@ -59,7 +59,7 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
       conclusion: 'failure', html_url: 'https://github.com/' + repository + '/actions/runs/' + run + '/job/' + job }] },
     paged: async () => history, report: () => {}, confirm: async () => effects.push('confirmed'),
     logs: async id => { assert.equal(id, job); return log; },
-    propose: async detail => { assert.match(detail, /set-state-in-effect/); return ['scoped changes']; },
+    propose: async detail => { assert.match(detail, /set-state-in-effect/); return { additions: [{ path: 'src/example.tsx', contents: 'YWJj' }], deletions: [] }; },
     publish: async () => effects.push('published'),
     gh: async (path, method, body) => {
       if (path === '/actions/runs/' + run) return { id: run, head_sha: head, path: '.github/workflows/' + workflow, status: 'completed' };
@@ -76,20 +76,21 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
   return { input, effects, history };
 }
 
-test('PR #333 source lint failure reserves three scoped repairs and then exhausts', async () => {
+test('PR #333 source lint failure records five genuine scoped repairs and then exhausts', async () => {
   const { input, effects, history } = repairFixture();
-  for (let i = 0; i < 3; i++) assert.equal(await repairProduct(input), 'started');
+  for (let i = 0; i < 5; i++) assert.equal(await repairProduct(input), 'started');
   assert.equal(await repairProduct(input), 'exhausted');
-  assert.equal(history.length, 3);
-  assert.equal(effects.filter(effect => effect === 'published').length, 3);
+  assert.equal(history.length, 5);
+  assert.equal(effects.filter(effect => effect === 'published').length, 5);
 });
 
-test('PR #333 disposable Supabase collision retries twice without a source write', async () => {
+test('PR #333 disposable Supabase collision retries three times without a source write', async () => {
   const { input, effects } = repairFixture({ infrastructure: true });
   assert.equal(repairDiagnostic('EADDRINUSE port 54322').infrastructure, true);
-  for (let i = 0; i < 2; i++) assert.equal(await repairProduct(input), 'started');
+  for (let i = 0; i < 3; i++) assert.equal(await repairProduct(input), 'started');
   assert.equal(await repairProduct(input), 'exhausted');
   assert.deepEqual(effects, ['confirmed', '/actions/runs/45815159004/rerun-failed-jobs',
+    'confirmed', '/actions/runs/45815159004/rerun-failed-jobs',
     'confirmed', '/actions/runs/45815159004/rerun-failed-jobs']);
 });
 
@@ -146,5 +147,5 @@ test('an integration failure before publication does not reserve a source repair
   input.propose = () => apiResponse(new Response('OK'), { operation: 'GitHub Models', endpoint: '/inference/chat/completions' });
   await assert.rejects(repairProduct(input), /outer-json\/plain-ok/);
   assert.deepEqual(history, []);
-  assert.deepEqual(effects, []);
+  assert.deepEqual(effects, ['confirmed']);
 });
