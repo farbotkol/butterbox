@@ -122,11 +122,21 @@ async function main() {
     logs: jobId => downloadJobLog({ repository: repo, jobId, token: ghToken }),
     async propose(diagnostic) {
       const source = [];
-      for (const file of input.files.filter(row => validPath(row.filename) &&
-        /\.(?:tsx?|jsx?|mjs|md|css)$/.test(row.filename) && row.status !== 'removed').slice(0, 20)) {
-        const item = await gh('/contents/' + file.filename + '?ref=' + input.pr.head.sha);
-        if (item.type === 'file' && item.encoding === 'base64' && item.sha === file.sha && item.size <= 48000)
-          source.push({ path: file.filename, text: Buffer.from(item.content, 'base64').toString('utf8') });
+      const paths = new Set([...input.files.filter(file => file.status !== 'removed').map(file => file.filename),
+        ...input.scope.paths, ...(diagnostic.match(/(?:src|tests|docs)\/[a-zA-Z0-9_./-]+/g) ?? [])]);
+      for (const path of [...paths].filter(path => validPath(path) && /\.(?:tsx?|jsx?|mjs|md|css)$/.test(path) &&
+        input.scope.paths.some(area => path === area || path.startsWith(area + '/'))).slice(0, 20)) {
+        let item;
+        try {
+          item = await gh('/contents/' + path + '?ref=' + input.pr.head.sha);
+        } catch (error) {
+          if (!error.message.startsWith('GitHub GET HTTP 404')) throw error;
+          continue;
+        }
+        const changed = input.files.find(file => file.filename === path);
+        if (item.type === 'file' && item.encoding === 'base64' && isSha(item.sha) &&
+          (!changed || item.sha === changed.sha) && item.size <= 48000)
+          source.push({ path, text: Buffer.from(item.content, 'base64').toString('utf8') });
       }
       if (!source.length) return [];
       const selected = source.filter(file => diagnostic.includes(file.path) || diagnostic.includes(file.path.split('/').at(-1)));
