@@ -2,7 +2,7 @@ import { withFactoryHealth } from './factory-health.mjs';
 import { apiResponse, responseFailure } from './api-response.mjs';
 import { recordRecoverySource, recoveryInstructions } from './parked-product.mjs';
 import { repairProduct } from './product-repair.mjs';
-import { copilotAssessment, copilotRepair } from './copilot-cli.mjs';
+import { copilotAssessment, copilotRepair, verifyAssessmentConnectivity } from './copilot-cli.mjs';
 import { inferProductAcceptance } from './product-acceptance.mjs';
 import { productScope, conflictsWithProduct, validPath } from './product.mjs';
 import { execFile } from 'node:child_process';
@@ -296,13 +296,7 @@ async function main() {
     gh, paged, report, revision: process.env.GITHUB_SHA,
     async probe() {
       await gh('/branches/' + development);
-      const evidence = await copilotAssessment('Return JSON with healthy (boolean) based on the supplied fact.',
-        { fact: 'The synthetic health check passed.' }, { token: ghToken, operation: 'Factory Copilot health probe' });
-      if (evidence.healthy !== true) {
-        const error = new Error('Factory Copilot health probe returned no usable evidence');
-        error.code = 'CONTROLLER_API';
-        throw error;
-      }
+      await verifyAssessmentConnectivity(ghToken);
     },
     advance: () => runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report,
       approval, repairBusy, readyPull, closingIssues, infer, assessor: 'copilot-cli-independent-v1', planScope,

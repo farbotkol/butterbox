@@ -56,6 +56,19 @@ export async function copilotAssessment(system, input, { token, operation = 'Ind
   }
 }
 
+export async function verifyAssessmentConnectivity(token) {
+  const result = await copilotAssessment(
+    'Assess this synthetic fact: check test-label is green. Use no tools. ' +
+    'Return exactly one JSON object with keys criterion, pass, evidence, and reason. ' +
+    'Set criterion to the number 1, pass to a boolean and evidence to an array of check-label strings.',
+    undefined, { token, operation: 'Independent assessment connectivity probe' });
+  if (result.criterion !== 1 || result.pass !== true || !Array.isArray(result.evidence) ||
+      result.evidence.length !== 1 || result.evidence[0] !== 'test-label' ||
+      typeof result.reason !== 'string' || !result.reason.trim()) {
+    throw integrationFailure('Independent assessment connectivity probe', 'incomplete-evidence');
+  }
+}
+
 export async function copilotRepair({ repository, token, head, scope, diagnostic, attempt }) {
   if (repository !== 'farbotkol/butterbox' || !isSha(head)) throw new Error('Invalid repair checkout');
   const root = await mkdtemp(join(tmpdir(), 'butterbox-repair-'));

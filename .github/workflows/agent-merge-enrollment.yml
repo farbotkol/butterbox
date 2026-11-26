@@ -269,14 +269,8 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           node --input-type=module <<'NODE'
-          import assert from 'node:assert/strict';
-          import { copilotAssessment } from './tools/delivery-controller/copilot-cli.mjs';
-          const result = await copilotAssessment(
-            'Assess this synthetic fact: check test-label is green. Respond with exactly one JSON object with criterion (1), pass (boolean), and evidence (exact supplied check label). Use no tools.',
-            undefined, { token: process.env.GITHUB_TOKEN, operation: 'Independent assessment connectivity probe' }
-          );
-          assert(result.criterion === 1 && result.pass === true && result.evidence === 'test-label',
-            'Copilot CLI did not return the expected structured evidence');
+          import { verifyAssessmentConnectivity } from './tools/delivery-controller/copilot-cli.mjs';
+          await verifyAssessmentConnectivity(process.env.GITHUB_TOKEN);
           console.log('Copilot CLI tool-free structured evidence verified');
           NODE
 
