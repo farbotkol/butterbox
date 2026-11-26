@@ -70,10 +70,14 @@ test("one submit sequences changes across multiple sections", async () => {
 });
 
 test("unchanged sections are excluded from saves", async () => {
-  const desired = { ...defaults, publish_overlap: "true" };
-  assert.deepEqual(changedVenueSettingsSections(defaults, desired), ["conflictPolicy"]);
+  const desired = {
+    ...defaults, publish_overlap: "true",
+    latitude: "12.3000", longitude: "151.209300", radius_meters: "150.0",
+  };
+  const current = { ...defaults, latitude: "12.3", longitude: "151.2093", radius_meters: "150" };
+  assert.deepEqual(changedVenueSettingsSections(current, desired), ["conflictPolicy"]);
   const calls = [];
-  await runVenueSettingsOperations(venueSettingsSaveOrder(defaults, desired), async (section) => {
+  await runVenueSettingsOperations(venueSettingsSaveOrder(current, desired), async (section) => {
     calls.push(section);
     return null;
   });
@@ -95,6 +99,10 @@ test("validation and partial failure leave unsaved sections retryable", async ()
   assert.deepEqual(validateVenueSettings({ ...defaults, enabled: "true" }), {
     enabled: "A venue location is required while clock location verification is on. Configure a location or turn verification off.",
   });
+  const clearingLocation = {
+    ...defaults, latitude: "-33.8688", longitude: "151.2093", radius_meters: "150", enabled: "true",
+  };
+  assert.deepEqual(venueSettingsSaveOrder(clearingLocation, defaults), ["clockVerification", "venueLocation"]);
 
   const desired = { ...defaults, mode: "approval", latitude: "-33.8688", longitude: "151.2093", radius_meters: "150" };
   const order = venueSettingsSaveOrder(defaults, desired);

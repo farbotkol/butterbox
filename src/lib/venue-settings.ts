@@ -44,6 +44,14 @@ export const venueSettingsSectionFields: Record<VenueSettingsSection, VenueSetti
   clockVerification: ["enabled"],
 };
 
+function sameSettingValue(field: VenueSettingsField, current: string, desired: string) {
+  if ((field === "latitude" || field === "longitude" || field === "radius_meters") &&
+    current.trim() && desired.trim()) {
+    return Number(current) === Number(desired);
+  }
+  return current === desired;
+}
+
 export function parseVenueSettingsForm(formData: FormData): VenueSettingsValues | null {
   const entries = Object.fromEntries(venueSettingsFields.map((field) => {
     const values = formData.getAll(field);
@@ -58,7 +66,8 @@ export function changedVenueSettingsSections(
   desired: VenueSettingsValues,
 ): VenueSettingsSection[] {
   return (Object.keys(venueSettingsSectionFields) as VenueSettingsSection[])
-    .filter((section) => venueSettingsSectionFields[section].some((field) => current[field] !== desired[field]));
+    .filter((section) => venueSettingsSectionFields[section]
+      .some((field) => !sameSettingValue(field, current[field], desired[field])));
 }
 
 export function venueSettingsSaveOrder(
