@@ -1,7 +1,8 @@
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { competingWriters } from './handoff.mjs';
 import { agentTasksApi, activeAgentTasks } from './agent-tasks-api.mjs';
-import { listWriterTasks } from './task-inventory.mjs';
+import { listWriterTasks, readLeaseCandidates, rememberLeaseTask, withTaskInventory } from './task-inventory.mjs';
 import { githubLeaseApi } from './github-lease-api.mjs';
 import { acquireLease, readLease, releaseLease } from './lease.mjs';
 import { taskMarker } from './handoff.mjs';
@@ -180,7 +181,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
       const [prs, allTasks, tip, draft, repairs] = await Promise.all([
         // Any row is enough to block. No second page is needed if the first is empty.
         gh('/pulls?state=open&base=copilot%2FDevelopment&per_page=1'),
-        listWriterTasks(tasks),
+        (tasks.inventory ? readLeaseCandidates(tasks) : listWriterTasks(tasks)),
         gh('/git/ref/heads/copilot/Development'),
         gh('/pulls/294'),
         gh('/actions/workflows/agent-merge-enrollment.yml/runs?status=in_progress&per_page=1'),
@@ -189,7 +190,7 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
         'An open Development PR may have a writer, including draft PR #294. Launch blocked.');
       requireEvidence(repairs.total_count === 0 && repairs.workflow_runs?.length === 0,
         'A CI repair run may still be writing. Launch blocked.');
-      requireEvidence(activeAgentTasks(allTasks).length === 0, 'A Copilot task may still be writing. Launch blocked.');
+      requireEvidence((tasks.inventory ? competingWriters(allTasks) : activeAgentTasks(allTasks)).length === 0, 'A Copilot task may still be writing. Launch blocked.');
       requireEvidence(shaPattern.test(baseSha) && tip.object?.type === 'commit' && tip.object.sha === baseSha,
         'Development moved. Start a new workflow run on the current branch.');
     };
@@ -222,7 +223,9 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
     const task = await tasks.get(created.id);
     requireEvidence(task?.id === created.id && taskStates.has(task.state), 'Independent task identity or status could not be confirmed.');
     report('Independent GET · task ' + task.id + ' · ' + task.state);
-    for (const session of verifiedSessions(task, created.id, lease)) {
+    const sessions = verifiedSessions(task, created.id, lease);
+    await rememberLeaseTask(tasks, lease, created.id);
+    for (const session of sessions) {
       report('Session ' + session.id + ' · ' + session.state);
     }
     return;
@@ -232,7 +235,8 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
   requireEvidence(current?.issue === issueNumber && current.runId.startsWith('synthetic_') &&
     intent?.object?.type === 'tag' && intent.object.sha === current.tagSha,
   'The one-time intent and active synthetic lease do not match.');
-  const task = await tasks.get(taskId);
+  const inventory = tasks.inventory ? await readLeaseCandidates(tasks, current, { exactTaskId: taskId }) : null;
+  const task = inventory ? inventory.find(row => row.id === taskId) : await tasks.get(taskId);
   const sessions = verifiedSessions(task, taskId, current);
   report('Independent GET · ' + taskLink(taskId) + ' · ' + task.state);
   for (const session of sessions) report('Session ' + session.id + ' · ' + session.state);
@@ -305,7 +309,10 @@ export async function runSynthetic({ operation, confirmation, taskId, prNumber, 
     requireEvidence(active?.tagSha === current.tagSha && active.runId === current.runId,
       'The synthetic lease changed during verification.');
   }
-  requireEvidence(activeAgentTasks(await listWriterTasks(tasks)).length === 0, 'Another Copilot task may still be writing.');
+  const writers = tasks.inventory ?
+    competingWriters(await readLeaseCandidates(tasks, current, { exactTaskId: taskId })) :
+    activeAgentTasks(await listWriterTasks(tasks));
+  requireEvidence(writers.length === 0, 'Another Copilot task may still be writing.');
   const runUrl = 'https://github.com/' + repo + '/actions/runs/' + runId.slice('synthetic_'.length);
   const launchRunUrl = 'https://github.com/' + repo + '/actions/runs/' + current.runId.slice('synthetic_'.length);
   const note = [
@@ -360,13 +367,15 @@ async function main() {
     }
     return response;
   };
+  const leases = githubLeaseApi({ token: env.GITHUB_TOKEN, repository: repo, request });
   await runSynthetic({
     operation: env.SYNTHETIC_OPERATION, confirmation: env.SYNTHETIC_CONFIRMATION,
     taskId: env.SYNTHETIC_TASK_ID, prNumber: env.SYNTHETIC_PR_NUMBER,
     correctionPrNumber: env.SYNTHETIC_CORRECTION_PR_NUMBER,
     runId: 'synthetic_' + env.GITHUB_RUN_ID, baseSha: env.GITHUB_SHA, report, gh,
-    tasks: agentTasksApi({ token: env.COPILOT_AGENT_USER_TOKEN, repository: repo, request: agentRequest }),
-    leases: githubLeaseApi({ token: env.GITHUB_TOKEN, repository: repo, request }),
+    tasks: withTaskInventory(agentTasksApi({ token: env.COPILOT_AGENT_USER_TOKEN, repository: repo, request: agentRequest }),
+      leases, { readOnly: env.SYNTHETIC_OPERATION === 'verify' }),
+    leases,
   });
 }
 

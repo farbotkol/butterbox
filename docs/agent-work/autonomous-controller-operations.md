@@ -331,14 +331,61 @@ evidence.
 Task inventory follows validated same-endpoint pagination links for up to
 20 pages. Missing pagination or count evidence on a full page, changing
 counts, malformed links, inconsistent task details and API budget exhaustion
-stop mutations. The bounded historical writer audit is still needed because
-task-state filters do not establish whether a terminal parent's older child
-session can continue or resume. The controller currently uses that audit
-before proof dispatch and before proof handoff mutations. The lease discovery
-poll still checks the recent and active snapshots for a potential match.
+stop mutations. The controller uses the shared Option 2 inventory for proof
+dispatch, handoff, parking, merge, release and recovery. CI repair and
+generic Phase 2 merge check the same inventory before admitting a writer.
+The synthetic workflow uses it for launch, verification and reconciliation.
 
 Product dispatch requires an approved criterion-level acceptance workflow
 that verifies scope, required exact-head checks and human acceptance.
 General-purpose automation must also have reliable cross-PR work-area
 conflict evidence and authoritative historical child-session coverage.
 The current proof code does not support those decisions for product issues.
+
+### Option 2 evidence and rollout gate
+
+The Agent Tasks REST reference defines `since` as an inclusive filter on
+parent task update time. Credentialed GET-only probes found an older-created
+task via its newer parent `updated_at`, and a future cutoff returned no
+tasks. One probe returned 61 unfiltered tasks, decomposed into 31 explicitly
+non-archived and 30 explicitly archived tasks. Do not infer archive
+coverage from the default query. Scoped discovery rejects returned rows
+with missing, invalid or out-of-window modification times.
+
+A completed parent with three completed sessions showed a parent update
+timestamp just after the latest child update. Some other sampled tasks had
+multiple completed sessions as well. This demonstrates completed-session
+history. GitHub's API reference does not specify a parent state or timestamp
+change when an older child becomes writable, or a visibility delay bound.
+The previously observed failed parent with a queued child could no longer
+be read by exact ID in the probe (HTTP 404).
+
+The owner accepted the residual risk that GitHub may omit a reactivation
+from both filters. This policy uses separate active and `since` queries
+for both archive partitions. The first successful scan bootstraps under
+the existing bounded pagination and quota. After bootstrap, routine detail
+reads cover active, modified, exact leased and previously unresolved tasks.
+The first scan for an older, unbound lease can extend the recent window
+to its acquisition time.
+
+The annotated Git tag `butterbox-controller-inventory` records the last
+successful scan's start time, unresolved IDs and exact lease-task binding.
+The next scan starts five minutes before that boundary, including after
+scheduler outages. The controller uses a compare-and-swap Git push to
+advance the tag after complete inventory verification. Failed reads and
+conflicting evidence leave the previous boundary available for retry.
+Verification-only operations and the independent repair and merge gates
+read the checkpoint without advancing it. The independent gates fail closed
+until a controller mutation workflow has initialized the checkpoint. Lease, CI and approval checks
+continue to determine which operations may proceed.
+
+In automated fixtures with 60, 100 and 1,000 historical tasks, steady-state
+scans used seven Copilot GETs each with an exact lease, an unresolved task
+and a newly modified archived or non-archived candidate. One-time
+bootstrap, exceptional lease discovery and recovery consistency checks
+have separate costs. The existing per-run budget and quota waits still
+apply.
+
+[REST reference](https://docs.github.com/en/rest/agent-tasks/agent-tasks#list-tasks-for-repository)
+· [Filter probe](https://github.com/farbotkol/butterbox/actions/runs/45736462753)
+· [Lifecycle sample](https://github.com/farbotkol/butterbox/actions/runs/45736527418)

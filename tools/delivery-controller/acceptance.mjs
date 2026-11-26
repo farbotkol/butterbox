@@ -126,7 +126,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     return;
   }
   const checkIdentity = async ({ discovery = false } = {}) => {
-    const tasks = await (discovery ? readLeaseCandidates(tasksApi, lease) : readTaskDetails(tasksApi));
+    const tasks = await (tasksApi.inventory || discovery ? readLeaseCandidates(tasksApi, lease) : readTaskDetails(tasksApi));
     const [current, issue, openPRs, repair] = await Promise.all([
       readLease(leaseApi), gh('/issues/' + lease.issue),
       openDevelopmentPRs(paged, repository), repairBusy(),
@@ -157,7 +157,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   if (result.action === 'PARK_VERIFIED') {
     const audited = (await checkIdentity()).result;
     assert(audited.action === result.action && audited.taskId === result.taskId && audited.taskState === result.taskState,
-      'Parking evidence changed during historical writer audit');
+      'Parking evidence changed during writer verification');
     await recordParking(leaseApi, lease, audited);
     const endpoint = '/issues/' + lease.issue + '/comments';
     const marker = '<!-- butterbox-parking:' + lease.tagSha + ' -->';

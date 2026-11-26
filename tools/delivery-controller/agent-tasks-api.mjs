@@ -101,7 +101,8 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
 
   }
   return {
-    list:async({states,since}={})=>{
+    list:async({states,since,archived}={})=>{
+      if (archived !== undefined && typeof archived !== 'boolean') throw new Error('Invalid Copilot archive scope');
       const allowed=WRITER_STATES;
       if(states!==undefined && (!Array.isArray(states)||!states.length||
           states.some(state=>!allowed.includes(state))||new Set(states).size!==states.length))
@@ -109,7 +110,8 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
       if (since !== undefined && (typeof since !== 'string' || !Number.isFinite(Date.parse(since)) ||
           new Date(since).toISOString() !== since)) throw new Error('Invalid Copilot inventory time scope');
       const query='?per_page=100'+(states?'&state='+states.join(','):'')+
-        (since?'&since='+encodeURIComponent(since):'');
+        (since?'&since='+encodeURIComponent(since):'') +
+        (archived === undefined ? '' : '&is_archived=' + archived);
       const tasks = [];
       let path = query;
       let expectedTotal;
@@ -135,7 +137,7 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
         const url = new URL(next, root);
         const original = new URL(root + query);
         if (url.origin + url.pathname !== root || url.username || url.password || url.hash || !url.search ||
-            ['state', 'since'].some(key => url.searchParams.get(key) !== original.searchParams.get(key)))
+            ['state', 'since', 'is_archived'].some(key => url.searchParams.get(key) !== original.searchParams.get(key)))
           throw new Error('Copilot task list incomplete: invalid pagination link');
         path = url.search;
       }
