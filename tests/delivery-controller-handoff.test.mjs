@@ -959,7 +959,7 @@ function productFixture() {
   state.openPRs = [state.pr, state.humanPR];
   state.deployStatuses = [{ id: 17, state: 'success', context: 'Vercel', created_at: mergedAt,
     target_url: 'https://vercel.com/farbotkol/butterbox/fake184' }];
-  state.deployment = { id: 'dpl_fake184', projectId: 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof', target: null,
+  state.deployment = { id: 'dpl_fake184', projectId: 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof', target: 'production', alias: ['butterbox.vercel.app'],
     readyState: 'READY', createdAt: Date.parse(mergedAt), url: 'butterbox-example.vercel.app',
     meta: { githubOrg: 'farbotkol', githubRepo: 'butterbox', githubCommitRef: development, githubCommitSha: merge } };
   state.provider = {
@@ -1027,7 +1027,7 @@ test('a stopped task with failed deployment parks after bounded verification and
   await run();
   await run();
   state.openPRs = [state.humanPR];
-  state.deployment.target = 'production';
+  state.deployment.target = 'preview';
   await assert.rejects(run(), /deployment is pending, failed, or unverifiable/);
   state.now += 60 * 60 * 1000;
   assert.equal(await run(), 'released');
@@ -1087,7 +1087,7 @@ test('a parked lease releases and selects the next eligible issue in the same cy
   assert.match(state.nextPrompt, /issue #305 only/);
 });
 
-test('the Vercel adapter requires a linked nonproduction Development branch', async () => {
+test('the Vercel adapter requires the exact owner-authorized Development project and primary branch', async () => {
   const project = { id: 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof', accountId: 'team_rXIarTVLEVlIYFY2Kr5rT4W3',
     link: { type: 'github', org: 'farbotkol', repo: 'butterbox', productionBranch: development } };
   const provider = developmentProvider({
@@ -1098,11 +1098,15 @@ test('the Vercel adapter requires a linked nonproduction Development branch', as
       return { ok: true, json: async () => project };
     },
   });
-  await assert.rejects(provider.verifyTarget(), /separate from its production branch/);
-  project.link.productionBranch = 'copilot/Production';
   await provider.verifyTarget();
+  project.link.productionBranch = 'copilot/Production';
+  await assert.rejects(provider.verifyTarget(), /owner-authorized Development/);
+  project.link.productionBranch = development;
   project.link.repo = 'different';
-  await assert.rejects(provider.verifyTarget(), /separate from its production branch/);
+  await assert.rejects(provider.verifyTarget(), /owner-authorized Development/);
+  project.link.repo = 'butterbox';
+  project.id = 'prj_other';
+  await assert.rejects(provider.verifyTarget(), /owner-authorized Development/);
 });
 
 test('a completed product task with an explicit empty artifact list parks only with no session branch PR', async () => {
