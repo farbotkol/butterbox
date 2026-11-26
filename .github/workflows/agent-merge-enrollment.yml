@@ -251,6 +251,22 @@ jobs:
           fi
           echo "Copilot CLI authentication succeeded with no tools enabled."
 
+      - name: Probe structured evidence from a separate tool-free Copilot session
+        if: inputs.smoke_only == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
+        working-directory: ${{ runner.temp }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          probe="$(mktemp -d "$RUNNER_TEMP/copilot-evidence.XXXXXX")"
+          trap 'rm -rf -- "$probe"' EXIT
+          cd "$probe"
+          copilot -p 'Assess this synthetic fact: check test-label is green. Respond with exactly one JSON object with criterion (1), pass (boolean), and evidence (exact supplied check label). Use no tools.' \
+            -s --no-ask-user --disable-builtin-mcps --deny-tool=read --deny-tool=write --deny-tool=shell --deny-tool=url \
+            >response 2>diagnostic
+          jq -se 'length == 1 and (.[0] | .criterion == 1 and .pass == true and .evidence == "test-label")' response >/dev/null
+          echo "Copilot CLI tool-free structured evidence verified."
+
       - name: Checkout trusted Development inventory policy
         if: github.repository == 'farbotkol/butterbox' && steps.guard.outputs.eligible == 'true'
         uses: actions/checkout@v4
