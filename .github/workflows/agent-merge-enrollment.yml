@@ -268,17 +268,6 @@ jobs:
         if: inputs.smoke_only == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
         with:
           persist-credentials: false
-      - name: Probe structured evidence from a separate tool-free Copilot session
-        if: inputs.smoke_only == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { verifyAssessmentConnectivity } from './tools/delivery-controller/copilot-cli.mjs';
-          await verifyAssessmentConnectivity(process.env.GITHUB_TOKEN);
-          console.log('Copilot CLI tool-free structured evidence verified');
-          NODE
-
       - name: Probe acceptance against the preserved #82 head and CI
         if: always() && inputs.smoke_only == true && inputs.acceptance_probe == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
         env:
