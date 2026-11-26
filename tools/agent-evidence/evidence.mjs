@@ -534,3 +534,10 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.a
     }
   }
 }
+
+export const autonomousDevelopmentMarker = '<!-- butterbox-delivery: autonomous-development -->';
+
+export function isAutonomousDevelopmentPR(pullRequest) {
+  return pullRequest?.base?.ref === 'copilot/Development' &&
+    (pullRequest.body ?? '').split(/\r?\n/).includes(autonomousDevelopmentMarker);
+}

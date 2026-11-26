@@ -8,6 +8,7 @@ import {
   evidencePathIdentity,
   getEvidencePathFromPullRequest,
   hasCanonicalIssueApproval,
+  isAutonomousDevelopmentPR,
   parseAcceptanceCriteria,
   referencesCanonicalIssue,
   validateMarkdownEvidence,
@@ -232,6 +233,7 @@ export function isEligiblePullRequest(pullRequest, repository) {
   return Boolean(pullRequest &&
     pullRequest.state === 'open' &&
     !pullRequest.merged &&
+    !isAutonomousDevelopmentPR(pullRequest) &&
     !pullRequest.merged_at &&
     pullRequest.base?.ref === 'copilot/Development' &&
     pullRequest.head?.ref?.startsWith('copilot/') &&

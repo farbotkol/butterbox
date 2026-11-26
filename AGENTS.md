@@ -166,7 +166,8 @@ The default is targeted verification, not a full regression after every story.
   owner authorization, dependency checks and a conflict/ownership check against
   active issues and open PRs. Existing direct Copilot assignments can bypass a
   local coordinator; until mandatory dispatch enforcement is installed, an
-  owner/reviewer must do these checks manually.
+  owner/reviewer must do these checks manually for direct assignments outside
+  the autonomous Development lane.
 - Before coding, declare expected affected components and check for overlapping
   active work; if a collision or unresolved dependency exists, mark it blocked
   and ask for sequencing rather than independently editing shared files.
@@ -188,6 +189,30 @@ The default is targeted verification, not a full regression after every story.
   `agent-evidence-governance-exception` label, a linked issue in the PR body,
   and the repository owner's approval review on the exact PR head. This is an
   audited exception, not permission to restore those files as live status.
+## Autonomous Development delivery
+
+- The delivery controller may dispatch a canonical story with owner-authorized
+  queue labels, explicit priority and scope, cleared dependencies and an
+  exclusive lease. Owner authorization of the backlog still applies.
+- The autonomous Development lane uses independent AI acceptance of the pinned
+  issue criteria, executable criterion tests on the exact PR head, and the
+  required GitHub CI and branch rules. It uses the repository automation identity
+  to squash verified work. Do not request per-story human or owner approval.
+- Reconcile and close the issue only after confirming the exact Development
+  squash and successful Development deployment. Release the verified stopped
+  lease and continue with the next eligible story. After bounded verification
+  attempts, park unverifiable work with the issue open. Retain a lease while a
+  writer may still be active or its identity is uncertain.
+- Humans review the product after Development deployment and submit corrections
+  or additional requirements through the backlog. This lane excludes production
+  and managed-file exceptions.
+- Use the controller's autonomous Development PR marker and a plain `Refs #N`
+  link. The approved work area must cover executable criterion tests in
+  `tests/*.test.mjs`. Keep the existing Vercel Git integration. The controller
+  must verify that its project separates the Development branch from production
+  and that the exact squash has a successful Preview deployment. Migration
+  stories also require a successful Development migration job on that squash.
+
 ## Copilot pull request links and evidence
 
 - Link the relevant canonical GitHub Issue in ordinary PR text (for example,
@@ -207,7 +232,7 @@ The default is targeted verification, not a full regression after every story.
   rewrite historical files merely to satisfy legacy formatting conventions.
 - Merged-PR evidence reconciliation may use available structured evidence, but
   lack of a hidden PR-body marker must not block code validation or merging.
-- Preserve required `verify` and `database` CI checks, reviews, security
+- Preserve required `verify` and `database-smoke` CI checks, security
   safeguards and branch protections. Use issue branches and PRs targeting
   `copilot/Development`; production changes require explicit approval.
 - See `docs/github-issues-workflow.md` for migration/cutover rules.

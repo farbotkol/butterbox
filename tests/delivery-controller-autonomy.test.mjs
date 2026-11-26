@@ -107,6 +107,7 @@ async function recoveryFixture({ list, create, repairBusy = async () => false, r
   paged: async path => path.startsWith('/issues?') ? (queuePage?.() ?? [recoveryIssue]) :
    proofs && /events$/.test(path) ? [{ event: 'closed', actor: { id: 41898282 }, commit_id: null }] : [],
   repairBusy, closingIssues: proofs ? async () => 0 : undefined,
+  provider: proofs ? { verifyTarget: async () => {} } : undefined,
   approval: async number => approve ? approve(number) : ({ issue: recoveryIssue, approved: true }),
   tasksApi: {
    list: async () => { seen.lists++; return list ? list(seen.lists) : []; },

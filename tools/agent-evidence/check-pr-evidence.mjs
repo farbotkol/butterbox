@@ -4,6 +4,7 @@ import {
   canonicalIssueNumber,
   getEvidencePathFromPullRequest,
   hasCanonicalIssueApproval,
+  isAutonomousDevelopmentPR,
   hasAutoCloseKeyword,
   evidenceIsComplete,
   referencesCanonicalIssue,
@@ -38,6 +39,12 @@ async function main() {
   if (currentPullRequest.state !== 'open' ||
       currentPullRequest.head?.sha !== pullRequest.head?.sha) {
     throw new Error('PR head changed or closed; this Verify run is stale');
+  }
+  if (isAutonomousDevelopmentPR(currentPullRequest)) {
+    if (hasAutoCloseKeyword(currentPullRequest.body))
+      throw new Error('Autonomous Development issues are closed by the delivery controller after deployment');
+    console.log('Autonomous Development acceptance and reconciliation are handled by the delivery controller.');
+    return;
   }
   const issueNumber = canonicalIssueNumber(currentPullRequest.body);
   if (!issueNumber || !referencesCanonicalIssue(currentPullRequest.body, issueNumber)) {

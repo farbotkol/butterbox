@@ -127,6 +127,12 @@ jobs:
             number="${matching[0]}"
           fi
           pr="$(gh api "repos/$REPO/pulls/$number")"
+          if jq -e '(.body // "" | split("\n") | map(rtrimstr("\r"))) |
+            index("<!-- butterbox-delivery: autonomous-development -->") != null' <<< "$pr" >/dev/null; then
+            echo "Autonomous Development PR is handled by its leased controller."
+            exit 0
+          fi
+
           repo_owner="${REPO%%/*}"
           if ! jq -e --arg repo "$REPO" --arg owner "$repo_owner" --arg sha "$RUN_SHA" --argjson number "$number" '
             .number == $number
