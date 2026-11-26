@@ -18,12 +18,23 @@ function fullTextDiff(files) {
     patchLines(file.patch, '-').length === file.deletions);
 }
 
+function findingProblem(results, criteria, sources) {
+  if (!Array.isArray(results)) return 'missing-results-array';
+  if (results.length !== criteria.length) return 'criterion-count-' + results.length + '-expected-' + criteria.length;
+  for (const [index, row] of results.entries()) {
+    const number = index + 1;
+    if (row?.criterion !== number || typeof row.pass !== 'boolean') return 'invalid-verdict-' + number;
+    if (!Array.isArray(row.evidence) || row.evidence.length === 0 ||
+        !row.evidence.every(item => sources.has(item))) return 'unknown-or-missing-evidence-' + number;
+    if (typeof row.reason !== 'string' || row.reason.trim().length < 10 || row.reason.length > 500)
+      return 'invalid-reason-' + number;
+  }
+  return null;
+}
+
 export function validFindings(results, scope, files, ci) {
   const sources = new Set([...files.map(file => file.filename), ...scope.paths, ...ci]);
-  return Array.isArray(results) && results.length === scope.criteria.length &&
-    results.every((row, index) => row?.criterion === index + 1 && typeof row.pass === 'boolean' &&
-      Array.isArray(row.evidence) && row.evidence.length > 0 && row.evidence.every(item => sources.has(item)) &&
-      typeof row.reason === 'string' && row.reason.trim().length >= 10 && row.reason.length <= 500);
+  return findingProblem(results, scope.criteria, sources) === null;
 }
 
 export async function modelJson(system, input, { token, request, operation = 'GitHub Models' }) {
@@ -58,13 +69,34 @@ export async function inferProductAcceptance({ criteria, files, ci, context }, o
     const review = await assess('Assess this diff against the requested outcome. Identify concrete implementation, tests, omissions and security concerns. Return JSON with a summary of up to 600 characters.',
       { criteria, fragment }, options);
     if (typeof review.summary !== 'string' || !review.summary.trim()) {
-      const error = new Error('GitHub Models acceptance review returned no usable summary');
+      const error = new Error('Independent acceptance review returned no usable summary');
       error.code = 'CONTROLLER_API';
       throw error;
     }
     reviews.push({ path: fragment.filename, review: review.summary.slice(0, 600) });
   }
-  return (await assess('Independently decide every criterion. Use the implementation and authenticated exact-head CI. Existing unit, browser or database checks can cover multiple criteria. Documentation or source inspection is sufficient where appropriate. Generic green CI alone does not prove behavior. Reject partial work, weakened tests, and unsafe changes. Return results in criterion order with criterion (1-based), pass, reason, and evidence (list of exact supplied path/check labels).', { criteria, reviews, ci, context }, options)).results;
+  const sources = [...new Set([...files.map(file => file.filename), ...ci])];
+  const catalog = Object.fromEntries(sources.map((label, index) => ['S' + (index + 1), label]));
+  const shape = '{"results":[{"criterion":1,"pass":false,"reason":"A concrete explanation.","evidence":["S1"]}]}';
+  const judgment = await assess(
+    'Independently decide every requested outcome. Use the implementation and authenticated exact-head CI. ' +
+    'Generic green CI alone does not prove behavior. Reject partial work, weakened tests, and unsafe changes. ' +
+    'Use this JSON schema example: ' + shape +
+    ' Include exactly one result per numbered criterion in order. Use a boolean pass and a reason of 10 to 500 characters. ' +
+    'For evidence, use one or more exact S identifiers from the supplied catalog. Do not write the label in place of its identifier.',
+    { criteria: criteria.map((description, index) => ({ number: index + 1, description })),
+      reviews, catalog, context }, options);
+  const results = Array.isArray(judgment.results) ? judgment.results.map(row => ({
+    ...row, evidence: Array.isArray(row?.evidence) ? row.evidence.map(key =>
+      typeof key === 'string' && Object.hasOwn(catalog, key) ? catalog[key] : key) : row?.evidence,
+  })) : judgment.results;
+  const problem = findingProblem(results, criteria, new Set(sources));
+  if (problem) {
+    const error = new Error('Independent acceptance model output · ' + problem);
+    error.code = 'CONTROLLER_API';
+    throw error;
+  }
+  return results;
 }
 
 export async function productAcceptance({ gh, paged, infer, lease, pr, scope, files, ci, boundary, context, assessor = defaultModel }) {
