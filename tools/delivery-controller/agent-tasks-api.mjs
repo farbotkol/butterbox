@@ -86,7 +86,13 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
       }
       // Preserve the exact existing error contract for lease recovery evidence.
       const error=new Error('Copilot task API '+method+' returned HTTP '+response.status);
-      error.status=response.status;error.code='COPILOT_TASK_'+method;throw error;
+      error.status = response.status;
+      error.code = 'COPILOT_TASK_' + method;
+      error.category = reason.includes('rate_limit') || response.status === 429 || response.status >= 500
+        ? 'integration' : [401, 403].includes(response.status) ? 'permission' : 'request';
+      error.retryAfter = diagnostics.retryAfter;
+      error.rateLimitReset = diagnostics.rateLimitReset;
+      throw error;
     }
     let result;
     try {

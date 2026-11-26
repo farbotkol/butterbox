@@ -42,12 +42,13 @@ export async function withFactoryHealth({ gh, paged, probe, advance, report, rev
     return;
   }
   const failed = async (error, healthCheck) => {
-    if (error.code !== 'CONTROLLER_API') throw error;
+    if (!['CONTROLLER_API', 'COPILOT_TASK_GET', 'COPILOT_TASK_POST'].includes(error.code)) throw error;
     const category = error.category ?? 'integration';
     const attempt = Math.min(retryLimit + 1, ((unhealthy && prior.revision === revision) ? prior.attempt : 0) + 1);
     const time = now();
     const nextAt = Math.max(time + Math.min(60, 2 ** attempt) * minute, deadline(error, time));
-    await save({ attempt, nextAt, category, stage: healthCheck ? 'health-probe' : 'delivery-cycle' });
+    await save({ attempt, nextAt, category, stage: healthCheck ? 'health-probe' : 'delivery-cycle',
+      reason: error.message.slice(0, 500) });
     report((attempt >= retryLimit || category !== 'integration' ? 'FACTORY_BLOCKED' : 'FACTORY_RETRY') +
       ' · attempt ' + attempt + ' · ' + error.message);
   };

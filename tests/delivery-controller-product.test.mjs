@@ -99,7 +99,7 @@ test('PR #333 disposable Supabase collision retries three times without a source
 
 test('repair leaves pending CI and an ambiguous writer undisturbed', async () => {
   const pending = repairFixture({ pending: true });
-  assert.equal(await repairProduct(pending.input), 'waiting');
+  assert.equal(await repairProduct(pending.input), 'validation-active');
   const busy = repairFixture();
   busy.input.confirm = async () => { throw new Error('competing writer'); };
   await assert.rejects(repairProduct(busy.input), /competing writer/);

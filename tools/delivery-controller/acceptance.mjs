@@ -363,7 +363,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const outcome = await repair({ gh, paged, lease, pr, checks, files, scope, failure, confirm: () => confirm(true) });
       if (outcome === 'waiting' && now() - time(lease.startedAt) > 3 * 60 * 60 * 1000)
         throw new Error('Product validation wait exhausted');
-      if (['started', 'waiting', 'no-change', 'rerun-pending'].includes(outcome)) {
+      if (['started', 'waiting', 'no-change', 'rerun-pending', 'validation-active'].includes(outcome)) {
         report('PRODUCT_REPAIR_' + outcome.toUpperCase() + ' #' + lease.issue);
         return true;
       }
@@ -509,7 +509,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   try {
     return await verify();
   } catch (error) {
-    if (error.code === 'CONTROLLER_API') {
+    if (['CONTROLLER_API', 'COPILOT_TASK_GET', 'COPILOT_TASK_POST'].includes(error.code)) {
       report('PRODUCT_INTEGRATION_FAILURE #' + lease.issue + ' PR #' + number + ' head ' + head);
       throw error;
     }

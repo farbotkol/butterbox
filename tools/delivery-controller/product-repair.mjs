@@ -30,7 +30,7 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
   const rows = checks.check_runs;
   const latest = Object.keys(workflowByCheck).map(name => rows.filter(row => row.name === name &&
     row.head_sha === head && row.app?.id === 15368).sort((a, b) => b.id - a.id)[0]).filter(Boolean);
-  if (latest.some(row => row.status !== 'completed')) return 'waiting';
+  if (latest.some(row => row.status !== 'completed')) return 'validation-active';
   const failed = latest.find(row => ['failure', 'timed_out', 'cancelled', 'startup_failure'].includes(row.conclusion));
   let run;
   let detail = { text: failure };
@@ -40,7 +40,7 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
     run = await gh('/actions/runs/' + source[1]);
     if (String(run.id) !== source[1] || run.head_sha !== head ||
         run.path !== '.github/workflows/' + workflowByCheck[failed.name]) return 'unsafe';
-    if (run.status !== 'completed') return 'waiting';
+    if (run.status !== 'completed') return 'validation-active';
     const job = await gh('/actions/jobs/' + source[2]);
     if (String(job.id) !== source[2] || job.run_id !== run.id || job.head_sha !== head ||
         job.name !== failed.name || job.conclusion !== failed.conclusion) return 'unsafe';
