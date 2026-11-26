@@ -17,6 +17,10 @@ on:
         description: "Test built-in Copilot authentication without repairing a PR"
         type: boolean
         default: false
+      models_probe:
+        description: "Diagnose the historical GitHub Models response"
+        type: boolean
+        default: false
       repair_probe:
         description: "Exercise scoped Copilot on the preserved PR 336 checkout without publishing"
         type: boolean
@@ -38,7 +42,7 @@ concurrency:
 
 jobs:
   models-connectivity:
-    if: github.event_name == 'workflow_dispatch' && inputs.smoke_only == true &&
+    if: github.event_name == 'workflow_dispatch' && inputs.smoke_only == true && inputs.models_probe == true &&
       github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
     runs-on: ubuntu-latest
     timeout-minutes: 3

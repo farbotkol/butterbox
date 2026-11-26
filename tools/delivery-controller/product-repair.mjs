@@ -17,7 +17,7 @@ export function repairDiagnostic(log) {
   };
 }
 
-export async function repairProduct({ gh, paged, lease, pr, checks, failure, confirm, logs, propose, publish, report }) {
+export async function repairProduct({ gh, paged, lease, pr, checks, failure, confirm, logs, propose, publish, report, now = Date.now }) {
   const head = pr.head.sha;
   const route = '/issues/' + lease.issue + '/comments';
   const previous = (await paged(route)).filter(row => row.user?.id === bot && row.body?.startsWith(prefix))
@@ -49,30 +49,50 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
   } else if (!failure && !interrupted) return 'waiting';
   const kind = detail.infrastructure || (!failure && interrupted && !failed) ? 'infra' : 'source';
   const attempt = previous.filter(row => row.kind === kind).length + 1;
+  if (kind === 'infra' && run) {
+    if (!Number.isSafeInteger(run.run_attempt) || run.run_attempt < 1) return 'unsafe';
+    const reserved = previous.find(row => row.kind === 'infra' && row.run === run.id && row.runAttempt === run.run_attempt);
+    if (reserved) {
+      if (now() - reserved.reservedAt < 30 * 60 * 1000) return 'rerun-pending';
+      const error = new Error('GitHub Actions rerun did not advance run ' + run.id + ' beyond attempt ' + run.run_attempt);
+      error.code = 'CONTROLLER_API';
+      throw error;
+    }
+  }
   if (attempt > (kind === 'source' ? 5 : 3)) return 'exhausted';
   if (kind === 'source' && !detail.text?.trim()) return 'unsafe';
   await confirm();
   const changes = kind === 'source' ? await propose(detail.text, attempt) : null;
-  const publishable = Boolean(changes?.additions.length || changes?.deletions.length);
+  const publishable = Boolean(changes?.additions?.length || changes?.deletions?.length);
   const body = prefix + JSON.stringify({
     lease: lease.tagSha, pr: pr.number, head, kind, attempt,
     outcome: kind === 'infra' ? 'rerun-reserved' : !changes ? 'out-of-scope' : publishable ? 'executed' : 'no-change',
-    ...(kind === 'infra' && run ? { run: run.id, runAttempt: run.run_attempt } : {}),
+    ...(kind === 'infra' && run ? { run: run.id, runAttempt: run.run_attempt, reservedAt: now() } : {}),
   });
   const receipt = await gh(route, 'POST', { body });
   if (receipt.user?.id !== bot || receipt.body !== body) throw new Error('Repair reservation was not confirmed');
   if (kind === 'source' && !changes) return 'unsafe';
   if (kind === 'source' && !publishable) return attempt === 5 ? 'exhausted' : 'no-change';
-  if (kind === 'infra' && run && failed.conclusion !== 'cancelled') {
-    await gh('/actions/runs/' + run.id + '/rerun-failed-jobs', 'POST');
-  } else if (kind === 'source') {
-    await confirm();
-    await publish(changes);
-  }
-  if (kind === 'source' || !run || failed?.conclusion === 'cancelled') {
+  if (kind === 'infra' && run) {
+    await gh('/actions/runs/' + run.id + (failed.conclusion === 'cancelled' ? '/rerun' : '/rerun-failed-jobs'), 'POST');
+    const current = await gh('/actions/runs/' + run.id);
+    if (current.id !== run.id || current.head_sha !== head || current.run_attempt <= run.run_attempt)
+      return 'rerun-pending';
+  } else {
+    let expectedHead = head;
+    if (kind === 'source') {
+      await confirm();
+      expectedHead = await publish(changes);
+      if (!isSha(expectedHead) || expectedHead === head) {
+        const error = new Error('Repair publication did not confirm a new exact branch head');
+        error.code = 'CONTROLLER_API';
+        throw error;
+      }
+    }
     for (const workflow of ['ci.yml', 'fast-database-candidate.yml', 'product-criteria.yml']) {
       await gh('/actions/workflows/' + workflow + '/dispatches', 'POST', { ref: pr.head.ref });
     }
+    report('PRODUCT_VALIDATION_REQUESTED #' + lease.issue + ' PR #' + pr.number + ' head ' + expectedHead);
   }
   report('PRODUCT_REPAIR #' + lease.issue + ' PR #' + pr.number + ' · ' + kind);
   return 'started';

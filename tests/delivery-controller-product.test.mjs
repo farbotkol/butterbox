@@ -55,15 +55,16 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
     'src/components/venue-settings-form.tsx\nError: Calling setState synchronously within an effect can trigger cascading renders  react-hooks/set-state-in-effect';
   const effects = [];
   const history = [];
+  let runAttempt = 1;
   const input = { lease: { issue: 84, tagSha: 'a'.repeat(40) }, pr: { number: 333, head: { sha: head, ref: 'copilot/test' } },
     checks: { check_runs: [{ id: 1, name, head_sha: head, app: { id: 15368 }, status: pending ? 'in_progress' : 'completed',
       conclusion: 'failure', html_url: 'https://github.com/' + repository + '/actions/runs/' + run + '/job/' + job }] },
     paged: async () => history, report: () => {}, confirm: async () => effects.push('confirmed'),
     logs: async id => { assert.equal(id, job); return log; },
     propose: async detail => { assert.match(detail, /set-state-in-effect/); return { additions: [{ path: 'src/example.tsx', contents: 'YWJj' }], deletions: [] }; },
-    publish: async () => effects.push('published'),
+    publish: async () => { effects.push('published'); return '2'.repeat(40); },
     gh: async (path, method, body) => {
-      if (path === '/actions/runs/' + run) return { id: run, head_sha: head, path: '.github/workflows/' + workflow, status: 'completed' };
+      if (path === '/actions/runs/' + run) return { id: run, run_attempt: runAttempt, head_sha: head, path: '.github/workflows/' + workflow, status: 'completed' };
       if (path === '/actions/jobs/' + job) return { id: job, name, head_sha: head, run_id: run, conclusion: 'failure' };
       if (path === '/issues/84/comments') {
         const row = { user: { id: 41898282 }, body: body.body };
@@ -71,6 +72,7 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
         return row;
       }
       assert.equal(method, 'POST');
+      if (path.endsWith('/rerun-failed-jobs')) runAttempt++;
       effects.push(path);
     },
   };
@@ -217,4 +219,21 @@ test('a confirmed out-of-scope repair is recorded and never publishes', async ()
   assert.equal(await repairProduct(input), 'unsafe');
   assert.match(history[0].body, /"outcome":"out-of-scope"/);
   assert.deepEqual(effects, ['confirmed']);
+});
+
+test('an acknowledged rerun without a new attempt is not dispatched twice', async () => {
+  const { input, history } = repairFixture({ infrastructure: true });
+  let submitted = 0;
+  const gh = input.gh;
+  input.gh = async (...args) => {
+    if (args[0].endsWith('/rerun-failed-jobs')) {
+      submitted++;
+      return null;
+    }
+    return gh(...args);
+  };
+  assert.equal(await repairProduct(input), 'rerun-pending');
+  assert.equal(await repairProduct(input), 'rerun-pending');
+  assert.equal(submitted, 1);
+  assert.equal(history.length, 1);
 });

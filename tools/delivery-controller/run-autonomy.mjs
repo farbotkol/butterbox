@@ -57,7 +57,17 @@ async function main() {
     return;
   }
 
-  const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const request = async (url, options) => {
+    try {
+      return await fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
+    } catch {
+      const error = new Error('GitHub ' + (options.method ?? 'GET') + ' · ' + new URL(url).pathname +
+        ' · transport failure · category integration');
+      error.code = 'CONTROLLER_API';
+      error.category = 'integration';
+      throw error;
+    }
+  };
   const infer = async input => {
     const existing = [];
     for (const path of input.paths.filter(path => /^(?:src|tests|docs)\/.+\.[a-z]+$/.test(path)).slice(0, 5)) {

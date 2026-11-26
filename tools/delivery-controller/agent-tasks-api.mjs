@@ -1,3 +1,4 @@
+import { responseFailure } from './api-response.mjs';
 // GitHub Copilot cloud tasks public-preview API; requires user-to-server credential.
 export const WRITER_STATES = Object.freeze(['queued', 'in_progress', 'waiting_for_user']);
 export function agentTasksApi({token,repository,request=fetch,report=message=>console.error(message),
@@ -87,7 +88,16 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
       const error=new Error('Copilot task API '+method+' returned HTTP '+response.status);
       error.status=response.status;error.code='COPILOT_TASK_'+method;throw error;
     }
-    const result = await response.json();
+    let result;
+    try {
+      result = await response.json();
+    } catch {
+      throw responseFailure(response, { operation: 'Copilot ' + operation, endpoint: '/agents/repos/:repo/tasks' },
+        'outer-json', 'invalid-json');
+    }
+    if (result === null || typeof result !== 'object')
+      throw responseFailure(response, { operation: 'Copilot ' + operation, endpoint: '/agents/repos/:repo/tasks' },
+        'outer-json', 'invalid-shape');
     if (!path || !path.startsWith('?')) return result;
     const link = response.headers?.get('link') ?? '';
     const next = link.match(/<([^>]+)>;\s*rel="?next"?(?:\s*[,;]|$)/)?.[1];

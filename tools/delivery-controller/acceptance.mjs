@@ -363,7 +363,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const outcome = await repair({ gh, paged, lease, pr, checks, files, scope, failure, confirm: () => confirm(true) });
       if (outcome === 'waiting' && now() - time(lease.startedAt) > 3 * 60 * 60 * 1000)
         throw new Error('Product validation wait exhausted');
-      if (['started', 'waiting', 'no-change'].includes(outcome)) {
+      if (['started', 'waiting', 'no-change', 'rerun-pending'].includes(outcome)) {
         report('PRODUCT_REPAIR_' + outcome.toUpperCase() + ' #' + lease.issue);
         return true;
       }
