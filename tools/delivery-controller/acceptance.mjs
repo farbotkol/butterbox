@@ -383,7 +383,6 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         report('PR_READY #' + number + ' head ' + head + ' · ' + ci.join(' · '));
         return;
       }
-      if (provider) await provider.verifyTarget();
       if (product) {
         acceptance = await readAcceptance(infer);
         assert(acceptance, 'Missing complete independent exact-head AI acceptance evidence');
@@ -393,6 +392,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
           (await readAcceptance())?.id === acceptance.id, 'Exact-head acceptance or CI evidence changed before merge');
       }
       assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
+      if (provider) await provider.verifyTarget();
       const merge = await gh(endpoint + '/merge', 'PUT', {
         sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
         commit_message: 'Refs #' + lease.issue,

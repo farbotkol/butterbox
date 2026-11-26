@@ -1,6 +1,8 @@
 import { parseAcceptanceCriteria, isManagedFile } from '../agent-evidence/evidence.mjs';
 import { isSha } from './handoff.mjs';
 
+export const isCriterionTestPath = path => /^tests\/[a-zA-Z0-9_.-]+\.test\.mjs$/.test(path ?? '');
+
 const pathPattern = /^(?:src|tests|docs|public|supabase\/migrations)\/[a-zA-Z0-9_./-]+$/;
 const validPath = path => typeof path === 'string' && pathPattern.test(path) &&
   !path.split('/').some(part => part === '.' || part === '..' || !part) && !isManagedFile(path);
@@ -14,7 +16,7 @@ export function productScope(issue) {
   const paths = lines.map(line => /^- `([^\x60]+)`$/.exec(line.trim())?.[1]?.replace(/\/$/, ''));
   const criteria = parseAcceptanceCriteria(issue.body).map(row => row.description);
   return sections.length === 1 && paths.length > 0 && paths.length <= 30 &&
-    paths.every(validPath) && new Set(paths).size === paths.length && criteria.length > 0 &&
+    paths.every(validPath) && paths.some(isCriterionTestPath) && new Set(paths).size === paths.length && criteria.length > 0 &&
     new Set(criteria).size === criteria.length ? { paths, criteria, issue: issue.number } : null;
 }
 

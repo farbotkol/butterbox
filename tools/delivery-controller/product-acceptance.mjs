@@ -1,30 +1,36 @@
 import { createHash } from 'node:crypto';
 import { development } from './handoff.mjs';
+import { isCriterionTestPath } from './product.mjs';
 
 const model = 'openai/gpt-4.1';
 const bot = 41898282;
 const prefix = '<!-- butterbox-ai-acceptance:v1 -->\n';
-const testPath = /^tests\/[a-zA-Z0-9_.-]+\.test\.mjs$/;
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
-function addedLines(patch) {
-  return (patch ?? '').split('\n').filter(line => line.startsWith('+') && !line.startsWith('+++'))
-    .map(line => line.slice(1).trim());
+function patchLines(patch, prefix) {
+  return (patch ?? '').split('\n').filter(line => line.startsWith(prefix));
+}
+
+function fullTextDiff(files) {
+  return files.every(file => typeof file.patch === 'string' && file.patch.startsWith('@@ ') &&
+    Number.isSafeInteger(file.additions) && Number.isSafeInteger(file.deletions) &&
+    patchLines(file.patch, '+').length === file.additions &&
+    patchLines(file.patch, '-').length === file.deletions);
 }
 
 function complete(results, criteria, files) {
   return Array.isArray(results) && results.length === criteria.length &&
     results.every((row, index) => row?.criterion === index + 1 && row.pass === true &&
       typeof row.assertion === 'string' && row.assertion.length >= 12 && /^(?:await )?assert(?:\.[a-zA-Z]+)?\(/.test(row.assertion) &&
-      testPath.test(row.test ?? '') && files.some(file => file.filename === row.test &&
-        ['added', 'modified', 'renamed'].includes(file.status) && addedLines(file.patch).includes(row.assertion)));
+      isCriterionTestPath(row.test) && files.some(file => file.filename === row.test &&
+        ['added', 'modified', 'renamed'].includes(file.status) && patchLines(file.patch, '+').some(line => line.slice(1).trim() === row.assertion)));
 }
 
 // Trusted controller code calls inference directly. No candidate code or agent
 // commands run with the controller token. The reviewed tests run in required CI.
 export async function inferProductAcceptance(input, { token, request }) {
   const payload = JSON.stringify(input);
-  if (Buffer.byteLength(payload) > 100_000 || input.files.some(file => !file.patch)) return null;
+  if (Buffer.byteLength(payload) > 100_000) return null;
   const response = await request('https://models.github.ai/inference/chat/completions', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' },
@@ -51,6 +57,7 @@ export async function inferProductAcceptance(input, { token, request }) {
 }
 
 export async function productAcceptance({ gh, paged, infer, lease, pr, scope, files, ci, boundary }) {
+  if (!fullTextDiff(files)) throw new Error('Independent acceptance requires complete text diffs');
   const route = '/issues/' + lease.issue + '/comments';
   const binding = { model, lease: lease.tagSha, issue: lease.issue, requirements: lease.issueDigest,
     pr: pr.number, head: pr.head.sha, diff: digest(files.map(file =>

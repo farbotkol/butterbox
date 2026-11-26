@@ -940,8 +940,10 @@ function productFixture() {
   const testPath = 'tests/roster.test.mjs';
   const assertions = ['assert.equal(view.rows.length, 1);', 'assert.equal(empty.rows.length, 0);'];
   const productFiles = [
-    { filename: 'src/roster/view.ts', status: 'modified', sha: blob, patch: '+showRoster();' },
-    { filename: testPath, status: 'added', sha: blob, patch: assertions.map(line => '+' + line).join('\n') },
+    { filename: 'src/roster/view.ts', status: 'modified', sha: blob,
+      additions: 1, deletions: 1, patch: '@@ -1 +1 @@\n-hideRoster();\n+showRoster();' },
+    { filename: testPath, status: 'added', sha: blob, additions: 2, deletions: 0,
+      patch: '@@ -0,0 +1,2 @@\n' + assertions.map(line => '+' + line).join('\n') },
   ];
   const run = fixture({ issue: productIssue, files: productFiles });
   const { state } = run;
@@ -982,6 +984,9 @@ test('product promotes, merges on independent criterion evidence without approva
   await assert.rejects(run(), /Missing complete independent/);
   assert.deepEqual(effects, ['ready']);
   state.aiResults = results;
+  state.files[1].additions++;
+  await assert.rejects(run(), /complete text diffs/);
+  state.files[1].additions--;
   await run();
   assert.deepEqual(effects, ['ready', 'merge']);
   assert.equal(state.issue.state, 'open');
