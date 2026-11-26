@@ -17,6 +17,10 @@ on:
         description: "Test built-in Copilot authentication without repairing a PR"
         type: boolean
         default: false
+      repair_probe:
+        description: "Exercise scoped Copilot on the preserved PR 336 checkout without publishing"
+        type: boolean
+        default: false
       verify_run_id:
         description: "Failed Verify run ID (required for repair)"
         type: string
@@ -271,6 +275,31 @@ jobs:
           assert(result.criterion === 1 && result.pass === true && result.evidence === 'test-label',
             'Copilot CLI did not return the expected structured evidence');
           console.log('Copilot CLI tool-free structured evidence verified');
+          NODE
+
+      - name: Probe isolated source repair with the preserved #84 CI failure
+        if: inputs.smoke_only == true && inputs.repair_probe == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { copilotRepair } from './tools/delivery-controller/copilot-cli.mjs';
+          import { downloadJobLog } from './tools/delivery-controller/job-log-download.mjs';
+          import { repairDiagnostic } from './tools/delivery-controller/product-repair.mjs';
+          const repository = process.env.GITHUB_REPOSITORY;
+          const token = process.env.GITHUB_TOKEN;
+          const head = '7bea6b8517e3f8e80bebcf5b73415b74e05cf9d1';
+          const diagnostic = repairDiagnostic(await downloadJobLog({ repository, token, jobId: 140139911055 }));
+          assert(!diagnostic.infrastructure && diagnostic.text.includes('strict mode violation'),
+            'Expected exact-head venue settings browser diagnostics');
+          const files = await copilotRepair({ repository, token, head, diagnostic: diagnostic.text, attempt: 1,
+            scope: { issue: 84, criteria: ['Provide a single save action for a venue and preserve the settings and audit behavior.'],
+              paths: ['src/app/settings/organisation', 'src/app/actions.ts', 'src/components/venue-settings-form.tsx',
+                'src/lib/venue-settings.ts', 'tests/venue-settings-save.test.mjs', 'tests/e2e', 'docs/USER_GUIDE.md'] } });
+          assert(files && files.additions.some(file => file.path.startsWith('src/')),
+            'Copilot produced no eligible application changes');
+          console.log('Copilot returned scoped source edits in the disposable checkout.');
           NODE
 
       - name: Checkout trusted Development inventory policy

@@ -60,11 +60,11 @@ async function main() {
   const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
   const infer = async input => {
     const existing = [];
-    for (const path of input.paths.filter(path => /^(?:src|tests|docs)\/.+\.[a-z]+$/.test(path)).slice(0, 15)) {
+    for (const path of input.paths.filter(path => /^(?:src|tests|docs)\/.+\.[a-z]+$/.test(path)).slice(0, 5)) {
       if (input.files.some(file => file.filename === path)) continue;
       try {
         const blob = await gh('/contents/' + path + '?ref=' + input.head);
-        if (blob.type === 'file' && blob.encoding === 'base64' && blob.size <= 12000) {
+        if (blob.type === 'file' && blob.encoding === 'base64' && blob.size <= 8000) {
           existing.push({ path, text: Buffer.from(blob.content, 'base64').toString('utf8') });
         }
       } catch (error) {
