@@ -11,7 +11,7 @@ import { ownerId, acceptanceIssues, proofFor, issueDigest, developmentSha, first
   openDevelopmentPRs, advanceAcceptance } from './acceptance.mjs';
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
-import { readTaskDetails } from './task-inventory.mjs';
+import { readLeaseCandidates, rememberLeaseTask, withTaskInventory } from './task-inventory.mjs';
 import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
@@ -115,7 +115,8 @@ async function main() {
   }
 
   const leaseApi = githubLeaseApi({ token: ghToken, repository: repo, request });
-  const tasksApi = agentTasksApi({ token: agentToken, repository: repo, request });
+  const tasksApi = withTaskInventory(agentTasksApi({ token: agentToken, repository: repo, request }),
+    leaseApi, { readOnly: ['verify', 'merged-verify'].includes(recovery) });
   if (recovery !== 'none') {
     const lease = await readLease(leaseApi, { verifyTarget: true });
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
@@ -183,9 +184,9 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
 
-  const candidateSnapshot = async () => {
+  const candidateSnapshot = async lease => {
     const [prs, rows, repair, ref, issues] = await Promise.all([
-      openDevelopmentPRs(paged, repository), readTaskDetails(tasksApi), repairBusy(),
+      openDevelopmentPRs(paged, repository), readLeaseCandidates(tasksApi, tasksApi.inventory ? lease : undefined), repairBusy(),
       gh('/git/ref/heads/' + development), paged('/issues?state=open&sort=created&direction=asc'),
     ]);
     if (issues.some(row => !Number.isSafeInteger(row.number) || row.state !== 'open') ||
@@ -237,7 +238,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   report('LEASE_ACQUIRED for #' + number + ' by ' + runId);
   let final, held;
   try {
-    final = await candidateSnapshot();
+    final = await candidateSnapshot(acquired);
     held = await readLease(leaseApi);
   } catch (error) {
     // This path returns or throws before the only call that can create a task.
@@ -269,6 +270,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   try {
     const created = await tasksApi.create({ prompt });
     const live = verifyCreatedTask(created, await tasksApi.get(created.id));
+    await rememberLeaseTask(tasksApi, acquired, live.id);
     report('COPILOT_LAUNCHED issue #' + number + ' task ' + live.id + ' state=' + live.state +
       ' ' + live.url + ' sessions=' + JSON.stringify(live.sessionIds));
   } catch (error) {

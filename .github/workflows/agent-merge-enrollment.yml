@@ -215,6 +215,20 @@ jobs:
           fi
           echo "Copilot CLI authentication succeeded with no tools enabled."
 
+      - name: Checkout trusted Development inventory policy
+        if: github.repository == 'farbotkol/butterbox' && steps.guard.outputs.eligible == 'true'
+        uses: actions/checkout@v4
+        with:
+          ref: copilot/Development
+          persist-credentials: false
+
+      - name: Verify cloud writer inventory before repair
+        if: github.repository == 'farbotkol/butterbox' && steps.guard.outputs.eligible == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
+        run: node tools/delivery-controller/verify-writer-inventory.mjs
+
       - name: Checkout exact PR commit without persisted credentials
         if: steps.guard.outputs.eligible == 'true'
         uses: actions/checkout@v4

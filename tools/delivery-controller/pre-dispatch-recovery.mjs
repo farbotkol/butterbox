@@ -1,13 +1,12 @@
 import { developmentSha, issueDigest, openDevelopmentPRs } from './acceptance.mjs';
 import { development, isSha, sessionSnapshotProblems, taskMarker, verifyTaskSnapshot } from './handoff.mjs';
-import { readTaskDetails, listTaskSummaries } from './task-inventory.mjs';
+import { readTaskDetails, listTaskSummaries, readLeaseCandidates } from './task-inventory.mjs';
 import { readLease, releaseLease } from './lease.mjs';
 
 const workflowPath = '.github/workflows/delivery-controller.yml';
 const legacyBase = 'e8c7a42209e497e1c415a422e3343f9b43851fbb';
 const legacyTag = '7dd255f68cff1cf7a3774c980836ce8d010ac122';
 const stopped = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
-const logStep = 'Advance the controlled GitHub acceptance lifecycle';
 export const preDispatchStop = lease => 'PRE_DISPATCH_STOP issue #' + lease.issue +
   ' run ' + lease.runId + ' tag ' + lease.tagSha;
 
@@ -94,7 +93,7 @@ export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh,
   if (![305, 306].includes(lease?.issue) || !isSha(lease.tagSha) ||
       !/^[a-f0-9]{64}$/.test(lease.issueDigest ?? '')) throw new Error('Unrecognized recovery lease');
   const [issue, ref, tasks, prs, repair, current] = await Promise.all([
-    gh('/issues/' + lease.issue), gh('/git/ref/heads/' + development), readTaskDetails(tasksApi),
+    gh('/issues/' + lease.issue), gh('/git/ref/heads/' + development), (tasksApi.inventory ? readLeaseCandidates(tasksApi, lease, { stable: true }) : readTaskDetails(tasksApi)),
     openDevelopmentPRs(paged, repository), repairBusy(), readLease(leaseApi, { verifyTarget: true }),
   ]);
   if (current?.tagSha !== lease.tagSha || current.runId !== lease.runId ||
@@ -117,9 +116,11 @@ export async function recoverPreDispatchLease({ repository, lease, leaseApi, gh,
   if (repair || prs.length || blockers.length) {
     throw new Error('Writer, matching task, or incomplete task/session/PR evidence; retain lease');
   }
-  const latest = await listTaskSummaries(tasksApi);
-  const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
-  if (states(latest) !== states(tasks)) throw new Error('Copilot task inventory changed during recovery');
+  if (!tasksApi.inventory) {
+    const latest = await listTaskSummaries(tasksApi);
+    const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
+    if (states(latest) !== states(tasks)) throw new Error('Copilot task inventory changed during recovery');
+  }
   const origin = 'https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1];
   const evidence = ' issue #' + lease.issue + ' run ' + lease.runId + ' tag ' + lease.tagSha +
     ' base ' + lease.baseSha + ' task details checked=' + tasks.length + ' origin=' + origin;

@@ -63,6 +63,8 @@ jobs:
       - name: Check eligibility and honor existing GitHub merge gates
         env:
           GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ github.token }}
+          COPILOT_AGENT_USER_TOKEN: ${{ github.event_name != 'pull_request' && secrets.COPILOT_AGENT_USER_TOKEN || '' }}
           REPO: ${{ github.repository }}
           EVENT_NAME: ${{ github.event_name }}
           TARGET_PR: ${{ inputs.pull_number }}
@@ -195,6 +197,11 @@ jobs:
                 fi
               fi
               continue
+            fi
+
+            if [[ "$DRY_RUN" != "true" && "$REPO" == "farbotkol/butterbox" && "${inventory_verified:-}" != "true" ]]; then
+              node tools/delivery-controller/verify-writer-inventory.mjs
+              inventory_verified=true
             fi
 
             # Fetch again after all gates to avoid merging an outdated SHA.

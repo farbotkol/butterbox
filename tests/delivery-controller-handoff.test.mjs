@@ -766,3 +766,109 @@ test('lease discovery rejects missing, invalid or out-of-window modification tim
     }, { startedAt: '2026-11-24T00:00:00.000Z' }), /recent inventory/);
   }
 });
+
+test('durable inventory bootstrap and restart retain unresolved and leased IDs at every history size', async () => {
+  const { agentTasksApi } = await import('../tools/delivery-controller/agent-tasks-api.mjs');
+  const { readLeaseCandidates, withTaskInventory, rememberLeaseTask } = await import('../tools/delivery-controller/task-inventory.mjs');
+  for (const volume of [60, 100, 1000]) {
+    let now = Date.parse('2026-11-24T00:00:00Z');
+    let saved = null;
+    let writes = 0;
+    const store = {
+      async readInventory() { return saved; },
+      async writeInventory(expected, record) {
+        assert.equal(expected, saved?.sha ?? '');
+        saved = { sha: String(++writes).padStart(40, '0'), record };
+      },
+    };
+    const liveLease = { ...lease, startedAt: new Date(now).toISOString() };
+    const old = Array.from({ length: volume }, (_, index) => ({
+      id: '01234567-89ab-cdef-0123-' + String(index).padStart(12, '0'),
+      state: 'completed', updated_at: '2026-01-01T00:00:00Z', archived: index % 2 === 0,
+      session_count: 0, sessions: [], artifacts: [],
+    }));
+    const owned = { ...task, updated_at: new Date(now).toISOString(), archived: false };
+    const unresolved = old[0];
+    unresolved.sessions = [{ id: sessionId, task_id: unresolved.id, state: 'queued' }];
+    unresolved.session_count = 1;
+    const history = [...old, owned];
+    const requests = [];
+    let failArchive = false;
+    const adapter = () => agentTasksApi({ token: 'fixture', repository, report: () => {},
+      request: async (input, { method }) => {
+        assert.equal(method, 'GET');
+        const url = new URL(input);
+        requests.push(url.href);
+        if (!url.search) return Response.json(history.find(row => url.pathname.endsWith('/' + row.id)));
+        const q = url.searchParams;
+        if (failArchive && q.get('is_archived') === 'true') return new Response('{}', { status: 403 });
+        const rows = history.filter(row => String(row.archived) === q.get('is_archived') &&
+          (!q.has('state') || q.get('state').split(',').includes(row.state)) &&
+          (!q.has('since') || Date.parse(row.updated_at) >= Date.parse(q.get('since'))));
+        const page = Number(q.get('page') ?? 1);
+        const headers = {};
+        if (page * 100 < rows.length) {
+          q.set('page', String(page + 1));
+          headers.link = '<' + url.href + '>; rel="next"';
+        }
+        return Response.json({ total_count: rows.length, tasks: rows.slice((page - 1) * 100, page * 100) }, { headers });
+      } });
+    const init = withTaskInventory(adapter(), store, { now: () => now });
+    await readLeaseCandidates(init, liveLease);
+    assert.deepEqual(saved.record.unresolved, [unresolved.id]);
+    assert.deepEqual(saved.record.leaseTask, { tagSha: liveLease.tagSha, id: owned.id });
+    await rememberLeaseTask(init, liveLease, owned.id);
+    assert.equal(saved.record.verifiedAt, liveLease.startedAt);
+
+    const cutoff = new Date(now - 300000).toISOString();
+    now += 10 * 86400000; // A scheduler outage must not move the lower bound.
+    requests.length = 0;
+    const fresh = old[1];
+    fresh.updated_at = cutoff; // Inclusive boundary of the overlap.
+    fresh.sessions = [{ id: sessionId, task_id: fresh.id, state: 'queued' }];
+    fresh.session_count = 1;
+    const restarted = withTaskInventory(adapter(), store, { now: () => now });
+    const before = saved;
+    failArchive = true;
+    await assert.rejects(readLeaseCandidates(restarted, liveLease), /HTTP 403/);
+    assert.equal(saved, before);
+    failArchive = false;
+    requests.length = 0;
+    const candidates = await readLeaseCandidates(restarted, liveLease);
+    assert.ok(requests.some(url => new URL(url).searchParams.get('since') === cutoff));
+    assert.deepEqual(competingWriters(candidates).map(row => row.taskId).sort(), [fresh.id, unresolved.id].sort());
+    assert.ok(candidates.some(row => row.id === owned.id));
+    assert.equal(requests.length, 7, 'incremental GETs at ' + volume + ' historical tasks');
+    assert.equal(saved.record.verifiedAt, new Date(now).toISOString());
+
+    const readOnly = withTaskInventory(adapter(), store, { readOnly: true, now: () => now });
+    const verified = saved;
+    await readLeaseCandidates(readOnly, liveLease, { stable: true });
+    assert.equal(saved, verified);
+  }
+});
+
+test('independent writer gates require a checkpoint and changed recovery snapshots cannot advance it', async () => {
+  const { readLeaseCandidates, withTaskInventory } = await import('../tools/delivery-controller/task-inventory.mjs');
+  const now = () => Date.parse('2026-11-26T00:00:00Z');
+  const readOnly = withTaskInventory({ list: async () => assert.fail('no bootstrap in an independent gate') },
+    { readInventory: async () => null }, { readOnly: true, requireCheckpoint: true, now });
+  await assert.rejects(readLeaseCandidates(readOnly), /has not been bootstrapped/);
+
+  const prior = { sha: tagSha, record: {
+    version: 1, verifiedAt: new Date(now() - 60_000).toISOString(), searchedLeaseTag: null,
+    unresolved: [], leaseTask: null,
+  } };
+  let passes = 0;
+  const api = withTaskInventory({
+    list: async ({ archived, states }) => {
+      if (archived || states) return [];
+      return [{ ...task, updated_at: new Date(now()).toISOString(),
+        sessions: [{ ...task.sessions[0], updated_at: new Date(now() + passes++).toISOString() }] }];
+    },
+  }, {
+    readInventory: async () => prior,
+    writeInventory: async () => assert.fail('changed snapshot cannot advance the checkpoint'),
+  }, { now });
+  await assert.rejects(readLeaseCandidates(api, undefined, { stable: true }), /changed during recovery/);
+});

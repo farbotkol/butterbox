@@ -331,11 +331,10 @@ evidence.
 Task inventory follows validated same-endpoint pagination links for up to
 20 pages. Missing pagination or count evidence on a full page, changing
 counts, malformed links, inconsistent task details and API budget exhaustion
-stop mutations. The bounded historical writer audit is still needed because
-task-state filters do not establish whether a terminal parent's older child
-session can continue or resume. The controller currently uses that audit
-before proof dispatch and before proof handoff mutations. The lease discovery
-poll still checks the recent and active snapshots for a potential match.
+stop mutations. The controller uses the shared Option 2 inventory for proof
+dispatch, handoff, parking, merge, release and recovery. CI repair and
+generic Phase 2 merge check the same inventory before admitting a writer.
+The synthetic workflow uses it for launch, verification and reconciliation.
 
 Product dispatch requires an approved criterion-level acceptance workflow
 that verifies scope, required exact-head checks and human acceptance.
@@ -361,27 +360,31 @@ change when an older child becomes writable, or a visibility delay bound.
 The previously observed failed parent with a queued child could no longer
 be read by exact ID in the probe (HTTP 404).
 
-A durable verification watermark becomes usable once coverage of historical
-child changes is established for the existing credential. A complete
-bootstrap must precede it. Persist the verified scan's start boundary after
-all reads and consistency checks succeed, and query from that boundary
-minus five minutes on the next run. Retain the previous boundary on any
-failure, including an interrupted scan or quota exhaustion. Include active
-states, the exact leased task and unresolved candidates, validate every page,
-and reject conflicting observations. A watermark and overlap cannot recover
-a change that GitHub never exposes. The current scoped result remains
-discovery-only and the existing mutation checks stay in force.
+The owner accepted the residual risk that GitHub may omit a reactivation
+from both filters. This policy uses separate active and `since` queries
+for both archive partitions. The first successful scan bootstraps under
+the existing bounded pagination and quota. After bootstrap, routine detail
+reads cover active, modified, exact leased and previously unresolved tasks.
+The first scan for an older, unbound lease can extend the recent window
+to its acquisition time.
 
-The synthetic launch and reconcile paths use the existing writer filter and
-exact task verification. The CI repair and generic Phase 2 merge workflows
-use their existing lease and workflow gates. None of these paths is switched
-to watermark-driven decisions without the same coverage proof.
+The annotated Git tag `butterbox-controller-inventory` records the last
+successful scan's start time, unresolved IDs and exact lease-task binding.
+The next scan starts five minutes before that boundary, including after
+scheduler outages. The controller uses a compare-and-swap Git push to
+advance the tag after complete inventory verification. Failed reads and
+conflicting evidence leave the previous boundary available for retry.
+Verification-only operations and the independent repair and merge gates
+read the checkpoint without advancing it. The independent gates fail closed
+until a controller mutation workflow has initialized the checkpoint. Lease, CI and approval checks
+continue to determine which operations may proceed.
 
-In automated fixtures with 60, 100 and 1,000 historical tasks and two
-relevant tasks, scoped discovery made four HTTP GETs each time. A simulated
-older child that reactivated without changing its parent's listed state
-or timestamp was invisible to that discovery and detected by the existing
-audit. These counts apply to discovery, with no change to mutation quotas.
+In automated fixtures with 60, 100 and 1,000 historical tasks, steady-state
+scans used seven Copilot GETs each with an exact lease, an unresolved task
+and a newly modified archived or non-archived candidate. One-time
+bootstrap, exceptional lease discovery and recovery consistency checks
+have separate costs. The existing per-run budget and quota waits still
+apply.
 
 [REST reference](https://docs.github.com/en/rest/agent-tasks/agent-tasks#list-tasks-for-repository)
 · [Filter probe](https://github.com/farbotkol/butterbox/actions/runs/45736462753)
