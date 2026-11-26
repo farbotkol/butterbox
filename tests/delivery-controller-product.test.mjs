@@ -6,6 +6,7 @@ import { productScope, scopedProductFiles } from '../tools/delivery-controller/p
 import { repairDiagnostic, repairProduct } from '../tools/delivery-controller/product-repair.mjs';
 import { recoveryInstructions } from '../tools/delivery-controller/parked-product.mjs';
 import { selectReadyIssue } from '../tools/delivery-controller/queue.mjs';
+import { withFactoryHealth } from "../tools/delivery-controller/factory-health.mjs";
 import { apiResponse } from "../tools/delivery-controller/api-response.mjs";
 import { modelJson } from "../tools/delivery-controller/product-acceptance.mjs";
 
@@ -147,5 +148,73 @@ test('an integration failure before publication does not reserve a source repair
   input.propose = () => apiResponse(new Response('OK'), { operation: 'GitHub Models', endpoint: '/inference/chat/completions' });
   await assert.rejects(repairProduct(input), /outer-json\/plain-ok/);
   assert.deepEqual(history, []);
+  assert.deepEqual(effects, ['confirmed']);
+});
+
+test('factory checkpoints enforce Retry-After, suspend work on probe failure and resume after recovery', async () => {
+  const history = [];
+  const messages = [];
+  let timestamp = Date.parse('2026-11-26T21:38:00Z');
+  let invocations = 0;
+  let probes = 0;
+  let healthy = false;
+  const unavailable = Object.assign(new Error('Provider busy'), {
+    code: 'CONTROLLER_API', category: 'integration', retryAfter: '1200',
+  });
+  const run = () => withFactoryHealth({
+    revision: head, now: () => timestamp, report: message => messages.push(message),
+    paged: async () => history,
+    gh: async (path, method, { body }) => {
+      assert.equal(path, '/issues/327/comments');
+      assert.equal(method, 'POST');
+      const row = { user: { id: 41898282 }, id: history.length + 1, body, created_at: timestamp, updated_at: timestamp };
+      history.push(row);
+      return row;
+    },
+    probe: async () => {
+      probes++;
+      if (!healthy) throw unavailable;
+    },
+    advance: async () => {
+      invocations++;
+      if (!healthy) throw unavailable;
+    },
+  });
+  await run();
+  timestamp += 19 * 60000;
+  await run();
+  assert.equal(invocations, 1);
+  assert.equal(probes, 0);
+  for (let i = 2; i <= 5; i++) {
+    timestamp += 60 * 60000;
+    await run();
+    assert.equal(invocations, i);
+  }
+  timestamp += 60 * 60000;
+  await run();
+  assert.equal(invocations, 5);
+  assert.equal(probes, 1);
+  assert(messages.some(message => message.startsWith('FACTORY_BLOCKED')));
+  healthy = true;
+  timestamp += 60 * 60000;
+  await run();
+  assert.equal(probes, 2);
+  assert.equal(invocations, 6);
+  assert.equal(messages.at(-1), 'FACTORY_HEALTH_RESTORED');
+});
+
+test('a confirmed repair with no changes is recorded and never publishes', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = async () => ({ additions: [], deletions: [] });
+  assert.equal(await repairProduct(input), 'no-change');
+  assert.match(history[0].body, /"outcome":"no-change"/);
+  assert.deepEqual(effects, ['confirmed']);
+});
+
+test('a confirmed out-of-scope repair is recorded and never publishes', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = async () => null;
+  assert.equal(await repairProduct(input), 'unsafe');
+  assert.match(history[0].body, /"outcome":"out-of-scope"/);
   assert.deepEqual(effects, ['confirmed']);
 });

@@ -268,9 +268,8 @@ jobs:
           import assert from 'node:assert/strict';
           import { copilotAssessment } from './tools/delivery-controller/copilot-cli.mjs';
           const result = await copilotAssessment(
-            'Assess the supplied synthetic fact. Return JSON with criterion (1), pass (boolean), and evidence (exact supplied check label).',
-            { criterion: 'Is test-label green?', fact: 'test-label is green.' },
-            { token: process.env.GITHUB_TOKEN, operation: 'Independent assessment connectivity probe' }
+            'Assess this synthetic fact: check test-label is green. Respond with exactly one JSON object with criterion (1), pass (boolean), and evidence (exact supplied check label). Use no tools.',
+            undefined, { token: process.env.GITHUB_TOKEN, operation: 'Independent assessment connectivity probe' }
           );
           assert(result.criterion === 1 && result.pass === true && result.evidence === 'test-label',
             'Copilot CLI did not return the expected structured evidence');
@@ -278,7 +277,7 @@ jobs:
           NODE
 
       - name: Probe isolated source repair with the preserved #84 CI failure
-        if: inputs.smoke_only == true && inputs.repair_probe == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
+        if: always() && inputs.smoke_only == true && inputs.repair_probe == true && github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
