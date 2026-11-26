@@ -4685,7 +4685,11 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await signIn(page, `geofence-owner-${suffix}@example.test`, password);
     await page.goto(`/settings/organisation?venue=${venueId}`);
     const region = page.getByRole("region", { name: "Venue location and geofence" });
-    const form = page.getByRole("form", { name: "Configure venue geofence" });
+    const form = page.getByRole("form", { name: "Venue settings" });
+    const saveButton = form.getByRole("button", { name: "Save changes" });
+    await expect(saveButton).toHaveCount(1);
+    await expect(saveButton).toBeVisible();
+    await expect(saveButton).toBeDisabled();
     await expect(region).toContainText("Staff may need to allow location access at clock-in and clock-out");
     await expect(region).toContainText("Location verification is optional and is off until an owner enables it");
     await expect(region).toContainText("flagged for review without stopping the clock event");
@@ -4695,8 +4699,19 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await form.getByLabel("Latitude").fill("-33.8688");
     await form.getByLabel("Longitude").fill("151.2093");
     await form.getByLabel("Radius in metres").fill("150");
-    await form.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await form.getByLabel("Publication mode").selectOption("approval");
+    await form.getByLabel("Publish with overlapping shifts").selectOption("true");
+    let navigationDialogMessage = "";
+    page.once("dialog", async (dialog) => {
+      navigationDialogMessage = dialog.message();
+      await dialog.dismiss();
+    });
+    await page.getByRole("link", { name: "Open departments and roles" }).click();
+    expect(navigationDialogMessage).toContain("Discard your unsaved changes");
+    await expect(page).toHaveURL(new RegExp(`/settings/organisation\\?venue=${venueId}`));
+    await expect(form.getByLabel("Latitude")).toHaveValue("-33.8688");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await expect(region).toContainText("-33.8688, 151.2093; 150 m");
     await expect(region).toContainText(`User ${userIds[0]}`);
     expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
@@ -4707,19 +4722,28 @@ test("owners configure venue geofences with protected audit and scoped access", 
     expect(firstVenue.data).toEqual({
       geofence_latitude: -33.8688, geofence_longitude: 151.2093, geofence_radius_meters: 150,
     });
-    // A repeated save keeps the same URL and status, then re-renders a fresh form with the saved values. Wait for
-    // that replacement so the next edit cannot be overwritten by a still-pending save.
-    await form.evaluate((element) => element.setAttribute("data-test-before-repeated-save", ""));
-    await form.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.locator("form[data-test-before-repeated-save]")).toHaveCount(0);
-    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await expect(form.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    const savedPolicy = await admin.from("venues")
+      .select("roster_publication_mode, block_publish_overlap").eq("id", venueId).single();
+    expect(savedPolicy.error).toBeNull();
+    expect(savedPolicy.data).toEqual({ roster_publication_mode: "approval", block_publish_overlap: true });
+
+    await form.getByLabel("Publication mode").selectOption("direct");
+    await form.getByLabel("Publish with overlapping shifts").selectOption("false");
     await form.getByLabel("Longitude").fill("");
-    await form.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("or clear all three");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(form.getByLabel("Longitude")).toHaveAttribute("aria-invalid", "true");
+    await expect(form.getByRole("alert")).toContainText("Enter a longitude from -180 to 180");
     const unchanged = await admin.from("venue_geofence_events").select("id").eq("venue_id", venueId);
     expect(unchanged.error).toBeNull();
     expect(unchanged.data).toHaveLength(1);
-    await expect(form.getByLabel("Longitude")).toHaveValue("151.2093");
+    const unchangedPolicy = await admin.from("venues")
+      .select("roster_publication_mode, block_publish_overlap").eq("id", venueId).single();
+    expect(unchangedPolicy.error).toBeNull();
+    expect(unchangedPolicy.data).toEqual({ roster_publication_mode: "approval", block_publish_overlap: true });
+    await form.getByLabel("Longitude").fill("151.2093");
+    await form.getByLabel("Publication mode").selectOption("approval");
+    await form.getByLabel("Publish with overlapping shifts").selectOption("true");
 
     await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
     await page.getByRole("button", { name: "Show venue" }).click();
@@ -4728,8 +4752,8 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await form.getByLabel("Latitude").fill("12");
     await form.getByLabel("Longitude").fill("20");
     await form.getByLabel("Radius in metres").fill("50");
-    await form.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     const secondVenue = await admin.from("venues")
       .select("geofence_latitude, geofence_longitude, geofence_radius_meters").eq("id", secondVenueId).single();
     expect(secondVenue.error).toBeNull();
@@ -4742,8 +4766,8 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await form.getByLabel("Latitude").fill("");
     await form.getByLabel("Longitude").fill("");
     await form.getByLabel("Radius in metres").fill("");
-    await form.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.getByRole("status")).toHaveText("Venue location saved.");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await expect(region).toContainText("-33.8688, 151.2093; 150 m to Not configured");
 
     const ownerApi = createClient(apiUrl, anonKey, options);
@@ -4777,7 +4801,7 @@ test("owners configure venue geofences with protected audit and scoped access", 
     await signIn(managerPage, `geofence-manager-${suffix}@example.test`, password);
     await managerPage.goto("/settings/organisation");
     await expect(managerPage.getByRole("heading", { name: "Venue settings" })).toBeVisible();
-    await expect(managerPage.getByRole("form", { name: "Configure venue geofence" })).toHaveCount(0);
+    await expect(managerPage.getByRole("form", { name: "Venue settings" })).toHaveCount(0);
     const managerApi = createClient(apiUrl, anonKey, options);
     expect((await managerApi.auth.signInWithPassword({ email: `geofence-manager-${suffix}@example.test`, password })).error).toBeNull();
     const managerHistory = await managerApi.from("venue_geofence_events").select("id").eq("venue_id", venueId);
@@ -4876,18 +4900,19 @@ test("venue planning weeks remain scoped, prospective and accessible on mobile",
     await signIn(page, `planning-ui-owner-${suffix}@example.test`, password);
     await page.goto(settings);
     const region = page.getByRole("region", { name: "Roster planning week settings" });
-    const form = page.getByRole("form", { name: "Configure roster planning week" });
+    const form = page.getByRole("form", { name: "Venue settings" });
     await expect(region).toContainText("Current planning start: Monday");
     await expect(form.getByLabel("Planning week starts on")).toHaveValue("1");
     await form.getByLabel("Planning week starts on").evaluate((select) => {
       select.add(new Option("Invalid", "8"));
       select.value = "8";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await form.getByRole("button", { name: "Save planning week" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "couldn't confirm the roster planning week" })).toBeVisible();
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(form.getByRole("alert").filter({ hasText: "Choose a planning week start from Monday to Sunday" })).toBeVisible();
     await form.getByLabel("Planning week starts on").selectOption("7");
-    await form.getByRole("button", { name: "Save planning week" }).click();
-    await expect(page.getByRole("status").filter({ hasText: "Roster planning week setting saved" })).toBeVisible();
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "All changed venue settings were saved" })).toBeVisible();
     await expect(region).toContainText("Current planning start: Monday");
     await expect(region).toContainText("Scheduled: Sunday");
     await expect(region).toContainText("Monday to Sunday");
@@ -4920,7 +4945,7 @@ test("venue planning weeks remain scoped, prospective and accessible on mobile",
     const manager = await managerContext.newPage();
     await signIn(manager, `planning-ui-manager-${suffix}@example.test`, password);
     await manager.goto(settings);
-    await expect(manager.getByRole("form", { name: "Configure roster planning week" })).toHaveCount(0);
+    await expect(manager.getByRole("form", { name: "Venue settings" })).toHaveCount(0);
     await manager.goto(planning);
     await expect(manager.getByText("Published service")).toBeVisible();
     await expect(manager.getByText("Draft service")).toBeVisible();
@@ -4946,7 +4971,7 @@ test("venue planning weeks remain scoped, prospective and accessible on mobile",
 
     await page.goto(settings);
     await form.getByLabel("Planning week starts on").selectOption("1");
-    await form.getByRole("button", { name: "Save planning week" }).click();
+    await form.getByRole("button", { name: "Save changes" }).click();
     await expect(region).toContainText("Cancelled pending change");
     await expect(region).not.toContainText("Scheduled: Sunday");
   } finally {
@@ -5011,19 +5036,20 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     await expect(page.getByRole("main").getByRole("alert"))
       .toContainText("Reactivate the department before saving an active role.");
     await page.goto(settings);
-    const policy = page.getByRole("form", { name: "Configure roster publication" });
+    const policy = page.getByRole("form", { name: "Venue settings" });
     await expect(policy.getByLabel("Publication mode")).toHaveValue("direct");
     await policy.getByLabel("Publication mode").selectOption("approval");
-    await policy.getByRole("button", { name: "Save publication setting" }).click();
-    await expect(page.getByRole("status")).toHaveText("Roster publication setting saved.");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await expect(page.getByRole("region", { name: "Roster publication settings" }))
       .toContainText("Direct publication to Approval required");
     await policy.getByLabel("Publication mode").evaluate((select) => {
       select.add(new Option("Invalid", "invalid"));
       select.value = "invalid";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await policy.getByRole("button", { name: "Save publication setting" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "couldn't save the roster publication setting" })).toBeVisible();
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(policy.getByRole("alert").filter({ hasText: "Choose direct publication or approval required" })).toBeVisible();
     expect(new URL(page.url()).searchParams.get("business")).toBe(businessId);
     expect(new URL(page.url()).searchParams.get("venue")).toBe(venueId);
     await expect(policy.getByLabel("Publication mode")).toHaveValue("approval");
@@ -5036,7 +5062,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     const manager = await managerContext.newPage();
     await signIn(manager, `roster-review-ui-foh-${suffix}@example.test`, password);
     await manager.goto(settings);
-    await expect(manager.getByRole("form", { name: "Configure roster publication" })).toHaveCount(0);
+    await expect(manager.getByRole("form", { name: "Venue settings" })).toHaveCount(0);
     await manager.goto(roster);
     await expect(manager.getByRole("button", { name: "Publish this department" })).toHaveCount(0);
     await manager.getByRole("button", { name: "Submit for review" }).click();
@@ -5111,8 +5137,8 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     const thirdHash = new URL(manager.url()).hash;
     await page.goto(settings);
     await policy.getByLabel("Publication mode").selectOption("direct");
-    await policy.getByRole("button", { name: "Save publication setting" }).click();
-    await expect(page.getByRole("status")).toHaveText("Roster publication setting saved.");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await manager.goto(roster);
     await expect(manager.locator(thirdHash)).toContainText("drafts or the publication settings have changed");
     await expect(manager.locator(thirdHash).getByRole("button", { name: "Approve and publish" })).toHaveCount(0);
@@ -5180,7 +5206,7 @@ test("owners configure venue conflict rules with protected history and scoped ac
     await signIn(page, `conflict-policy-owner-${suffix}@example.test`, password);
     await page.goto(`/settings/organisation?venue=${venueId}`);
     const region = page.getByRole("region", { name: "Roster conflict rules" });
-    const form = page.getByRole("form", { name: "Configure roster conflict rules" });
+    const form = page.getByRole("form", { name: "Venue settings" });
     const labels = [
       "Manual assignment with unavailable worker", "Publish with unavailable worker",
       "Publish with overlapping shifts", "Publish a shift longer than 24 hours",
@@ -5190,8 +5216,8 @@ test("owners configure venue conflict rules with protected history and scoped ac
     await expect(region).toContainText("No rule changes yet.");
     for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
     for (const label of labels) await form.getByLabel(label).selectOption("true");
-    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
-    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await expect(region).toContainText(`User ${userIds[0]}`);
     await expect(region).toContainText("Manual availability: warn");
     await expect(region).toContainText("Manual availability: block");
@@ -5205,12 +5231,8 @@ test("owners configure venue conflict rules with protected history and scoped ac
       block_manual_unavailability: true, block_publish_unavailability: true,
       block_publish_overlap: true, block_publish_long_shift: true,
     });
-    // Clear the previous saved message so the unchanged save is observed completing before the next step.
-    await page.goto(`/settings/organisation?venue=${venueId}`);
-    await expect(page.getByRole("status")).toHaveCount(0);
     for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("true");
-    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
-    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+    await expect(form.getByRole("button", { name: "Save changes" })).toBeDisabled();
     const unchangedHistory = await admin.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
     expect(unchangedHistory.error).toBeNull();
     expect(unchangedHistory.data).toHaveLength(1);
@@ -5218,10 +5240,12 @@ test("owners configure venue conflict rules with protected history and scoped ac
     await form.getByLabel(labels[0]).evaluate((select) => {
       select.add(new Option("Invalid", "invalid"));
       select.value = "invalid";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
     });
-    await form.getByRole("button", { name: "Save roster conflict rules" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("Select a valid option for each roster conflict rule");
+    await form.getByRole("button", { name: "Save changes" }).click();
+    await expect(form.getByRole("alert")).toContainText("Choose whether this rule warns or blocks");
     await expect(form.getByLabel(labels[0])).toHaveValue("true");
+    await form.getByLabel(labels[0]).selectOption("true");
     await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
     await page.getByRole("button", { name: "Show venue" }).click();
     for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
@@ -5235,7 +5259,7 @@ test("owners configure venue conflict rules with protected history and scoped ac
     const managerPage = await managerContext.newPage();
     await signIn(managerPage, `conflict-policy-manager-${suffix}@example.test`, password);
     await managerPage.goto(`/settings/organisation?venue=${venueId}`);
-    await expect(managerPage.getByRole("form", { name: "Configure roster conflict rules" })).toHaveCount(0);
+    await expect(managerPage.getByRole("form", { name: "Venue settings" })).toHaveCount(0);
     const managerApi = createClient(apiUrl, anonKey, options);
     expect((await managerApi.auth.signInWithPassword({
       email: `conflict-policy-manager-${suffix}@example.test`, password,
@@ -5324,13 +5348,13 @@ test("configured conflict rules block assignments and publication until warnings
 
     await signIn(page, `conflict-enforce-owner-${suffix}@example.test`, password);
     await page.goto(`/settings/organisation?venue=${venueId}`);
-    const policy = page.getByRole("form", { name: "Configure roster conflict rules" });
+    const policy = page.getByRole("form", { name: "Venue settings" });
     for (const label of [
       "Manual assignment with unavailable worker", "Publish with unavailable worker",
       "Publish with overlapping shifts", "Publish a shift longer than 24 hours",
     ]) await policy.getByLabel(label).selectOption("true");
-    await policy.getByRole("button", { name: "Save roster conflict rules" }).click();
-    await expect(page.getByRole("status")).toHaveText("Roster conflict rules saved.");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
 
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${fohId}`;
     await page.goto(roster);
@@ -8547,10 +8571,10 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     expect(automatic.data.employee_id).toBe(alternateEmployee);
 
     await page.goto(`/settings/organisation?venue=${firstVenue}`);
-    const policy = page.getByRole("form", { name: "Configure roster conflict rules" });
+    const policy = page.getByRole("form", { name: "Venue settings" });
     await policy.getByLabel("Publish with overlapping shifts").selectOption("true");
-    await policy.getByRole("button", { name: "Save roster conflict rules" }).click();
-    await expect(page.locator('p[role="status"]')).toHaveText("Roster conflict rules saved.");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.locator('p[role="status"]')).toHaveText("All changed venue settings were saved.");
     await managerPage.goto(roster);
     await managerPage.getByRole("button", { name: "Publish this department" }).click();
     await expect(managerPage.locator('p[role="alert"]')).toContainText("overlapping shifts");
@@ -10075,11 +10099,12 @@ test("optional clock location is requested only at clock events and exceptions a
 
     await signIn(page, `clock-location-owner-${suffix}@example.test`, password);
     await page.goto(`/settings/organisation?venue=${secondVenue}`);
-    const policy = page.getByRole("form", { name: "Configure clock location verification" });
+    const policy = page.getByRole("form", { name: "Venue settings" });
     await expect(policy.getByLabel("Clock location verification")).toHaveValue("false");
     await policy.getByLabel("Clock location verification").selectOption("true");
-    await policy.getByRole("button", { name: "Save clock location setting" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("Configure a venue location before enabling verification");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(policy.getByRole("alert")).toContainText("A venue location is required while clock location verification is on");
+    await policy.getByLabel("Clock location verification").selectOption("false");
     await page.goto(`/settings/organisation?venue=${firstVenue}`);
     await expect(policy.getByLabel("Clock location verification")).toHaveValue("false");
 
@@ -10124,20 +10149,19 @@ test("optional clock location is requested only at clock events and exceptions a
       row.verification_status === "not_required" && row.reason === "disabled" && row.distance_meters === null)).toBe(true);
 
     await policy.getByLabel("Clock location verification").selectOption("true");
-    await policy.getByRole("button", { name: "Save clock location setting" }).click();
-    await expect(page.getByRole("status")).toHaveText("Clock location setting saved.");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await expect(page.getByRole("region", { name: "Venue location and geofence" }))
       .toContainText(`User ${users[0]}`);
     const audit = await admin.from("venue_clock_location_events").select("actor_id, old_enabled, new_enabled")
       .eq("venue_id", firstVenue);
     expect(audit.error).toBeNull();
     expect(audit.data).toEqual([{ actor_id: users[0], old_enabled: false, new_enabled: true }]);
-    const geofence = page.getByRole("form", { name: "Configure venue geofence" });
-    await geofence.getByLabel("Latitude").fill("");
-    await geofence.getByLabel("Longitude").fill("");
-    await geofence.getByLabel("Radius in metres").fill("");
-    await geofence.getByRole("button", { name: "Save venue location" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("disable verification before removing it");
+    await policy.getByLabel("Latitude").fill("");
+    await policy.getByLabel("Longitude").fill("");
+    await policy.getByLabel("Radius in metres").fill("");
+    await policy.getByRole("button", { name: "Save changes" }).click();
+    await expect(policy.getByRole("alert")).toContainText("A venue location is required while clock location verification is on");
 
     await workerPage.reload();
     expect(await calls()).toBe(0);
