@@ -125,12 +125,15 @@ jobs:
       actions: write
       checks: read
       statuses: read
-      models: read
+      copilot-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           ref: copilot/Development
           persist-credentials: false
+      - name: Install Copilot CLI
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @github/copilot
       - name: Advance the controlled GitHub acceptance lifecycle
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -149,11 +152,15 @@ jobs:
       actions: read
       checks: read
       statuses: read
-      models: read
+      copilot-requests: write
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+      - name: Install Copilot CLI for parked issue scope analysis
+        if: inputs.lease_recovery == 'unpark'
+        working-directory: ${{ runner.temp }}
+        run: npm install --global @github/copilot
       - name: Verify the stopped controller attempt and current writer evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}

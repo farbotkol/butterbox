@@ -6,6 +6,9 @@ import { productScope, scopedProductFiles } from '../tools/delivery-controller/p
 import { repairDiagnostic, repairProduct } from '../tools/delivery-controller/product-repair.mjs';
 import { recoveryInstructions } from '../tools/delivery-controller/parked-product.mjs';
 import { selectReadyIssue } from '../tools/delivery-controller/queue.mjs';
+import { withFactoryHealth } from "../tools/delivery-controller/factory-health.mjs";
+import { apiResponse } from "../tools/delivery-controller/api-response.mjs";
+import { modelJson } from "../tools/delivery-controller/product-acceptance.mjs";
 
 const repository = 'farbotkol/butterbox';
 const head = '1'.repeat(40);
@@ -52,15 +55,16 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
     'src/components/venue-settings-form.tsx\nError: Calling setState synchronously within an effect can trigger cascading renders  react-hooks/set-state-in-effect';
   const effects = [];
   const history = [];
+  let runAttempt = 1;
   const input = { lease: { issue: 84, tagSha: 'a'.repeat(40) }, pr: { number: 333, head: { sha: head, ref: 'copilot/test' } },
     checks: { check_runs: [{ id: 1, name, head_sha: head, app: { id: 15368 }, status: pending ? 'in_progress' : 'completed',
       conclusion: 'failure', html_url: 'https://github.com/' + repository + '/actions/runs/' + run + '/job/' + job }] },
     paged: async () => history, report: () => {}, confirm: async () => effects.push('confirmed'),
     logs: async id => { assert.equal(id, job); return log; },
-    propose: async detail => { assert.match(detail, /set-state-in-effect/); return ['scoped changes']; },
-    publish: async () => effects.push('published'),
+    propose: async detail => { assert.match(detail, /set-state-in-effect/); return { additions: [{ path: 'src/example.tsx', contents: 'YWJj' }], deletions: [] }; },
+    publish: async () => { effects.push('published'); return '2'.repeat(40); },
     gh: async (path, method, body) => {
-      if (path === '/actions/runs/' + run) return { id: run, head_sha: head, path: '.github/workflows/' + workflow, status: 'completed' };
+      if (path === '/actions/runs/' + run) return { id: run, run_attempt: runAttempt, head_sha: head, path: '.github/workflows/' + workflow, status: 'completed' };
       if (path === '/actions/jobs/' + job) return { id: job, name, head_sha: head, run_id: run, conclusion: 'failure' };
       if (path === '/issues/84/comments') {
         const row = { user: { id: 41898282 }, body: body.body };
@@ -68,32 +72,34 @@ function repairFixture({ infrastructure = false, pending = false } = {}) {
         return row;
       }
       assert.equal(method, 'POST');
+      if (path.endsWith('/rerun-failed-jobs')) runAttempt++;
       effects.push(path);
     },
   };
   return { input, effects, history };
 }
 
-test('PR #333 source lint failure reserves three scoped repairs and then exhausts', async () => {
+test('PR #333 source lint failure records five genuine scoped repairs and then exhausts', async () => {
   const { input, effects, history } = repairFixture();
-  for (let i = 0; i < 3; i++) assert.equal(await repairProduct(input), 'started');
+  for (let i = 0; i < 5; i++) assert.equal(await repairProduct(input), 'started');
   assert.equal(await repairProduct(input), 'exhausted');
-  assert.equal(history.length, 3);
-  assert.equal(effects.filter(effect => effect === 'published').length, 3);
+  assert.equal(history.length, 5);
+  assert.equal(effects.filter(effect => effect === 'published').length, 5);
 });
 
-test('PR #333 disposable Supabase collision retries twice without a source write', async () => {
+test('PR #333 disposable Supabase collision retries three times without a source write', async () => {
   const { input, effects } = repairFixture({ infrastructure: true });
   assert.equal(repairDiagnostic('EADDRINUSE port 54322').infrastructure, true);
-  for (let i = 0; i < 2; i++) assert.equal(await repairProduct(input), 'started');
+  for (let i = 0; i < 3; i++) assert.equal(await repairProduct(input), 'started');
   assert.equal(await repairProduct(input), 'exhausted');
   assert.deepEqual(effects, ['confirmed', '/actions/runs/45815159004/rerun-failed-jobs',
+    'confirmed', '/actions/runs/45815159004/rerun-failed-jobs',
     'confirmed', '/actions/runs/45815159004/rerun-failed-jobs']);
 });
 
 test('repair leaves pending CI and an ambiguous writer undisturbed', async () => {
   const pending = repairFixture({ pending: true });
-  assert.equal(await repairProduct(pending.input), 'waiting');
+  assert.equal(await repairProduct(pending.input), 'validation-active');
   const busy = repairFixture();
   busy.input.confirm = async () => { throw new Error('competing writer'); };
   await assert.rejects(repairProduct(busy.input), /competing writer/);
@@ -106,4 +112,128 @@ test('recovery seeds the new attempt from an authenticated immutable closed PR',
   });
   assert.equal(await recoveryInstructions(async () => [{ user: { id: 11307166 }, body }], 82), null);
   assert.match(await recoveryInstructions(async () => [{ user: { id: 41898282 }, body }], 82), /Reuse.*closed PR #334/);
+});
+
+test('GitHub response contracts distinguish acknowledgements from required resources', async () => {
+  const contract = { operation: 'GitHub POST', endpoint: '/actions/workflows/ci.yml/dispatches' };
+  assert.deepEqual(await apiResponse(Response.json({ id: 42 }), contract), { id: 42 });
+  assert.deepEqual(await apiResponse(Response.json({ id: 42 }, { status: 201 }), contract), { id: 42 });
+  for (const [body, status] of [['OK\n', 200], ['', 200], [null, 201], [null, 202], [null, 204]]) {
+    assert.equal(await apiResponse(new Response(body, { status }), { ...contract, ack: true }), null);
+  }
+  for (const [status, category] of [[429, 'integration'], [503, 'integration'], [401, 'permission'], [403, 'permission']]) {
+    await assert.rejects(apiResponse(new Response('sensitive diagnosis', { status, headers: {
+      'retry-after': status === 429 ? '30' : '',
+    } }), contract), error => error.status === status && error.category === category &&
+      (status !== 429 || error.retryAfter === '30') && !error.message.includes('sensitive diagnosis'));
+  }
+  await assert.rejects(apiResponse(new Response('{invalid'), contract), /outer-json\/invalid-json/);
+  await assert.rejects(apiResponse(new Response(null, { status: 204 }), contract), /outer-json\/empty/);
+});
+
+test('runs 420 and 426: OK cannot become independent acceptance evidence', async () => {
+  const log = await readFile(new URL('./fixtures/delivery-controller/ok-json-failure.log', import.meta.url), 'utf8');
+  const observed = [...log.matchAll(/STOPPED: Unexpected token 'O', "([^\n]*)\n\S+Z " is not valid JSON/g)];
+  assert.equal(observed.length, 2);
+  for (const [, line] of observed) {
+    const content = line + '\n';
+    await assert.rejects(modelJson('Return evidence', {}, { request: async () => new Response(content) }),
+      /outer-json\/plain-ok/);
+    await assert.rejects(modelJson('Return evidence', {}, { request: async () =>
+      Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] }) }),
+    /model-output\/invalid-json/);
+  }
+});
+
+test('an integration failure before publication does not reserve a source repair', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = () => apiResponse(new Response('OK'), { operation: 'GitHub Models', endpoint: '/inference/chat/completions' });
+  await assert.rejects(repairProduct(input), /outer-json\/plain-ok/);
+  assert.deepEqual(history, []);
+  assert.deepEqual(effects, ['confirmed']);
+});
+
+test('factory checkpoints enforce Retry-After, suspend work on probe failure and resume after recovery', async () => {
+  const history = [];
+  const messages = [];
+  let timestamp = Date.parse('2026-11-26T21:38:00Z');
+  let invocations = 0;
+  let probes = 0;
+  let healthy = false;
+  const unavailable = Object.assign(new Error('Provider busy'), {
+    code: 'CONTROLLER_API', category: 'integration', retryAfter: '1200',
+  });
+  const run = () => withFactoryHealth({
+    revision: head, now: () => timestamp, report: message => messages.push(message),
+    paged: async () => history,
+    gh: async (path, method, { body }) => {
+      assert.equal(path, '/issues/327/comments');
+      assert.equal(method, 'POST');
+      const row = { user: { id: 41898282 }, id: history.length + 1, body, created_at: timestamp, updated_at: timestamp };
+      history.push(row);
+      return row;
+    },
+    probe: async () => {
+      probes++;
+      if (!healthy) throw unavailable;
+    },
+    advance: async () => {
+      invocations++;
+      if (!healthy) throw unavailable;
+    },
+  });
+  await run();
+  timestamp += 19 * 60000;
+  await run();
+  assert.equal(invocations, 1);
+  assert.equal(probes, 0);
+  for (let i = 2; i <= 5; i++) {
+    timestamp += 60 * 60000;
+    await run();
+    assert.equal(invocations, i);
+  }
+  timestamp += 60 * 60000;
+  await run();
+  assert.equal(invocations, 5);
+  assert.equal(probes, 1);
+  assert(messages.some(message => message.startsWith('FACTORY_BLOCKED')));
+  healthy = true;
+  timestamp += 60 * 60000;
+  await run();
+  assert.equal(probes, 2);
+  assert.equal(invocations, 6);
+  assert.equal(messages.at(-1), 'FACTORY_HEALTH_RESTORED');
+});
+
+test('a confirmed repair with no changes is recorded and never publishes', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = async () => ({ additions: [], deletions: [] });
+  assert.equal(await repairProduct(input), 'no-change');
+  assert.match(history[0].body, /"outcome":"no-change"/);
+  assert.deepEqual(effects, ['confirmed']);
+});
+
+test('a confirmed out-of-scope repair is recorded and never publishes', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = async () => null;
+  assert.equal(await repairProduct(input), 'unsafe');
+  assert.match(history[0].body, /"outcome":"out-of-scope"/);
+  assert.deepEqual(effects, ['confirmed']);
+});
+
+test('an acknowledged rerun without a new attempt is not dispatched twice', async () => {
+  const { input, history } = repairFixture({ infrastructure: true });
+  let submitted = 0;
+  const gh = input.gh;
+  input.gh = async (...args) => {
+    if (args[0].endsWith('/rerun-failed-jobs')) {
+      submitted++;
+      return null;
+    }
+    return gh(...args);
+  };
+  assert.equal(await repairProduct(input), 'rerun-pending');
+  assert.equal(await repairProduct(input), 'rerun-pending');
+  assert.equal(submitted, 1);
+  assert.equal(history.length, 1);
 });
