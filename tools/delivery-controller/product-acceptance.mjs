@@ -108,8 +108,8 @@ export function developmentProvider({ token, request }) {
       const project = await read('/v9/projects/' + projectId);
       if (project.id !== projectId || project.accountId !== teamId ||
           project.link?.type !== 'github' || project.link.org !== 'farbotkol' || project.link.repo !== 'butterbox' ||
-          !project.link.productionBranch || project.link.productionBranch === development)
-        throw new Error('Vercel project does not prove Development is separate from its production branch');
+          project.link.productionBranch !== development)
+        throw new Error('Vercel project does not match the owner-authorized Development project and branch');
     },
     async readDeployment(id) {
       return read('/v13/deployments/' + id);
@@ -119,7 +119,7 @@ export function developmentProvider({ token, request }) {
 
 export async function developmentDeployment({ paged, gh, provider, merge, mergedAt, migrations }) {
   // GitHub commit status is a pointer only. The provider must independently
-  // confirm the immutable commit, project and nonproduction target.
+  // confirm the immutable commit, allowlisted Development project and primary target.
   const statuses = await paged('/commits/' + merge + '/statuses');
   const matches = statuses.filter(row => row.context === 'Vercel');
   if (matches.some(row => !Number.isSafeInteger(row.id) || !Number.isFinite(Date.parse(row.created_at))) ||
@@ -131,7 +131,8 @@ export async function developmentDeployment({ paged, gh, provider, merge, merged
   const id = 'dpl_' + link[1];
   const deployment = await provider.readDeployment(id);
   if (deployment.id !== id || deployment.projectId !== projectId || deployment.readyState !== 'READY' ||
-      ![null, 'preview'].includes(deployment.target) ||
+      deployment.target !== 'production' ||
+      !Array.isArray(deployment.alias) || !deployment.alias.includes('butterbox.vercel.app') ||
       deployment.meta?.githubOrg !== 'farbotkol' || deployment.meta.githubRepo !== 'butterbox' ||
       deployment.meta.githubCommitRef !== development || deployment.meta.githubCommitSha !== merge ||
       !(deployment.createdAt >= mergedAt) || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url ?? '')) return null;
