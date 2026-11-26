@@ -5,22 +5,24 @@ on:
     branches: [copilot/Development]
     types: [opened, synchronize, reopened, ready_for_review]
 
+  workflow_dispatch:
+
 permissions:
   contents: read
 
 concurrency:
-  group: product-criteria-${{ github.event.pull_request.number }}
+  group: product-criteria-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   product-criteria:
-    if: github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'copilot/')
+    if: (github.event_name == 'workflow_dispatch' && startsWith(github.ref, 'refs/heads/copilot/')) || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'copilot/'))
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.pull_request.head.sha }}
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
