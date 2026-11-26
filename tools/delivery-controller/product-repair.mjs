@@ -44,8 +44,8 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
     const job = await gh('/actions/jobs/' + source[2]);
     if (String(job.id) !== source[2] || job.run_id !== run.id || job.head_sha !== head ||
         job.name !== failed.name || job.conclusion !== failed.conclusion) return 'unsafe';
-    detail = repairDiagnostic(await logs(Number(source[2])));
-    detail.infrastructure ||= ['cancelled', 'startup_failure'].includes(failed.conclusion);
+    detail = ['cancelled', 'startup_failure'].includes(failed.conclusion) ?
+      { infrastructure: true } : repairDiagnostic(await logs(Number(source[2])));
   } else if (!failure && !interrupted) return 'waiting';
   const kind = detail.infrastructure || (!failure && interrupted && !failed) ? 'infra' : 'source';
   if (previous.filter(row => row.kind === kind).length >= (kind === 'source' ? 3 : 2)) return 'exhausted';

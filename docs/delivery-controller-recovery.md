@@ -14,8 +14,8 @@ Both patches passed a local three-way application check against Development
 guide and browser spec, so reevaluate conflicts against the current Development
 tip before each dispatch.
 
-After the corrected controller merges and the owner authorizes re-entry, use
-`unpark` with the issue number and exact parking tag SHA. The controller checks
+After the corrected controller merges, verify its required checks and recovery evidence.
+When the owner authorizes P0 recovery, enable the disabled workflow and use `unpark` with the issue number and exact parking tag SHA. The controller checks
 the parked task and closed PR, verifies the stopped writer and scoped diff,
 records the immutable source range, and compares and deletes the parking tag.
 The next authorized controller cycle gives the new Copilot task the preserved
