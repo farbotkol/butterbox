@@ -1,17 +1,14 @@
 name: Check Copilot agent token
-
 on:
   workflow_dispatch:
-
 permissions: {}
-
 jobs:
   check-token:
     if: github.repository == 'farbotkol/butterbox' && github.ref == 'refs/heads/diagnose/305-retained-lease' && github.actor_id == '11307166' && github.triggering_actor == 'farbotkol'
     runs-on: ubuntu-latest
     timeout-minutes: 4
     steps:
-      - name: Read current Copilot writer evidence for Issue 305
+      - name: Compare documented modification and writer filters using GET only
         env:
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
         run: |
@@ -19,71 +16,64 @@ jobs:
           const token = process.env.COPILOT_AGENT_USER_TOKEN;
           if (!token) throw new Error('Copilot credential unavailable');
           const root = 'https://api.github.com/agents/repos/farbotkol/butterbox/tasks';
-          const uuid = value => typeof value === 'string' && /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(value);
-          const stopped = new Set(['completed', 'failed', 'cancelled', 'timed_out']);
-          const known = new Set([...stopped, 'idle', 'queued', 'in_progress', 'waiting_for_user']);
-          const marker = 'BUTTERBOX_LEASE_RUN=actions_45121500090_1';
-          async function get(path) {
+          const states = new Set(['queued', 'in_progress', 'waiting_for_user']);
+          const knownId = 'e80f0b14-620a-4914-8dac-f12059f2421f';
+          const logs = [];
+          async function get(path, purpose) {
             const response = await fetch(root + path, {
               method: 'GET', redirect: 'error', signal: AbortSignal.timeout(15000),
               headers: { Accept: 'application/vnd.github+json', Authorization: 'Bearer ' + token, 'X-GitHub-Api-Version': '2026-03-10' },
             });
-            if (!response.ok) throw new Error('Copilot GET ' + path + ' returned HTTP ' + response.status);
-            if (/rel="?next"?/.test(response.headers.get('link') ?? '')) throw new Error('Paginated task evidence');
-            return response.json();
+            const meta = name => {
+              const value = response.headers.get(name);
+              return value && /^[\da-f:]+$/i.test(value) ? value : null;
+            };
+            console.log(JSON.stringify({ purpose, status: response.status, requestId: meta('x-github-request-id'),
+              remaining: meta('x-ratelimit-remaining'), limit: meta('x-ratelimit-limit'), reset: meta('x-ratelimit-reset') }));
+            logs.push(response.status);
+            if (!response.ok) return null;
+            return { data: await response.json(), next: /rel="?next"?/.test(response.headers.get('link') ?? '') };
           }
-          async function list(archived) {
-            const data = await get('?per_page=100' + (archived === null ? '' : '&is_archived=' + archived));
-            if (!Array.isArray(data.tasks) || data.tasks.length >= 100 ||
-                (Object.hasOwn(data, 'total_count') && data.tasks.length !== data.total_count) ||
-                data.tasks.some(task => !uuid(task.id) || !known.has(task.state)) ||
-                new Set(data.tasks.map(task => task.id)).size !== data.tasks.length) throw new Error('Incomplete task inventory');
-            return data.tasks;
-          }
-          for (const archived of [null, false, true]) {
-            try {
-            const rows = await list(archived);
-            const tasks = [];
-            for (let i = 0; i < rows.length; i += 8) {
-              tasks.push(...await Promise.all(rows.slice(i, i + 8).map(async row => {
-                const task = await get('/' + row.id);
-                if (task.id !== row.id || task.state !== row.state) throw new Error('Task list and detail disagree');
-                return task;
-              })));
-            }
-            const states = rows => rows.map(row => row.id + ':' + row.state).sort().join(',');
-            if (states(rows) !== states(await list(archived))) throw new Error('Task inventory changed');
-            const findings = { archived, tasks: tasks.length, missingPromptSessions: 0,
-              missingPromptByState: {}, badShape: [], writers: [], idlePairs: [], matching: [], sessionKeys: [] };
-            const sessionKeys = new Set();
-            for (const task of tasks) {
-              const sessions = Array.isArray(task.sessions) ? task.sessions : [];
-              if (!sessions.length || task.session_count !== sessions.length ||
-                  sessions.some(s => !uuid(s.id) || s.task_id !== task.id || !known.has(s.state)) ||
-                  new Set(sessions.map(s => s.id)).size !== sessions.length) findings.badShape.push(task.id);
-              if (task.state === 'idle' && sessions.length && sessions.every(s => s.state === 'idle')) {
-                findings.idlePairs.push({ taskId: task.id, sessionIds: sessions.map(s => s.id).filter(uuid) });
-              }
-              const active = sessions.filter(s => !stopped.has(s.state) && s.state !== 'idle');
-              if ((!stopped.has(task.state) && task.state !== 'idle') || active.length) {
-                findings.writers.push({ taskId: task.id, state: task.state, sessionIds: active.map(s => s.id).filter(uuid) });
-              }
-              for (const session of sessions) {
-                for (const key of Object.keys(session)) sessionKeys.add(key);
-                if (typeof session.prompt !== 'string' || !session.prompt.trim()) {
-                  findings.missingPromptSessions++;
-                  const state = known.has(session.state) ? session.state : 'unknown';
-                  findings.missingPromptByState[state] = (findings.missingPromptByState[state] ?? 0) + 1;
-                } else if (session.prompt.split(/\r?\n/).some(line => line.trim() === marker)) {
-                  findings.matching.push({ taskId: task.id, sessionId: uuid(session.id) ? session.id : null });
-                }
+          const list = async (params, purpose) => {
+            const out = [];
+            for (let page = 1; page <= 3; page++) {
+              const result = await get('?per_page=100&page=' + page + '&' + params, purpose);
+              if (!result) return null;
+              const { data, next } = result;
+              if (!Array.isArray(data.tasks)) throw new Error('Invalid repository task list');
+              out.push(...data.tasks);
+              if (!next) {
+                if ((data.total_count !== undefined && data.total_count !== out.length) ||
+                    (data.total_count === undefined && data.tasks.length === 100) ||
+                    new Set(out.map(t => t.id)).size !== out.length) throw new Error('Incomplete repository task list');
+                return out;
               }
             }
-            findings.sessionKeys = [...sessionKeys].sort();
-            console.log(JSON.stringify(findings));
-            } catch (error) {
-              console.log(JSON.stringify({ archived, error: error.message }));
-              process.exitCode = 1;
+            throw new Error('Diagnostic pagination cap reached');
+          };
+          const t = await get('/' + knownId, 'historical-conflicting-session');
+          if (t) console.log(JSON.stringify({ knownId, state: t.data.state, created: t.data.created_at,
+            updated: t.data.updated_at, sessionCount: t.data.session_count,
+            sessions: t.data.sessions?.map(s => ({ id:s.id, state:s.state, updated:s.updated_at })) }));
+          const active = await list('state=queued,in_progress,waiting_for_user', 'active');
+          for (const filter of ['', 'is_archived=false', 'is_archived=true']) {
+            const base = await list(filter, 'baseline ' + filter);
+            if (!base) continue;
+            const witness = base.find(row => Date.parse(row.updated_at) > Date.parse(row.created_at) + 1000);
+            if (!witness) {
+              console.log(JSON.stringify({ filter, count: base.length, witness: false }));
+              continue;
             }
+            const since = new Date(Date.parse(witness.created_at) + 1000).toISOString();
+            const recent = await list(filter + (filter ? '&' : '') + 'since=' + encodeURIComponent(since), 'since ' + filter);
+            const future = await list(filter + (filter ? '&' : '') + 'since=2099-01-01T00%3A00%3A00Z', 'future ' + filter);
+            console.log(JSON.stringify({ filter, count: base.length, active: active?.length,
+              historicalKnownInBaseline: base.some(r => r.id === knownId), historicalKnownInActive: active?.some(r => r.id === knownId),
+              since, witnessId: witness.id, created: witness.created_at, updated: witness.updated_at,
+              witnessInSince: recent?.some(r => r.id === witness.id), recent: recent?.length,
+              outOfWindow: recent?.filter(r => !(Date.parse(r.updated_at) >= Date.parse(since))).length,
+              omittedExpected: recent && base.filter(r => Date.parse(r.updated_at) >= Date.parse(since) && !recent.some(n => n.id === r.id)).length,
+              future: future?.length }));
           }
+          console.log(JSON.stringify({ requests: logs.length }));
           JS
