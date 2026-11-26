@@ -70,3 +70,38 @@ test('parking survives release and replays without overwriting the blocker recor
  assert.equal(await isParked(api,lease.issue+1),false);
  assert.ok((await acquireLease(api,args('next',lease.issue+1))).acquired);
 });
+
+test('owner re-entry requires the exact parking tag, original priority and no live lease', async () => {
+  const { unparkIssue } = await import('../tools/delivery-controller/lease.mjs');
+  const sha = 'a'.repeat(40);
+  const ref = 'refs/tags/butterbox-controller-parked-401';
+  let held = false;
+  let deleted = false;
+  const api = {
+    async getRef(name) {
+      if (name === LEASE_REF && !held) throw Object.assign(new Error('missing'), { status: 404 });
+      return { object: { type: 'tag', sha } };
+    },
+    async getTag() {
+      return held ? { tag: 'butterbox-controller-lease',
+        message: JSON.stringify({ version: 1, issue: 401, runId: 'actions_15_1', baseSha: sha,
+          startedAt: '2026-11-26T00:00:00Z' }) } : {
+        sha, tag: ref.slice('refs/tags/'.length), object: { type: 'commit' },
+        message: JSON.stringify({ issue: 401, action: 'PARK_VERIFIED', priority: 'p2.01' }),
+      };
+    },
+    async compareAndDeleteRef(name, expected) {
+      assert.equal(name, ref);
+      assert.equal(expected, sha);
+      deleted = true;
+    },
+  };
+  await assert.rejects(unparkIssue(api, 401, 'b'.repeat(40), 'p2.01'), /no longer matches/);
+  await assert.rejects(unparkIssue(api, 401, sha, 'p2.02'), /original priority/);
+  held = true;
+  await assert.rejects(unparkIssue(api, 401, sha, 'p2.01'), /exclusive lease/);
+  assert.equal(deleted, false);
+  held = false;
+  await unparkIssue(api, 401, sha, 'p2.01');
+  assert.equal(deleted, true);
+});

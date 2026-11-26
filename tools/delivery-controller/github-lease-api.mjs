@@ -82,7 +82,7 @@ export function githubLeaseApi({token, repository, request = fetch} = {}) {
       }
     },
     async compareAndDeleteRef(ref, sha) {
-      if (ref !== LEASE_REF || !/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid lease deletion target');
+      if ((ref !== LEASE_REF && !/^refs\/tags\/butterbox-controller-parked-[1-9]\d*$/.test(ref)) || !/^[a-f0-9]{40}$/.test(sha)) throw new Error('Invalid lease deletion target');
       try {
         await push(ref, sha, '');
       } catch {

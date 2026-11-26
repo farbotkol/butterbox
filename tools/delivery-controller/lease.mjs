@@ -30,10 +30,11 @@ export async function readLease(api, { verifyTarget = false } = {}) {
   return { ...record, tagSha: ref.object.sha };
 }
 
-export async function acquireLease(api, {issue, runId, baseSha, issueDigest, startedAt = new Date().toISOString()}) {
+export async function acquireLease(api, {issue, runId, baseSha, issueDigest, priority, startedAt = new Date().toISOString()}) {
   if (!validIssue(issue) || !validRun(runId) || !validSha(baseSha) ||
       !Number.isFinite(Date.parse(startedAt)) || (issueDigest !== undefined && !/^[a-f0-9]{64}$/.test(issueDigest))) throw new Error('Invalid lease request');
-  const record = {version:1, issue, runId, baseSha, startedAt, ...(issueDigest === undefined ? {} : {issueDigest})};
+  if (priority !== undefined && !/^p(?:10|[0-9])(?:\.[0-9]{2})?$/.test(priority)) throw new Error('Invalid lease priority');
+  const record = {version:1, issue, runId, baseSha, startedAt, ...(priority ? {priority} : {}), ...(issueDigest === undefined ? {} : {issueDigest})};
   // Orphan tag objects are harmless; they do not own the single ref.
   const tag = await api.createTag({
     tag:'butterbox-controller-lease', message:JSON.stringify(record), object:baseSha,
@@ -86,6 +87,22 @@ export async function isParked(api, issue) {
   }
 }
 
+export async function unparkIssue(api, issue, expectedSha, priority) {
+  if (!validIssue(issue) || !validSha(expectedSha) || !/^p(?:10|[0-9])(?:\.[0-9]{2})?$/.test(priority ?? ''))
+    throw new Error('Invalid parking re-entry request');
+  if (await readLease(api)) throw new Error('Cannot re-enter while an exclusive lease is held');
+  const ref = parkingRef(issue);
+  const current = await api.getRef(ref);
+  if (current?.object?.type !== 'tag' || current.object.sha !== expectedSha)
+    throw new Error('Parking tag no longer matches owner request');
+  const tag = await api.getTag(expectedSha);
+  const record = JSON.parse(tag.message);
+  if (tag.sha !== expectedSha || tag.tag !== ref.slice('refs/tags/'.length) || tag.object?.type !== 'commit' ||
+      record.issue !== issue || record.action !== 'PARK_VERIFIED' || record.priority !== priority)
+    throw new Error('Parking identity or original priority is unverified');
+  await api.compareAndDeleteRef(ref, expectedSha);
+}
+
 export async function recordParking(api, lease, evidence) {
   const current = await readLease(api);
   if (!current || current.tagSha !== lease.tagSha || current.runId !== lease.runId ||
@@ -95,7 +112,7 @@ export async function recordParking(api, lease, evidence) {
     tag:tagName,
     message:JSON.stringify({version:1, issue:current.issue, runId:current.runId, startedAt:current.startedAt,
       taskId:evidence.taskId, taskUrl:evidence.taskUrl, blocker:evidence.taskState, sessionCount:evidence.sessionCount,
-      action:evidence.action}),
+      action:evidence.action, priority:evidence.priority, parkedAt:new Date().toISOString()}),
     object:current.baseSha, type:'commit'
   });
   if (!validSha(tag?.sha)) throw new Error('Invalid parking tag SHA');
@@ -104,5 +121,11 @@ export async function recordParking(api, lease, evidence) {
   } catch (error) {
     // A restarted run can proceed once the durable quarantine still exists.
     if (![409, 422].includes(error.status) || !await isParked(api, current.issue)) throw error;
+    const prior = await api.getRef(parkingRef(current.issue));
+    const record = JSON.parse((await api.getTag(prior.object.sha)).message);
+    if (record.issue !== current.issue || record.runId !== current.runId ||
+        record.taskId !== evidence.taskId || record.action !== evidence.action ||
+        record.blocker !== evidence.taskState || record.priority !== evidence.priority)
+      throw new Error('Existing parking record belongs to different evidence');
   }
 }

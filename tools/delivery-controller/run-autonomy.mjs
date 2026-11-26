@@ -1,10 +1,11 @@
+import { productScope, conflictsWithProduct } from './product.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { githubLeaseApi } from './github-lease-api.mjs';
-import { readLease, acquireLease, releaseLease, isParked } from './lease.mjs';
-import { ownerApprovedQueueLabels, selectReadyIssue } from './queue.mjs';
+import { readLease, acquireLease, releaseLease, isParked, unparkIssue } from './lease.mjs';
+import { ownerApprovedQueueLabels, queuePriority, selectReadyIssue } from './queue.mjs';
 import { agentTasksApi, verifyCreatedTask } from './agent-tasks-api.mjs';
 import { taskMarker, development, competingWriters, isSha } from './handoff.mjs';
 import { ownerId, acceptanceIssues, proofFor, issueDigest, developmentSha, firstAcceptanceCompleted,
@@ -33,7 +34,7 @@ async function main() {
   if (process.env.GITHUB_EVENT_NAME === 'workflow_dispatch' && process.env.GITHUB_ACTOR_ID !== String(ownerId))
     throw new Error('Only the owner can manually run autonomous acceptance');
   const recovery = process.env.LEASE_RECOVERY || 'none';
-  if (!['none', 'verify', 'release', 'merged-verify', 'merged-release'].includes(recovery))
+  if (!['none', 'verify', 'release', 'merged-verify', 'merged-release', 'unpark'].includes(recovery))
     throw new Error('Invalid recovery mode');
   if (recovery !== 'none' && (process.env.GITHUB_EVENT_NAME !== 'workflow_dispatch' ||
       process.env.GITHUB_TRIGGERING_ACTOR !== 'farbotkol' || !isSha(process.env.EXPECTED_LEASE_TAG_SHA))) {
@@ -44,7 +45,7 @@ async function main() {
     return;
   }
   if (!ghToken) throw new Error('Missing Actions repository token');
-  if (!agentToken) {
+  if (!agentToken && recovery !== 'unpark') {
     if (recovery !== 'none') throw new Error('Missing Copilot credential for recovery');
     report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
     return;
@@ -98,6 +99,22 @@ async function main() {
     if (json.errors?.length || pr?.isDraft !== false || pr.headRefOid !== head)
       throw new Error('GitHub did not confirm draft promotion at the verified head');
   };
+  async function closingIssues(pr) {
+    if (typeof pr.node_id !== 'string') throw new Error('Missing product PR graph identity');
+    const response = await request('https://api.github.com/graphql', {
+      method: 'POST', headers, body: JSON.stringify({
+        query: 'query($id: ID!) { node(id: $id) { ... on PullRequest { headRefOid closingIssuesReferences(first: 1) { totalCount } } } }',
+        variables: { id: pr.node_id },
+      }),
+    });
+    if (!response.ok) throw new Error('Could not verify GitHub closing issue links');
+    const json = await response.json();
+    const prNode = json.data?.node;
+    const count = prNode?.closingIssuesReferences?.totalCount;
+    if (json.errors?.length || prNode?.headRefOid !== pr.head?.sha || !Number.isSafeInteger(count) || count < 0)
+      throw new Error('Incomplete GitHub closing issue links');
+    return count;
+  }
   async function approval(number) {
     const [issue, events, dependencies] = await Promise.all([
       gh('/issues/' + number), paged('/issues/' + number + '/events'),
@@ -115,6 +132,18 @@ async function main() {
   }
 
   const leaseApi = githubLeaseApi({ token: ghToken, repository: repo, request });
+  if (recovery === 'unpark') {
+    const input = process.env.PARKED_ISSUE_NUMBER ?? '';
+    if (!/^[1-9][0-9]*$/.test(input) || !Number.isSafeInteger(Number(input)))
+      throw new Error('Unpark requires a canonical issue number');
+    const { issue, approved } = await approval(Number(input));
+    if (!approved || !selectReadyIssue({ issues: [issue], prs: [], activeTasks: [], lease: { state: 'free' } }).issue ||
+        (!acceptanceIssues.includes(issue.number) && !productScope(issue)))
+      throw new Error('Issue has not been reauthorised with viable scope and dependencies');
+    await unparkIssue(leaseApi, issue.number, process.env.EXPECTED_LEASE_TAG_SHA, queuePriority(issue).label);
+    report('UNPARKED #' + issue.number + ' · normal dispatch requires a separate run');
+    return;
+  }
   const tasksApi = withTaskInventory(agentTasksApi({ token: agentToken, repository: repo, request }),
     leaseApi, { readOnly: ['verify', 'merged-verify'].includes(recovery) });
   if (recovery !== 'none') {
@@ -122,7 +151,7 @@ async function main() {
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
     if (recovery.startsWith('merged-')) {
       await advanceAcceptance({ repository: repo, gh, paged, tasksApi, leaseApi, lease, runId, report,
-        approval, repairBusy, readyPull, mergedRecovery: recovery.slice('merged-'.length) });
+        approval, repairBusy, readyPull, closingIssues, mergedRecovery: recovery.slice('merged-'.length) });
       return;
     }
     const readRunLog = async (id, attempt) => {
@@ -170,17 +199,17 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull });
+  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues });
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
-  repairBusy, readyPull }) {
+  repairBusy, readyPull, closingIssues }) {
   const current = await readLease(leaseApi);
   if (current) {
     report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
       ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
     await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
-      approval, repairBusy, readyPull });
+      approval, repairBusy, readyPull, closingIssues });
     return;
   }
 
@@ -196,7 +225,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
     if (repair) report('CI_REPAIR_BLOCK: A CI repair run may still be writing.');
     const activeTasks = repair ? [...writers, { source: 'CI repair' }] : writers;
-    const queue = { prs, activeTasks, lease: { state: 'free' } };
+    const queue = { prs: [], activeTasks, lease: { state: 'free' } };
     const eligible = [];
     for (const row of issues) {
       if (!selectReadyIssue({ ...queue, issues: [row] }).issue) continue;
@@ -207,6 +236,19 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
         report('QUEUE_SKIPPED #' + row.number + ': owner approval, dependencies or parking gate');
         continue;
       }
+      if (!acceptanceIssues.includes(row.number)) {
+        const scope = productScope(issue);
+        if (!scope || !closingIssues) {
+          report('PRODUCT_SCOPE_BLOCKED #' + row.number + ': owner-approved work area or lifecycle verification unavailable.');
+          continue;
+        }
+        const proofs = await Promise.all(acceptanceIssues.map(async number => firstAcceptanceCompleted(
+          await gh('/issues/' + number), await paged('/issues/' + number + '/events'), number)));
+        if (!proofs.every(Boolean) || await conflictsWithProduct(paged, gh, prs, scope)) {
+          report('PRODUCT_SCOPE_BLOCKED #' + row.number + ': proof sequence or work-area conflict.');
+          continue;
+        }
+      } else if (prs.length) continue;
       if (row.number === 306 && !firstAcceptanceCompleted(
         await gh('/issues/305'), await paged('/issues/305/events'))) {
         report('QUEUE_SKIPPED #306: historical proof #305 lacks verified completion');
@@ -224,12 +266,9 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
   const number = issue.number;
-  if (!acceptanceIssues.includes(number)) {
-    report('PRODUCT_DISPATCH_BLOCKED #' + number + ': product acceptance and owner review are pending.');
-    return;
-  }
   const acquired = await acquireLease(leaseApi, {
     issue: number, runId, baseSha: initial.baseSha, issueDigest: issueDigest(issue),
+    priority: queuePriority(issue).label,
   });
   if (!acquired.acquired) {
     report('LEASE_CONFLICT: another controller owns ' + acquired.holder.runId);
@@ -256,15 +295,17 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     return;
   }
 
-  const proof = proofFor(number);
+  const proof = acceptanceIssues.includes(number) ? proofFor(number) : null;
   const prompt = [
     'Implement Butterbox GitHub issue #' + number + ' only, against ' + development + '.',
     taskMarker(runId),
-    'Read its issue and AGENTS.md. Add only ' + proof.path + ' with exactly the content in the issue.',
+    proof ? 'Read its issue and AGENTS.md. Add only ' + proof.path + ' with exactly the content in the issue.' :
+      'Read its issue and AGENTS.md. Work only in the approved Autonomy scope: ' + productScope(issue).paths.join(', ') +
+      '. Report tests and evidence for every acceptance criterion in the PR. Report any incomplete criteria explicitly.',
     'Open a draft PR. Use this body with one marker per line and no GitHub issue closing keywords:',
     'Refs #' + number,
     '<!-- butterbox-issue: ' + number + ' -->',
-    '<!-- butterbox-evidence: ' + proof.path + ' -->',
+    ...(proof ? ['<!-- butterbox-evidence: ' + proof.path + ' -->'] : []),
     'Leave CI and merge to GitHub. Do not access external systems, change other files, or begin another issue.',
   ].join('\n');
   try {

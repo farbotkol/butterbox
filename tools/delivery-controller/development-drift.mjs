@@ -2,11 +2,14 @@
 // This module deliberately does not change the durable lease or authorize a merge.
 import { isSha } from './handoff.mjs';
 
-export function assessDevelopmentDrift({ pinnedSha, currentSha, comparison, proofPath }) {
+export function assessDevelopmentDrift({ pinnedSha, currentSha, comparison, proofPath, productPaths }) {
   if (!isSha(pinnedSha) || !isSha(currentSha) ||
-      typeof proofPath !== 'string' || !proofPath.startsWith('docs/agent-work/')) {
+      (!Array.isArray(productPaths) && (typeof proofPath !== 'string' || !proofPath.startsWith('docs/agent-work/')))) {
     throw new Error('Invalid development drift evidence');
   }
+  const changedScope = productPaths || [proofPath];
+  const overlaps = file => changedScope.some(path => file === path ||
+    (file?.startsWith('supabase/') && path.startsWith('supabase/')));
   if (pinnedSha === currentSha) return { kind: 'unchanged', safe: true };
   if (!comparison || comparison.status !== 'ahead' ||
       comparison.base_commit?.sha !== pinnedSha ||
@@ -21,7 +24,7 @@ export function assessDevelopmentDrift({ pinnedSha, currentSha, comparison, proo
       comparison.files.length >= 300 ||
       comparison.files.some(file => !['added', 'modified', 'removed', 'renamed', 'copied', 'changed', 'unchanged'].includes(file.status)) ||
       comparison.files.some(file => typeof file.filename !== 'string' ||
-        file.filename === proofPath || file.previous_filename === proofPath)) {
+        overlaps(file.filename) || overlaps(file.previous_filename))) {
     return { kind: 'blocked', safe: false, reason: 'Development drift ancestry, completeness or proof path is unverified' };
   }
   return {
