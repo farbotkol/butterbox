@@ -18,7 +18,7 @@ import { FutureVisionPreview } from "@/components/future-vision-preview";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { isFutureVisionPreviewEnabled } from "@/lib/future-vision";
-import { parseOnboardingProgress } from "@/lib/onboarding";
+import { canViewOnboardingProgress, getOnboardingDashboardState } from "@/lib/onboarding";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
@@ -147,15 +147,15 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       .eq("venue_id", workspace.venue.id)
       .order("name"),
     unreadRosterNotificationCount(workspace.supabase, workspace.business.id, workspace.venue.id),
-    workspace.membership.role === "owner"
+    canViewOnboardingProgress(workspace.membership.role)
       ? workspace.supabase.rpc("get_onboarding_progress", { p_business_id: workspace.business.id })
       : Promise.resolve(null),
   ]);
-  const onboardingProgress = onboarding ? parseOnboardingProgress(onboarding.data) : null;
-  if (onboarding && (onboarding.error || !onboardingProgress)) {
+  const onboardingState = getOnboardingDashboardState(workspace.membership.role, onboarding);
+  if (onboardingState.status === "error") {
     console.error("Could not load onboarding progress.", {
-      code: onboarding.error?.code,
-      message: onboarding.error?.message ?? "The server returned invalid onboarding data.",
+      code: onboarding?.error?.code,
+      message: onboarding?.error?.message ?? "The server returned invalid onboarding data.",
     });
   }
 
@@ -228,11 +228,12 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} businessId={workspace.business.id} />
-      {onboarding && (onboardingProgress
-        ? <OnboardingChecklist progress={onboardingProgress} venueId={workspace.venue.id} businessId={workspace.business.id} />
-        : <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
-            We couldn&apos;t load your onboarding checklist. Refresh and try again.
-          </p>)}
+      {onboardingState.status === "incomplete" &&
+        <OnboardingChecklist progress={onboardingState.progress} venueId={workspace.venue.id} businessId={workspace.business.id} />}
+      {onboardingState.status === "error" &&
+        <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
+          We couldn&apos;t load your onboarding checklist. Refresh and try again.
+        </p>}
 
       <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard

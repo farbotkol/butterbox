@@ -6,6 +6,40 @@ export type OnboardingProgress = {
   publication_ready: boolean;
 };
 
+export function canViewOnboardingProgress(role: string): boolean {
+  return role === "owner";
+}
+
+export function getOnboardingProgress(
+  result: { data: unknown; error: unknown } | null,
+): OnboardingProgress | null {
+  if (!result || result.error) return null;
+  return parseOnboardingProgress(result.data);
+}
+
+export function isOnboardingComplete(progress: OnboardingProgress): boolean {
+  return progress.business_ready && progress.venue_ready && progress.staff_ready &&
+    progress.shift_ready && progress.publication_ready;
+}
+
+export type OnboardingDashboardState =
+  | { status: "unavailable" }
+  | { status: "error" }
+  | { status: "incomplete"; progress: OnboardingProgress }
+  | { status: "complete"; progress: OnboardingProgress };
+
+export function getOnboardingDashboardState(
+  role: string,
+  result: { data: unknown; error: unknown } | null,
+): OnboardingDashboardState {
+  if (!canViewOnboardingProgress(role)) return { status: "unavailable" };
+  const progress = getOnboardingProgress(result);
+  if (!progress) return { status: "error" };
+  return isOnboardingComplete(progress)
+    ? { status: "complete", progress }
+    : { status: "incomplete", progress };
+}
+
 export function parseOnboardingProgress(value: unknown): OnboardingProgress | null {
   if (!Array.isArray(value) || value.length !== 1) return null;
   const row: unknown = value[0];

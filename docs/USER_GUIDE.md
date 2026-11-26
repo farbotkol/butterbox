@@ -170,6 +170,14 @@ Award Central and production/legal acceptance are not implied.
 5. Add employee profiles, associate eligible job roles and departments, and review employee availability before scheduling.
 6. Create draft shifts in the weekly roster, check conflicts and publish when ready. A venue can use direct publication or an approval-based publication workflow.
 
+The owner-only **Get your first roster ready** checklist appears while any of its
+five steps is incomplete. It uses the active business's server-verified progress,
+so switching businesses shows that business's own checklist. Once all five
+steps are complete, the entire section, including its counter and help link,
+disappears. If a later operational change makes a step incomplete again, the
+checklist reappears. If progress cannot be loaded, the dashboard reports an
+error instead of treating missing data as completion.
+
 **Permissions:** Owners can manage the business; general managers and FOH/BOH managers have scoped responsibilities. Employees can access their own supported self-service functionality. A manager must not assume that access to one department permits access to another. Accounts with multiple business memberships can switch the active business; each request is independently authorized.
 
 ### Accounts and business access
