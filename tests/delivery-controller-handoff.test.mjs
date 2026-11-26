@@ -1104,3 +1104,15 @@ test('the Vercel adapter requires a linked nonproduction Development branch', as
   project.link.repo = 'different';
   await assert.rejects(provider.verifyTarget(), /separate from its production branch/);
 });
+
+test('a completed product task with an explicit empty artifact list parks only with no session branch PR', async () => {
+  const { run, effects, state } = productFixture();
+  state.task.artifacts = [];
+  await run();
+  assert.deepEqual(effects, []);
+  state.openPRs = [state.humanPR];
+  assert.equal(await run(), 'released');
+  assert.deepEqual(effects, ['park', 'release']);
+  assert.equal(state.issue.state, 'open');
+  assert.equal(state.parking.blocker, 'completed-without-pr');
+});
