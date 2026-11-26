@@ -6,6 +6,8 @@ import { productScope, scopedProductFiles } from '../tools/delivery-controller/p
 import { repairDiagnostic, repairProduct } from '../tools/delivery-controller/product-repair.mjs';
 import { recoveryInstructions } from '../tools/delivery-controller/parked-product.mjs';
 import { selectReadyIssue } from '../tools/delivery-controller/queue.mjs';
+import { apiResponse } from "../tools/delivery-controller/api-response.mjs";
+import { modelJson } from "../tools/delivery-controller/product-acceptance.mjs";
 
 const repository = 'farbotkol/butterbox';
 const head = '1'.repeat(40);
@@ -106,4 +108,43 @@ test('recovery seeds the new attempt from an authenticated immutable closed PR',
   });
   assert.equal(await recoveryInstructions(async () => [{ user: { id: 11307166 }, body }], 82), null);
   assert.match(await recoveryInstructions(async () => [{ user: { id: 41898282 }, body }], 82), /Reuse.*closed PR #334/);
+});
+
+test('GitHub response contracts distinguish acknowledgements from required resources', async () => {
+  const contract = { operation: 'GitHub POST', endpoint: '/actions/workflows/ci.yml/dispatches' };
+  assert.deepEqual(await apiResponse(Response.json({ id: 42 }), contract), { id: 42 });
+  assert.deepEqual(await apiResponse(Response.json({ id: 42 }, { status: 201 }), contract), { id: 42 });
+  for (const [body, status] of [['OK\n', 200], ['', 200], [null, 201], [null, 202], [null, 204]]) {
+    assert.equal(await apiResponse(new Response(body, { status }), { ...contract, ack: true }), null);
+  }
+  for (const [status, category] of [[429, 'integration'], [503, 'integration'], [401, 'permission'], [403, 'permission']]) {
+    await assert.rejects(apiResponse(new Response('sensitive diagnosis', { status, headers: {
+      'retry-after': status === 429 ? '30' : '',
+    } }), contract), error => error.status === status && error.category === category &&
+      (status !== 429 || error.retryAfter === '30') && !error.message.includes('sensitive diagnosis'));
+  }
+  await assert.rejects(apiResponse(new Response('{invalid'), contract), /outer-json\/invalid-json/);
+  await assert.rejects(apiResponse(new Response(null, { status: 204 }), contract), /outer-json\/empty/);
+});
+
+test('runs 420 and 426: OK cannot become independent acceptance evidence', async () => {
+  const log = await readFile(new URL('./fixtures/delivery-controller/ok-json-failure.log', import.meta.url), 'utf8');
+  const observed = [...log.matchAll(/STOPPED: Unexpected token 'O', "([^\n]*)\n\S+Z " is not valid JSON/g)];
+  assert.equal(observed.length, 2);
+  for (const [, line] of observed) {
+    const content = line + '\n';
+    await assert.rejects(modelJson('Return evidence', {}, { request: async () => new Response(content) }),
+      /outer-json\/plain-ok/);
+    await assert.rejects(modelJson('Return evidence', {}, { request: async () =>
+      Response.json({ choices: [{ finish_reason: 'stop', message: { content } }] }) }),
+    /model-output\/invalid-json/);
+  }
+});
+
+test('an integration failure before publication does not reserve a source repair', async () => {
+  const { input, history, effects } = repairFixture();
+  input.propose = () => apiResponse(new Response('OK'), { operation: 'GitHub Models', endpoint: '/inference/chat/completions' });
+  await assert.rejects(repairProduct(input), /outer-json\/plain-ok/);
+  assert.deepEqual(history, []);
+  assert.deepEqual(effects, []);
 });

@@ -50,6 +50,8 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
   const kind = detail.infrastructure || (!failure && interrupted && !failed) ? 'infra' : 'source';
   if (previous.filter(row => row.kind === kind).length >= (kind === 'source' ? 3 : 2)) return 'exhausted';
   if (kind === 'source' && !detail.text?.trim()) return 'unsafe';
+  const changes = kind === 'source' ? await propose(detail.text) : null;
+  if (kind === 'source' && !changes?.length) return 'unsafe';
   await confirm();
   const body = prefix + JSON.stringify({ lease: lease.tagSha, pr: pr.number, head, kind });
   const receipt = await gh(route, 'POST', { body });
@@ -57,8 +59,6 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
   if (kind === 'infra' && run && failed.conclusion !== 'cancelled') {
     await gh('/actions/runs/' + run.id + '/rerun-failed-jobs', 'POST');
   } else if (kind === 'source') {
-    const changes = await propose(detail.text);
-    if (!changes?.length) return 'unsafe';
     await confirm();
     await publish(changes);
   }

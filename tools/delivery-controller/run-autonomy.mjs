@@ -1,3 +1,4 @@
+import { apiResponse, responseFailure } from './api-response.mjs';
 import { recordRecoverySource, recoveryInstructions } from './parked-product.mjs';
 import { repairProduct } from './product-repair.mjs';
 import { inferProductAcceptance, modelJson } from './product-acceptance.mjs';
@@ -77,7 +78,7 @@ async function main() {
         checks.push({ name, passed: job.steps?.filter(step => step.conclusion === 'success').map(step => step.name) });
       }
     }
-    return inferProductAcceptance({ ...input, context: { issue: input.context, existing, checks } }, { token: ghToken, request });
+    return inferProductAcceptance({ ...input, context: { issue: input.context, existing, checks } }, { token: ghToken, request, operation: 'GitHub Models independent acceptance' });
   };
   const headers = {
     Accept: 'application/vnd.github+json',
@@ -90,8 +91,9 @@ async function main() {
     const response = await request('https://api.github.com/repos/' + repo + path, {
       headers, method, body: body && JSON.stringify(body),
     });
-    if (!response.ok) throw new Error('GitHub ' + method + ' HTTP ' + response.status + ' for ' + path);
-    return [201, 204].includes(response.status) && method === 'POST' && path.includes('/actions/') ? null : response.json();
+    const endpoint = path.split('?')[0];
+    const ack = method === 'POST' && /^\/actions\/(?:workflows\/[^/]+\/dispatches|runs\/\d+\/rerun(?:-failed-jobs)?)$/.test(endpoint);
+    return apiResponse(response, { operation: 'GitHub ' + method, endpoint, ack });
   }
   async function paged(path) {
     const all = [];
@@ -115,7 +117,7 @@ async function main() {
     })).filter(row => row.score).sort((a, b) => b.score - a.score).slice(0, 100).map(row => row.path);
     if (!candidates.length) return null;
     const result = await modelJson('Select only the few exact catalog paths needed to implement and test the requested outcome. Return JSON {paths:[]} for vague, ambiguous, broad or sensitive changes. Do not infer scope for credentials, authorization, payroll or database migrations.',
-      { title: issue.title, body: issue.body, candidates }, { token: ghToken, request });
+      { title: issue.title, body: issue.body, candidates }, { token: ghToken, request, operation: 'GitHub Models scope planning' });
     return Array.isArray(result.paths) && result.paths.every(path => candidates.includes(path) && !path.startsWith('supabase/')) ? result.paths : null;
   }
   const repair = input => repairProduct({ ...input, gh, paged, report,
@@ -141,7 +143,7 @@ async function main() {
       if (!source.length) return [];
       const selected = source.filter(file => diagnostic.includes(file.path) || diagnostic.includes(file.path.split('/').at(-1)));
       const files = (selected.length ? selected : source).slice(0, 5);
-      const answer = await modelJson('Repair only the diagnosed failure within these files. Preserve behavior, tenant boundaries, permissions, test intent and assertions. Return JSON with edits of {path, old, replacement}. Each old must be a nonempty exact unique substring. No shell commands or external systems.', { diagnostic, requirements: input.scope.criteria, files }, { token: ghToken, request });
+      const answer = await modelJson('Repair only the diagnosed failure within these files. Preserve behavior, tenant boundaries, permissions, test intent and assertions. Return JSON with edits of {path, old, replacement}. Each old must be a nonempty exact unique substring. No shell commands or external systems.', { diagnostic, requirements: input.scope.criteria, files }, { token: ghToken, request, operation: 'GitHub Models repair proposal' });
       if (!Array.isArray(answer.edits) || !answer.edits.length || answer.edits.length > 15) return [];
       const changed = new Map();
       for (const edit of answer.edits) {
@@ -165,10 +167,10 @@ async function main() {
             fileChanges: { additions } } },
         }),
       });
-      if (!response.ok) throw new Error('Repair mutation HTTP ' + response.status);
-      const json = await response.json();
+      const contract = { operation: 'GitHub publish repair', endpoint: '/graphql' };
+      const json = await apiResponse(response, contract);
       if (json.errors?.length || !isSha(json.data?.createCommitOnBranch?.commit?.oid))
-        throw new Error('Repair commit outcome could not be confirmed');
+        throw responseFailure(response, contract, 'graphql-result', 'unconfirmed');
     },
   });
   const repairBusy = async () => {
@@ -188,11 +190,11 @@ async function main() {
         variables: { id: nodeId },
       }),
     });
-    if (!response.ok) throw new Error('GitHub draft promotion returned HTTP ' + response.status);
-    const json = await response.json();
+    const contract = { operation: 'GitHub promote draft', endpoint: '/graphql' };
+    const json = await apiResponse(response, contract);
     const pr = json.data?.markPullRequestReadyForReview?.pullRequest;
     if (json.errors?.length || pr?.isDraft !== false || pr.headRefOid !== head)
-      throw new Error('GitHub did not confirm draft promotion at the verified head');
+      throw responseFailure(response, contract, 'graphql-result', 'unconfirmed');
   };
   async function closingIssues(pr, issue) {
     if (typeof pr.node_id !== 'string') throw new Error('Missing product PR graph identity');
@@ -202,12 +204,12 @@ async function main() {
         variables: { id: pr.node_id },
       }),
     });
-    if (!response.ok) throw new Error('Could not verify GitHub closing issue links');
-    const json = await response.json();
+    const contract = { operation: 'GitHub verify closing issues', endpoint: '/graphql' };
+    const json = await apiResponse(response, contract);
     const prNode = json.data?.node;
     const count = prNode?.closingIssuesReferences?.totalCount;
     if (json.errors?.length || prNode?.headRefOid !== pr.head?.sha || !Number.isSafeInteger(count) || count < 0)
-      throw new Error('Incomplete GitHub closing issue links');
+      throw responseFailure(response, contract, 'graphql-result', 'unconfirmed');
     const nodes = prNode.closingIssuesReferences.nodes;
     if (!Array.isArray(nodes) || nodes.length !== count ||
         nodes.some(node => node?.number !== issue || node.repository?.nameWithOwner !== repo))

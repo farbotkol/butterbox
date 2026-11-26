@@ -33,6 +33,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  models-connectivity:
+    if: github.event_name == 'workflow_dispatch' && inputs.smoke_only == true &&
+      github.repository == 'farbotkol/butterbox' && github.actor_id == '11307166'
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      contents: read
+      models: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify structured GitHub Models evidence with the Actions identity
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          node --input-type=module <<'NODE'
+          import assert from 'node:assert/strict';
+          import { modelJson } from './tools/delivery-controller/product-acceptance.mjs';
+          const result = await modelJson(
+            'Assess the supplied synthetic fact. Return JSON with criterion (1), pass (boolean), and evidence (exact supplied check label).',
+            { criterion: 'Is test-label green?', fact: 'test-label is green.' },
+            { token: process.env.GITHUB_TOKEN, operation: 'GitHub Models connectivity probe',
+              request: (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) }) }
+          );
+          assert(result.criterion === 1 && result.pass === true && result.evidence === 'test-label',
+            'GitHub Models did not return the expected structured evidence');
+          console.log('GitHub Models connectivity and structured output verified');
+          NODE
+
   repair-failed-test:
     if: >-
       (github.event_name == 'workflow_run' &&

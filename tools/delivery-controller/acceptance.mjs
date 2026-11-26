@@ -417,7 +417,11 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       if (product) {
         try {
           acceptance = await readAcceptance(infer);
-          assert(acceptance, 'Missing complete independent exact-head AI acceptance evidence');
+          if (!acceptance) {
+            const error = new Error('Missing complete independent exact-head AI acceptance evidence');
+            error.code = 'CONTROLLER_API';
+            throw error;
+          }
         } catch (error) {
           if (error.message.startsWith('Independent acceptance rejected:') && await recover(error.message)) return;
           throw error;
@@ -505,7 +509,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   try {
     return await verify();
   } catch (error) {
-    if (!product || mergedRecovery !== 'none' || issue.state !== 'open') throw error;
+    if (error.code === 'CONTROLLER_API' || !product || mergedRecovery !== 'none' || issue.state !== 'open') throw error;
     const stoppedAt = Math.max(time(lease.startedAt), time(pr.merged_at) || 0, ...[task, ...task.sessions]
       .flatMap(row => [row.updated_at, row.completed_at])
       .map(time).filter(Number.isFinite));
