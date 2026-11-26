@@ -1,8 +1,9 @@
+import { reconcileProductMetadata } from './product-metadata.mjs';
 import { queuePriority } from './queue.mjs';
 import { createHash } from 'node:crypto';
 import { assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
-import { canonicalIssueNumber, isAutonomousDevelopmentPR, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
+import { canonicalIssueNumber, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
 import { productScope, scopedProductFiles, readProductDiff, conflictsWithProduct, sameSquashFiles } from './product.mjs';
 import { productAcceptance, developmentDeployment } from './product-acceptance.mjs';
 import { assessDevelopmentDrift } from './development-drift.mjs';
@@ -118,7 +119,7 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull, closingIssues, infer, now = Date.now, mergedRecovery = 'none' }) {
+  approval, repairBusy, readyPull, closingIssues, infer, repair, now = Date.now, mergedRecovery = 'none' }) {
   assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
     runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
@@ -139,7 +140,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     assert(!repair, 'CI repair may still be writing');
     if (!parking) {
       assert(issueDigest(issue) === lease.issueDigest, 'Issue requirements changed after lease acquisition');
-      if (product) assert(productScope(issue) && Array.isArray(issue.assignees) && !issue.assignees.length,
+      if (product) assert(productScope(issue, lease.scopePaths) && Array.isArray(issue.assignees) && !issue.assignees.length,
         'Missing approved product scope or issue has a competing assignee');
     }
     return { issue, openPRs, result: assessHandoff({ lease, tasks, openPRs, issue, product }) };
@@ -196,7 +197,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
   }
 
   const { task, artifact } = result;
-  const scope = product && productScope(issue);
+  const scope = product && productScope(issue, lease.scopePaths);
   const { path, bytes } = product ? {} : proofFor(lease.issue);
   const matching = openPRs.filter(pr => pr.id === artifact || pr.number === artifact);
   assert(matching.length <= 1, 'Ambiguous task PR exists');
@@ -245,17 +246,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     if (product) assert(scope && Array.isArray(issue.assignees) && !issue.assignees.length,
       'Missing approved product scope or issue has a competing assignee');
     assert(result.action === 'VERIFY_PR', 'Failed product task still has an unresolved PR artifact');
-    let metadata;
-    if (product) {
-      const refs = [...(pr.body ?? '').matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)];
-      assert(refs.every(ref => Number(ref[1]) === lease.issue) && !closesIssue.test(pr.body ?? '') && !closesIssue.test(pr.title ?? '') &&
-        isAutonomousDevelopmentPR(pr) && canonicalIssueNumber(pr.body) === lease.issue && referencesCanonicalIssue(pr.body, lease.issue) &&
-        (pr.body.match(/<!--\s*butterbox-issue\s*:/g) ?? []).length === 1,
-      'Product PR lacks unique canonical metadata or uses an issue closing reference');
-      metadata = { changed: false };
-    } else {
-      metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
-    }
+    const metadata = product ? reconcileProductMetadata(pr, lease.issue, repository) :
+      { ...planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? ''), title: pr.title };
     // Closed/merged PRs cannot be repaired after the fact.
     if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
       'Merged PR lacks verified metadata');
@@ -287,17 +279,6 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     const mergedAt = time(pr.merged_at);
     const names = product ? [...requiredChecks, 'product-criteria'] : requiredChecks;
     const boundary = pr.merged === true ? mergedAt : now();
-    const ci = verifiedChecks(checks, head, boundary, names);
-    if (product) {
-      const runId = /\/runs\/(\d+)\/job\//.exec(ci.at(-1))[1];
-      const run = await gh('/actions/runs/' + runId);
-      assert(String(run.id) === runId && run.head_sha === head && run.event === 'pull_request' &&
-        run.path === '.github/workflows/product-criteria.yml' && run.head_repository?.full_name === repository,
-      'Exact-head product criteria check is not from the expected workflow');
-    }
-    const readAcceptance = ai => productAcceptance({ gh, paged, infer: ai, lease, pr, scope, files, ci,
-      boundary: pr.merged === true ? mergedAt : now() });
-    let acceptance;
     const tip = developmentSha(ref);
     // Validate only bounded, complete forward ancestry. The original lease remains immutable.
     const checkedAncestry = async (from, to) => {
@@ -309,13 +290,14 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     };
     const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
       [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
-    const confirm = async (expectedOpen, expectedBody = pr.body) => {
+    const confirm = async (expectedOpen, expectedBody = pr.body, expectedTitle = pr.title, normalizing = false) => {
       const fresh = await checkIdentity();
       const [freshPR, freshTip, approved] = await Promise.all([
         gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
       ]);
       if (product) {
-        assert(await closingIssues(freshPR) === 0, 'Product PR has linked issue-closing references');
+        const linked = await closingIssues(freshPR, lease.issue);
+        assert(linked === 0 || normalizing, 'Product PR has linked issue-closing references');
         if (expectedOpen) assert(!await conflictsWithProduct(paged, gh, fresh.openPRs, scope, number),
           'Competing Development PR overlaps the product work area');
       }
@@ -327,7 +309,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
           !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
             (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
         developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
-        freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
+        freshPR.title === expectedTitle && freshPR.state === pr.state && freshPR.draft === pr.draft &&
         freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
         freshPR.head?.ref === pr.head.ref && freshPR.head?.repo?.full_name === repository &&
         (!expectedOpen || freshPR.base?.sha === pr.base.sha) &&
@@ -361,20 +343,69 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         'PR head is not based on the original leased Development commit');
       assert(pr.auto_merge === null && typeof pr.draft === 'boolean' && pr.mergeable === true,
         'PR mergeability, draft state or native auto-merge is unverified');
-      const currentIssue = await confirm(true);
+      const currentIssue = await confirm(true, pr.body, pr.title, product && metadata.changed);
       assert(currentIssue.state === 'open' && !currentIssue.body?.includes(marker), 'Issue changed before merge');
-      if (metadata.changed) {
+      if (product && metadata.changed) {
         // Separate, reverified stage. Never promote or merge in the repair run.
-        const updated = await gh(endpoint, 'PATCH', { body: metadata.body });
+        const updated = await gh(endpoint, 'PATCH', { body: metadata.body, title: metadata.title });
         assert(updated.number === number && updated.head?.sha === head &&
-          updated.body === metadata.body && updated.state === 'open' &&
+          updated.body === metadata.body && updated.title === metadata.title && updated.state === 'open' &&
           updated.draft === pr.draft && updated.merged === false,
         'GitHub did not confirm exact metadata repair');
-        await confirm(true, metadata.body);
+        await confirm(true, metadata.body, metadata.title);
         report('PR_METADATA_REPAIRED #' + number + ' head ' + head +
-          ' · independently verified issue #' + lease.issue + ' proof ' + path);
+          ' · independently verified issue #' + lease.issue);
         return;
       }
+    }
+    const recover = async failure => {
+      if (!product || pr.state !== 'open' || !repair) return false;
+      const outcome = await repair({ gh, paged, lease, pr, checks, files, scope, failure, confirm: () => confirm(true) });
+      if (outcome === 'waiting' && now() - time(lease.startedAt) > 3 * 60 * 60 * 1000)
+        throw new Error('Product validation wait exhausted');
+      if (outcome === 'started' || outcome === 'waiting') {
+        report('PRODUCT_REPAIR_' + outcome.toUpperCase() + ' #' + lease.issue);
+        return true;
+      }
+      const error = new Error('Product repair ' + outcome + ': ' + (failure || 'CI validation failed'));
+      error.code = 'PRODUCT_REPAIR_STOP';
+      throw error;
+    };
+    let ci;
+    try {
+      ci = verifiedChecks(checks, head, boundary, names);
+    } catch (error) {
+      if (error.message.startsWith('Missing successful exact-head check') && await recover()) return;
+      throw error;
+    }
+    const latestAdvisory = ['database', 'targeted'].map(name => checks.check_runs.filter(row =>
+      row.name === name && row.app?.id === 15368 && row.head_sha === head && time(row.started_at) <= boundary).sort((a, b) => b.id - a.id)[0]);
+    if (latestAdvisory.some(row => row?.status === 'completed' && ['failure', 'timed_out'].includes(row.conclusion)) &&
+        await recover()) return;
+    const evidence = [...ci, ...latestAdvisory.filter(row => row?.status === 'completed' && row.conclusion === 'success' &&
+      time(row.completed_at) <= boundary && /^https:\/\/github\.com\/farbotkol\/butterbox\/actions\/runs\/\d+\/job\/\d+$/.test(row.html_url ?? ''))
+      .map(row => row.name + ' ' + row.html_url)];
+    if (product) {
+      const runId = /\/runs\/(\d+)\/job\//.exec(ci.at(-1))[1];
+      const run = await gh('/actions/runs/' + runId);
+      assert(String(run.id) === runId && run.head_sha === head && ['pull_request', 'workflow_dispatch'].includes(run.event) &&
+        run.path === '.github/workflows/product-criteria.yml' && run.head_repository?.full_name === repository,
+      'Exact-head product criteria check is not from the expected workflow');
+    }
+    const readAcceptance = ai => productAcceptance({ gh, paged, infer: ai, lease, pr, scope, files, ci: evidence, context: issue.title,
+      boundary: pr.merged === true ? mergedAt : now() });
+    let acceptance;
+    if (metadata.changed) {
+      const updated = await gh(endpoint, 'PATCH', { body: metadata.body });
+      assert(updated.number === number && updated.head?.sha === head &&
+        updated.body === metadata.body && updated.state === 'open' && updated.draft === pr.draft && !updated.merged,
+      'GitHub did not confirm exact metadata repair');
+      await confirm(true, metadata.body);
+      report('PR_METADATA_REPAIRED #' + number + ' head ' + head +
+        ' · independently verified issue #' + lease.issue + ' proof ' + path);
+      return;
+    }
+    if (pr.state === 'open') {
       const latest = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
       verifiedChecks(latest, head, now(), names);
       if (pr.draft) {
@@ -384,8 +415,13 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         return;
       }
       if (product) {
-        acceptance = await readAcceptance(infer);
-        assert(acceptance, 'Missing complete independent exact-head AI acceptance evidence');
+        try {
+          acceptance = await readAcceptance(infer);
+          assert(acceptance, 'Missing complete independent exact-head AI acceptance evidence');
+        } catch (error) {
+          if (error.message.startsWith('Independent acceptance rejected:') && await recover(error.message)) return;
+          throw error;
+        }
         await confirm(true);
         const currentChecks = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
         assert(JSON.stringify(verifiedChecks(currentChecks, head, now(), names)) === JSON.stringify(ci) &&
@@ -473,7 +509,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     const stoppedAt = Math.max(time(lease.startedAt), time(pr.merged_at) || 0, ...[task, ...task.sessions]
       .flatMap(row => [row.updated_at, row.completed_at])
       .map(time).filter(Number.isFinite));
-    if (result.action !== 'VERIFY_PARK_PR' && now() - stoppedAt < 60 * 60 * 1000) throw error;
+    if (result.action !== 'VERIFY_PARK_PR' && error.code !== 'PRODUCT_REPAIR_STOP' && now() - stoppedAt < 60 * 60 * 1000) throw error;
     // Re-read the exact PR and writer snapshot after any uncertain operation.
     // A successful-but-unconfirmed merge or closure is handled on a fresh cycle.
     if (pr.state === 'open' && await readStopped('open', false)) {

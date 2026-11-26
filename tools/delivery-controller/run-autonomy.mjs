@@ -1,5 +1,7 @@
-import { inferProductAcceptance } from './product-acceptance.mjs';
-import { productScope, conflictsWithProduct } from './product.mjs';
+import { recordRecoverySource, recoveryInstructions } from './parked-product.mjs';
+import { repairProduct } from './product-repair.mjs';
+import { inferProductAcceptance, modelJson } from './product-acceptance.mjs';
+import { productScope, conflictsWithProduct, validPath } from './product.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { appendFileSync } from 'node:fs';
@@ -14,7 +16,6 @@ import { ownerId, acceptanceIssues, proofFor, issueDigest, developmentSha, first
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
 import { readLeaseCandidates, rememberLeaseTask, withTaskInventory } from './task-inventory.mjs';
-import { autonomousDevelopmentMarker } from '../agent-evidence/evidence.mjs';
 import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
@@ -47,14 +48,37 @@ async function main() {
     return;
   }
   if (!ghToken) throw new Error('Missing Actions repository token');
-  if (!agentToken && recovery !== 'unpark') {
+  if (!agentToken) {
     if (recovery !== 'none') throw new Error('Missing Copilot credential for recovery');
     report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
     return;
   }
 
   const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
-  const infer = input => inferProductAcceptance(input, { token: ghToken, request });
+  const infer = async input => {
+    const existing = [];
+    for (const path of input.paths.filter(path => /^(?:src|tests|docs)\/.+\.[a-z]+$/.test(path)).slice(0, 15)) {
+      if (input.files.some(file => file.filename === path)) continue;
+      try {
+        const blob = await gh('/contents/' + path + '?ref=' + input.head);
+        if (blob.type === 'file' && blob.encoding === 'base64' && blob.size <= 12000) {
+          existing.push({ path, text: Buffer.from(blob.content, 'base64').toString('utf8') });
+        }
+      } catch (error) {
+        if (!error.message.startsWith('GitHub GET HTTP 404')) throw error;
+      }
+    }
+    const checks = [];
+    for (const name of input.ci) {
+      const id = Number(/\/job\/(\d+)$/.exec(name)?.[1]);
+      if (!Number.isSafeInteger(id)) continue;
+      const job = await gh('/actions/jobs/' + id);
+      if (job.id === id && job.head_sha === input.head && job.conclusion === 'success') {
+        checks.push({ name, passed: job.steps?.filter(step => step.conclusion === 'success').map(step => step.name) });
+      }
+    }
+    return inferProductAcceptance({ ...input, context: { issue: input.context, existing, checks } }, { token: ghToken, request });
+  };
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: 'Bearer ' + ghToken,
@@ -67,7 +91,7 @@ async function main() {
       headers, method, body: body && JSON.stringify(body),
     });
     if (!response.ok) throw new Error('GitHub ' + method + ' HTTP ' + response.status + ' for ' + path);
-    return response.json();
+    return [201, 204].includes(response.status) && method === 'POST' && path.includes('/actions/') ? null : response.json();
   }
   async function paged(path) {
     const all = [];
@@ -79,6 +103,64 @@ async function main() {
     }
     throw new Error('GitHub page cap reached');
   }
+  async function planScope(issue, base) {
+    if (issue.body.length > 14000 || /(?:\b(?:production|secret|credential|payroll)\b|\b(?:auth|security) (?:bypass|policy)\b)/i
+      .test(issue.title)) return null;
+    const { tree, truncated } = await gh('/git/trees/' + base + '?recursive=1');
+    if (truncated !== false || !Array.isArray(tree)) return null;
+    const terms = [...new Set((issue.title + ' ' + issue.body.slice(0, 1500)).toLowerCase().match(/[a-z]{5,}/g) ?? [])]
+      .filter(term => !['should', 'change', 'existing', 'working', 'expected', 'current', 'please', 'behaviour'].includes(term));
+    const candidates = tree.filter(row => row.type === 'blob' && validPath(row.path)).map(({ path }) => ({
+      path, score: terms.filter(term => path.toLowerCase().includes(term)).length,
+    })).filter(row => row.score).sort((a, b) => b.score - a.score).slice(0, 100).map(row => row.path);
+    if (!candidates.length) return null;
+    const result = await modelJson('Select only the few exact catalog paths needed to implement and test the requested outcome. Return JSON {paths:[]} for vague, ambiguous, broad or sensitive changes. Do not infer scope for credentials, authorization, payroll or database migrations.',
+      { title: issue.title, body: issue.body, candidates }, { token: ghToken, request });
+    return Array.isArray(result.paths) && result.paths.every(path => candidates.includes(path) && !path.startsWith('supabase/')) ? result.paths : null;
+  }
+  const repair = input => repairProduct({ ...input, gh, paged, report,
+    logs: jobId => downloadJobLog({ repository: repo, jobId, token: ghToken }),
+    async propose(diagnostic) {
+      const source = [];
+      for (const file of input.files.filter(row => validPath(row.filename) &&
+        /\.(?:tsx?|jsx?|mjs|md|css)$/.test(row.filename) && row.status !== 'removed').slice(0, 20)) {
+        const item = await gh('/contents/' + file.filename + '?ref=' + input.pr.head.sha);
+        if (item.type === 'file' && item.encoding === 'base64' && item.sha === file.sha && item.size <= 48000)
+          source.push({ path: file.filename, text: Buffer.from(item.content, 'base64').toString('utf8') });
+      }
+      if (!source.length) return [];
+      const selected = source.filter(file => diagnostic.includes(file.path) || diagnostic.includes(file.path.split('/').at(-1)));
+      const files = (selected.length ? selected : source).slice(0, 5);
+      const answer = await modelJson('Repair only the diagnosed failure within these files. Preserve behavior, tenant boundaries, permissions, test intent and assertions. Return JSON with edits of {path, old, replacement}. Each old must be a nonempty exact unique substring. No shell commands or external systems.', { diagnostic, requirements: input.scope.criteria, files }, { token: ghToken, request });
+      if (!Array.isArray(answer.edits) || !answer.edits.length || answer.edits.length > 15) return [];
+      const changed = new Map();
+      for (const edit of answer.edits) {
+        const file = files.find(row => row.path === edit?.path);
+        const text = file && (changed.get(file.path) ?? file.text);
+        if (!file || typeof edit.old !== 'string' || !edit.old || typeof edit.replacement !== 'string' ||
+            text.indexOf(edit.old) < 0 || text.indexOf(edit.old) !== text.lastIndexOf(edit.old)) return [];
+        // Automated source repair leaves test expectations and security enforcement intact.
+        if (/(?:policy|security|payroll)/i.test(file.path) || edit.replacement.length > 10000 ||
+            (file.path.startsWith('tests/') && !edit.replacement.includes(edit.old))) return [];
+        changed.set(file.path, text.replace(edit.old, () => edit.replacement));
+      }
+      return [...changed].map(([path, text]) => ({ path, contents: Buffer.from(text).toString('base64') }));
+    },
+    async publish(additions) {
+      const response = await request('https://api.github.com/graphql', {
+        method: 'POST', headers, body: JSON.stringify({
+          query: 'mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { oid } } }',
+          variables: { input: { branch: { repositoryNameWithOwner: repo, branchName: input.pr.head.ref },
+            expectedHeadOid: input.pr.head.sha, message: { headline: 'Repair verified Development validation failure #' + input.pr.number },
+            fileChanges: { additions } } },
+        }),
+      });
+      if (!response.ok) throw new Error('Repair mutation HTTP ' + response.status);
+      const json = await response.json();
+      if (json.errors?.length || !isSha(json.data?.createCommitOnBranch?.commit?.oid))
+        throw new Error('Repair commit outcome could not be confirmed');
+    },
+  });
   const repairBusy = async () => {
     const states = ['queued', 'in_progress', 'waiting', 'pending', 'requested'];
     const snapshots = await Promise.all(states.map(status =>
@@ -102,11 +184,11 @@ async function main() {
     if (json.errors?.length || pr?.isDraft !== false || pr.headRefOid !== head)
       throw new Error('GitHub did not confirm draft promotion at the verified head');
   };
-  async function closingIssues(pr) {
+  async function closingIssues(pr, issue) {
     if (typeof pr.node_id !== 'string') throw new Error('Missing product PR graph identity');
     const response = await request('https://api.github.com/graphql', {
       method: 'POST', headers, body: JSON.stringify({
-        query: 'query($id: ID!) { node(id: $id) { ... on PullRequest { headRefOid closingIssuesReferences(first: 1) { totalCount } } } }',
+        query: 'query($id: ID!) { node(id: $id) { ... on PullRequest { headRefOid closingIssuesReferences(first: 15) { totalCount nodes { number repository { nameWithOwner } } } } } }',
         variables: { id: pr.node_id },
       }),
     });
@@ -116,6 +198,10 @@ async function main() {
     const count = prNode?.closingIssuesReferences?.totalCount;
     if (json.errors?.length || prNode?.headRefOid !== pr.head?.sha || !Number.isSafeInteger(count) || count < 0)
       throw new Error('Incomplete GitHub closing issue links');
+    const nodes = prNode.closingIssuesReferences.nodes;
+    if (!Array.isArray(nodes) || nodes.length !== count ||
+        nodes.some(node => node?.number !== issue || node.repository?.nameWithOwner !== repo))
+      throw new Error('Product PR closes a conflicting issue');
     return count;
   }
   async function approval(number) {
@@ -140,9 +226,17 @@ async function main() {
     if (!/^[1-9][0-9]*$/.test(input) || !Number.isSafeInteger(Number(input)))
       throw new Error('Unpark requires a canonical issue number');
     const { issue, approved } = await approval(Number(input));
-    if (!approved || !selectReadyIssue({ issues: [issue], prs: [], activeTasks: [], lease: { state: 'free' } }).issue ||
-        (!acceptanceIssues.includes(issue.number) && !productScope(issue)))
+    if (!approved || !selectReadyIssue({ issues: [issue], prs: [], activeTasks: [], p0Only: true, lease: { state: 'free' } }).issue ||
+        (!acceptanceIssues.includes(issue.number) && !productScope(issue) && !await planScope(issue, developmentSha(await gh('/git/ref/heads/' + development)))))
       throw new Error('Issue has not been reauthorised with viable scope and dependencies');
+    if (!acceptanceIssues.includes(issue.number)) {
+      const scope = productScope(issue) ?? productScope(issue,
+        await planScope(issue, developmentSha(await gh('/git/ref/heads/' + development))));
+      if (!scope) throw new Error('Parked story scope is unavailable');
+      const tasksApi = withTaskInventory(agentTasksApi({ token: agentToken, repository: repo, request }), leaseApi, { readOnly: true });
+      await recordRecoverySource({ gh, paged, leaseApi, tasksApi, issue, expected: process.env.EXPECTED_LEASE_TAG_SHA,
+        scope, repository: repo, repairBusy });
+    }
     await unparkIssue(leaseApi, issue.number, process.env.EXPECTED_LEASE_TAG_SHA, queuePriority(issue).label);
     report('UNPARKED #' + issue.number + ' · normal dispatch requires a separate run');
     return;
@@ -202,17 +296,21 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer });
+  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer, planScope, repair, recoverySource: issue => recoveryInstructions(paged, issue), p0Only: true });
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
-  repairBusy, readyPull, closingIssues, infer }) {
+  repairBusy, readyPull, closingIssues, infer, planScope, repair, recoverySource, p0Only = false }) {
   const current = await readLease(leaseApi);
   if (current) {
+    if (p0Only && !/^p0(?:\.\d{2})?$/.test(current.priority ?? '')) {
+      report('LEASE_HELD: Higher priority waves are paused.');
+      return;
+    }
     report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
       ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
     const outcome = await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
-      approval, repairBusy, readyPull, closingIssues, infer });
+      approval, repairBusy, readyPull, closingIssues, infer, repair });
     if (outcome !== 'released' || current.runId === runId) return;
   }
 
@@ -228,8 +326,10 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     for (const writer of writers) report('COPILOT_WRITER_BLOCK: ' + JSON.stringify(writer));
     if (repair) report('CI_REPAIR_BLOCK: A CI repair run may still be writing.');
     const activeTasks = repair ? [...writers, { source: 'CI repair' }] : writers;
-    const queue = { prs: [], activeTasks, lease: { state: 'free' } };
+    const queue = { prs: [], activeTasks, p0Only, lease: { state: 'free' } };
     const eligible = [];
+    const scopes = new Map();
+    const baseSha = developmentSha(ref);
     for (const row of issues) {
       if (!selectReadyIssue({ ...queue, issues: [row] }).issue) continue;
       const { issue, approved } = await approval(row.number);
@@ -240,7 +340,8 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
         continue;
       }
       if (!acceptanceIssues.includes(row.number)) {
-        const scope = productScope(issue);
+        const scope = productScope(issue, lease?.issue === issue.number ? lease.scopePaths : undefined) ??
+          productScope(issue, await planScope?.(issue, baseSha));
         if (!scope || !closingIssues) {
           report('PRODUCT_SCOPE_BLOCKED #' + row.number + ': owner-approved work area or lifecycle verification unavailable.');
           continue;
@@ -251,6 +352,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
           report('PRODUCT_SCOPE_BLOCKED #' + row.number + ': proof sequence or work-area conflict.');
           continue;
         }
+        scopes.set(row.number, scope);
       } else if (prs.length) continue;
       if (row.number === 306 && !firstAcceptanceCompleted(
         await gh('/issues/305'), await paged('/issues/305/events'))) {
@@ -260,7 +362,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
       eligible.push(issue);
     }
     const selection = selectReadyIssue({ ...queue, issues: eligible });
-    return { selection, issue: eligible.find(row => row.number === selection.issue), baseSha: developmentSha(ref) };
+    return { selection, issue: eligible.find(row => row.number === selection.issue), baseSha, scope: scopes.get(selection.issue) };
   };
   const initial = await candidateSnapshot();
   const { selection, issue } = initial;
@@ -271,16 +373,17 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   const number = issue.number;
   const acquired = await acquireLease(leaseApi, {
     issue: number, runId, baseSha: initial.baseSha, issueDigest: issueDigest(issue),
-    priority: queuePriority(issue).label,
+    priority: queuePriority(issue).label, scopePaths: initial.scope?.paths,
   });
   if (!acquired.acquired) {
     report('LEASE_CONFLICT: another controller owns ' + acquired.holder.runId);
     return;
   }
   report('LEASE_ACQUIRED for #' + number + ' by ' + runId);
-  let final, held;
+  let final, held, recoveryPrompt;
   try {
     final = await candidateSnapshot(acquired);
+    recoveryPrompt = await recoverySource?.(number);
     held = await readLease(leaseApi);
   } catch (error) {
     // This path returns or throws before the only call that can create a task.
@@ -302,13 +405,13 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   const prompt = [
     'Implement Butterbox GitHub issue #' + number + ' only, against ' + development + '.',
     taskMarker(runId),
+    ...(recoveryPrompt ? [recoveryPrompt] : []),
     proof ? 'Read its issue and AGENTS.md. Add only ' + proof.path + ' with exactly the content in the issue.' :
-      'Read its issue and AGENTS.md. Work only in the approved Autonomy scope: ' + productScope(issue).paths.join(', ') +
-      '. Add executable assertions in scoped top-level tests/*.test.mjs for each criterion. Report tests and evidence for every acceptance criterion in the PR. Report any incomplete criteria explicitly.',
+      'Read its issue and AGENTS.md. Work only in the approved Autonomy scope: ' + initial.scope.paths.join(', ') +
+      '. Use proportionate tests for the requested behavior. Explain actual test results and any gaps in the PR.',
     'Open a draft PR. Use this body with one marker per line and no GitHub issue closing keywords:',
     'Refs #' + number,
-    '<!-- butterbox-issue: ' + number + ' -->',
-    ...(proof ? ['<!-- butterbox-evidence: ' + proof.path + ' -->'] : [autonomousDevelopmentMarker]),
+    ...(proof ? ['<!-- butterbox-issue: ' + number + ' -->', '<!-- butterbox-evidence: ' + proof.path + ' -->'] : []),
     'Leave CI and merge to GitHub. Do not access external systems, change other files, or begin another issue.',
   ].join('\n');
   try {

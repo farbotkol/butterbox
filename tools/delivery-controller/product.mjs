@@ -1,23 +1,21 @@
 import { parseAcceptanceCriteria, isManagedFile } from '../agent-evidence/evidence.mjs';
 import { isSha } from './handoff.mjs';
 
-export const isCriterionTestPath = path => /^tests\/[a-zA-Z0-9_.-]+\.test\.mjs$/.test(path ?? '');
-
 const pathPattern = /^(?:src|tests|docs|public|supabase\/migrations)\/[a-zA-Z0-9_./-]+$/;
-const validPath = path => typeof path === 'string' && pathPattern.test(path) &&
-  !path.split('/').some(part => part === '.' || part === '..' || !part) && !isManagedFile(path);
+export const validPath = path => typeof path === 'string' && pathPattern.test(path) &&
+  !path.split('/').some(part => part === '.' || part === '..' || !part) && !isManagedFile(path) && !/^(?:src\/(?:middleware|proxy)\.|docs\/agent-work\/|tests\/(?:delivery-controller|agent-evidence|ci-repair|phase2))/i.test(path);
 const overlaps = (a, b) => a === b || a.startsWith(b + '/') || b.startsWith(a + '/') ||
   (a.startsWith('supabase/') && b.startsWith('supabase/'));
 
-export function productScope(issue) {
-  if (!/^\s*(?:\[BB-[A-Z0-9-]+\]|BB-[A-Z0-9-]+\b)/i.test(issue.title ?? '')) return null;
+export function productScope(issue, plannedPaths) {
   const sections = [...(issue.body ?? '').matchAll(/^##[ \t]+Autonomy scope[ \t]*\r?\n([\s\S]*?)(?=^#{1,2}[ \t]|$(?![\s\S]))/gim)];
-  const lines = sections[0]?.[1].trim().split(/\r?\n/) ?? [];
-  const paths = lines.map(line => /^- `([^\x60]+)`$/.exec(line.trim())?.[1]?.replace(/\/$/, ''));
+  const paths = sections.length ? sections[0][1].trim().split(/\r?\n/)
+    .map(line => /^- `([^`]+)`$/.exec(line.trim())?.[1]?.replace(/\/$/, '')) : plannedPaths;
   const criteria = parseAcceptanceCriteria(issue.body).map(row => row.description);
-  return sections.length === 1 && paths.length > 0 && paths.length <= 30 &&
-    paths.every(validPath) && paths.some(isCriterionTestPath) && new Set(paths).size === paths.length && criteria.length > 0 &&
-    new Set(criteria).size === criteria.length ? { paths, criteria, issue: issue.number } : null;
+  if (!criteria.length && issue.body?.trim()) criteria.push(issue.title + '\n' + issue.body.trim());
+  return sections.length <= 1 && Array.isArray(paths) && paths.length > 0 && paths.length <= 30 &&
+    paths.every(validPath) && new Set(paths).size === paths.length && criteria.length > 0 ?
+    { paths, criteria: [...new Set(criteria)], issue: issue.number } : null;
 }
 
 export function changedPaths(files) {
@@ -36,7 +34,7 @@ export function scopedProductFiles(scope, files) {
   const paths = changedPaths(files);
   if (!paths.every(path => validPath(path) &&
       scope.paths.some(area => path === area || path.startsWith(area + '/'))) ||
-      !paths.some(path => /^(src|public|supabase)\//.test(path)))
+      !paths.some(path => /^(src|public|supabase|docs)\//.test(path)))
     throw new Error('Product PR changes paths outside its approved scope or lacks a product change');
   return paths;
 }

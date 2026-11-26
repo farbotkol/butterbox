@@ -72,6 +72,7 @@ function fixture(overrides = {}) {
       if (state.failMetadataPatch) throw new Error('PR metadata PATCH failed');
       if (state.mutateBeforeMetadataPatch) state.mutateBeforeMetadataPatch(state);
       state.pr.body = data.body;
+      if (data.title !== undefined) state.pr.title = data.title;
       if (state.corruptMetadataReply) return { ...state.pr, body: 'unexpected' };
       return structuredClone(state.pr);
     }
@@ -948,7 +949,7 @@ function productFixture() {
   const { state } = run;
   state.now = Date.parse('2024-11-22T00:15:00Z');
   state.pr.title = 'Display roster';
-  state.pr.body = 'Refs #401\n<!-- butterbox-issue: 401 -->\n' + autonomousDevelopmentMarker;
+  state.pr.body = 'Refs #401\n\n<!-- butterbox-issue: 401 -->\n' + autonomousDevelopmentMarker;
   state.pr.changed_files = productFiles.length;
   state.checks.push({ ...state.checks[0], name: 'product-criteria', id: 102,
     html_url: 'https://github.com/' + repository + '/actions/runs/123/job/102' });
@@ -959,7 +960,7 @@ function productFixture() {
   state.deployStatuses = [{ id: 17, state: 'success', context: 'Vercel', created_at: mergedAt,
     creator: { id: 35613825, login: 'vercel[bot]', type: 'Bot' },
     target_url: 'https://vercel.com/farbotkol/butterbox/fake184' }];
-  const results = assertions.map((assertion, index) => ({ criterion: index + 1, pass: true, test: testPath, assertion }));
+  const results = assertions.map((_, index) => ({ criterion: index + 1, pass: true, evidence: [testPath], reason: 'The test verifies the behavior.' }));
   return { ...run, results };
 }
 
@@ -971,15 +972,12 @@ test('product promotes, merges on independent criterion evidence without approva
   await assert.rejects(run(), /Missing complete independent/);
   state.aiResults = results.slice(0, 1);
   await assert.rejects(run(), /Missing complete independent/);
-  state.aiResults = [{ ...results[0], assertion: 'assert.equal(view.rows.length, 9);' }, results[1]];
+  state.aiResults = [{ ...results[0], evidence: ['tests/nonexistent.test.mjs'] }, results[1]];
   await assert.rejects(run(), /Missing complete independent/);
   state.aiResults = [{ ...results[0], pass: false }, results[1]];
-  await assert.rejects(run(), /Missing complete independent/);
+  await assert.rejects(run(), /Independent acceptance rejected/);
   assert.deepEqual(effects, ['ready']);
   state.aiResults = results;
-  state.files[1].additions++;
-  await assert.rejects(run(), /complete text diffs/);
-  state.files[1].additions--;
   await run();
   assert.deepEqual(effects, ['ready', 'merge']);
   assert.equal(state.issue.state, 'open');

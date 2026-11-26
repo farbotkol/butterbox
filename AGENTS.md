@@ -177,7 +177,7 @@ The default is targeted verification, not a full regression after every story.
   Prefer scoped issue/PR-specific evidence. Issue #75 covers implementing
   automated single-writer evidence consolidation and guardrails; this governance
   change does not imply that enforcement is already live.
-- For each issue/PR/attempt, keep append-only Markdown and versioned JSON evidence
+- For legacy evidence workflows, keep append-only Markdown and versioned JSON evidence
   under `docs/agent-work/issues/issue-N/pr-N/attempt-NN.*`; validate it with
   `node tools/agent-evidence/evidence.mjs --file <json> --repo farbotkol/butterbox`.
   Record criterion-level outcomes and evidence, exact tests, CI references,
@@ -206,14 +206,16 @@ The default is targeted verification, not a full regression after every story.
 - Humans review the product after Development deployment and submit corrections
   or additional requirements through the backlog. Managed-file exceptions
   follow their existing approval policy.
-- Use the controller's autonomous Development PR marker and a plain `Refs #N`
-  link. The approved work area must cover executable criterion tests in
-  `tests/*.test.mjs`. Butterbox has one environment, Development. Keep the
-  existing Vercel Git integration for `copilot/Development` and verify deployment
-  using the Vercel GitHub App's successful commit status for the exact squash.
-  Vercel's internal target labels do not define Butterbox environments.
-  Migration stories also require a successful Development migration job
-  on that squash.
+- Use a normal issue and PR description. Describe the observable outcome and
+  report actual test results. The controller records the work area, reconciles
+  PR links and independently checks the outcome using proportionate exact-head
+  evidence. Explicit issue scope remains binding. The current backlog wave is P0.
+- Repair verified failures on the leased PR with bounded attempts and scoped
+  edits. Retry verified infrastructure failures without editing product code.
+  Keep original evidence and stop safely when repair cannot be verified.
+- Butterbox has one environment, Development. Verify deployment through the
+  existing Vercel GitHub App's successful status for the Development squash.
+  Migration stories also require the existing Development migration job.
 
 ## Copilot pull request links and evidence
 

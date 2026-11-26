@@ -30,11 +30,11 @@ export async function readLease(api, { verifyTarget = false } = {}) {
   return { ...record, tagSha: ref.object.sha };
 }
 
-export async function acquireLease(api, {issue, runId, baseSha, issueDigest, priority, startedAt = new Date().toISOString()}) {
+export async function acquireLease(api, {issue, runId, baseSha, issueDigest, priority, scopePaths, startedAt = new Date().toISOString()}) {
   if (!validIssue(issue) || !validRun(runId) || !validSha(baseSha) ||
       !Number.isFinite(Date.parse(startedAt)) || (issueDigest !== undefined && !/^[a-f0-9]{64}$/.test(issueDigest))) throw new Error('Invalid lease request');
   if (priority !== undefined && !/^p(?:10|[0-9])(?:\.[0-9]{2})?$/.test(priority)) throw new Error('Invalid lease priority');
-  const record = {version:1, issue, runId, baseSha, startedAt, ...(priority ? {priority} : {}), ...(issueDigest === undefined ? {} : {issueDigest})};
+  const record = {version:1, issue, runId, baseSha, startedAt, ...(scopePaths ? {scopePaths} : {}), ...(priority ? {priority} : {}), ...(issueDigest === undefined ? {} : {issueDigest})};
   // Orphan tag objects are harmless; they do not own the single ref.
   const tag = await api.createTag({
     tag:'butterbox-controller-lease', message:JSON.stringify(record), object:baseSha,
