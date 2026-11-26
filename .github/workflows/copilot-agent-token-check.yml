@@ -75,5 +75,15 @@ jobs:
               omittedExpected: recent && base.filter(r => Date.parse(r.updated_at) >= Date.parse(since) && !recent.some(n => n.id === r.id)).length,
               future: future?.length }));
           }
+          const sample = await list('sort=updated_at&direction=desc', 'sample');
+          const sorted = sample?.filter(row => Date.parse(row.updated_at) > Date.parse(row.created_at)).slice(0, 10) ?? [];
+          for (const row of sorted) {
+            const detail = await get('/' + row.id, 'sample detail');
+            if (!detail) continue;
+            const t = detail.data;
+            console.log(JSON.stringify({ sampleId: row.id, parentState: t.state, created: t.created_at, updated: t.updated_at,
+              consistent: row.state === t.state && row.updated_at === t.updated_at, sessionCount: t.session_count,
+              sessions: t.sessions?.map(s => ({ id:s.id, state:s.state, created:s.created_at, updated:s.updated_at })) }));
+          }
           console.log(JSON.stringify({ requests: logs.length }));
           JS
