@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessHandoff, competingWriters, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
 import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor, readTaskDetails, planAcceptancePrMetadata } from '../tools/delivery-controller/acceptance.mjs';
-import { developmentProvider } from '../tools/delivery-controller/product-acceptance.mjs';
+import { developmentDeployment } from '../tools/delivery-controller/product-acceptance.mjs';
 import { runAcceptanceCycle } from '../tools/delivery-controller/run-autonomy.mjs';
 import { autonomousDevelopmentMarker } from '../tools/agent-evidence/evidence.mjs';
 import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
@@ -179,7 +179,6 @@ function fixture(overrides = {}) {
     repository, gh, paged, leaseApi, lease: leased, closingIssues: async () => state.closingIssues ?? 0, runId: 'actions_124_1',
     mergedRecovery, now: () => state.now ?? Date.now(),
     infer: async () => state.aiResults,
-    provider: state.provider,
     tasksApi: {
       list: async ({ states } = {}) => [{ id: taskId, state: state.task.state, updated_at: state.task.updated_at }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
@@ -958,14 +957,8 @@ function productFixture() {
   state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
   state.openPRs = [state.pr, state.humanPR];
   state.deployStatuses = [{ id: 17, state: 'success', context: 'Vercel', created_at: mergedAt,
+    creator: { id: 35613825, login: 'vercel[bot]', type: 'Bot' },
     target_url: 'https://vercel.com/farbotkol/butterbox/fake184' }];
-  state.deployment = { id: 'dpl_fake184', projectId: 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof', target: null,
-    readyState: 'READY', createdAt: Date.parse(mergedAt), url: 'butterbox-example.vercel.app',
-    meta: { githubOrg: 'farbotkol', githubRepo: 'butterbox', githubCommitRef: development, githubCommitSha: merge } };
-  state.provider = {
-    async verifyTarget() { if (state.productionTarget) throw new Error('Development is the production target'); },
-    async readDeployment() { return state.deployment; },
-  };
   const results = assertions.map((assertion, index) => ({ criterion: index + 1, pass: true, test: testPath, assertion }));
   return { ...run, results };
 }
@@ -997,7 +990,7 @@ test('product promotes, merges on independent criterion evidence without approva
   assert.match(state.issue.body, /Development deployment dpl_fake184/);
 });
 
-test('product blocks a production target, linked closure, overlapping changes, failed CI and wrong squash files', async () => {
+test('product blocks linked closure, overlapping changes, failed CI and wrong squash files', async () => {
   const { run, effects, state, results } = productFixture();
   state.aiResults = results;
   await run();
@@ -1007,9 +1000,6 @@ test('product blocks a production target, linked closure, overlapping changes, f
   state.humanFiles = [{ filename: 'docs/payroll.md', previous_filename: 'src/roster/view.ts', status: 'renamed' }];
   await assert.rejects(run(), /overlaps the product work area/);
   state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
-  state.productionTarget = true;
-  await assert.rejects(run(), /production target/);
-  state.productionTarget = false;
   state.checks[2].conclusion = 'failure';
   await assert.rejects(run(), /product-criteria/);
   state.checks[2].conclusion = 'success';
@@ -1027,7 +1017,7 @@ test('a stopped task with failed deployment parks after bounded verification and
   await run();
   await run();
   state.openPRs = [state.humanPR];
-  state.deployment.target = 'production';
+  state.deployStatuses[0].state = 'failure';
   await assert.rejects(run(), /deployment is pending, failed, or unverifiable/);
   state.now += 60 * 60 * 1000;
   assert.equal(await run(), 'released');
@@ -1087,22 +1077,25 @@ test('a parked lease releases and selects the next eligible issue in the same cy
   assert.match(state.nextPrompt, /issue #305 only/);
 });
 
-test('the Vercel adapter requires a linked nonproduction Development branch', async () => {
-  const project = { id: 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof', accountId: 'team_rXIarTVLEVlIYFY2Kr5rT4W3',
-    link: { type: 'github', org: 'farbotkol', repo: 'butterbox', productionBranch: development } };
-  const provider = developmentProvider({
-    token: 'fixture',
-    request: async (url, options) => {
-      assert.match(url, /^https:\/\/api\.vercel\.com\/v9\/projects\//);
-      assert.equal(options.headers.Authorization, 'Bearer fixture');
-      return { ok: true, json: async () => project };
-    },
+test('Development deployment requires current exact-squash success from the established Vercel GitHub App', async () => {
+  const { state } = productFixture();
+  const [success] = state.deployStatuses;
+  const read = statuses => developmentDeployment({
+    merge, mergedAt: Date.parse(mergedAt), migrations: false,
+    paged: async route => { assert.equal(route, '/commits/' + merge + '/statuses'); return statuses; },
   });
-  await assert.rejects(provider.verifyTarget(), /separate from its production branch/);
-  project.link.productionBranch = 'copilot/Production';
-  await provider.verifyTarget();
-  project.link.repo = 'different';
-  await assert.rejects(provider.verifyTarget(), /separate from its production branch/);
+  assert.deepEqual(await read([success]), {
+    id: 'dpl_fake184', status: 17, url: 'https://vercel.com/farbotkol/butterbox/fake184',
+  });
+  for (const statuses of [
+    [],
+    [{ ...success, created_at: ended }],
+    [{ ...success, creator: { ...success.creator, id: 11307166 } }],
+    [{ ...success, target_url: 'https://vercel.com/other/butterbox/fake184' }],
+    [success, { ...success, id: 18, state: 'pending' }],
+    [success, { ...success, id: 18, state: 'failure' }],
+  ]) assert.equal(await read(statuses), null);
+  await assert.rejects(read([success, success]), /Ambiguous Vercel commit status/);
 });
 
 test('a completed product task with an explicit empty artifact list parks only with no session branch PR', async () => {

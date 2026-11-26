@@ -204,14 +204,16 @@ The default is targeted verification, not a full regression after every story.
   attempts, park unverifiable work with the issue open. Retain a lease while a
   writer may still be active or its identity is uncertain.
 - Humans review the product after Development deployment and submit corrections
-  or additional requirements through the backlog. This lane excludes production
-  and managed-file exceptions.
+  or additional requirements through the backlog. Managed-file exceptions
+  follow their existing approval policy.
 - Use the controller's autonomous Development PR marker and a plain `Refs #N`
   link. The approved work area must cover executable criterion tests in
-  `tests/*.test.mjs`. Keep the existing Vercel Git integration. The controller
-  must verify that its project separates the Development branch from production
-  and that the exact squash has a successful Preview deployment. Migration
-  stories also require a successful Development migration job on that squash.
+  `tests/*.test.mjs`. Butterbox has one environment, Development. Keep the
+  existing Vercel Git integration for `copilot/Development` and verify deployment
+  using the Vercel GitHub App's successful commit status for the exact squash.
+  Vercel's internal target labels do not define Butterbox environments.
+  Migration stories also require a successful Development migration job
+  on that squash.
 
 ## Copilot pull request links and evidence
 

@@ -132,7 +132,6 @@ jobs:
       - name: Advance the controlled GitHub acceptance lifecycle
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          VERCEL_DEPLOYMENT_READ_TOKEN: ${{ secrets.VERCEL_DEPLOYMENT_READ_TOKEN }}
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
           BUTTERBOX_AUTONOMY_ENABLED: ${{ vars.BUTTERBOX_AUTONOMY_ENABLED }}
         run: node tools/delivery-controller/run-autonomy.mjs
@@ -155,7 +154,6 @@ jobs:
       - name: Verify the stopped controller attempt and current writer evidence
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          VERCEL_DEPLOYMENT_READ_TOKEN: ${{ secrets.VERCEL_DEPLOYMENT_READ_TOKEN }}
           COPILOT_AGENT_USER_TOKEN: ${{ secrets.COPILOT_AGENT_USER_TOKEN }}
           LEASE_RECOVERY: ${{ inputs.lease_recovery }}
           PARKED_ISSUE_NUMBER: ${{ inputs.parked_issue_number }}

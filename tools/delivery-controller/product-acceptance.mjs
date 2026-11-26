@@ -91,37 +91,14 @@ export async function productAcceptance({ gh, paged, infer, lease, pr, scope, fi
   return row;
 }
 
-const projectId = 'prj_q6t7qQVxFhQHlwQk7yKPI6zw7fof';
-const teamId = 'team_rXIarTVLEVlIYFY2Kr5rT4W3';
+const vercelBot = 35613825;
 
-export function developmentProvider({ token, request }) {
-  async function read(path) {
-    if (!token) throw new Error('Missing Vercel credential for Development-only deployment verification');
-    const response = await request('https://api.vercel.com' + path + '?teamId=' + teamId, {
-      headers: { Authorization: 'Bearer ' + token },
-    });
-    if (!response.ok) throw new Error('Vercel verification returned HTTP ' + response.status);
-    return response.json();
-  }
-  return {
-    async verifyTarget() {
-      const project = await read('/v9/projects/' + projectId);
-      if (project.id !== projectId || project.accountId !== teamId ||
-          project.link?.type !== 'github' || project.link.org !== 'farbotkol' || project.link.repo !== 'butterbox' ||
-          !project.link.productionBranch || project.link.productionBranch === development)
-        throw new Error('Vercel project does not prove Development is separate from its production branch');
-    },
-    async readDeployment(id) {
-      return read('/v13/deployments/' + id);
-    },
-  };
-}
-
-export async function developmentDeployment({ paged, gh, provider, merge, mergedAt, migrations }) {
-  // GitHub commit status is a pointer only. The provider must independently
-  // confirm the immutable commit, project and nonproduction target.
+export async function developmentDeployment({ paged, gh, merge, mergedAt, migrations }) {
+  // The controller has already verified the squash in Development history.
+  // The existing Vercel Git integration attests to deployment on that SHA.
   const statuses = await paged('/commits/' + merge + '/statuses');
-  const matches = statuses.filter(row => row.context === 'Vercel');
+  const matches = statuses.filter(row => row.context === 'Vercel' &&
+    row.creator?.id === vercelBot && row.creator.login === 'vercel[bot]' && row.creator.type === 'Bot');
   if (matches.some(row => !Number.isSafeInteger(row.id) || !Number.isFinite(Date.parse(row.created_at))) ||
       new Set(matches.map(row => row.id)).size !== matches.length)
     throw new Error('Ambiguous Vercel commit status snapshot');
@@ -129,12 +106,7 @@ export async function developmentDeployment({ paged, gh, provider, merge, merged
   const link = /^https:\/\/vercel\.com\/farbotkol\/butterbox\/([A-Za-z0-9]+)$/.exec(status?.target_url ?? '');
   if (!link || status.state !== 'success' || !(Date.parse(status.created_at) >= mergedAt)) return null;
   const id = 'dpl_' + link[1];
-  const deployment = await provider.readDeployment(id);
-  if (deployment.id !== id || deployment.projectId !== projectId || deployment.readyState !== 'READY' ||
-      ![null, 'preview'].includes(deployment.target) ||
-      deployment.meta?.githubOrg !== 'farbotkol' || deployment.meta.githubRepo !== 'butterbox' ||
-      deployment.meta.githubCommitRef !== development || deployment.meta.githubCommitSha !== merge ||
-      !(deployment.createdAt >= mergedAt) || !/^[a-z0-9-]+\.vercel\.app$/.test(deployment.url ?? '')) return null;
+  const deployment = { id, status: status.id, url: status.target_url };
   if (migrations) {
     const runs = await gh('/actions/workflows/dev-supabase-migrations.yml/runs?head_sha=' + merge +
       '&event=deployment_status&per_page=100');
@@ -142,13 +114,13 @@ export async function developmentDeployment({ paged, gh, provider, merge, merged
     const run = runs.workflow_runs.sort((a, b) => b.id - a.id)[0];
     if (!Number.isSafeInteger(run?.id) || !Number.isSafeInteger(run.run_attempt) || run.head_sha !== merge || run.head_branch !== development ||
         run.event !== 'deployment_status' || run.conclusion !== 'success' ||
-        !(Date.parse(run.created_at) >= deployment.createdAt)) return null;
+        !(Date.parse(run.created_at) >= mergedAt)) return null;
     const jobs = await gh('/actions/runs/' + run.id + '/attempts/' + run.run_attempt + '/jobs?per_page=100');
     if (!Array.isArray(jobs.jobs) || jobs.total_count !== jobs.jobs.length || jobs.jobs.length !== 1 ||
         jobs.jobs[0].name !== 'deploy-migrations' || jobs.jobs[0].conclusion !== 'success' ||
         !jobs.jobs[0].steps?.some(step =>
           step.name === 'Apply pending migrations from the successfully deployed revision' && step.conclusion === 'success')) return null;
-    return { id, status: status.id, url: 'https://' + deployment.url, migrationRun: run.id };
+    return { ...deployment, migrationRun: run.id };
   }
-  return { id, status: status.id, url: 'https://' + deployment.url };
+  return deployment;
 }

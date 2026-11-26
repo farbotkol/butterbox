@@ -1,4 +1,4 @@
-import { developmentProvider, inferProductAcceptance } from './product-acceptance.mjs';
+import { inferProductAcceptance } from './product-acceptance.mjs';
 import { productScope, conflictsWithProduct } from './product.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -54,7 +54,6 @@ async function main() {
   }
 
   const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
-  const provider = developmentProvider({ token: process.env.VERCEL_DEPLOYMENT_READ_TOKEN, request });
   const infer = input => inferProductAcceptance(input, { token: ghToken, request });
   const headers = {
     Accept: 'application/vnd.github+json',
@@ -155,7 +154,7 @@ async function main() {
     if (lease?.tagSha !== process.env.EXPECTED_LEASE_TAG_SHA) throw new Error('Expected lease tag is no longer held');
     if (recovery.startsWith('merged-')) {
       await advanceAcceptance({ repository: repo, gh, paged, tasksApi, leaseApi, lease, runId, report,
-        approval, repairBusy, readyPull, closingIssues, provider, mergedRecovery: recovery.slice('merged-'.length) });
+        approval, repairBusy, readyPull, closingIssues, mergedRecovery: recovery.slice('merged-'.length) });
       return;
     }
     const readRunLog = async (id, attempt) => {
@@ -203,17 +202,17 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer, provider });
+  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer });
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
-  repairBusy, readyPull, closingIssues, infer, provider }) {
+  repairBusy, readyPull, closingIssues, infer }) {
   const current = await readLease(leaseApi);
   if (current) {
     report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
       ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
     const outcome = await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
-      approval, repairBusy, readyPull, closingIssues, infer, provider });
+      approval, repairBusy, readyPull, closingIssues, infer });
     if (outcome !== 'released' || current.runId === runId) return;
   }
 
@@ -231,7 +230,6 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     const activeTasks = repair ? [...writers, { source: 'CI repair' }] : writers;
     const queue = { prs: [], activeTasks, lease: { state: 'free' } };
     const eligible = [];
-    let target;
     for (const row of issues) {
       if (!selectReadyIssue({ ...queue, issues: [row] }).issue) continue;
       const { issue, approved } = await approval(row.number);
@@ -258,13 +256,6 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
         await gh('/issues/305'), await paged('/issues/305/events'))) {
         report('QUEUE_SKIPPED #306: historical proof #305 lacks verified completion');
         continue;
-      }
-      if (provider || !acceptanceIssues.includes(row.number)) {
-        target ??= Promise.resolve().then(() => provider.verifyTarget()).then(() => true, error => {
-          report('DEVELOPMENT_TARGET_BLOCKED: ' + error.message);
-          return false;
-        });
-        if (!await target) continue;
       }
       eligible.push(issue);
     }

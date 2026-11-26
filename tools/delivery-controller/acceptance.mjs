@@ -118,7 +118,7 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull, closingIssues, infer, provider, now = Date.now, mergedRecovery = 'none' }) {
+  approval, repairBusy, readyPull, closingIssues, infer, now = Date.now, mergedRecovery = 'none' }) {
   assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
     runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
@@ -392,7 +392,6 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
           (await readAcceptance())?.id === acceptance.id, 'Exact-head acceptance or CI evidence changed before merge');
       }
       assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
-      if (provider) await provider.verifyTarget();
       const merge = await gh(endpoint + '/merge', 'PUT', {
         sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
         commit_message: 'Refs #' + lease.issue,
@@ -426,7 +425,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     if (product) {
       acceptance = await readAcceptance();
       assert(acceptance, 'Missing historical independent exact-head AI acceptance evidence');
-      deployment = await developmentDeployment({ paged, gh, provider, merge, mergedAt,
+      deployment = await developmentDeployment({ paged, gh, merge, mergedAt,
         migrations: productPaths.some(path => path.startsWith('supabase/migrations/')) });
       assert(deployment, 'Development deployment is pending, failed, or unverifiable for ' + merge);
     }
