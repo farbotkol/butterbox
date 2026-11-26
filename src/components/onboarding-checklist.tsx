@@ -1,10 +1,12 @@
 import Link from "next/link";
 import { helpHref } from "@/lib/help";
-import type { OnboardingProgress } from "@/lib/onboarding";
+import { isOnboardingComplete, type OnboardingProgress } from "@/lib/onboarding";
 
 export function OnboardingChecklist({ progress, venueId, businessId }: {
   progress: OnboardingProgress; venueId: string; businessId: string;
 }) {
+  if (isOnboardingComplete(progress)) return null;
+
   const rosterUrl = `/roster?venue=${encodeURIComponent(venueId)}`;
   const steps = [
     { title: "Business", done: progress.business_ready, help: "Your business is created during setup." },
