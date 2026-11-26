@@ -71,10 +71,11 @@ export function assessHandoff({ lease, tasks, openPRs, issue, product = false })
   if (writers.length)
     return blocked('A competing Copilot session may still be writing: ' + JSON.stringify(writers));
 
+  const heads = new Set(task.sessions.map(session => session.head_ref).filter(Boolean));
+  const noArtifact = issue.state === 'open' && Array.isArray(task.artifacts) && task.artifacts.length === 0 &&
+    heads.size === task.sessions.length && openPRs.every(pr => pr.head?.ref && !heads.has(pr.head.ref));
   if (task.state !== 'completed') {
-    const heads = new Set(task.sessions.map(session => session.head_ref).filter(Boolean));
-    if (issue.state === 'open' && Array.isArray(task.artifacts) && task.artifacts.length === 0 &&
-        openPRs.every(pr => heads.size === task.sessions.length && pr.head?.ref && !heads.has(pr.head.ref)))
+    if (noArtifact)
       return { action: 'PARK_VERIFIED', taskId: task.id, taskState: task.state, sessionCount: task.session_count };
     const refs = Array.isArray(task.artifacts) ? task.artifacts : [];
     const artifact = refs[0]?.data?.id;
@@ -87,6 +88,8 @@ export function assessHandoff({ lease, tasks, openPRs, issue, product = false })
   if (task.sessions.some(session => session.state !== 'completed'))
     return blocked('Copilot sessions did not all complete');
   if (!Array.isArray(task.artifacts)) return blocked('Missing Copilot PR artifacts');
+  if (product && noArtifact)
+    return { action: 'PARK_VERIFIED', taskId: task.id, taskState: 'completed-without-pr', sessionCount: task.session_count };
   const artifacts = task.artifacts.filter(artifact => artifact.provider === 'github' && artifact.type === 'pull');
   if (artifacts.length !== 1 || !Number.isSafeInteger(artifacts[0].data?.id) || artifacts[0].data.id < 1)
     return blocked('Missing or ambiguous Copilot PR artifact');

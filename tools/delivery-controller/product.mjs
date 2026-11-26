@@ -1,5 +1,7 @@
-import { parseAcceptanceCriteria, hasCanonicalIssueApproval, isManagedFile } from '../agent-evidence/evidence.mjs';
+import { parseAcceptanceCriteria, isManagedFile } from '../agent-evidence/evidence.mjs';
 import { isSha } from './handoff.mjs';
+
+export const isCriterionTestPath = path => /^tests\/[a-zA-Z0-9_.-]+\.test\.mjs$/.test(path ?? '');
 
 const pathPattern = /^(?:src|tests|docs|public|supabase\/migrations)\/[a-zA-Z0-9_./-]+$/;
 const validPath = path => typeof path === 'string' && pathPattern.test(path) &&
@@ -14,7 +16,7 @@ export function productScope(issue) {
   const paths = lines.map(line => /^- `([^\x60]+)`$/.exec(line.trim())?.[1]?.replace(/\/$/, ''));
   const criteria = parseAcceptanceCriteria(issue.body).map(row => row.description);
   return sections.length === 1 && paths.length > 0 && paths.length <= 30 &&
-    paths.every(validPath) && new Set(paths).size === paths.length && criteria.length > 0 &&
+    paths.every(validPath) && paths.some(isCriterionTestPath) && new Set(paths).size === paths.length && criteria.length > 0 &&
     new Set(criteria).size === criteria.length ? { paths, criteria, issue: issue.number } : null;
 }
 
@@ -61,22 +63,6 @@ export async function conflictsWithProduct(paged, gh, prs, scope, own) {
     if (paths.some(file => scope.paths.some(area => overlaps(file, area)))) return pr.number;
   }
   return null;
-}
-
-export function productReview(reviews, head, issueNumber, criteria, ownerId, boundary, scopeDigest) {
-  const blocking = ['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'];
-  const review = reviews.filter(row => row.user?.id === ownerId && blocking.includes(row.state))
-    .sort((a, b) => b.id - a.id)[0];
-  if (!review || !Number.isSafeInteger(review.id) || !isSha(head) ||
-      !(Date.parse(review.submitted_at) <= boundary) ||
-      !hasCanonicalIssueApproval([review], head, issueNumber, 'farbotkol')) return null;
-  const lines = (review.body ?? '').split(/\r?\n/);
-  if (!lines.includes('Acceptance scope: ' + scopeDigest)) return null;
-  const accepted = lines.filter(line => line.startsWith('Criterion '));
-  if (accepted.length !== criteria.length ||
-      !criteria.every((_, index) => accepted[index]?.startsWith('Criterion ' + (index + 1) + ' PASS: ') &&
-        accepted[index].slice(('Criterion ' + (index + 1) + ' PASS: ').length).trim().length > 0)) return null;
-  return review;
 }
 
 export function sameSquashFiles(left, right) {

@@ -2,6 +2,9 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { assessHandoff, competingWriters, taskMarker, development } from '../tools/delivery-controller/handoff.mjs';
 import { advanceAcceptance, firstAcceptanceCompleted, issueDigest, proofFor, readTaskDetails, planAcceptancePrMetadata } from '../tools/delivery-controller/acceptance.mjs';
+import { developmentDeployment } from '../tools/delivery-controller/product-acceptance.mjs';
+import { runAcceptanceCycle } from '../tools/delivery-controller/run-autonomy.mjs';
+import { autonomousDevelopmentMarker } from '../tools/agent-evidence/evidence.mjs';
 import { LEASE_REF } from '../tools/delivery-controller/lease.mjs';
 
 const repository = 'farbotkol/butterbox';
@@ -58,6 +61,12 @@ function fixture(overrides = {}) {
   const leased = { ...lease, issue: state.issue.number, issueDigest: issueDigest(state.issue) };
   const issueRoute = '/issues/' + state.issue.number;
   const gh = async (route, method = 'GET', data) => {
+    if (method === 'PATCH' && route === '/pulls/401' && data.state === 'closed') {
+      effects.push('close-unmerged');
+      state.pr.state = 'closed';
+      state.openPRs = state.openPRs.filter(row => row.number !== 401);
+      return structuredClone(state.pr);
+    }
     if (method === 'PATCH' && route === '/pulls/401') {
       effects.push('metadata');
       if (state.failMetadataPatch) throw new Error('PR metadata PATCH failed');
@@ -84,12 +93,18 @@ function fixture(overrides = {}) {
       return structuredClone(state.issue);
     }
     if (method === 'POST' && route === issueRoute + '/comments') {
-      const comment = { id: 123, body: data.body, user: { id: 41898282 } };
+      const comment = { id: 123 + comments.length, body: data.body, user: { id: 41898282 },
+        created_at: ended, updated_at: ended };
       comments.push(comment);
       return comment;
     }
     assert.equal(method, 'GET');
+    if (route === '/actions/runs/123') return {
+      id: 123, head_sha: head, path: '.github/workflows/product-criteria.yml',
+      event: 'pull_request', head_repository: { full_name: repository },
+    };
     if (route === issueRoute) return structuredClone(state.issue);
+    if (route === '/issues/' + state.nextIssue?.number) return state.nextIssue;
     if (route === '/pulls/401') return structuredClone(state.pr);
     if (route === '/pulls/402') return structuredClone(state.humanPR);
     if (route === '/pulls/401/files?per_page=2') return state.files;
@@ -107,7 +122,7 @@ function fixture(overrides = {}) {
         commits: [{ sha: moved }], files: [{ filename: 'tools/delivery-controller/acceptance.mjs', status: 'modified' }] };
     }
     if (route.startsWith('/rules/branches/')) return [
-      { type: 'pull_request', parameters: { allowed_merge_methods: ['squash'] } },
+      { type: 'pull_request', parameters: { allowed_merge_methods: ['squash'], required_approving_review_count: 0, required_reviewers: [] } },
       { type: 'required_status_checks', parameters: { required_status_checks: ['verify', 'database-smoke']
         .map(context => ({ context, integration_id: 15368 })) } },
     ];
@@ -116,7 +131,8 @@ function fixture(overrides = {}) {
   const paged = async route => {
     if (route === issueRoute + '/comments') return comments;
     if (route === issueRoute + '/events') return events;
-    if (route === '/pulls/401/reviews') return state.reviews ?? [];
+    if (route.startsWith('/issues?')) return state.nextIssue ? [state.nextIssue] : [];
+    if (route.startsWith('/commits/' + merge + '/statuses')) return state.deployStatuses ?? [];
     if (route === '/pulls/401/files') return state.files;
     if (route === '/pulls/402/files') return state.humanFiles;
     if (route.startsWith('/pulls?state=open')) return state.openPRs ?? (state.pr.state === 'open' ? [state.pr] : []);
@@ -125,23 +141,33 @@ function fixture(overrides = {}) {
   };
   const leaseApi = {
     async createTag(tag) {
+      if (tag.tag === 'butterbox-controller-lease') {
+        state.nextLease = JSON.parse(tag.message);
+        return { sha: '1'.repeat(40) };
+      }
       assert.match(tag.tag, /^butterbox-controller-parked-/);
       state.parking = JSON.parse(tag.message);
       return { sha: blob };
     },
     async createRef({ ref, sha }) {
+      if (ref === LEASE_REF && !currentTag) {
+        currentTag = sha;
+        return;
+      }
       assert.equal(ref, 'refs/tags/butterbox-controller-parked-' + state.issue.number);
       assert.equal(sha, blob);
       effects.push('park');
     },
     async getRef(ref) {
-      assert.equal(ref, LEASE_REF);
+      if (ref !== LEASE_REF) throw Object.assign(new Error('not found'), { status: 404 });
       reads++;
       if (state.replaceLease && reads > 1) currentTag = 'f'.repeat(40);
       if (!currentTag) throw Object.assign(new Error('not found'), { status: 404 });
       return { object: { sha: currentTag, type: 'tag' } };
     },
-    async getTag() { return { tag: 'butterbox-controller-lease', message: JSON.stringify(leased) }; },
+    async getTag(sha) {
+      return { tag: 'butterbox-controller-lease', message: JSON.stringify(sha === '1'.repeat(40) ? state.nextLease : leased) };
+    },
     async compareAndDeleteRef(ref, expected) {
       assert.equal(ref, LEASE_REF);
       if (state.replaceAtDelete) currentTag = 'f'.repeat(40);
@@ -149,14 +175,17 @@ function fixture(overrides = {}) {
       effects.push('release'); currentTag = null;
     },
   };
-  const run = (mergedRecovery = 'none') => advanceAcceptance({
+  const controller = mergedRecovery => ({
     repository, gh, paged, leaseApi, lease: leased, closingIssues: async () => state.closingIssues ?? 0, runId: 'actions_124_1',
-    mergedRecovery,
+    mergedRecovery, now: () => state.now ?? Date.now(),
+    infer: async () => state.aiResults,
     tasksApi: {
       list: async ({ states } = {}) => [{ id: taskId, state: state.task.state, updated_at: state.task.updated_at }, ...(state.otherTasks ?? [])].filter(row => !states || states.includes(row.state)),
       get: async id => id === taskId ? state.task : state.otherTasks.find(row => row.id === id),
+      create: async ({ prompt }) => { state.nextPrompt = prompt; throw new Error('simulated unconfirmed next dispatch'); },
     },
-    approval: async () => ({ issue: { ...state.issue }, approved: !state.revoked }),
+    approval: async number => ({ issue: { ...(number === state.issue.number ? state.issue : state.nextIssue) },
+      approved: !state.revoked }),
     repairBusy: async () => Boolean(state.repair),
     readyPull: async (id, sha) => {
       assert.equal(id, 'pr-node');
@@ -166,7 +195,11 @@ function fixture(overrides = {}) {
     },
     report: line => reports.push(line),
   });
-  return { run, effects, reports, state, events, comments };
+  return {
+    run: (recovery = 'none') => advanceAcceptance(controller(recovery)),
+    cycle: () => runAcceptanceCycle(controller('none')),
+    effects, reports, state, events, comments,
+  };
 }
 
 test('draft, exact-head protected squash, audited close, then release in order', async () => {
@@ -903,54 +936,73 @@ function productFixture() {
     body: '## Autonomy scope\n- `src/roster`\n- `tests/roster.test.mjs`\n\n## Acceptance criteria\n' +
       '- Render roster\n- Preserve empty state',
   };
-  const productFiles = [{ filename: 'src/roster/view.ts', status: 'modified', sha: blob }];
+  const testPath = 'tests/roster.test.mjs';
+  const assertions = ['assert.equal(view.rows.length, 1);', 'assert.equal(empty.rows.length, 0);'];
+  const productFiles = [
+    { filename: 'src/roster/view.ts', status: 'modified', sha: blob,
+      additions: 1, deletions: 1, patch: '@@ -1 +1 @@\n-hideRoster();\n+showRoster();' },
+    { filename: testPath, status: 'added', sha: blob, additions: 2, deletions: 0,
+      patch: '@@ -0,0 +1,2 @@\n' + assertions.map(line => '+' + line).join('\n') },
+  ];
   const run = fixture({ issue: productIssue, files: productFiles });
   const { state } = run;
+  state.now = Date.parse('2024-11-22T00:15:00Z');
   state.pr.title = 'Display roster';
-  state.pr.body = 'Refs #401\n<!-- butterbox-issue: 401 -->';
-  state.humanPR = { ...state.pr, number: 402, id: 9998, body: 'Unrelated payroll documentation', head: { ...state.pr.head, sha: moved, ref: 'human/payroll-doc' } };
+  state.pr.body = 'Refs #401\n<!-- butterbox-issue: 401 -->\n' + autonomousDevelopmentMarker;
+  state.pr.changed_files = productFiles.length;
+  state.checks.push({ ...state.checks[0], name: 'product-criteria', id: 102,
+    html_url: 'https://github.com/' + repository + '/actions/runs/123/job/102' });
+  state.humanPR = { ...state.pr, number: 402, id: 9998, body: 'Unrelated payroll documentation', changed_files: 1,
+    head: { ...state.pr.head, sha: moved, ref: 'human/payroll-doc' } };
   state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
   state.openPRs = [state.pr, state.humanPR];
-  const ownerReview = {
-    id: 12, user: { id: 11307166, login: 'farbotkol' }, commit_id: head, state: 'APPROVED', submitted_at: ended,
-    body: 'Canonical issue approved: #401\nAcceptance scope: ' + issueDigest(productIssue) + '\n' +
-      'Criterion 1 PASS: Independently ran roster render test\nCriterion 2 PASS: Verified the empty fixture',
-  };
-  return { ...run, ownerReview };
+  state.deployStatuses = [{ id: 17, state: 'success', context: 'Vercel', created_at: mergedAt,
+    creator: { id: 35613825, login: 'vercel[bot]', type: 'Bot' },
+    target_url: 'https://vercel.com/farbotkol/butterbox/fake184' }];
+  const results = assertions.map((assertion, index) => ({ criterion: index + 1, pass: true, test: testPath, assertion }));
+  return { ...run, results };
 }
 
-test('product story promotes, waits for exact-head criterion acceptance, merges, reconciles and releases', async () => {
-  const { run, effects, state, ownerReview } = productFixture();
+test('product promotes, merges on independent criterion evidence without approval, deploys, closes and releases', async () => {
+  const { run, effects, state, results } = productFixture();
+  state.pr.requested_reviewers = [{ login: 'farbotkol' }];
   await run();
   assert.deepEqual(effects, ['ready']);
-  await run();
+  await assert.rejects(run(), /Missing complete independent/);
+  state.aiResults = results.slice(0, 1);
+  await assert.rejects(run(), /Missing complete independent/);
+  state.aiResults = [{ ...results[0], assertion: 'assert.equal(view.rows.length, 9);' }, results[1]];
+  await assert.rejects(run(), /Missing complete independent/);
+  state.aiResults = [{ ...results[0], pass: false }, results[1]];
+  await assert.rejects(run(), /Missing complete independent/);
   assert.deepEqual(effects, ['ready']);
-  state.reviews = [{ ...ownerReview, body: ownerReview.body.split('\n').slice(0, -1).join('\n') }];
-  await run();
-  assert.deepEqual(effects, ['ready']);
-  state.reviews = [ownerReview];
+  state.aiResults = results;
+  state.files[1].additions++;
+  await assert.rejects(run(), /complete text diffs/);
+  state.files[1].additions--;
   await run();
   assert.deepEqual(effects, ['ready', 'merge']);
   assert.equal(state.issue.state, 'open');
   state.openPRs = [state.humanPR];
   await run();
   assert.deepEqual(effects, ['ready', 'merge', 'close', 'release']);
-  assert.match(state.issue.body, /owner acceptance review 12/);
+  assert.match(state.issue.body, /independent AI acceptance comment 123/);
+  assert.match(state.issue.body, /Development deployment dpl_fake184/);
 });
 
-test('product merge blocks linked issue closure, unknown overlap, stale acceptance and wrong squash files', async () => {
-  const { run, effects, state, ownerReview } = productFixture();
+test('product blocks linked closure, overlapping changes, failed CI and wrong squash files', async () => {
+  const { run, effects, state, results } = productFixture();
+  state.aiResults = results;
   await run();
-  state.reviews = [ownerReview, { ...ownerReview, id: 13, state: 'CHANGES_REQUESTED' }];
-  await run();
-  assert.deepEqual(effects, ['ready']);
-  state.reviews = [ownerReview];
   state.closingIssues = 1;
   await assert.rejects(run(), /linked issue-closing references/);
   state.closingIssues = 0;
   state.humanFiles = [{ filename: 'docs/payroll.md', previous_filename: 'src/roster/view.ts', status: 'renamed' }];
   await assert.rejects(run(), /overlaps the product work area/);
   state.humanFiles = [{ filename: 'docs/payroll.md', status: 'modified' }];
+  state.checks[2].conclusion = 'failure';
+  await assert.rejects(run(), /product-criteria/);
+  state.checks[2].conclusion = 'success';
   await run();
   state.openPRs = [state.humanPR];
   state.mergedFiles = [{ ...state.files[0], sha: moved }];
@@ -959,18 +1011,101 @@ test('product merge blocks linked issue closure, unknown overlap, stale acceptan
   assert.equal(state.issue.state, 'open');
 });
 
-test('failed product work parks after exact task PR is closed unmerged, with unrelated human PR still open', async () => {
+test('a stopped task with failed deployment parks after bounded verification and leaves the issue open', async () => {
+  const { run, effects, state, results } = productFixture();
+  state.aiResults = results;
+  await run();
+  await run();
+  state.openPRs = [state.humanPR];
+  state.deployStatuses[0].state = 'failure';
+  await assert.rejects(run(), /deployment is pending, failed, or unverifiable/);
+  state.now += 60 * 60 * 1000;
+  assert.equal(await run(), 'released');
+  assert.deepEqual(effects, ['ready', 'merge', 'park', 'release']);
+  assert.equal(state.issue.state, 'open');
+});
+
+test('failed product task closes and parks only its exact stopped PR, leaving unrelated human work open', async () => {
   const { run, effects, state, comments } = productFixture();
   state.task.state = 'failed';
   state.task.sessions[0].state = 'failed';
-  await assert.rejects(run(), /unresolved PR artifact/);
-  assert.deepEqual(effects, []);
-  state.pr.state = 'closed';
-  state.pr.merged = false;
-  state.openPRs = [state.humanPR];
-  await run();
-  assert.deepEqual(effects, ['park', 'release']);
+  assert.equal(await run(), 'released');
+  assert.deepEqual(effects, ['close-unmerged', 'park', 'release']);
+  assert.equal(state.humanPR.state, 'open');
   assert.equal(state.issue.state, 'open');
   assert.equal(state.parking.priority, 'p2.01');
-  assert.match(comments[0].body, /closed and unmerged/);
+  assert.match(comments[0].body, /closed-unmerged/);
+});
+
+test('requirements changes invalidate product acceptance and park the exact PR after the deadline', async () => {
+  const { run, effects, state, results } = productFixture();
+  state.aiResults = results;
+  await run();
+  state.issue.body += '\n- New requirement';
+  await assert.rejects(run(), /requirements changed/);
+  state.now += 60 * 60 * 1000;
+  assert.equal(await run(), 'released');
+  assert.deepEqual(effects, ['ready', 'close-unmerged', 'park', 'release']);
+});
+
+test('post-merge reconciliation rejects changed acceptance records and accepts no second AI verdict', async () => {
+  const { run, effects, state, results, comments } = productFixture();
+  state.aiResults = results;
+  await run();
+  await run();
+  state.openPRs = [state.humanPR];
+  const original = comments[0].body;
+  comments[0].body = original.replace(head, moved);
+  await assert.rejects(run(), /Missing historical independent/);
+  comments[0].body = original;
+  comments[0].user.id = 11307166;
+  await assert.rejects(run(), /Missing historical independent/);
+  assert.equal(comments.length, 1);
+  assert.deepEqual(effects, ['ready', 'merge']);
+});
+
+test('a parked lease releases and selects the next eligible issue in the same cycle', async () => {
+  const { cycle, effects, state } = productFixture();
+  state.task.state = 'failed';
+  state.task.sessions[0].state = 'failed';
+  state.humanPR = null;
+  state.openPRs = [state.pr];
+  state.nextIssue = { ...issue, title: '[BB-TEST-001] Next eligible proof', labels: ['p2', 'autonomy-ready', 'dependencies-cleared'] };
+  await assert.rejects(cycle(), /unconfirmed next dispatch/);
+  assert.deepEqual(effects, ['close-unmerged', 'park', 'release']);
+  assert.equal(state.nextLease.issue, 305);
+  assert.match(state.nextPrompt, /issue #305 only/);
+});
+
+test('Development deployment requires current exact-squash success from the established Vercel GitHub App', async () => {
+  const { state } = productFixture();
+  const [success] = state.deployStatuses;
+  const read = statuses => developmentDeployment({
+    merge, mergedAt: Date.parse(mergedAt), migrations: false,
+    paged: async route => { assert.equal(route, '/commits/' + merge + '/statuses'); return statuses; },
+  });
+  assert.deepEqual(await read([success]), {
+    id: 'dpl_fake184', status: 17, url: 'https://vercel.com/farbotkol/butterbox/fake184',
+  });
+  for (const statuses of [
+    [],
+    [{ ...success, created_at: ended }],
+    [{ ...success, creator: { ...success.creator, id: 11307166 } }],
+    [{ ...success, target_url: 'https://vercel.com/other/butterbox/fake184' }],
+    [success, { ...success, id: 18, state: 'pending' }],
+    [success, { ...success, id: 18, state: 'failure' }],
+  ]) assert.equal(await read(statuses), null);
+  await assert.rejects(read([success, success]), /Ambiguous Vercel commit status/);
+});
+
+test('a completed product task with an explicit empty artifact list parks only with no session branch PR', async () => {
+  const { run, effects, state } = productFixture();
+  state.task.artifacts = [];
+  await run();
+  assert.deepEqual(effects, []);
+  state.openPRs = [state.humanPR];
+  assert.equal(await run(), 'released');
+  assert.deepEqual(effects, ['park', 'release']);
+  assert.equal(state.issue.state, 'open');
+  assert.equal(state.parking.blocker, 'completed-without-pr');
 });

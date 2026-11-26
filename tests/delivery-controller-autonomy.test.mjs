@@ -450,7 +450,7 @@ test('Copilot task list traverses bounded pagination for 60, 100 and 1,000 task 
 test('a higher-priority arrival invalidates the unused reservation before any POST', async () => {
  const first = { ...recoveryIssue, labels: ['autonomy-ready', 'dependencies-cleared', 'P5.00'] };
  const arrival = story(309, { updated_at: recoveryIssue.updated_at,
-  body: '## Autonomy scope\n- `src/roster`\n\n## Acceptance criteria\n- Render roster',
+  body: '## Autonomy scope\n- `src/roster`\n- `tests/roster.test.mjs`\n\n## Acceptance criteria\n- Render roster',
   labels: ['autonomy-ready', 'dependencies-cleared', 'P2.01'] });
  const proofs = Object.fromEntries([305, 306].map(number => [number, {
   number, state: 'closed', state_reason: 'completed',

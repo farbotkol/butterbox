@@ -121,6 +121,9 @@ jobs:
       issues: write
       pull-requests: write
       actions: read
+      checks: read
+      statuses: read
+      models: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -142,6 +145,8 @@ jobs:
       issues: read
       pull-requests: read
       actions: read
+      checks: read
+      statuses: read
     steps:
       - uses: actions/checkout@v4
         with:

@@ -1,3 +1,4 @@
+import { inferProductAcceptance } from './product-acceptance.mjs';
 import { productScope, conflictsWithProduct } from './product.mjs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -13,6 +14,7 @@ import { ownerId, acceptanceIssues, proofFor, issueDigest, developmentSha, first
 
 import { preDispatchStop, recoverPreDispatchLease, verifyStoppedAttempt } from './pre-dispatch-recovery.mjs';
 import { readLeaseCandidates, rememberLeaseTask, withTaskInventory } from './task-inventory.mjs';
+import { autonomousDevelopmentMarker } from '../agent-evidence/evidence.mjs';
 import { downloadJobLog } from './job-log-download.mjs';
 
 const exec = promisify(execFile);
@@ -52,6 +54,7 @@ async function main() {
   }
 
   const request = (url, options) => fetch(url, { ...options, redirect: 'error', signal: AbortSignal.timeout(15000) });
+  const infer = input => inferProductAcceptance(input, { token: ghToken, request });
   const headers = {
     Accept: 'application/vnd.github+json',
     Authorization: 'Bearer ' + ghToken,
@@ -199,18 +202,18 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues });
+  await runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report, approval, repairBusy, readyPull, closingIssues, infer });
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
-  repairBusy, readyPull, closingIssues }) {
+  repairBusy, readyPull, closingIssues, infer }) {
   const current = await readLease(leaseApi);
   if (current) {
     report('LEASE_HELD issue #' + current.issue + ' run ' + current.runId +
       ' age ' + ((Date.now() - Date.parse(current.startedAt)) / 3600000).toFixed(1) + 'h');
-    await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
-      approval, repairBusy, readyPull, closingIssues });
-    return;
+    const outcome = await advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease: current, runId, report,
+      approval, repairBusy, readyPull, closingIssues, infer });
+    if (outcome !== 'released' || current.runId === runId) return;
   }
 
   const candidateSnapshot = async lease => {
@@ -301,11 +304,11 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
     taskMarker(runId),
     proof ? 'Read its issue and AGENTS.md. Add only ' + proof.path + ' with exactly the content in the issue.' :
       'Read its issue and AGENTS.md. Work only in the approved Autonomy scope: ' + productScope(issue).paths.join(', ') +
-      '. Report tests and evidence for every acceptance criterion in the PR. Report any incomplete criteria explicitly.',
+      '. Add executable assertions in scoped top-level tests/*.test.mjs for each criterion. Report tests and evidence for every acceptance criterion in the PR. Report any incomplete criteria explicitly.',
     'Open a draft PR. Use this body with one marker per line and no GitHub issue closing keywords:',
     'Refs #' + number,
     '<!-- butterbox-issue: ' + number + ' -->',
-    ...(proof ? ['<!-- butterbox-evidence: ' + proof.path + ' -->'] : []),
+    ...(proof ? ['<!-- butterbox-evidence: ' + proof.path + ' -->'] : [autonomousDevelopmentMarker]),
     'Leave CI and merge to GitHub. Do not access external systems, change other files, or begin another issue.',
   ].join('\n');
   try {

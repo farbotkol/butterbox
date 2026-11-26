@@ -1,3 +1,4 @@
+import { isAutonomousDevelopmentPR } from './agent-evidence/evidence.mjs';
 import { fileURLToPath } from 'node:url';
 
 const DEVELOPMENT_BRANCH = 'copilot/Development';
@@ -16,6 +17,9 @@ export function evaluatePhase2Eligibility(pullRequest, repository) {
   }
   if (pullRequest.base?.ref !== DEVELOPMENT_BRANCH) {
     return reject(`target branch must be ${DEVELOPMENT_BRANCH}.`);
+  }
+  if (isAutonomousDevelopmentPR(pullRequest)) {
+    return reject('Autonomous Development uses the delivery controller acceptance and merge gate.');
   }
   if (pullRequest.head?.repo?.full_name !== repository) {
     return reject('head repository must be this repository; fork or missing heads are not eligible.');

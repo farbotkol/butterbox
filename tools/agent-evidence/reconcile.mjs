@@ -4,6 +4,7 @@ import {
   canonicalIssueNumber,
   evidenceIsComplete,
   hasCanonicalIssueApproval,
+  isAutonomousDevelopmentPR,
   parseAcceptanceCriteria,
   getEvidencePathFromPullRequest,
   referencesCanonicalIssue,
@@ -103,6 +104,11 @@ export async function reconcilePullRequest({ repository, pullRequest, api }) {
   if (!confirmedMerged(pullRequest) || !pullRequest.merged_at ||
       pullRequest.base?.ref !== TARGET_BRANCH || !SHA.test(pullRequest.merge_commit_sha ?? '')) {
     result.reason = 'PR is not confirmed merged to copilot/Development';
+    return result;
+  }
+
+  if (isAutonomousDevelopmentPR(pullRequest)) {
+    result.reason = 'Autonomous Development is reconciled by the delivery controller after deployment';
     return result;
   }
 

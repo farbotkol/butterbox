@@ -2,8 +2,9 @@ import { queuePriority } from './queue.mjs';
 import { createHash } from 'node:crypto';
 import { assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
-import { canonicalIssueNumber, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
-import { productScope, scopedProductFiles, readProductDiff, conflictsWithProduct, productReview, sameSquashFiles } from './product.mjs';
+import { canonicalIssueNumber, isAutonomousDevelopmentPR, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
+import { productScope, scopedProductFiles, readProductDiff, conflictsWithProduct, sameSquashFiles } from './product.mjs';
+import { productAcceptance, developmentDeployment } from './product-acceptance.mjs';
 import { assessDevelopmentDrift } from './development-drift.mjs';
 import { readTaskDetails, readLeaseCandidates } from './task-inventory.mjs';
 export { readTaskDetails } from './task-inventory.mjs';
@@ -56,10 +57,10 @@ export function compareProof(file, approved, blob) {
     typeof file.content === 'string' && Buffer.from(file.content, 'base64').equals(approved);
 }
 
-export function verifiedChecks(checks, head, boundary = Date.now()) {
+export function verifiedChecks(checks, head, boundary = Date.now(), names = requiredChecks) {
   assert(Array.isArray(checks.check_runs) && checks.total_count === checks.check_runs.length &&
     new Set(checks.check_runs.map(row => row.id)).size === checks.check_runs.length, 'Incomplete check-run snapshot');
-  return requiredChecks.map(name => {
+  return names.map(name => {
     const rows = checks.check_runs.filter(row => row.name === name && row.app?.slug === 'github-actions' &&
       row.app.id === 15368 && row.head_sha === head);
     assert(rows.every(row => Number.isSafeInteger(row.id) && Number.isFinite(time(row.started_at))),
@@ -117,7 +118,7 @@ export async function openDevelopmentPRs(paged, repository) {
 }
 
 export async function advanceAcceptance({ repository, gh, paged, tasksApi, leaseApi, lease, runId, report,
-  approval, repairBusy, readyPull, closingIssues, mergedRecovery = 'none' }) {
+  approval, repairBusy, readyPull, closingIssues, infer, now = Date.now, mergedRecovery = 'none' }) {
   assert(['none', 'verify', 'release'].includes(mergedRecovery), 'Invalid merged recovery mode');
   const release = () => releaseLease(leaseApi, {
     runId: lease.runId, expectedTagSha: lease.tagSha, confirmedWriterStopped: true, compareAndDelete: true,
@@ -128,7 +129,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     report('RETAIN_LEASE: No controlled acceptance scope for the active lease.');
     return;
   }
-  const checkIdentity = async ({ discovery = false } = {}) => {
+  const checkIdentity = async ({ discovery = false, parking = false } = {}) => {
     const tasks = await (tasksApi.inventory || discovery ? readLeaseCandidates(tasksApi, lease) : readTaskDetails(tasksApi));
     const [current, issue, openPRs, repair] = await Promise.all([
       readLease(leaseApi), gh('/issues/' + lease.issue),
@@ -136,13 +137,15 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     ]);
     assert(current?.tagSha === lease.tagSha && current.runId === lease.runId, 'Exclusive lease changed');
     assert(!repair, 'CI repair may still be writing');
-    assert(issueDigest(issue) === lease.issueDigest, 'Issue requirements changed after lease acquisition');
-    if (product) assert(productScope(issue) && Array.isArray(issue.assignees) && !issue.assignees.length,
-      'Missing approved product scope or issue has a competing assignee');
+    if (!parking) {
+      assert(issueDigest(issue) === lease.issueDigest, 'Issue requirements changed after lease acquisition');
+      if (product) assert(productScope(issue) && Array.isArray(issue.assignees) && !issue.assignees.length,
+        'Missing approved product scope or issue has a competing assignee');
+    }
     return { issue, openPRs, result: assessHandoff({ lease, tasks, openPRs, issue, product }) };
   };
 
-  const snapshot = await checkIdentity({ discovery: true });
+  const snapshot = await checkIdentity({ discovery: true, parking: product });
   const { issue, result, openPRs } = snapshot;
   if (mergedRecovery !== 'none') {
     assert(issue.state === 'closed' && result.action === 'VERIFY_PR',
@@ -173,9 +176,9 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const body = [
         marker, 'Autonomous delivery parked at ' + new Date().toISOString() + '.',
         'Task ' + audited.taskId + ' ended ' + audited.taskState +
-          (audited.taskUrl ? '. Its task PR is closed and unmerged: ' + audited.taskUrl :
+          (audited.taskUrl ? '. Task PR: ' + audited.taskUrl :
             '. Its sessions are terminal and no task PR artifact was found.'),
-        'Resolve the task failure before asking the repository owner to review and reauthorise dispatch.',
+        'The issue remains open. Submit corrections and changes through the backlog.',
       ].join('\n');
       const comment = await gh(endpoint, 'POST', { body });
       assert(comment.body === body && comment.user?.id === actionsBot && Number.isSafeInteger(comment.id),
@@ -186,10 +189,10 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       recheck.taskState === expected.taskState, 'Parking evidence changed');
     await release();
     report('PARKED issue #' + lease.issue + ' after task ' + audited.taskId + ' ended ' + audited.taskState);
+    return 'released';
   };
   if (result.action === 'PARK_VERIFIED') {
-    await park(result, async () => (await checkIdentity()).result);
-    return;
+    return park(result, async () => (await checkIdentity({ parking: product })).result);
   }
 
   const { task, artifact } = result;
@@ -214,212 +217,278 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       session.prompt.split(/\r?\n/).includes(taskMarker(lease.runId))), 'PR identity or session head does not match the artifact');
   assert(!openPRs.some(row => row.number !== number && row.head?.repo?.full_name === repository &&
     row.head?.ref === pr.head.ref), 'Competing Development PR uses the leased task branch');
-  if (product && pr.state === 'closed' && pr.merged === false && issue.state === 'open') {
-    const stopped = { action: 'PARK_VERIFIED', taskId: task.id, taskState: 'closed-unmerged',
+  const readStopped = async (state, merged) => {
+    const [fresh, currentPR] = await Promise.all([checkIdentity({ parking: true }), gh(endpoint)]);
+    const verified = fresh.result;
+    return fresh.issue.state === 'open' && verified.action === result.action && verified.task.id === task.id &&
+      verified.artifact === artifact && currentPR.number === number && currentPR.head?.sha === head &&
+      currentPR.state === state && currentPR.merged === merged && currentPR.auto_merge === null &&
+      currentPR.head?.ref === pr.head.ref && currentPR.head?.repo?.full_name === repository &&
+      currentPR.base?.ref === development && currentPR.base?.repo?.full_name === repository &&
+      (state === 'open' || currentPR.merge_commit_sha === pr.merge_commit_sha || !merged) &&
+      !fresh.openPRs.some(row => row.number !== number && row.head?.ref === pr.head.ref) &&
+      fresh.openPRs.some(row => row.number === number && row.head.sha === head) === (state === 'open');
+  };
+  const parkProduct = async merged => {
+    const stopped = { action: 'PARK_VERIFIED', taskId: task.id,
+      taskState: merged ? 'merged-deployment-or-acceptance-unverified' : 'closed-unmerged',
       sessionCount: task.session_count, taskUrl: 'https://github.com/' + repository + '/pull/' + number };
-    await park(stopped, async () => {
-      const [fresh, currentPR] = await Promise.all([checkIdentity(), gh(endpoint)]);
-      const verified = fresh.result;
-      return fresh.issue.state === 'open' && verified.action === result.action && verified.task.id === task.id &&
-        verified.artifact === artifact && currentPR.number === number && currentPR.head?.sha === head &&
-        currentPR.state === 'closed' && currentPR.merged === false &&
-        !fresh.openPRs.some(row => row.number === number || row.head?.ref === pr.head.ref) ? stopped : null;
-    });
-    return;
-  }
-  assert(result.action === 'VERIFY_PR', 'Failed product task still has an unresolved PR artifact');
-  let metadata;
-  if (product) {
-    const refs = [...(pr.body ?? '').matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)];
-    assert(refs.every(ref => Number(ref[1]) === lease.issue) && !closesIssue.test(pr.body ?? '') && !closesIssue.test(pr.title ?? '') &&
-      canonicalIssueNumber(pr.body) === lease.issue && referencesCanonicalIssue(pr.body, lease.issue) &&
-      (pr.body.match(/<!--\s*butterbox-issue\s*:/g) ?? []).length === 1,
-    'Product PR lacks unique canonical metadata or uses an issue closing reference');
-    metadata = { changed: false };
-  } else {
-    metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
-  }
-  // Closed/merged PRs cannot be repaired after the fact.
-  if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
-    'Merged PR lacks verified metadata');
-  assert(Array.isArray(pr.requested_reviewers) && !pr.requested_reviewers.length &&
-    Array.isArray(pr.requested_teams) && !pr.requested_teams.length, 'PR still has pending reviews or missing review evidence');
-
-  const [files, headProof, checks, ref, rules] = await Promise.all([
-    product ? readProductDiff(paged, gh, pr) : gh(endpoint + '/files?per_page=2'),
-    product ? null : contentsAt(gh, path, head),
-    gh('/commits/' + head + '/check-runs?filter=all&per_page=100'), gh('/git/ref/heads/' + development),
-    gh('/rules/branches/' + encodeURIComponent(development)),
-  ]);
-  assert(Array.isArray(rules) && rules.some(rule => rule.type === 'pull_request' &&
-    rule.parameters?.allowed_merge_methods?.includes('squash')) &&
-    requiredChecks.every(name => rules.some(rule => rule.type === 'required_status_checks' &&
-      rule.parameters?.required_status_checks?.some(check => check.context === name && check.integration_id === 15368))),
-  'Required Development squash and GitHub Actions rules are unavailable');
-  const productPaths = product && scopedProductFiles(scope, files);
-  if (product) assert(files.length < 100, 'Product diff exceeds the verifiable squash bound');
-  if (!product) assert(pr.changed_files === 1 && Array.isArray(files) && files.length === 1 &&
-    files[0].filename === path && files[0].status === 'added' && isSha(files[0].sha) &&
-    compareProof(headProof, bytes, files[0].sha), 'PR does not add exactly the approved proof file and bytes');
-  const mergedAt = time(pr.merged_at);
-  const readOwnerReview = async () => productReview(await paged(endpoint + '/reviews'), head,
-    lease.issue, scope.criteria, ownerId, pr.merged === true ? mergedAt : Date.now(), lease.issueDigest);
-  const review = product && (!pr.draft || pr.merged === true) ? await readOwnerReview() : null;
-  if (product && !pr.draft && !review) {
-    report('PRODUCT_ACCEPTANCE_PENDING #' + lease.issue + ' PR #' + number + ' head ' + head + ' scope ' + lease.issueDigest);
-    return;
-  }
-  const ci = verifiedChecks(checks, head, pr.merged === true ? mergedAt : Date.now());
-  const tip = developmentSha(ref);
-  // Validate only bounded, complete forward ancestry. The original lease remains immutable.
-  const checkedAncestry = async (from, to) => {
-    if (from === to) return { kind: 'unchanged', safe: true };
-    const comparison = await gh('/compare/' + from + '...' + to + '?per_page=100');
-    const verdict = assessDevelopmentDrift({ pinnedSha: from, currentSha: to, comparison, proofPath: path, productPaths });
-    assert(verdict.kind === 'candidate', 'Unsafe Development movement: ' + verdict.reason);
-    return verdict;
+    await park(stopped, async () => await readStopped('closed', merged) ? stopped : null);
   };
-  const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
-    [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
-  const confirm = async (expectedOpen, expectedBody = pr.body) => {
-    const fresh = await checkIdentity();
-    const [freshPR, freshTip, approved] = await Promise.all([
-      gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
-    ]);
+  if (product && pr.state === 'closed' && pr.merged === false && issue.state === 'open') {
+    await parkProduct(false);
+    return 'released';
+  }
+
+  const verify = async () => {
+    assert(issueDigest(issue) === lease.issueDigest, 'Issue requirements changed after lease acquisition');
+    if (product) assert(scope && Array.isArray(issue.assignees) && !issue.assignees.length,
+      'Missing approved product scope or issue has a competing assignee');
+    assert(result.action === 'VERIFY_PR', 'Failed product task still has an unresolved PR artifact');
+    let metadata;
     if (product) {
-      assert(await closingIssues(freshPR) === 0, 'Product PR has linked issue-closing references');
-      if (expectedOpen) assert(!await conflictsWithProduct(paged, gh, fresh.openPRs, scope, number),
-        'Competing Development PR overlaps the product work area');
-      if (review) {
-        const latest = await readOwnerReview();
-        assert(latest?.id === review.id && latest.body === review.body, 'Product acceptance review changed');
-      }
+      const refs = [...(pr.body ?? '').matchAll(/\b(?:Refs|Related to)\s+#(\d+)\b/gi)];
+      assert(refs.every(ref => Number(ref[1]) === lease.issue) && !closesIssue.test(pr.body ?? '') && !closesIssue.test(pr.title ?? '') &&
+        isAutonomousDevelopmentPR(pr) && canonicalIssueNumber(pr.body) === lease.issue && referencesCanonicalIssue(pr.body, lease.issue) &&
+        (pr.body.match(/<!--\s*butterbox-issue\s*:/g) ?? []).length === 1,
+      'Product PR lacks unique canonical metadata or uses an issue closing reference');
+      metadata = { changed: false };
+    } else {
+      metadata = planAcceptancePrMetadata(pr.body ?? '', lease.issue, path, pr.title ?? '');
     }
-    assert(fresh.result.action === 'VERIFY_PR' && fresh.result.task.id === task.id &&
-      sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
-      fresh.result.artifact === artifact &&
-      (expectedOpen ? (product || fresh.openPRs.length === 1) &&
-        fresh.openPRs.some(row => row.number === number && row.head.sha === head) :
-        !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
-          (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
-      developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
-      freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
-      freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
-      freshPR.head?.ref === pr.head.ref && freshPR.head?.repo?.full_name === repository &&
-      (!expectedOpen || freshPR.base?.sha === pr.base.sha) &&
-      freshPR.base?.ref === development && freshPR.base?.repo?.full_name === repository &&
-      freshPR.merge_commit_sha === pr.merge_commit_sha && freshPR.auto_merge === null &&
-      Array.isArray(freshPR.requested_reviewers) && !freshPR.requested_reviewers.length &&
-      Array.isArray(freshPR.requested_teams) && !freshPR.requested_teams.length &&
-      approved.approved && Number.isFinite(time(fresh.issue.updated_at)) &&
-      approved.issue.updated_at === fresh.issue.updated_at,
-    'PR, Development, approval or writer evidence changed during handoff');
-    return fresh.issue;
+    // Closed/merged PRs cannot be repaired after the fact.
+    if (pr.state !== 'open') assert(!metadata.changed && canonicalIssueNumber(pr.body) === lease.issue,
+      'Merged PR lacks verified metadata');
+    if (!product) assert(Array.isArray(pr.requested_reviewers) && !pr.requested_reviewers.length &&
+      Array.isArray(pr.requested_teams) && !pr.requested_teams.length, 'PR still has pending reviews or missing review evidence');
+
+    const [files, headProof, checks, ref, rules] = await Promise.all([
+      product ? readProductDiff(paged, gh, pr) : gh(endpoint + '/files?per_page=2'),
+      product ? null : contentsAt(gh, path, head),
+      gh('/commits/' + head + '/check-runs?filter=all&per_page=100'), gh('/git/ref/heads/' + development),
+      gh('/rules/branches/' + encodeURIComponent(development)),
+    ]);
+    assert(Array.isArray(rules) && rules.some(rule => rule.type === 'pull_request' &&
+      rule.parameters?.allowed_merge_methods?.includes('squash')) &&
+      requiredChecks.every(name => rules.some(rule => rule.type === 'required_status_checks' &&
+        rule.parameters?.required_status_checks?.some(check => check.context === name && check.integration_id === 15368))),
+    'Required Development squash and GitHub Actions rules are unavailable');
+    if (product) assert(rules.filter(rule => rule.type === 'pull_request').every(rule =>
+      rule.parameters?.required_approving_review_count === 0 && !rule.parameters.require_code_owner_review &&
+      !rule.parameters.require_last_push_approval && !rule.parameters.require_extra_approval_for_unattributed_changes &&
+      Array.isArray(rule.parameters.required_reviewers) && !rule.parameters.required_reviewers.length),
+    'Development native pull_request rule requires approval or reviewer evidence: ' +
+      JSON.stringify(rules.filter(rule => rule.type === 'pull_request').map(rule => rule.parameters)));
+    const productPaths = product && scopedProductFiles(scope, files);
+    if (product) assert(files.length < 100, 'Product diff exceeds the verifiable squash bound');
+    if (!product) assert(pr.changed_files === 1 && Array.isArray(files) && files.length === 1 &&
+      files[0].filename === path && files[0].status === 'added' && isSha(files[0].sha) &&
+      compareProof(headProof, bytes, files[0].sha), 'PR does not add exactly the approved proof file and bytes');
+    const mergedAt = time(pr.merged_at);
+    const names = product ? [...requiredChecks, 'product-criteria'] : requiredChecks;
+    const boundary = pr.merged === true ? mergedAt : now();
+    const ci = verifiedChecks(checks, head, boundary, names);
+    if (product) {
+      const runId = /\/runs\/(\d+)\/job\//.exec(ci.at(-1))[1];
+      const run = await gh('/actions/runs/' + runId);
+      assert(String(run.id) === runId && run.head_sha === head && run.event === 'pull_request' &&
+        run.path === '.github/workflows/product-criteria.yml' && run.head_repository?.full_name === repository,
+      'Exact-head product criteria check is not from the expected workflow');
+    }
+    const readAcceptance = ai => productAcceptance({ gh, paged, infer: ai, lease, pr, scope, files, ci,
+      boundary: pr.merged === true ? mergedAt : now() });
+    let acceptance;
+    const tip = developmentSha(ref);
+    // Validate only bounded, complete forward ancestry. The original lease remains immutable.
+    const checkedAncestry = async (from, to) => {
+      if (from === to) return { kind: 'unchanged', safe: true };
+      const comparison = await gh('/compare/' + from + '...' + to + '?per_page=100');
+      const verdict = assessDevelopmentDrift({ pinnedSha: from, currentSha: to, comparison, proofPath: path, productPaths });
+      assert(verdict.kind === 'candidate', 'Unsafe Development movement: ' + verdict.reason);
+      return verdict;
+    };
+    const sessionEvidence = task => JSON.stringify(task.sessions.map(session =>
+      [session.id, session.state, session.task_id, session.base_ref, session.head_ref]).sort());
+    const confirm = async (expectedOpen, expectedBody = pr.body) => {
+      const fresh = await checkIdentity();
+      const [freshPR, freshTip, approved] = await Promise.all([
+        gh(endpoint), gh('/git/ref/heads/' + development), approval(lease.issue),
+      ]);
+      if (product) {
+        assert(await closingIssues(freshPR) === 0, 'Product PR has linked issue-closing references');
+        if (expectedOpen) assert(!await conflictsWithProduct(paged, gh, fresh.openPRs, scope, number),
+          'Competing Development PR overlaps the product work area');
+      }
+      assert(fresh.result.action === 'VERIFY_PR' && fresh.result.task.id === task.id &&
+        sessionEvidence(fresh.result.task) === sessionEvidence(task) &&
+        fresh.result.artifact === artifact &&
+        (expectedOpen ? (product || fresh.openPRs.length === 1) &&
+          fresh.openPRs.some(row => row.number === number && row.head.sha === head) :
+          !fresh.openPRs.some(row => row.id === artifact || row.number === artifact || row.number === number ||
+            (row.head?.repo?.full_name === repository && row.head?.ref === pr.head.ref))) &&
+        developmentSha(freshTip) === tip && freshPR.head?.sha === head && freshPR.body === expectedBody &&
+        freshPR.title === pr.title && freshPR.state === pr.state && freshPR.draft === pr.draft &&
+        freshPR.merged === pr.merged && freshPR.merged_at === pr.merged_at && freshPR.merged_by?.id === pr.merged_by?.id &&
+        freshPR.head?.ref === pr.head.ref && freshPR.head?.repo?.full_name === repository &&
+        (!expectedOpen || freshPR.base?.sha === pr.base.sha) &&
+        freshPR.base?.ref === development && freshPR.base?.repo?.full_name === repository &&
+        freshPR.merge_commit_sha === pr.merge_commit_sha && freshPR.auto_merge === null &&
+        (product || (Array.isArray(freshPR.requested_reviewers) && !freshPR.requested_reviewers.length &&
+        Array.isArray(freshPR.requested_teams) && !freshPR.requested_teams.length)) &&
+        approved.approved && Number.isFinite(time(fresh.issue.updated_at)) &&
+        approved.issue.updated_at === fresh.issue.updated_at,
+      'PR, Development, approval or writer evidence changed during handoff');
+      return fresh.issue;
+    };
+
+    if (pr.state === 'open') {
+      assert(product || openPRs.length === 1, 'Competing Development PR exists');
+      assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
+        !issue.body?.includes(marker) && isSha(pr.base?.sha),
+      'Open PR or reported Development base is invalid');
+      const movement = await checkedAncestry(lease.baseSha, tip);
+      // GitHub may retain the original PR base SHA after the target branch advances.
+      // Independently prove the reported base lies on the verified forward path.
+      // A fresh snapshot must still match both the reported base and live tip.
+      if (pr.base.sha !== tip) {
+        await checkedAncestry(lease.baseSha, pr.base.sha);
+        await checkedAncestry(pr.base.sha, tip);
+        report('STALE_PR_BASE_VALIDATED #' + number + ' reported ' + pr.base.sha + ' current ' + tip);
+      }
+      if (movement.kind === 'candidate') report('DEVELOPMENT_DRIFT_VALIDATED #' + number + ' original ' + lease.baseSha + ' current ' + tip);
+      const comparison = await gh('/compare/' + lease.baseSha + '...' + head + '?per_page=1');
+      assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === lease.baseSha,
+        'PR head is not based on the original leased Development commit');
+      assert(pr.auto_merge === null && typeof pr.draft === 'boolean' && pr.mergeable === true,
+        'PR mergeability, draft state or native auto-merge is unverified');
+      const currentIssue = await confirm(true);
+      assert(currentIssue.state === 'open' && !currentIssue.body?.includes(marker), 'Issue changed before merge');
+      if (metadata.changed) {
+        // Separate, reverified stage. Never promote or merge in the repair run.
+        const updated = await gh(endpoint, 'PATCH', { body: metadata.body });
+        assert(updated.number === number && updated.head?.sha === head &&
+          updated.body === metadata.body && updated.state === 'open' &&
+          updated.draft === pr.draft && updated.merged === false,
+        'GitHub did not confirm exact metadata repair');
+        await confirm(true, metadata.body);
+        report('PR_METADATA_REPAIRED #' + number + ' head ' + head +
+          ' · independently verified issue #' + lease.issue + ' proof ' + path);
+        return;
+      }
+      const latest = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
+      verifiedChecks(latest, head, now(), names);
+      if (pr.draft) {
+        assert(typeof pr.node_id === 'string' && pr.node_id.length > 0, 'Missing pull request GraphQL ID');
+        await readyPull(pr.node_id, head);
+        report('PR_READY #' + number + ' head ' + head + ' · ' + ci.join(' · '));
+        return;
+      }
+      if (product) {
+        acceptance = await readAcceptance(infer);
+        assert(acceptance, 'Missing complete independent exact-head AI acceptance evidence');
+        await confirm(true);
+        const currentChecks = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
+        assert(JSON.stringify(verifiedChecks(currentChecks, head, now(), names)) === JSON.stringify(ci) &&
+          (await readAcceptance())?.id === acceptance.id, 'Exact-head acceptance or CI evidence changed before merge');
+      }
+      assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
+      const merge = await gh(endpoint + '/merge', 'PUT', {
+        sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
+        commit_message: 'Refs #' + lease.issue,
+      });
+      assert(merge.merged === true && isSha(merge.sha), 'GitHub did not confirm the protected squash merge');
+      report('MERGE_CONFIRMED PR #' + number + ' head ' + head + ' merge ' + merge.sha + ' · ' + ci.join(' · '));
+      return;
+    }
+
+    const merge = pr.merge_commit_sha;
+    assert(pr.state === 'closed' && pr.merged === true && Number.isFinite(mergedAt) && isSha(merge) &&
+      pr.merged_by?.id === actionsBot && matching.length === 0,
+    'Missing controller merge_commit_sha, bot merge identity, or task PR remains open');
+    if (tip !== merge) {
+      const ancestry = await gh('/compare/' + merge + '...' + tip + '?per_page=1');
+      assert(ancestry.status === 'ahead' && ancestry.base_commit?.sha === merge &&
+        ancestry.merge_base_commit?.sha === merge, 'Merged proof is not an ancestor of Development');
+    }
+    const [commit, mergedProof] = await Promise.all([
+      gh('/commits/' + merge + (product ? '?per_page=100' : '?per_page=2')),
+      product ? null : contentsAt(gh, path, merge),
+    ]);
+    assert(commit.sha === merge && commit.parents?.length === 1 && isSha(commit.parents[0].sha) &&
+      (product ? files.length < 100 && sameSquashFiles(files, commit.files) :
+        commit.files?.length === 1 && commit.files[0].status === 'added' && commit.files[0].filename === path &&
+        commit.files[0].sha === files[0].sha && compareProof(mergedProof, bytes, files[0].sha)),
+    'Squash commit parent, changed file or proof bytes do not match the verified PR');
+    const parent = commit.parents[0].sha;
+    await checkedAncestry(lease.baseSha, parent);
+    let deployment;
+    if (product) {
+      acceptance = await readAcceptance();
+      assert(acceptance, 'Missing historical independent exact-head AI acceptance evidence');
+      deployment = await developmentDeployment({ paged, gh, merge, mergedAt,
+        migrations: productPaths.some(path => path.startsWith('supabase/migrations/')) });
+      assert(deployment, 'Development deployment is pending, failed, or unverifiable for ' + merge);
+    }
+    const record = [
+      marker, '',
+      'Issue #' + lease.issue + ' · lease ' + lease.runId + ' · task ' + task.id,
+      'Task https://github.com/' + repository + '/copilot/tasks/' + task.id,
+      'Completed sessions ' + task.sessions.map(session => session.id).sort().join(', '),
+      'PR #' + number + ' · head ' + head + ' · squash ' + merge +
+        (product ? ' · independent AI acceptance comment ' + acceptance.id + ' · issue digest ' + lease.issueDigest : ' · proof blob ' + files[0].sha),
+      ...(product ? ['Development deployment ' + deployment.id + ' · status ' + deployment.status + ' · ' + deployment.url,
+        ...(deployment.migrationRun ? ['Development migrations Actions run ' + deployment.migrationRun] : [])] : []),
+      'Original base ' + lease.baseSha + ' · verified squash parent ' + parent,
+      ...ci,
+      'Launch https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1],
+    ].join('\n');
+    const currentIssue = await confirm(false);
+    if (currentIssue.state === 'open') {
+      assert(!currentIssue.body?.includes(marker), 'Issue already has reconciliation evidence but is open');
+      const closed = await gh('/issues/' + lease.issue, 'PATCH', {
+        body: originalBody(currentIssue) + '\n\n' + record + '\nReconciliation https://github.com/' +
+          repository + '/actions/runs/' + runId.split('_')[1],
+        state: 'closed', state_reason: 'completed',
+      });
+      assert(closed.number === lease.issue && closed.state === 'closed' && closed.body?.includes(record),
+        'GitHub did not confirm issue closure and evidence');
+      report('ISSUE_RECONCILED #' + lease.issue + ' PR #' + number + ' merge ' + merge);
+    }
+    const [closed, events] = await Promise.all([confirm(false), paged('/issues/' + lease.issue + '/events')]);
+    assert(closedByController(closed, events) && closed.body?.includes(record + '\nReconciliation '),
+      'Missing matching controller closure and audit evidence');
+    if (mergedRecovery === 'verify') {
+      report('MERGED_RECOVERY_VERIFIED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge);
+      return;
+    }
+    await release();
+    report('LEASE_RELEASED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge);
+    return 'released';
   };
 
-  if (pr.state === 'open') {
-    assert(product || openPRs.length === 1, 'Competing Development PR exists');
-    assert(pr.merged === false && matching.length === 1 && issue.state === 'open' &&
-      !issue.body?.includes(marker) && isSha(pr.base?.sha),
-    'Open PR or reported Development base is invalid');
-    const movement = await checkedAncestry(lease.baseSha, tip);
-    // GitHub may retain the original PR base SHA after the target branch advances.
-    // Independently prove the reported base lies on the verified forward path.
-    // A fresh snapshot must still match both the reported base and live tip.
-    if (pr.base.sha !== tip) {
-      await checkedAncestry(lease.baseSha, pr.base.sha);
-      await checkedAncestry(pr.base.sha, tip);
-      report('STALE_PR_BASE_VALIDATED #' + number + ' reported ' + pr.base.sha + ' current ' + tip);
+  try {
+    return await verify();
+  } catch (error) {
+    if (!product || mergedRecovery !== 'none' || issue.state !== 'open') throw error;
+    const stoppedAt = Math.max(time(lease.startedAt), time(pr.merged_at) || 0, ...[task, ...task.sessions]
+      .flatMap(row => [row.updated_at, row.completed_at])
+      .map(time).filter(Number.isFinite));
+    if (result.action !== 'VERIFY_PARK_PR' && now() - stoppedAt < 60 * 60 * 1000) throw error;
+    // Re-read the exact PR and writer snapshot after any uncertain operation.
+    // A successful-but-unconfirmed merge or closure is handled on a fresh cycle.
+    if (pr.state === 'open' && await readStopped('open', false)) {
+      report('PRODUCT_VERIFICATION_EXHAUSTED #' + lease.issue + ': ' + error.message);
+      const closed = await gh(endpoint, 'PATCH', { state: 'closed' });
+      assert(closed.number === number && closed.state === 'closed' && closed.merged === false &&
+        closed.head?.sha === head, 'GitHub did not confirm exact unmerged PR closure');
+      await parkProduct(false);
+      return 'released';
     }
-    if (movement.kind === 'candidate') report('DEVELOPMENT_DRIFT_VALIDATED #' + number + ' original ' + lease.baseSha + ' current ' + tip);
-    const comparison = await gh('/compare/' + lease.baseSha + '...' + head + '?per_page=1');
-    assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === lease.baseSha,
-      'PR head is not based on the original leased Development commit');
-    assert(pr.auto_merge === null && typeof pr.draft === 'boolean' && pr.mergeable === true,
-      'PR mergeability, draft state or native auto-merge is unverified');
-    const currentIssue = await confirm(true);
-    assert(currentIssue.state === 'open' && !currentIssue.body?.includes(marker), 'Issue changed before merge');
-    if (metadata.changed) {
-      // Separate, reverified stage. Never promote or merge in the repair run.
-      const updated = await gh(endpoint, 'PATCH', { body: metadata.body });
-      assert(updated.number === number && updated.head?.sha === head &&
-        updated.body === metadata.body && updated.state === 'open' &&
-        updated.draft === pr.draft && updated.merged === false,
-      'GitHub did not confirm exact metadata repair');
-      await confirm(true, metadata.body);
-      report('PR_METADATA_REPAIRED #' + number + ' head ' + head +
-        ' · independently verified issue #' + lease.issue + ' proof ' + path);
-      return;
+    if (pr.merged === true && pr.merged_by?.id === actionsBot && await readStopped('closed', true)) {
+      report('PRODUCT_VERIFICATION_EXHAUSTED #' + lease.issue + ': ' + error.message);
+      await parkProduct(true);
+      return 'released';
     }
-    const latest = await gh('/commits/' + head + '/check-runs?filter=all&per_page=100');
-    verifiedChecks(latest, head);
-    if (pr.draft) {
-      assert(typeof pr.node_id === 'string' && pr.node_id.length > 0, 'Missing pull request GraphQL ID');
-      await readyPull(pr.node_id, head);
-      report('PR_READY #' + number + ' head ' + head + ' · ' + ci.join(' · '));
-      return;
-    }
-    assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
-    const merge = await gh(endpoint + '/merge', 'PUT', {
-      sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
-      commit_message: 'Refs #' + lease.issue,
-    });
-    assert(merge.merged === true && isSha(merge.sha), 'GitHub did not confirm the protected squash merge');
-    report('MERGE_CONFIRMED PR #' + number + ' head ' + head + ' merge ' + merge.sha + ' · ' + ci.join(' · '));
-    return;
+    throw error;
   }
-
-  const merge = pr.merge_commit_sha;
-  assert(pr.state === 'closed' && pr.merged === true && Number.isFinite(mergedAt) && isSha(merge) &&
-    pr.merged_by?.id === actionsBot && matching.length === 0,
-  'Missing controller merge_commit_sha, bot merge identity, or task PR remains open');
-  if (tip !== merge) {
-    const ancestry = await gh('/compare/' + merge + '...' + tip + '?per_page=1');
-    assert(ancestry.status === 'ahead' && ancestry.base_commit?.sha === merge &&
-      ancestry.merge_base_commit?.sha === merge, 'Merged proof is not an ancestor of Development');
-  }
-  const [commit, mergedProof] = await Promise.all([
-    gh('/commits/' + merge + (product ? '?per_page=100' : '?per_page=2')),
-    product ? null : contentsAt(gh, path, merge),
-  ]);
-  assert(commit.sha === merge && commit.parents?.length === 1 && isSha(commit.parents[0].sha) &&
-    (product ? files.length < 100 && sameSquashFiles(files, commit.files) :
-      commit.files?.length === 1 && commit.files[0].status === 'added' && commit.files[0].filename === path &&
-      commit.files[0].sha === files[0].sha && compareProof(mergedProof, bytes, files[0].sha)),
-  'Squash commit parent, changed file or proof bytes do not match the verified PR');
-  const parent = commit.parents[0].sha;
-  await checkedAncestry(lease.baseSha, parent);
-  const record = [
-    marker, '',
-    'Issue #' + lease.issue + ' · lease ' + lease.runId + ' · task ' + task.id,
-    'Task https://github.com/' + repository + '/copilot/tasks/' + task.id,
-    'Completed sessions ' + task.sessions.map(session => session.id).sort().join(', '),
-    'PR #' + number + ' · head ' + head + ' · squash ' + merge +
-      (product ? ' · owner acceptance review ' + review.id + ' · issue digest ' + lease.issueDigest : ' · proof blob ' + files[0].sha),
-    'Original base ' + lease.baseSha + ' · verified squash parent ' + parent,
-    ...ci,
-    'Launch https://github.com/' + repository + '/actions/runs/' + lease.runId.split('_')[1],
-  ].join('\n');
-  const currentIssue = await confirm(false);
-  if (currentIssue.state === 'open') {
-    assert(!currentIssue.body?.includes(marker), 'Issue already has reconciliation evidence but is open');
-    const closed = await gh('/issues/' + lease.issue, 'PATCH', {
-      body: originalBody(currentIssue) + '\n\n' + record + '\nReconciliation https://github.com/' +
-        repository + '/actions/runs/' + runId.split('_')[1],
-      state: 'closed', state_reason: 'completed',
-    });
-    assert(closed.number === lease.issue && closed.state === 'closed' && closed.body?.includes(record),
-      'GitHub did not confirm issue closure and evidence');
-    report('ISSUE_RECONCILED #' + lease.issue + ' PR #' + number + ' merge ' + merge);
-  }
-  const [closed, events] = await Promise.all([confirm(false), paged('/issues/' + lease.issue + '/events')]);
-  assert(closedByController(closed, events) && closed.body?.includes(record + '\nReconciliation '),
-    'Missing matching controller closure and audit evidence');
-  if (mergedRecovery === 'verify') {
-    report('MERGED_RECOVERY_VERIFIED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge);
-    return;
-  }
-  await release();
-  report('LEASE_RELEASED #' + lease.issue + ' task ' + task.id + ' PR #' + number + ' merge ' + merge +
-    ' · next selection is a separate run');
 }
