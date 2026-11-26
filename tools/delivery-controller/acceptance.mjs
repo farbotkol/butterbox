@@ -3,7 +3,7 @@ import { queuePriority } from './queue.mjs';
 import { createHash } from 'node:crypto';
 import { assessHandoff, development, isSha, taskMarker } from './handoff.mjs';
 import { readLease, recordParking, releaseLease } from './lease.mjs';
-import { canonicalIssueNumber, referencesCanonicalIssue } from '../agent-evidence/evidence.mjs';
+import { canonicalIssueNumber } from '../agent-evidence/evidence.mjs';
 import { productScope, scopedProductFiles, readProductDiff, conflictsWithProduct, sameSquashFiles } from './product.mjs';
 import { productAcceptance, developmentDeployment } from './product-acceptance.mjs';
 import { assessDevelopmentDrift } from './development-drift.mjs';

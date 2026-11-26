@@ -17,9 +17,9 @@ function fullTextDiff(files) {
     patchLines(file.patch, '-').length === file.deletions);
 }
 
-function complete(results, criteria, files, ci) {
-  const sources = new Set([...files.map(file => file.filename), ...ci]);
-  return Array.isArray(results) && results.length === criteria.length &&
+function complete(results, scope, files, ci) {
+  const sources = new Set([...files.map(file => file.filename), ...scope.paths, ...ci]);
+  return Array.isArray(results) && results.length === scope.criteria.length &&
     results.every((row, index) => row?.criterion === index + 1 && row.pass === true &&
       Array.isArray(row.evidence) && row.evidence.length > 0 && row.evidence.every(item => sources.has(item)) &&
       typeof row.reason === 'string' && row.reason.trim().length >= 10 && row.reason.length <= 500);
@@ -68,7 +68,7 @@ export async function productAcceptance({ gh, paged, infer, lease, pr, scope, fi
       try {
         const record = JSON.parse(row.body.slice(prefix.length));
         return JSON.stringify(record.binding) === JSON.stringify(binding) &&
-          complete(record.results, scope.criteria, files, ci) ? [row] : [];
+          complete(record.results, scope, files, ci) ? [row] : [];
       } catch {
         return [];
       }
@@ -95,7 +95,7 @@ export async function productAcceptance({ gh, paged, infer, lease, pr, scope, fi
   }));
   const results = await infer({ criteria: scope.criteria, files: material, ci, context, paths: scope.paths,
     head: binding.head, requirements: binding.requirements });
-  if (!complete(results, scope.criteria, files, ci)) {
+  if (!complete(results, scope, files, ci)) {
     const gaps = Array.isArray(results) ? results.filter(row => row?.pass === false && typeof row.reason === 'string')
       .map(row => row.reason.replace(/\s+/g, ' ').slice(0, 350)).slice(0, 8) : [];
     if (gaps.length) throw new Error('Independent acceptance rejected: ' + gaps.join(' | '));
