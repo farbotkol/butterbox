@@ -18,7 +18,7 @@ import { FutureVisionPreview } from "@/components/future-vision-preview";
 import { OnboardingChecklist } from "@/components/onboarding-checklist";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { isFutureVisionPreviewEnabled } from "@/lib/future-vision";
-import { canViewOnboardingProgress, getOnboardingDashboardState } from "@/lib/onboarding";
+import { canViewOnboardingProgress, getOnboardingDashboardState, getOnboardingSection } from "@/lib/onboarding";
 import { unreadRosterNotificationCount } from "@/lib/roster-notifications";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import {
@@ -29,6 +29,8 @@ import {
   localMidnightAsUtc,
   getWorkspace,
 } from "@/lib/workspace";
+
+export const dynamic = "force-dynamic";
 
 type HomePageProps = {
   searchParams: Promise<{ week?: string; business?: string; venue?: string; error?: string; saved?: string }>;
@@ -152,6 +154,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       : Promise.resolve(null),
   ]);
   const onboardingState = getOnboardingDashboardState(workspace.membership.role, onboarding);
+  const onboardingSection = getOnboardingSection(onboardingState);
   if (onboardingState.status === "error") {
     console.error("Could not load onboarding progress.", {
       code: onboarding?.error?.code,
@@ -228,9 +231,9 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} businessId={workspace.business.id} />
-      {onboardingState.status === "incomplete" &&
+      {onboardingSection === "checklist" && onboardingState.status === "incomplete" &&
         <OnboardingChecklist progress={onboardingState.progress} venueId={workspace.venue.id} businessId={workspace.business.id} />}
-      {onboardingState.status === "error" &&
+      {onboardingSection === "error" &&
         <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-sm text-red-800">
           We couldn&apos;t load your onboarding checklist. Refresh and try again.
         </p>}

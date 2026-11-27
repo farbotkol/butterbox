@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import {
   canViewOnboardingProgress,
   getOnboardingDashboardState,
   getOnboardingProgress,
+  getOnboardingSection,
   isOnboardingComplete,
 } from "../src/lib/onboarding.ts";
 
@@ -76,6 +78,31 @@ test("each active business uses its own returned completion state", () => {
     data: [progressFor(2 ** (stepKeys.length - 1) - 1)],
     error: null,
   }).status, "incomplete");
+});
+
+test("a completed or unavailable checklist renders no dashboard section at all", () => {
+  const complete = progressFor(2 ** stepKeys.length - 1);
+  const incomplete = progressFor(1);
+
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("owner", { data: [complete], error: null })), "none");
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("employee", null)), "none");
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("owner", { data: [incomplete], error: null })), "checklist");
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("owner", null)), "error");
+});
+
+test("completing the final step is reflected on the next render and nothing wraps the checklist", () => {
+  const before = getOnboardingDashboardState("owner", { data: [progressFor(0b01111)], error: null });
+  const after = getOnboardingDashboardState("owner", { data: [progressFor(0b11111)], error: null });
+  assert.equal(getOnboardingSection(before), "checklist");
+  assert.equal(getOnboardingSection(after), "none");
+
+  const page = readFileSync(new URL("../src/app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /export const dynamic = "force-dynamic"/);
+  assert.match(page, /rpc\("get_onboarding_progress", \{ p_business_id: workspace\.business\.id \}\)/);
+  assert.match(page, /onboardingSection === "checklist" && onboardingState\.status === "incomplete" &&\s*<OnboardingChecklist/);
+
+  const component = readFileSync(new URL("../src/components/onboarding-checklist.tsx", import.meta.url), "utf8");
+  assert.match(component, /if \(isOnboardingComplete\(progress\)\) return null;/);
 });
 
 test("only owners may request onboarding progress", () => {

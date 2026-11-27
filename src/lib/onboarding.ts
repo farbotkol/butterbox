@@ -40,6 +40,12 @@ export function getOnboardingDashboardState(
     : { status: "incomplete", progress };
 }
 
+// Only an incomplete checklist or an error notice occupies space on the dashboard.
+export function getOnboardingSection(state: OnboardingDashboardState): "checklist" | "error" | "none" {
+  if (state.status === "incomplete") return "checklist";
+  return state.status === "error" ? "error" : "none";
+}
+
 export function parseOnboardingProgress(value: unknown): OnboardingProgress | null {
   if (!Array.isArray(value) || value.length !== 1) return null;
   const row: unknown = value[0];
