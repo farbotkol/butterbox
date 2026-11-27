@@ -300,11 +300,21 @@ directory; other installations may differ until updated.
    provisioning is a backend/operator workflow, not an instruction to create a
    second business or to modify a database yourself.
 6. Owners open **Venue settings** in **Venue Management**
-   (`/settings/organisation`). Under **Venue location and geofence**, set **Latitude**, **Longitude**
-   and **Radius in metres**, then **Save venue location**. Choose **Clock
-   location verification** and **Save clock location setting** separately.
-   Coordinates must be valid; radius is a whole number from 1 to 10,000 metres.
-   Clear all location fields together only after disabling verification.
+   (`/settings/organisation`). Edit the planning week, publication mode,
+   conflict rules, venue coordinates/radius, and clock location verification as
+   needed, then select the single **Save changes** action at the bottom of the
+   settings. It is disabled until a value changes. The page validates all
+   changed settings before saving; invalid fields are identified beside their
+   controls, and no setting is saved when validation fails. Coordinates must be
+   valid; radius is a whole number from 1 to 10,000 metres. Clear all location
+   fields together only after disabling verification. Planning-week changes
+   retain their scheduled effective date and transition rules; changing
+   publication mode does not publish drafts.
+   If a save reports that some settings were saved before another failed, the
+   message identifies the partial result. The remaining edits stay on the page;
+   correct the reported problem and retry **Save changes**. Previously saved
+   values are reconciled and are not written again. Unsaved edits prompt before
+   leaving the page and trigger the browser's refresh warning.
 7. In **Departments and roles**, owners, administrators and general managers
    can manage department details within their permitted venue. Eligible managers
    can manage roles and restrictions only within permitted departments. See
@@ -542,8 +552,8 @@ trying again.
    If the result is uncertain, use **Retry same request** or reload and inspect;
    do not repeatedly create new requests.
 5. Resolve overlap, eligibility and blocking availability issues. Owners can
-   configure **Roster conflict rules** in **Venue settings** and **Save roster
-   conflict rules**; warnings and blockers differ by policy. Warnings are not
+   configure **Roster conflict rules** in **Venue settings** and select **Save
+   changes**; warnings and blockers differ by policy. Warnings are not
    payroll/legal clearance. Assignment and publication recheck current data.
 6. For direct publication choose **Publish this department**. In approval mode,
    **Submit for review** creates an immutable submitted snapshot. In **Roster
