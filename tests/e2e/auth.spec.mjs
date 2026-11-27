@@ -5229,9 +5229,10 @@ test("owners configure venue conflict rules with protected history and scoped ac
     await expect(region).toContainText("Manual availability: block");
     expect(await page.locator("body").evaluate((body) => body.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 
-    const saved = await admin.from("venues")
+    const readConflictRules = () => admin.from("venues")
       .select("block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift")
       .eq("id", venueId).single();
+    const saved = await readConflictRules();
     expect(saved.error).toBeNull();
     expect(saved.data).toEqual({
       block_manual_unavailability: true, block_publish_unavailability: true,
@@ -5250,8 +5251,15 @@ test("owners configure venue conflict rules with protected history and scoped ac
     });
     await form.getByRole("button", { name: "Save changes" }).click();
     await expect(form.getByText("Choose whether this rule warns or blocks.", { exact: true })).toBeVisible();
-    await expect(form.getByLabel(labels[0])).toHaveValue("true");
+    await expect(form.getByLabel(labels[0])).toHaveAttribute("aria-invalid", "true");
+    const afterInvalidSave = await readConflictRules();
+    expect(afterInvalidSave.error).toBeNull();
+    expect(afterInvalidSave.data).toEqual(saved.data);
+    const historyAfterInvalidSave = await admin.from("venue_conflict_policy_events").select("id").eq("venue_id", venueId);
+    expect(historyAfterInvalidSave.error).toBeNull();
+    expect(historyAfterInvalidSave.data).toEqual(unchangedHistory.data);
     await form.getByLabel(labels[0]).selectOption("true");
+    await expect(form.getByLabel(labels[0])).toHaveValue("true");
     await page.getByRole("combobox", { name: "Venue", exact: true }).selectOption(secondVenueId);
     await page.getByRole("button", { name: "Show venue" }).click();
     for (const label of labels) await expect(form.getByLabel(label)).toHaveValue("false");
@@ -10170,7 +10178,9 @@ test("optional clock location is requested only at clock events and exceptions a
     await policy.getByLabel("Longitude").fill("");
     await policy.getByLabel("Radius in metres").fill("");
     await policy.getByRole("button", { name: "Save changes" }).click();
-    await expect(policy.getByRole("alert")).toContainText("A venue location is required while clock location verification is on");
+    await expect(policy.getByRole("alert").filter({
+      hasText: "A venue location is required while clock location verification is on",
+    })).toBeVisible();
 
     await workerPage.reload();
     expect(await calls()).toBe(0);
