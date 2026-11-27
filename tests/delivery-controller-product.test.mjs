@@ -7,6 +7,7 @@ import { repairDiagnostic, repairProduct } from '../tools/delivery-controller/pr
 import { recoveryInstructions } from '../tools/delivery-controller/parked-product.mjs';
 import { selectReadyIssue } from '../tools/delivery-controller/queue.mjs';
 import { withFactoryHealth } from "../tools/delivery-controller/factory-health.mjs";
+import { submitNativeMerge } from "../tools/delivery-controller/native-merge.mjs";
 import { apiResponse } from "../tools/delivery-controller/api-response.mjs";
 import { modelJson } from "../tools/delivery-controller/product-acceptance.mjs";
 
@@ -260,4 +261,110 @@ test('a replacement implementation reconciles the known successful HTTP 200 ackn
     advance: async () => { advanced++; }, gh: async (_path, _method, { body }) => ({ ...row, id: 2, body }),
   });
   assert.equal(advanced, 1);
+});
+
+function nativeMergeFixture() {
+  const comments = [], reports = [], effects = [];
+  let time = 1700000000000;
+  const pr = { number: 340, state: 'open', merged: false, mergeable_state: 'blocked',
+    head: { sha: head, ref: 'copilot/scope', repo: { full_name: repository } } };
+  const state = {
+    fresh: structuredClone(pr),
+    failure: { status: 405, message: 'Pull Request is not mergeable' },
+    workflows: [{ id: 10, run_attempt: 1, path: '.github/workflows/ci.yml', event: 'pull_request',
+      head_sha: head, head_repository: { full_name: repository }, pull_requests: [{ number: 340 }],
+      status: 'completed', conclusion: 'action_required', actor: { login: 'github-actions[bot]' } }],
+  };
+  const run = () => submitNativeMerge({
+    pr, ci: ['verify'], tip: '2'.repeat(40), lease: { issue: 82, tagSha: '3'.repeat(40) },
+    body: { sha: head, merge_method: 'squash' }, now: () => time, report: line => reports.push(line),
+    paged: async () => comments, gh: async (path, method, data) => {
+      effects.push([path, method]);
+      if (path.endsWith('/merge')) {
+        assert.equal(data.sha, head);
+        if (state.failure) throw Object.assign(new Error(state.failure.message), { code: 'CONTROLLER_API', ...state.failure });
+        return { merged: true, sha: '4'.repeat(40) };
+      }
+      if (path === '/pulls/340') return state.fresh;
+      if (path.startsWith('/actions/runs?')) return { total_count: state.workflows.length, workflow_runs: [...state.workflows] };
+      const saved = { id: comments.length + 1, user: { id: 41898282 }, created_at: time, updated_at: time, body: data.body };
+      comments.push(saved);
+      return saved;
+    },
+  });
+  return { state, run, reports, effects, comments, advance: minutes => { time += minutes * 60000; } };
+}
+
+test('a native 405 waits for changed approval evidence without opening the factory circuit', async () => {
+  const { run, advance, state, effects, reports } = nativeMergeFixture();
+  assert.equal(await run(), null);
+  assert(reports.some(row => row.includes('maintainer approval required for PR runs 10')));
+  advance(75);
+  assert.equal(await run(), null);
+  assert.equal(effects.filter(([, method]) => method === 'PUT').length, 1);
+  advance(15);
+  state.workflows[0].conclusion = 'success';
+  state.failure = null;
+  assert.deepEqual(await run(), { merged: true, sha: '4'.repeat(40) });
+  assert.equal(effects.filter(([, method]) => method === 'PUT').length, 2);
+});
+
+test('a native 422 with unchanged evidence can be parked without repeating the merge', async () => {
+  const { run, advance, state, effects } = nativeMergeFixture();
+  state.workflows = [];
+  state.failure.status = 422;
+  assert.equal(await run(), null);
+  advance(65);
+  assert.equal((await run()).exhausted, true);
+  assert.equal(effects.filter(([, method]) => method === 'PUT').length, 1);
+});
+
+test('an ambiguous merge reconciles an already merged PR and drops stale evidence for a changed head', async () => {
+  const recovered = nativeMergeFixture();
+  recovered.state.failure.status = 503;
+  Object.assign(recovered.state.fresh, { state: 'closed', merged: true, merged_by: { id: 41898282 }, merge_commit_sha: '4'.repeat(40) });
+  assert.deepEqual(await recovered.run(), { merged: true, sha: '4'.repeat(40) });
+  assert.equal(recovered.comments.length, 0);
+  const changed = nativeMergeFixture();
+  changed.state.failure.status = 409;
+  changed.state.fresh.head.sha = '5'.repeat(40);
+  assert.equal(await changed.run(), null);
+  assert.equal(changed.comments.length, 0);
+  assert.match(changed.reports.at(-1), /MERGE_REVALIDATE/);
+});
+
+test('permission failures visibly fail a factory cycle and can recover with the same revision', async () => {
+  let now = 1700000000000, healthy = false, deliveries = 0, probes = 0;
+  const rows = [];
+  const denied = Object.assign(new Error('GitHub credential rejected'), { code: 'CONTROLLER_API', category: 'permission' });
+  const run = () => withFactoryHealth({
+    revision: head, now: () => now, paged: async () => rows, report: () => {},
+    gh: async (_path, _method, { body }) => {
+      const row = { id: rows.length + 1, user: { id: 41898282 }, created_at: now, updated_at: now, body };
+      rows.push(row);
+      return row;
+    },
+    advance: async () => { if (!healthy) throw denied; deliveries++; },
+    probe: async category => { assert.equal(category, 'permission'); probes++; if (!healthy) throw denied; },
+  });
+  assert.equal(await run(), false);
+  assert.equal(await run(), false);
+  assert.equal(probes, 0);
+  now += 60 * 60000;
+  assert.equal(await run(), false);
+  assert.equal(deliveries, 0);
+  healthy = true;
+  now += 60 * 60000;
+  assert.equal(await run(), true);
+  assert.equal(probes, 2);
+  assert.equal(deliveries, 1);
+});
+
+test('GitHub error diagnostics preserve known messages and omit arbitrary structured payload text', async () => {
+  const response = Response.json({ message: 'Pull Request is not mergeable', errors: [
+    { resource: 'PullRequest', field: 'sha', code: 'invalid', message: 'ghp_testSecret' },
+  ] }, { status: 405, headers: { 'x-github-request-id': 'A1:B2' } });
+  await assert.rejects(apiResponse(response, { operation: 'GitHub PUT', endpoint: '/pulls/340/merge' }), error =>
+    /405.*A1:B2.*Pull Request is not mergeable.*PullRequest\/sha\/invalid/.test(error.message) &&
+    !error.message.includes('ghp_testSecret'));
 });

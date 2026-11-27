@@ -80,6 +80,8 @@ export async function inferProductAcceptance({ criteria, files, ci, context }, o
   const shape = '{"results":[{"criterion":1,"pass":false,"reason":"A concrete explanation.","evidence":["S1"]}]}';
   const judgment = await assess(
     'Independently decide every requested outcome. Use the implementation and authenticated exact-head CI. ' +
+    'Accept proportionate exact-head evidence from implementation, existing tests, and relevant documentation. ' +
+    'Do not require particular implementation patterns, new tests per criterion, or specific wording unless requested. ' +
     'Generic green CI alone does not prove behavior. Reject partial work, weakened tests, and unsafe changes. ' +
     'Use this JSON schema example: ' + shape +
     ' Include exactly one result per numbered criterion in order. Use a boolean pass and a reason of 10 to 500 characters. ' +
