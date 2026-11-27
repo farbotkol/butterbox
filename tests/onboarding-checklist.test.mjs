@@ -105,6 +105,15 @@ test("completing the final step is reflected on the next render and nothing wrap
   assert.match(component, /if \(isOnboardingComplete\(progress\)\) return null;/);
 });
 
+test("a pending progress request is loading, never complete, and non-owners never load", () => {
+  const loading = getOnboardingDashboardState("owner", undefined);
+  assert.deepEqual(loading, { status: "loading" });
+  assert.equal(getOnboardingSection(loading), "loading");
+  assert.deepEqual(getOnboardingDashboardState("employee", undefined), { status: "unavailable" });
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("employee", undefined)), "none");
+  assert.equal(getOnboardingSection(getOnboardingDashboardState("owner", null)), "error");
+});
+
 test("only owners may request onboarding progress", () => {
   assert.equal(canViewOnboardingProgress("owner"), true);
   for (const role of ["admin", "general_manager", "foh_manager", "boh_manager", "employee"]) {

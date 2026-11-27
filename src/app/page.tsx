@@ -15,7 +15,7 @@ import { AppShell } from "@/components/app-shell";
 import { BrandLockup } from "@/components/brand-lockup";
 import { CoastalIllustration } from "@/components/coastal-illustration";
 import { FutureVisionPreview } from "@/components/future-vision-preview";
-import { OnboardingChecklist } from "@/components/onboarding-checklist";
+import { OnboardingChecklist, OnboardingChecklistSkeleton } from "@/components/onboarding-checklist";
 import { RosterNotificationBanner } from "@/components/roster-notification-banner";
 import { isFutureVisionPreviewEnabled } from "@/lib/future-vision";
 import { canViewOnboardingProgress, getOnboardingDashboardState, getOnboardingSection } from "@/lib/onboarding";
@@ -231,6 +231,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
       </section>
 
       <RosterNotificationBanner count={unreadNotifications} venueId={workspace.venue.id} businessId={workspace.business.id} />
+      {onboardingSection === "loading" && <OnboardingChecklistSkeleton />}
       {onboardingSection === "checklist" && onboardingState.status === "incomplete" &&
         <OnboardingChecklist progress={onboardingState.progress} venueId={workspace.venue.id} businessId={workspace.business.id} />}
       {onboardingSection === "error" &&

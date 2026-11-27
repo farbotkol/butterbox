@@ -24,15 +24,18 @@ export function isOnboardingComplete(progress: OnboardingProgress): boolean {
 
 export type OnboardingDashboardState =
   | { status: "unavailable" }
+  | { status: "loading" }
   | { status: "error" }
   | { status: "incomplete"; progress: OnboardingProgress }
   | { status: "complete"; progress: OnboardingProgress };
 
+// `undefined` means the progress request has not resolved yet; `null` means it produced no result.
 export function getOnboardingDashboardState(
   role: string,
-  result: { data: unknown; error: unknown } | null,
+  result: { data: unknown; error: unknown } | null | undefined,
 ): OnboardingDashboardState {
   if (!canViewOnboardingProgress(role)) return { status: "unavailable" };
+  if (result === undefined) return { status: "loading" };
   const progress = getOnboardingProgress(result);
   if (!progress) return { status: "error" };
   return isOnboardingComplete(progress)
@@ -40,8 +43,9 @@ export function getOnboardingDashboardState(
     : { status: "incomplete", progress };
 }
 
-// Only an incomplete checklist or an error notice occupies space on the dashboard.
-export function getOnboardingSection(state: OnboardingDashboardState): "checklist" | "error" | "none" {
+// Only a loading placeholder, an incomplete checklist or an error notice occupies space on the dashboard.
+export function getOnboardingSection(state: OnboardingDashboardState): "loading" | "checklist" | "error" | "none" {
+  if (state.status === "loading") return "loading";
   if (state.status === "incomplete") return "checklist";
   return state.status === "error" ? "error" : "none";
 }
