@@ -1,10 +1,21 @@
 import Link from "next/link";
 import { helpHref } from "@/lib/help";
-import type { OnboardingProgress } from "@/lib/onboarding";
+import { isOnboardingComplete, type OnboardingProgress } from "@/lib/onboarding";
+
+export function OnboardingChecklistSkeleton() {
+  return (
+    <section aria-busy="true" aria-label="Loading onboarding checklist" className="mt-5 rounded-lg border border-line bg-white p-5 sm:p-6">
+      <div className="h-6 w-56 animate-pulse rounded bg-line" />
+      <div className="mt-4 h-20 animate-pulse rounded bg-line" />
+    </section>
+  );
+}
 
 export function OnboardingChecklist({ progress, venueId, businessId }: {
   progress: OnboardingProgress; venueId: string; businessId: string;
 }) {
+  if (isOnboardingComplete(progress)) return null;
+
   const rosterUrl = `/roster?venue=${encodeURIComponent(venueId)}`;
   const steps = [
     { title: "Business", done: progress.business_ready, help: "Your business is created during setup." },

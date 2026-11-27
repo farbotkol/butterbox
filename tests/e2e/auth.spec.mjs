@@ -11436,6 +11436,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
     ])).error).toBeNull();
     expect((await admin.from("business_memberships").insert([
       { business_id: businessId, user_id: users[0], role: "owner" },
+      { business_id: outsideBusiness, user_id: users[0], role: "owner" },
       { business_id: businessId, user_id: users[1], role: "employee", venue_id: venueId, department_id: departmentId },
       { business_id: outsideBusiness, user_id: users[2], role: "owner" },
     ])).error).toBeNull();
@@ -11451,16 +11452,21 @@ test("owner onboarding follows real staff, draft and publication progress withou
 
     await page.setViewportSize({ width: 390, height: 844 });
     await signIn(page, `onboarding-owner-${suffix}@example.test`, password);
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
     const checklist = page.getByRole("region", { name: "Get your first roster ready" });
     await expect(checklist).toBeVisible();
     await expect(checklist).toContainText("2 of 5 steps complete");
     await expect(checklist.getByText("Complete", { exact: true })).toHaveCount(2);
     await expect(checklist.getByText("To do", { exact: true })).toHaveCount(3);
+    await expect(checklist.getByRole("link", { name: "Help with your first roster" }))
+      .toHaveAttribute("href", `/help?business=${businessId}&contextVenue=${venueId}&topic=onboarding`);
+    await expect(checklist.getByRole("link", { name: "Add staff" }))
+      .toHaveAttribute("href", `/people?venue=${venueId}`);
     await expect(page.getByText("Outside worker", { exact: true })).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     await checklist.getByRole("link", { name: "Open departments" }).click();
     await expect(page.getByRole("heading", { name: "Departments and roles" })).toBeVisible();
-    await page.goto("/");
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
 
     const employeeContext = await browser.newContext({ baseURL: appUrl });
     contexts.push(employeeContext);
@@ -11481,7 +11487,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
     const employee = await admin.from("employees").select("id")
       .eq("business_id", businessId).eq("name", "First team member").single();
     expect(employee.error).toBeNull();
-    await page.goto("/");
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
     await expect(checklist).toContainText("3 of 5 steps complete");
 
     await checklist.getByRole("link", { name: "Create a shift" }).click();
@@ -11496,16 +11502,25 @@ test("owner onboarding follows real staff, draft and publication progress withou
     await draft.getByLabel("Break (mins)").fill("0");
     await draft.getByRole("button", { name: "Save draft shift" }).click();
     await expect(page.getByRole("status")).toContainText("Shift saved to the draft roster");
-    await page.goto("/");
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
     await expect(checklist).toContainText("4 of 5 steps complete");
 
     await checklist.getByRole("link", { name: "Open the roster" }).click();
     await page.goto(`/roster?week=2032-03-29&venue=${venueId}&department=${departmentId}`);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toContainText("roster published");
-    await page.goto("/");
-    await expect(checklist).toContainText("5 of 5 steps complete");
-    await expect(checklist.getByText("Complete", { exact: true })).toHaveCount(5);
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
+    await expect(page.getByRole("region", { name: "Get your first roster ready" })).toHaveCount(0);
+    await expect(page.getByText("5 of 5 steps complete", { exact: true })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Help with your first roster" })).toHaveCount(0);
+
+    await page.goto(`/?business=${outsideBusiness}&venue=${outsideVenue}`);
+    const otherBusinessChecklist = page.getByRole("region", { name: "Get your first roster ready" });
+    await expect(otherBusinessChecklist).toBeVisible();
+    await expect(otherBusinessChecklist).toContainText("4 of 5 steps complete");
+    await page.goto(`/?business=${businessId}&venue=${venueId}`);
+    await expect(page.getByRole("region", { name: "Get your first roster ready" })).toHaveCount(0);
+
     const publications = await admin.from("roster_publications").select("id").eq("business_id", businessId);
     expect(publications.error).toBeNull();
     expect(publications.data).toHaveLength(1);
