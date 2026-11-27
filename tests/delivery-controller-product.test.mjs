@@ -237,3 +237,27 @@ test('an acknowledged rerun without a new attempt is not dispatched twice', asyn
   assert.equal(submitted, 1);
   assert.equal(history.length, 1);
 });
+
+test('an ordinary reset header does not delay reconciliation of an acknowledged mutation', async () => {
+  const reset = String(Math.floor(Date.now() / 1000) + 3600);
+  const request = { operation: 'GitHub publish repair', endpoint: '/graphql' };
+  await assert.rejects(apiResponse(new Response('OK', { headers: {
+    'x-ratelimit-reset': reset, 'x-ratelimit-remaining': '4999',
+  } }), request), error => error.category === 'integration' && error.rateLimitReset === undefined);
+  await assert.rejects(apiResponse(new Response('rate limit', { status: 429, headers: {
+    'x-ratelimit-reset': reset, 'x-ratelimit-remaining': '0',
+  } }), request), error => error.status === 429 && error.rateLimitReset === reset);
+});
+
+test('a replacement implementation reconciles the known successful HTTP 200 acknowledgement', async () => {
+  const at = Date.parse('2026-11-27T01:45:00Z');
+  const prior = { attempt: 1, nextAt: at + 20 * 60000, category: 'integration', revision: 'old',
+    reason: 'GitHub publish repair HTTP 200 for /graphql · branch-verification/unconfirmed' };
+  const row = { id: 1, user: { id: 41898282 }, body: '<!-- butterbox-factory-health:v1 -->\n' + JSON.stringify(prior),
+    created_at: at - 5 * 60000, updated_at: at - 5 * 60000 };
+  let advanced = 0;
+  await withFactoryHealth({ paged: async () => [row], now: () => at, revision: 'new', report: () => {},
+    advance: async () => { advanced++; }, gh: async (_path, _method, { body }) => ({ ...row, id: 2, body }),
+  });
+  assert.equal(advanced, 1);
+});
