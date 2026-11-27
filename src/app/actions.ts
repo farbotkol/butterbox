@@ -35,7 +35,7 @@ import {
   attendanceClaimTimezoneChangedMessage, parseOfflineClaimReceipt, parseOfflineMatchOption,
 } from "@/lib/offline-attendance";
 import { isRosterWeek, rosterCopyError, type RosterCopyState } from "@/lib/roster-copy";
-import { parseRosterWeekInput } from "@/lib/roster-planning";
+import { parseRosterWeekInput, parseRosterWeekSettings } from "@/lib/roster-planning";
 import { isRosterTimestamp } from "@/lib/roster-quick-changes";
 import { parseRosterPublicationMode, rosterReviewFailureCode } from "@/lib/roster-review";
 import { validateShiftForm, type ShiftFormState } from "@/lib/shift-form";
@@ -46,6 +46,15 @@ import { parsePayrollPeriodInput, payrollFailureReason, payrollFinalisedMessage 
 import { isPublicShowcase } from "@/lib/showcase";
 import { createClient, isSupabaseConfigured } from "@/lib/supabase/server";
 import { parseVenueGeofence } from "@/lib/venue-geofence";
+import {
+  parseVenueSettingsForm,
+  runVenueSettingsOperations,
+  validateVenueSettings,
+  venueSettingsSaveOrder,
+  type VenueSettingsSaveState,
+  type VenueSettingsSection,
+  type VenueSettingsValues,
+} from "@/lib/venue-settings";
 import {
   parseBulkLockReceipt, parseBulkLockSelections, parseTimesheetEmployeeFilter, timesheetWeek,
 } from "@/lib/weekly-timesheet";
@@ -659,6 +668,231 @@ const organisationErrors: Record<string, string> = {
   "Confirm department status change": "confirm",
   "Confirm job role status change": "confirm",
 };
+
+const venueSettingsSectionLabels: Record<VenueSettingsSection, string> = {
+  planningWeek: "roster planning week",
+  publicationMode: "roster publication setting",
+  conflictPolicy: "roster conflict rules",
+  venueLocation: "venue location",
+  clockVerification: "clock location verification",
+};
+
+function venueSettingsFailure(section: VenueSettingsSection, error: string) {
+  if (error === "Permission denied") {
+    return { message: "Your permission to change venue settings is no longer available. Reload and review access.", errors: {} };
+  }
+  if (section === "planningWeek") {
+    if (error === "Planning transition has started; wait for it to take effect") {
+      return {
+        message: "The planning transition has already started. Wait until its scheduled start before changing it.",
+        errors: { weekday: "Wait until the scheduled start date before changing the planning week." },
+      };
+    }
+    if (error === "Roster week setting changed; refresh before saving") {
+      return {
+        message: "The planning week setting changed. Reload and review it before saving again.",
+        errors: { weekday: "This setting changed elsewhere. Reload before trying again." },
+      };
+    }
+  }
+  if (section === "venueLocation" &&
+    error === "Configure a venue geofence before enabling location verification") {
+    return {
+      message: "Disable clock location verification before removing the venue location.",
+      errors: { latitude: "Disable clock location verification before clearing the venue location." },
+    };
+  }
+  if (section === "clockVerification" &&
+    error === "Configure a venue geofence before enabling location verification") {
+    return {
+      message: "Configure a venue location before enabling clock location verification.",
+      errors: { enabled: "Configure a venue location before enabling verification." },
+    };
+  }
+  if (section === "conflictPolicy" && error === "Invalid conflict policy") {
+    return {
+      message: "Choose a valid option for each roster conflict rule and try again.",
+      errors: { form: "Review each roster conflict rule and choose Warn only or Block." },
+    };
+  }
+  return {
+    message: `We couldn't save the ${venueSettingsSectionLabels[section]}. Review its value and try again.`,
+    errors: { form: `The ${venueSettingsSectionLabels[section]} was not saved.` },
+  };
+}
+
+export async function saveVenueSettingsAction(
+  _previousState: VenueSettingsSaveState,
+  formData: FormData,
+): Promise<VenueSettingsSaveState> {
+  const values = parseVenueSettingsForm(formData);
+  if (!values) {
+    return {
+      status: "error",
+      message: "The venue settings form was incomplete. Reload the page before trying again.",
+      errors: { form: "Reload the page and review the current settings." },
+    };
+  }
+  const errors = validateVenueSettings(values);
+  if (Object.keys(errors).length) {
+    return {
+      status: "error",
+      message: "Review the highlighted venue settings and try again.",
+      errors,
+    };
+  }
+
+  const venueIds = uuidList(formData, "venue_id", 1);
+  if (!venueIds || venueIds.length !== 1) {
+    return {
+      status: "error",
+      message: "The selected venue is invalid. Reload before saving.",
+      errors: { form: "Reload the page and select a valid venue." },
+    };
+  }
+  const workspace = await getWorkspace(venueIds[0], businessContext(formData));
+  if (workspace.status === "anonymous") redirect("/login?message=session-ended");
+  if (workspace.status === "needs_setup") redirect("/setup");
+  if (workspace.status === "error") {
+    console.error("Could not load the venue settings workspace.", { message: workspace.message });
+    redirect("/settings/organisation?error=filter");
+  }
+  if (workspace.membership.role !== "owner") {
+    return {
+      status: "error",
+      message: "Only the business owner can change these venue settings.",
+      errors: { form: "Your role does not allow changes to venue settings." },
+    };
+  }
+
+  const venueResult = await workspace.supabase.from("venues")
+    .select("id, business_id, geofence_latitude, geofence_longitude, geofence_radius_meters, clock_geofence_enabled, block_manual_unavailability, block_publish_unavailability, block_publish_overlap, block_publish_long_shift, roster_publication_mode")
+    .eq("id", workspace.venue.id).eq("business_id", workspace.business.id).maybeSingle();
+  const rosterWeekResult = await workspace.supabase.rpc("get_venue_roster_week_settings", {
+    p_business_id: workspace.business.id, p_venue_id: workspace.venue.id,
+  });
+  const rosterWeek = parseRosterWeekSettings(rosterWeekResult.data);
+  if (venueResult.error || !venueResult.data || rosterWeekResult.error || !rosterWeek) {
+    console.error("Could not verify the current venue settings before saving.", {
+      venueCode: venueResult.error?.code,
+      rosterWeekCode: rosterWeekResult.error?.code,
+    });
+    return {
+      status: "error",
+      message: "We couldn't verify the current settings. Nothing was saved; reload and try again.",
+      errors: { form: "The current settings could not be verified. Reload before saving." },
+    };
+  }
+  const venue = venueResult.data;
+  const current: VenueSettingsValues = {
+    weekday: String(rosterWeek.pending_weekday ?? rosterWeek.current_weekday),
+    mode: venue.roster_publication_mode,
+    manual_unavailability: String(venue.block_manual_unavailability),
+    publish_unavailability: String(venue.block_publish_unavailability),
+    publish_overlap: String(venue.block_publish_overlap),
+    publish_long_shift: String(venue.block_publish_long_shift),
+    latitude: venue.geofence_latitude === null ? "" : String(venue.geofence_latitude),
+    longitude: venue.geofence_longitude === null ? "" : String(venue.geofence_longitude),
+    radius_meters: venue.geofence_radius_meters === null ? "" : String(venue.geofence_radius_meters),
+    enabled: String(venue.clock_geofence_enabled),
+  };
+  const order = venueSettingsSaveOrder(current, values);
+  if (order.length === 0) return { status: "unchanged" };
+
+  const result = await runVenueSettingsOperations(order, async (section) => {
+    switch (section) {
+      case "planningWeek": {
+        const input = parseRosterWeekInput(formData);
+        if (!input) return "Invalid roster planning week request";
+        const response = await workspace.supabase.rpc("save_venue_roster_week", {
+          p_business_id: workspace.business.id,
+          p_venue_id: workspace.venue.id,
+          p_weekday: input.weekday,
+          p_expected_revision: input.revision,
+          p_expected_pending_id: input.pendingId,
+          p_request_id: input.requestId,
+        });
+        if (response.error) return response.error.message;
+        if (response.data !== null && !parseBusinessId(response.data)) return "Invalid roster planning week receipt";
+        return null;
+      }
+      case "publicationMode": {
+        const response = await workspace.supabase.rpc("save_roster_publication_mode", {
+          p_business_id: workspace.business.id,
+          p_venue_id: workspace.venue.id,
+          p_mode: values.mode,
+        });
+        return response.error?.message ?? null;
+      }
+      case "conflictPolicy": {
+        const policy = parseConflictPolicy(formData);
+        if (!policy) return "Invalid conflict policy";
+        const response = await workspace.supabase.rpc("save_venue_conflict_policy", {
+          p_business_id: workspace.business.id,
+          p_venue_id: workspace.venue.id,
+          p_block_manual_unavailability: policy.manual_unavailability,
+          p_block_publish_unavailability: policy.publish_unavailability,
+          p_block_publish_overlap: policy.publish_overlap,
+          p_block_publish_long_shift: policy.publish_long_shift,
+        });
+        return response.error?.message ?? null;
+      }
+      case "venueLocation": {
+        const geofence = parseVenueGeofence({
+          latitude: values.latitude, longitude: values.longitude, radiusMeters: values.radius_meters,
+        });
+        if (!geofence.valid) return "Invalid venue geofence";
+        const response = await workspace.supabase.rpc("save_venue_geofence", {
+          p_business_id: workspace.business.id,
+          p_venue_id: workspace.venue.id,
+          p_latitude: geofence.latitude,
+          p_longitude: geofence.longitude,
+          p_radius_meters: geofence.radiusMeters,
+        });
+        return response.error?.message ?? null;
+      }
+      case "clockVerification": {
+        const response = await workspace.supabase.rpc("set_venue_clock_geofence", {
+          p_business_id: workspace.business.id,
+          p_venue_id: workspace.venue.id,
+          p_enabled: values.enabled === "true",
+        });
+        return response.error?.message ?? null;
+      }
+    }
+  });
+
+  for (const section of result.savedSections) {
+    if (section === "planningWeek") {
+      revalidatePath("/roster/planning");
+    }
+    if (section === "publicationMode" || section === "conflictPolicy") {
+      revalidatePath("/roster");
+    }
+    if (section === "clockVerification") {
+      revalidatePath("/attendance");
+    }
+  }
+  if (result.savedSections.length) revalidatePath("/settings/organisation");
+
+  if (result.failedSection) {
+    const failure = venueSettingsFailure(result.failedSection, result.error ?? "save");
+    const sectionNames = result.savedSections.map((section) => venueSettingsSectionLabels[section]);
+    const detail = result.savedSections.length
+      ? `Saved ${sectionNames.join(", ")}, but ${failure.message} Nothing after that setting was saved. Your remaining edits are still on this page; retry Save changes to reconcile them.`
+      : `${failure.message} Nothing was saved. Correct the highlighted setting and retry.`;
+    return {
+      status: result.savedSections.length ? "partial" : "error",
+      message: detail,
+      errors: failure.errors,
+      savedSections: result.savedSections,
+    };
+  }
+  return {
+    status: "saved",
+    savedSections: result.savedSections,
+  };
+}
 
 function activeFlag(formData: FormData) {
   const active = formData.get("active");

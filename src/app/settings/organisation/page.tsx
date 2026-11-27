@@ -1,17 +1,12 @@
 import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import {
-  saveRosterPublicationModeAction,
-  saveVenueRosterWeekAction,
-  saveVenueConflictPolicyAction,
-  saveVenueGeofenceAction,
-  setVenueClockGeofenceAction,
-} from "@/app/actions";
 import { AppShell } from "@/components/app-shell";
+import { VenueSettingsControl, VenueSettingsForm } from "@/components/venue-settings-form";
 import type { ConflictPolicyValues } from "@/lib/conflict-policy";
 import { parseRosterWeekEvents, parseRosterWeekSettings, rosterWeekdays } from "@/lib/roster-planning";
 import { parseRosterPublicationMode, parseRosterPublicationModeEvents } from "@/lib/roster-review";
+import type { VenueSettingsValues } from "@/lib/venue-settings";
 import { isSupabaseConfigured } from "@/lib/supabase/server";
 import { withBusiness } from "@/lib/business-selection";
 import { getWorkspace } from "@/lib/workspace";
@@ -70,19 +65,6 @@ function formatGeofence(values: GeofenceValues) {
 function formatConflictPolicy(values: ConflictPolicyValues) {
   const setting = (blocked: boolean) => blocked ? "block" : "warn";
   return `Manual availability: ${setting(values.manual_unavailability)}; publication availability: ${setting(values.publish_unavailability)}; overlaps: ${setting(values.publish_overlap)}; long shifts: ${setting(values.publish_long_shift)}`;
-}
-
-function ConflictPolicySelect({ name, label, blocked, blockLabel }: {
-  name: keyof ConflictPolicyValues; label: string; blocked: boolean; blockLabel: string;
-}) {
-  return (
-    <label className="text-sm">{label}
-      <select name={name} defaultValue={String(blocked)} className={fieldClass}>
-        <option value="false">Warn only</option>
-        <option value="true">{blockLabel}</option>
-      </select>
-    </label>
-  );
 }
 
 export default async function OrganisationPage({
@@ -181,6 +163,22 @@ export default async function OrganisationPage({
   const geofenceEvents: GeofenceEvent[] = geofenceHistory.data ?? [];
   const locationPolicyEvents: ClockLocationPolicyEvent[] = locationPolicyHistory.data ?? [];
   const conflictEvents: ConflictPolicyEvent[] = conflictHistory.data ?? [];
+  const initialVenueSettings: VenueSettingsValues = {
+    weekday: String(rosterWeek?.pending_weekday ?? rosterWeek?.current_weekday ?? 1),
+    mode: rosterMode ?? "direct",
+    manual_unavailability: String(selectedVenue?.block_manual_unavailability ?? false),
+    publish_unavailability: String(selectedVenue?.block_publish_unavailability ?? false),
+    publish_overlap: String(selectedVenue?.block_publish_overlap ?? false),
+    publish_long_shift: String(selectedVenue?.block_publish_long_shift ?? false),
+    latitude: selectedVenue?.geofence_latitude === null || selectedVenue?.geofence_latitude === undefined
+      ? "" : String(selectedVenue.geofence_latitude),
+    longitude: selectedVenue?.geofence_longitude === null || selectedVenue?.geofence_longitude === undefined
+      ? "" : String(selectedVenue.geofence_longitude),
+    radius_meters: selectedVenue?.geofence_radius_meters === null || selectedVenue?.geofence_radius_meters === undefined
+      ? "" : String(selectedVenue.geofence_radius_meters),
+    enabled: String(selectedVenue?.clock_geofence_enabled ?? false),
+  };
+  const venueSettingsReady = Boolean(selectedVenue && rosterWeek && rosterMode && !venues.error);
 
   return (
     <AppShell businessName={workspace.business.name} businessId={workspace.business.id} businessCount={workspace.businesses.length} venueId={venueId} venueName={selectedVenue?.name ?? workspace.venue.name}
@@ -238,6 +236,9 @@ export default async function OrganisationPage({
       ) : (
         <>
           {canManageGeofence && selectedVenue && (
+            <VenueSettingsForm businessId={workspace.business.id} venueId={venueId}
+              revision={rosterWeek?.revision ?? 0} pendingId={rosterWeek?.pending_id ?? null}
+              requestId={randomUUID()} initialValues={initialVenueSettings} saveAvailable={venueSettingsReady}>
             <section aria-label="Roster planning week settings" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster planning week</h2>
               <p id="roster-week-help" className="mt-3 text-sm leading-6 text-muted">
@@ -257,24 +258,11 @@ export default async function OrganisationPage({
                         {" "}from <time dateTime={rosterWeek.pending_effective_on}>{rosterWeek.pending_effective_on}</time>.</>
                     )}
                   </p>
-                  <form action={saveVenueRosterWeekAction} aria-label="Configure roster planning week"
-                    aria-describedby="roster-week-help" className="mt-4 grid gap-4 sm:grid-cols-2">
-                    <input type="hidden" name="business_id" value={workspace.business.id} />
-                    <input type="hidden" name="venue_id" value={venueId} />
-                    <input type="hidden" name="revision" value={rosterWeek.revision} />
-                    <input type="hidden" name="pending_id" value={rosterWeek.pending_id ?? ""} />
-                    <input type="hidden" name="request_id" value={randomUUID()} />
-                    <label className="text-sm">Planning week starts on
-                      <select name="weekday" defaultValue={String(rosterWeek.pending_weekday ?? rosterWeek.current_weekday)}
-                        disabled={rosterWeek.pending_locked} className={fieldClass}>
-                        {rosterWeekdays.map((day, index) => <option key={day} value={index + 1}>{day}</option>)}
-                      </select>
-                    </label>
-                    <button type="submit" disabled={rosterWeek.pending_locked}
-                      className="self-end justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white disabled:opacity-50">
-                      Save planning week
-                    </button>
-                  </form>
+                  <div className="mt-4 max-w-md">
+                    <VenueSettingsControl name="weekday" label="Planning week starts on"
+                      options={rosterWeekdays.map((day, index) => ({ value: String(index + 1), label: day }))}
+                      disabled={rosterWeek.pending_locked || !venueSettingsReady} describedBy="roster-week-help" />
+                  </div>
                   {rosterWeek.pending_locked ? (
                     <p role="status" className="mt-2 text-sm text-muted">
                       This transition has started. Wait for the scheduled date before changing the planning start again.
@@ -312,8 +300,6 @@ export default async function OrganisationPage({
               )}
               {rosterWeekEvents?.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
             </section>
-          )}
-          {canManageGeofence && selectedVenue && (
             <section aria-label="Roster publication settings" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster publication settings</h2>
               <p id="roster-mode-help" className="mt-3 text-sm leading-6 text-muted">
@@ -322,20 +308,13 @@ export default async function OrganisationPage({
                 Changing this setting does not publish drafts and makes existing pending reviews stale.
               </p>
               {rosterMode ? (
-                <form action={saveRosterPublicationModeAction} aria-label="Configure roster publication"
-                  aria-describedby="roster-mode-help" className="mt-4 grid gap-4 sm:grid-cols-2">
-                  <input type="hidden" name="business_id" value={workspace.business.id} />
-                  <input type="hidden" name="venue_id" value={venueId} />
-                  <label className="text-sm">Publication mode
-                    <select name="mode" defaultValue={rosterMode} className={fieldClass}>
-                      <option value="direct">Direct publication</option>
-                      <option value="approval">Approval required</option>
-                    </select>
-                  </label>
-                  <button type="submit" className="self-end justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
-                    Save publication setting
-                  </button>
-                </form>
+                <div className="mt-4 max-w-md">
+                  <VenueSettingsControl name="mode" label="Publication mode"
+                    options={[
+                      { value: "direct", label: "Direct publication" },
+                      { value: "approval", label: "Approval required" },
+                    ]} disabled={!venueSettingsReady} describedBy="roster-mode-help" />
+                </div>
               ) : (
                 <p role="alert" className="mt-3 text-sm text-red-800">
                   We couldn&apos;t load the publication setting. Reload before making changes.
@@ -360,8 +339,6 @@ export default async function OrganisationPage({
               )}
               {rosterModeEvents?.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
             </section>
-          )}
-          {canManageGeofence && selectedVenue && (
             <section aria-label="Roster conflict rules" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Roster conflict rules</h2>
               <p id="conflict-policy-help" className="mt-3 text-sm leading-6 text-muted">
@@ -373,21 +350,20 @@ export default async function OrganisationPage({
                 longer than 24 hours cannot be verified and is blocked when publication requires
                 available workers.
               </p>
-              <form action={saveVenueConflictPolicyAction} aria-label="Configure roster conflict rules"
-                aria-describedby="conflict-policy-help" className="mt-4 grid gap-4 sm:grid-cols-2">
-                <input type="hidden" name="venue_id" value={venueId} />
-                <ConflictPolicySelect name="manual_unavailability" label="Manual assignment with unavailable worker"
-                  blocked={selectedVenue.block_manual_unavailability} blockLabel="Block assignment" />
-                <ConflictPolicySelect name="publish_unavailability" label="Publish with unavailable worker"
-                  blocked={selectedVenue.block_publish_unavailability} blockLabel="Block publication" />
-                <ConflictPolicySelect name="publish_overlap" label="Publish with overlapping shifts"
-                  blocked={selectedVenue.block_publish_overlap} blockLabel="Block publication" />
-                <ConflictPolicySelect name="publish_long_shift" label="Publish a shift longer than 24 hours"
-                  blocked={selectedVenue.block_publish_long_shift} blockLabel="Block publication" />
-                <button type="submit" className="justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
-                  Save roster conflict rules
-                </button>
-              </form>
+              <div className="mt-4 grid gap-4 sm:grid-cols-2" aria-describedby="conflict-policy-help">
+                <VenueSettingsControl name="manual_unavailability" label="Manual assignment with unavailable worker"
+                  options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block assignment" }]}
+                  disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
+                <VenueSettingsControl name="publish_unavailability" label="Publish with unavailable worker"
+                  options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
+                  disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
+                <VenueSettingsControl name="publish_overlap" label="Publish with overlapping shifts"
+                  options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
+                  disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
+                <VenueSettingsControl name="publish_long_shift" label="Publish a shift longer than 24 hours"
+                  options={[{ value: "false", label: "Warn only" }, { value: "true", label: "Block publication" }]}
+                  disabled={!venueSettingsReady} describedBy="conflict-policy-help" />
+              </div>
               <h3 className="mt-5 text-sm font-semibold">Recent rule changes</h3>
               {conflictHistory.error ? (
                 <p role="alert" className="mt-2 text-sm text-red-800">We could not load rule history. Try again.</p>
@@ -406,8 +382,6 @@ export default async function OrganisationPage({
               )}
               {conflictEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
             </section>
-          )}
-          {canManageGeofence && selectedVenue && (
             <section aria-label="Venue location and geofence" className="mt-6 rounded-xl border border-line bg-white p-5">
               <h2 className="font-semibold">Venue location and geofence</h2>
               <p id="geofence-help" className="mt-3 text-sm leading-6 text-muted">
@@ -419,38 +393,22 @@ export default async function OrganisationPage({
                 the clock event. Verification requires the reported accuracy area to fit within the
                 radius. Device-reported location can be spoofed, and raw coordinates are not retained.
               </p>
-              <form action={saveVenueGeofenceAction} aria-label="Configure venue geofence"
-                aria-describedby="geofence-help" className="mt-4 grid gap-4 sm:grid-cols-3">
-                <input type="hidden" name="venue_id" value={venueId} />
-                <label className="text-sm">Latitude
-                  <input name="latitude" type="number" min="-90" max="90" step="0.000001"
-                    defaultValue={selectedVenue.geofence_latitude ?? ""} className={fieldClass} />
-                </label>
-                <label className="text-sm">Longitude
-                  <input name="longitude" type="number" min="-180" max="180" step="0.000001"
-                    defaultValue={selectedVenue.geofence_longitude ?? ""} className={fieldClass} />
-                </label>
-                <label className="text-sm">Radius in metres
-                  <input name="radius_meters" type="number" min="1" max="10000" step="1"
-                    defaultValue={selectedVenue.geofence_radius_meters ?? ""} className={fieldClass} />
-                </label>
-                <button type="submit" className="justify-self-start rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
-                  Save venue location
-                </button>
-              </form>
-              <form action={setVenueClockGeofenceAction} aria-label="Configure clock location verification"
-                aria-describedby="geofence-help" className="mt-5">
-                <input type="hidden" name="venue_id" value={venueId} />
-                <label className="block max-w-md text-sm">Clock location verification
-                  <select name="enabled" defaultValue={String(selectedVenue.clock_geofence_enabled)} className={fieldClass}>
-                    <option value="false">Off</option>
-                    <option value="true">On</option>
-                  </select>
-                </label>
-                <button type="submit" className="mt-4 rounded-lg bg-ocean px-4 py-3 font-semibold text-white">
-                  Save clock location setting
-                </button>
-              </form>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                <VenueSettingsControl name="latitude" label="Latitude"
+                  type="number" min={-90} max={90} step={0.000001} disabled={!venueSettingsReady}
+                  describedBy="geofence-help" />
+                <VenueSettingsControl name="longitude" label="Longitude"
+                  type="number" min={-180} max={180} step={0.000001} disabled={!venueSettingsReady}
+                  describedBy="geofence-help" />
+                <VenueSettingsControl name="radius_meters" label="Radius in metres"
+                  type="number" min={1} max={10000} step={1} disabled={!venueSettingsReady}
+                  describedBy="geofence-help" />
+              </div>
+              <div className="mt-5 max-w-md">
+                <VenueSettingsControl name="enabled" label="Clock location verification"
+                  options={[{ value: "false", label: "Off" }, { value: "true", label: "On" }]}
+                  disabled={!venueSettingsReady} describedBy="geofence-help" />
+              </div>
               <h3 className="mt-5 text-sm font-semibold">Recent clock location setting changes</h3>
               {locationPolicyHistory.error ? (
                 <p role="alert" className="mt-2 text-sm text-red-800">We could not load clock location history. Try again.</p>
@@ -486,6 +444,7 @@ export default async function OrganisationPage({
               )}
               {geofenceEvents.length === 10 && <p className="mt-2 text-xs text-muted">Showing the 10 most recent changes.</p>}
             </section>
+            </VenueSettingsForm>
           )}
           {!canManageGeofence && <p className="mt-6 text-sm text-muted">
             Only the business owner can change these venue settings.
