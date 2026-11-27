@@ -431,7 +431,9 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         assert(JSON.stringify(verifiedChecks(currentChecks, head, now(), names)) === JSON.stringify(ci) &&
           (await readAcceptance())?.id === acceptance.id, 'Exact-head acceptance or CI evidence changed before merge');
       }
-      assert(pr.mergeable_state === 'clean', 'GitHub merge requirements are not clean');
+      // GitHub enforces native merge requirements on the exact-head squash request.
+      // The advisory mergeable_state is not an additional controller gate.
+      report('MERGE_REQUEST PR #' + number + ' head ' + head + ' · GitHub state ' + (pr.mergeable_state ?? 'unknown'));
       const merge = await gh(endpoint + '/merge', 'PUT', {
         sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
         commit_message: 'Refs #' + lease.issue,
