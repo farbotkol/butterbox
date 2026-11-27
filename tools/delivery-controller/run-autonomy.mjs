@@ -151,10 +151,15 @@ async function main() {
       if (json.errors?.length || !isSha(json.data?.createCommitOnBranch?.commit?.oid))
         throw responseFailure(response, contract, 'graphql-result', 'unconfirmed');
       const commit = json.data.createCommitOnBranch.commit.oid;
-      const fresh = await gh('/pulls/' + input.pr.number);
-      if (fresh.head?.sha !== commit || fresh.head?.ref !== input.pr.head.ref)
-        throw responseFailure(response, contract, 'branch-verification', 'unconfirmed');
-      return commit;
+      const branch = input.pr.head.ref;
+      for (const pause of [0, 1000, 2000, 4000]) {
+        if (pause) await new Promise(resolve => setTimeout(resolve, pause));
+        const ref = await gh('/git/ref/heads/' + branch);
+        if (ref.ref !== 'refs/heads/' + branch || ref.object?.type !== 'commit') break;
+        if (ref.object.sha === commit) return commit;
+        if (ref.object.sha !== input.pr.head.sha) break;
+      }
+      throw responseFailure(response, contract, 'branch-verification', 'unconfirmed');
     },
   });
   const repairBusy = async () => {

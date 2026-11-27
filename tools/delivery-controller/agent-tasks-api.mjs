@@ -91,7 +91,7 @@ export function agentTasksApi({token,repository,request=fetch,report=message=>co
       error.category = reason.includes('rate_limit') || response.status === 429 || response.status >= 500
         ? 'integration' : [401, 403].includes(response.status) ? 'permission' : 'request';
       error.retryAfter = diagnostics.retryAfter;
-      error.rateLimitReset = diagnostics.rateLimitReset;
+      if (error.category === 'integration' && remaining === '0') error.rateLimitReset = diagnostics.rateLimitReset;
       throw error;
     }
     let result;

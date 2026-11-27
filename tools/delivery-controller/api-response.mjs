@@ -14,8 +14,9 @@ export function responseFailure(response, { operation, endpoint }, stage, classi
   error.code = 'CONTROLLER_API';
   error.category = category;
   error.status = status;
-  error.retryAfter = header('retry-after');
-  error.rateLimitReset = header('x-ratelimit-reset');
+  if (limited || status === 408 || status >= 500) error.retryAfter = header('retry-after');
+  if (limited && header('x-ratelimit-remaining') === '0')
+    error.rateLimitReset = header('x-ratelimit-reset');
   return error;
 }
 

@@ -33,7 +33,10 @@ export async function withFactoryHealth({ gh, paged, probe, advance, report, rev
   };
   const unhealthy = prior && prior.category !== 'healthy';
   const open = unhealthy && (prior.attempt >= retryLimit || prior.category !== 'integration');
-  if (unhealthy && now() < prior.nextAt) {
+  const stalePublishDelay = unhealthy && prior.revision !== revision && prior.attempt === 1 &&
+    prior.category === 'integration' && prior.reason?.startsWith(
+      'GitHub publish repair HTTP 200 for /graphql · branch-verification/unconfirmed');
+  if (unhealthy && !stalePublishDelay && now() < prior.nextAt) {
     report('FACTORY_COOLDOWN integration retry ' + prior.attempt + ' until ' + new Date(prior.nextAt).toISOString());
     return;
   }
