@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en-AU">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Butterbox UX concepts</title>
+<style>
+:root{--ocean:#123f4a;--cloud:#faf9f6;--ink:#173a40;--muted:#53696d;--line:#dce5e2;--sea:#edf5f4;--warm:#fff3db;--danger:#a93636}
+*{box-sizing:border-box}body{margin:0;background:var(--cloud);color:var(--ink);font:15px/1.45 Inter,system-ui,sans-serif}header.intro,main{max-width:1240px;margin:auto;padding:28px 24px} h1,h2,h3,p{margin:0 0 12px} h1{font-size:40px;letter-spacing:-.04em} h2{font-size:25px} h3{font-size:19px}small,.muted{color:var(--muted)} .intro{border-bottom:1px solid var(--line)}.intro p{max-width:75ch}.panel{background:white;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0 20px}.shell{display:grid;grid-template-columns:145px 1fr}.side{background:#f1f5f3;padding:18px;border-right:1px solid var(--line);display:grid;align-content:start;gap:10px}.side span{padding:5px 8px;border-radius:6px}.side .active{background:#dbece7;font-weight:650}.screen{padding:18px;min-width:0}.bar,.chips,.actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.bar{justify-content:space-between;margin:0 0 12px}.tag,.control,.primary{border-radius:6px;border:1px solid var(--line);padding:6px 10px;color:var(--ink);background:white;min-height:34px;display:inline-flex;align-items:center}.primary{background:var(--ocean);color:white;border-color:var(--ocean);font-weight:650}.tag{background:var(--sea);min-height:0;font-size:12px}.warn{background:var(--warm);color:#754b08}.split{display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:14px;margin-top:12px}.scroll{overflow-x:auto}.grid{width:100%;border-collapse:collapse;min-width:455px}.grid td,.grid th{padding:9px;border:1px solid var(--line);text-align:left;vertical-align:top}.grid th{background:#f6f8f7}.shift{background:var(--sea);border-left:4px solid #54897f;padding:5px;border-radius:4px;white-space:nowrap}.draft{border-left-color:#a96d18;background:var(--warm)}.drawer{border:1px solid var(--line);border-radius:9px;padding:12px;background:white}.field{margin:0 0 10px;display:grid;gap:4px}.field span{border:1px solid var(--line);padding:7px 8px;border-radius:5px;min-height:34px}.notice{padding:8px;background:var(--warm);border-radius:5px;margin:8px 0}.layout{display:grid;grid-template-columns:1fr 1fr;gap:20px}.person-row,.mobile-card{border:1px solid var(--line);padding:12px;border-radius:7px;margin:8px 0}.phone{max-width:390px;margin:14px auto;background:white;border:1px solid var(--line);border-radius:17px;overflow:hidden}.phone .screen{padding:16px}.phone-nav{display:flex;justify-content:space-evenly;padding:12px 5px;background:#f1f5f3;border-top:1px solid var(--line);font-size:13px}.compare{display:grid;grid-template-columns:1fr 1fr;gap:8px}.compare div{padding:10px;border:1px solid var(--line);border-radius:5px}.caption{color:var(--muted);padding:0 0 12px;font-size:14px}main>section+section,main>.layout{margin-top:25px}@media(max-width:850px){.split,.layout{grid-template-columns:1fr}.shell{grid-template-columns:1fr}.side{display:none}.screen{padding:12px}}@media print{body{background:white}section,.panel{break-inside:avoid}.intro,main{padding:12px}}
+</style>
+<header class="intro"><h1>Butterbox UX wireframes</h1><p>Static design concepts for the audit. Fictional examples illustrate workspace hierarchy, actions and feedback.</p></header>
+<main>
+<section aria-labelledby="roster"><h2 id="roster">Roster with shift editor</h2><div class="panel shell">
+<aside class="side" aria-label="Illustrative navigation"><strong>Butterbox</strong><span>Today</span><span class="active">Roster</span><span>People</span><span>Time</span><span>Inbox</span><span>Settings</span></aside>
+<div class="screen"><div class="bar"><div><small>Saltbush Café ▾</small><h3>Roster</h3></div><span class="primary">Publish 3 changes</span></div>
+<div class="chips"><span class="control">‹</span><span class="control">23–29 Nov</span><span class="control">›</span><span class="control">Week</span><span class="control">Day</span><span class="control">Planning</span><span class="tag">Front of house ×</span></div>
+<div class="split"><div><p class="notice">1 conflict to review · 2 open shifts</p><div class="scroll"><table class="grid"><thead><tr><th>Team</th><th>Mon 23</th><th>Tue 24</th><th>Wed 25</th><th>Thu 26</th><th>Fri 27</th></tr></thead><tbody>
+<tr><th>Avery</th><td><div class="shift">09:00–15:00<br>Server</div></td><td>＋ Add</td><td><div class="shift draft">09:00–14:00<br>Draft</div></td><td>＋ Add</td><td></td></tr>
+<tr><th>Casey</th><td>＋ Add</td><td><div class="shift">08:00–14:00<br>Server</div></td><td>Unavailable</td><td></td><td>＋ Add</td></tr>
+<tr><th>Open shifts</th><td></td><td>＋ Add</td><td></td><td></td><td><div class="shift draft">10:00–16:00<br>Open</div></td></tr>
+</tbody></table></div><p class="caption">Selection and scroll remain in this workspace during edit, move and duplicate.</p></div>
+<aside class="drawer" aria-label="Illustrative shift editor"><div class="bar"><h3>Edit draft shift</h3><span>×</span></div><small>Wednesday 25 November · FOH</small>
+<div class="field"><strong>Team member</strong><span>Avery ▾</span></div><div class="field"><strong>Role</strong><span>Server ▾</span></div><div class="compare"><div>Starts<br>09:00</div><div>Ends<br>14:00</div></div>
+<p class="notice">Check availability after 14:00</p><div class="actions"><span class="primary">Save draft</span><span class="control">Cancel</span><span class="control">More ▾</span></div></aside>
+</div></div></div><p class="caption">The same anchor supports a day timeline and a read-only planning lens. Publish opens a scoped review with audience and conflicts.</p></section>
+<div class="layout">
+<section aria-labelledby="publish">
+  <h2 id="publish">Publication review</h2>
+  <div class="panel screen">
+    <div class="bar"><div><small>Saltbush Café · Front of house</small><h3>Review roster changes</h3></div><span class="tag">23–29 Nov</span></div>
+    <p>3 draft changes · 2 people affected</p>
+    <div class="person-row"><strong>Avery · Wed 25</strong><p>09:00–14:00 · Changed end time</p></div>
+    <div class="person-row"><strong>Open shift · Fri 27</strong><p>10:00–16:00 · New</p></div>
+    <p class="notice">1 conflict needs a decision before publication.</p>
+    <p class="caption">In-app update for 2 people · Department review approved</p>
+    <div class="actions"><span class="primary">Review conflict</span><span class="control">Return to roster</span></div>
+  </div>
+</section>
+<section aria-labelledby="venue">
+  <h2 id="venue">Venue settings</h2>
+  <div class="panel screen">
+    <div class="bar"><div><small>Settings › Venues</small><h3>Saltbush Café</h3></div><span class="control">Switch venue ▾</span></div>
+    <div class="chips"><span class="tag">Scheduling</span><span class="control">Clock location</span><span class="control">Change history</span></div>
+    <div class="person-row">
+      <div class="field"><strong>Planning week starts</strong><span>Wednesday ▾</span></div>
+      <div class="field"><strong>Overlapping shifts</strong><span>Warn before saving ▾</span></div>
+      <p class="caption">Changes apply to future planning. Review each setting's effect before saving.</p>
+      <div class="actions"><span class="primary">Save scheduling settings</span><span class="control">Cancel</span></div>
+    </div>
+  </div>
+</section>
+</div>
+<div class="layout">
+<section aria-labelledby="time"><h2 id="time">Time exceptions and approval</h2><div class="panel screen"><div class="bar"><h3>Review time</h3><span class="control">16–22 Nov ▾</span></div><div class="chips"><span class="tag warn">Needs review · 2</span><span class="tag">Approved · 12</span></div>
+<div class="person-row"><strong>Casey · Front of house</strong><p class="muted">Wed 18 · missing clock-out</p></div><div class="compare"><div><small>Planned</small><br>09:00–15:00</div><div><small>Original clock</small><br>09:02 → missing</div></div>
+<div class="field"><strong>Correction</strong><span>15:00 · confirmation received</span></div><p class="caption">View original events and prior decisions</p><div class="actions"><span class="primary">Approve &amp; next</span><span class="control">Save correction</span></div></div></section>
+<section aria-labelledby="person"><h2 id="person">Person profile</h2><div class="panel screen"><div class="bar"><div><small>People › Front of house</small><h3>Avery Example</h3></div><span class="tag">Active</span></div>
+<div class="chips"><span class="control">Overview</span><span class="tag">Employment</span><span class="control">Roles &amp; access</span><span class="control">Activity</span></div><div class="person-row"><div class="field"><strong>Employment type</strong><span>Casual ▾</span></div><div class="field"><strong>Start date</strong><span>4 November 2026</span></div><p class="caption">Visible to authorised administrators · History available in Activity</p><div class="actions"><span class="primary">Save employment</span><span class="control">Cancel</span></div></div></div></section>
+</div>
+<section aria-labelledby="mobile"><h2 id="mobile">Employee mobile</h2><div class="phone"><div class="screen"><small>Saltbush Café</small><h3>Today</h3><div class="mobile-card"><small>Next shift · Saturday</small><h3>10:00–16:00</h3><p>Server · Front of house</p><span class="control">Shift details</span></div>
+<div class="mobile-card"><p>Clocked out</p><span class="primary">Clock in</span></div><div class="mobile-card"><small>Needs attention</small><p>Roster updated for next week</p><span class="control">Review shift</span></div></div><nav class="phone-nav" aria-label="Illustrative employee destinations"><strong>Today</strong><span>Clock</span><span>Schedule</span><span>Inbox</span><span>Me</span></nav></div></section>
+</main></html>

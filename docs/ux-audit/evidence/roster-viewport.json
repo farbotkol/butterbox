@@ -1,0 +1,44 @@
+[
+  {
+    "device": "desktop",
+    "width": 1440,
+    "height": 1000,
+    "headingY": 1523,
+    "gridVisible": false,
+    "scrollRegions": [
+      [
+        1128,
+        1312
+      ]
+    ],
+    "navDestinations": 20
+  },
+  {
+    "device": "tablet",
+    "width": 820,
+    "height": 1180,
+    "headingY": 1835,
+    "gridVisible": false,
+    "scrollRegions": [
+      [
+        508,
+        1312
+      ]
+    ],
+    "navDestinations": 20
+  },
+  {
+    "device": "mobile",
+    "width": 390,
+    "height": 844,
+    "headingY": 2379,
+    "gridVisible": false,
+    "scrollRegions": [
+      [
+        348,
+        1312
+      ]
+    ],
+    "navDestinations": 20
+  }
+]

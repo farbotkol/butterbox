@@ -1,0 +1,256 @@
+[
+  {
+    "name": "Create assigned draft from roster cell",
+    "clicks": 2,
+    "transitions": 2,
+    "pageTransitions": 0,
+    "saves": 1,
+    "confirmations": 0,
+    "fieldEdits": 4,
+    "steps": [
+      "Open 12:00 cell",
+      "Set matching role",
+      "Assign fictional employee",
+      "Set start",
+      "Set end",
+      "Save draft"
+    ],
+    "context": "Selected week retained. Measured URL changes include opening the editor and returning to the roster state.",
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Edit and update existing draft",
+    "clicks": 2,
+    "transitions": 2,
+    "pageTransitions": 0,
+    "saves": 1,
+    "confirmations": 0,
+    "fieldEdits": 1,
+    "steps": [
+      "Open the linked draft editor",
+      "Change end time",
+      "Update draft with new end time"
+    ],
+    "context": "Exact updated end time visible in the same week.",
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Duplicate then undo using visible non-drag controls",
+    "clicks": 4,
+    "transitions": 0,
+    "pageTransitions": 0,
+    "saves": 2,
+    "confirmations": 1,
+    "fieldEdits": 2,
+    "steps": [
+      "Open Move or duplicate",
+      "Select Duplicate as draft",
+      "Choose next day",
+      "Preview proposed duplicate",
+      "Create draft duplicate",
+      "Undo last quick change"
+    ],
+    "context": "The preview and undo did not navigate away from the roster.",
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Drag an assigned draft into another day and cancel",
+    "clicks": 1,
+    "transitions": 0,
+    "pageTransitions": 0,
+    "saves": 0,
+    "confirmations": 0,
+    "fieldEdits": 0,
+    "steps": [
+      "Drag draft to next day",
+      "Cancel proposed move"
+    ],
+    "gestures": 1,
+    "context": "The drag opens a contextual move proposal before any database write.",
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Owner switches Planning and operational roster",
+    "clicks": 2,
+    "transitions": 2,
+    "pageTransitions": 2,
+    "saves": 0,
+    "confirmations": 0,
+    "fieldEdits": 0,
+    "steps": [
+      "Open venue planning view",
+      "Choose operational week link"
+    ],
+    "result": "Completed and verified visible outcome",
+    "context": "Returns to the operational roster through a selected week link."
+  },
+  {
+    "name": "Copy a previous week into a new roster",
+    "clicks": 1,
+    "transitions": 1,
+    "pageTransitions": 0,
+    "saves": 1,
+    "confirmations": 0,
+    "fieldEdits": 1,
+    "steps": [
+      "Set source week and submit Copy into this week"
+    ],
+    "result": "Completed and verified 8 copied drafts",
+    "context": "One selected department. No separate explicit preview or confirmation."
+  },
+  {
+    "name": "Owner gets to employment editor",
+    "start": "/people",
+    "segments": [
+      {
+        "action": "click",
+        "label": "Open fictional employee profile",
+        "landed": "/people/fixture-record",
+        "contextChanged": true
+      },
+      {
+        "action": "click",
+        "label": "Open employment editing",
+        "landed": "/people/fixture-record/employment",
+        "contextChanged": true
+      }
+    ],
+    "clicks": 2,
+    "transitions": 2,
+    "saves": 0,
+    "confirmations": 0,
+    "result": "Completed listed interactions",
+    "pageTransitions": 2
+  },
+  {
+    "name": "Owner reviews payroll export evidence",
+    "start": "/timesheets",
+    "segments": [
+      {
+        "action": "click",
+        "label": "Expand finalised payroll records",
+        "landed": "/timesheets",
+        "contextChanged": false
+      },
+      {
+        "action": "click",
+        "label": "Expand export history",
+        "landed": "/timesheets",
+        "contextChanged": false
+      }
+    ],
+    "clicks": 2,
+    "transitions": 0,
+    "saves": 0,
+    "confirmations": 0,
+    "result": "Completed listed interactions",
+    "pageTransitions": 0
+  },
+  {
+    "name": "Owner opens and submits invalid draft shift",
+    "start": "/roster",
+    "segments": [
+      {
+        "action": "click",
+        "label": "Find a roster cell add action",
+        "landed": "/roster",
+        "contextChanged": true
+      },
+      {
+        "action": "fill",
+        "label": "Enter invalid blank role",
+        "landed": "/roster",
+        "contextChanged": false
+      },
+      {
+        "action": "save",
+        "label": "Submit draft with invalid role",
+        "landed": "/roster",
+        "contextChanged": false
+      }
+    ],
+    "clicks": 2,
+    "transitions": 1,
+    "saves": 0,
+    "confirmations": 0,
+    "result": "Inline role validation observed. No draft was created.",
+    "pageTransitions": 0,
+    "submitAttempts": 1
+  },
+  {
+    "name": "Owner filters roster and searches",
+    "start": "/roster",
+    "segments": [
+      {
+        "action": "fill",
+        "label": "Enter fictional name",
+        "landed": "/roster",
+        "contextChanged": false
+      },
+      {
+        "action": "click",
+        "label": "Search week",
+        "landed": "/roster",
+        "contextChanged": true
+      }
+    ],
+    "clicks": 1,
+    "transitions": 1,
+    "saves": 0,
+    "confirmations": 0,
+    "result": "Completed listed interactions",
+    "pageTransitions": 0
+  },
+  {
+    "name": "Employee mobile dashboard to schedule",
+    "start": "/",
+    "clicks": 2,
+    "transitions": 1,
+    "saves": 0,
+    "confirmations": 0,
+    "result": "Reached My schedule through Menu",
+    "pageTransitions": 1
+  },
+  {
+    "name": "Owner opens original events from timesheet",
+    "clicks": 1,
+    "fieldEdits": 0,
+    "transitions": 0,
+    "pageTransitions": 0,
+    "saves": 0,
+    "confirmations": 0,
+    "steps": [
+      "Expand Inspect source events"
+    ],
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Employee mobile clocks in and out",
+    "clicks": 2,
+    "fieldEdits": 0,
+    "transitions": 1,
+    "pageTransitions": 0,
+    "saves": 2,
+    "confirmations": 0,
+    "steps": [
+      "Submit clock-in",
+      "Submit clock-out"
+    ],
+    "result": "Completed and verified visible outcome"
+  },
+  {
+    "name": "Owner configures fictional payroll mapping destination and opens employee mapping",
+    "clicks": 3,
+    "fieldEdits": 2,
+    "transitions": 3,
+    "pageTransitions": 3,
+    "saves": 1,
+    "confirmations": 0,
+    "steps": [
+      "Open Add mapping destination",
+      "Submit fictional mapping destination",
+      "Open fictional employee mapping"
+    ],
+    "result": "Completed and verified visible outcome"
+  }
+]

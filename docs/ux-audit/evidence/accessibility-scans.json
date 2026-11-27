@@ -1,0 +1,74 @@
+[
+  {
+    "role": "public",
+    "device": "mobile",
+    "template": "/login",
+    "violations": []
+  },
+  {
+    "role": "owner",
+    "device": "desktop",
+    "template": "/roster",
+    "violations": []
+  },
+  {
+    "role": "owner",
+    "device": "desktop",
+    "template": "/attendance",
+    "violations": []
+  },
+  {
+    "role": "owner",
+    "device": "desktop",
+    "template": "/timesheets",
+    "violations": []
+  },
+  {
+    "role": "owner",
+    "device": "desktop",
+    "template": "/people",
+    "violations": []
+  },
+  {
+    "role": "owner",
+    "device": "desktop",
+    "template": "/settings/organisation",
+    "violations": []
+  },
+  {
+    "role": "foh_manager",
+    "device": "tablet",
+    "template": "/roster",
+    "violations": []
+  },
+  {
+    "role": "foh_manager",
+    "device": "tablet",
+    "template": "/timesheets",
+    "violations": []
+  },
+  {
+    "role": "foh_manager",
+    "device": "tablet",
+    "template": "/people",
+    "violations": []
+  },
+  {
+    "role": "employee",
+    "device": "mobile",
+    "template": "/roster",
+    "violations": []
+  },
+  {
+    "role": "employee",
+    "device": "mobile",
+    "template": "/my-schedule",
+    "violations": []
+  },
+  {
+    "role": "employee",
+    "device": "mobile",
+    "template": "/attendance",
+    "violations": []
+  }
+]
