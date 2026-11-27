@@ -1,19 +1,15 @@
 # Recover parked P0 work
 
-Issue #327 keeps the native controller schedule paused until the corrected
-controller and recovery are verified. P1–P9 remain held. Both original pull
-requests are closed unmerged, and their branches and parking tags are retained.
+Only pause scheduling for authorized maintenance. Record the reason, start
+time and previous values. Check GitHub workflow 425440593 and the Supabase
+Development job `butterbox-delivery-controller-fallback` after maintenance.
+Check recent GitHub run events and Supabase run details separately. A successful
+cron invocation or controller cycle does not by itself prove a delivery.
 
-| Priority | Issue | Preserved pull request | Preserved head | Parking tag SHA |
-| --- | --- | --- | --- | --- |
-| P0.01 | #84 | #336 | `7bea6b8517e3f8e80bebcf5b73415b74e05cf9d1` | `1f2993e702be6f7d15b6bf264051c6a769e7eb22` |
-| P0.02 | #82 | #337 | `1d71222d2450c54b4d1b60a74dc15651cf337c22` | `a32bc47554d740e9a1d98241ca18459a54b203f1` |
-
-The current parking tags and both branch tips were verified on 27 November
-2026. Reverify them and check for patch conflicts against the current
-Development tip immediately before each unpark. Recover #84 first, then #82.
-GitHub workflow 425440593 is disabled manually. Supabase Development
-`butterbox-delivery-controller-fallback` is inactive.
+For #84, resolve the known acceptance and scope problems before asking the owner
+to unpark. Fetch the current parking tag, stopped writer and preserved branch.
+Historical tag values from PRs #336 and #337 are stale. #82 already holds an
+active lease and must resume on PR #340.
 
 The first Actions-identity integration probe reproduced HTTP 200 with a
 plain-text `OK` response from GitHub Models inference. No model-generated
@@ -22,17 +18,11 @@ parser error and omit the endpoint and parsing stage. The independent
 acceptance gate requires valid assessment evidence.
 [Actions probe](https://github.com/farbotkol/butterbox/actions/runs/45911590588/job/140221011597)
 
-After the corrected controller merges, verify its required checks, live integration connectivity and recovery evidence.
-For the authorized P0 recovery, enable the disabled workflow and use `unpark` with the issue number and exact parking tag SHA. The controller checks
-the parked task and closed PR, verifies the stopped writer and scoped diff,
-records the immutable source range, and compares and deletes the parking tag.
-The next authorized controller cycle gives the new Copilot task the preserved
-source range to apply under its own lease. The old PR and branch stay intact.
-On the preserved #84 head the latest exact-head database and targeted browser
-jobs reported four failing venue-settings checks, including duplicate accessible
-alerts and a failed expected field value. An earlier head had React lint and
-disposable Supabase startup failures. Run fresh required validation and
-independent acceptance on each recovered head before merge.
+Use `unpark` only for authorized parked work, with the exact issue number
+and current parking tag SHA. The controller records the immutable source
+range, verifies the stopped writer and scoped diff, then removes the matching
+parking tag. A normal scheduled cycle uses that range for recovery. Leave the
+old PR and branch available as evidence.
 
 GitHub documents cloud session steering and Agent Merge through interactive
 surfaces. No supported programmatic repair-only continuation for this
@@ -44,11 +34,45 @@ when publishing. The smoke run exercised the assessor and scoped repair of the
 preserved #84 diagnostics without publishing to the product branch.
 [Copilot CLI live smoke](https://github.com/farbotkol/butterbox/actions/runs/45912198033/job/140222971927)
 
-A typed upstream response or model-output failure leaves the product PR and
-lease in place. Authenticated #327 checkpoints record the retry state and
-backoff. Once the circuit opens, a connectivity probe must pass before the
-controller runs another cycle. Permanent request and permission failures
-keep the circuit blocked for investigation.
+A typed upstream failure leaves the PR and lease in place. Authenticated
+#327 checkpoints record backoff and periodic health probes. Unhealthy cycles
+return a failing job result. A native merge rejection uses a separate
+checkpoint on the product issue tied to the lease, PR and head. It waits for
+changed native evidence and never repeats an unchanged merge request. A
+confirmed maintainer-approval gate requires a security decision and retains
+the active PR. Other unchanged native restrictions are bounded by the
+product recovery window.
+
+## GitHub Actions approval on controller-authored PR updates
+
+At PR #340 head `6f0506df55e5f82f88aa0a8e50a2b24420da5637`, four PR-triggered
+runs from `github-actions[bot]` were approval-required and had no jobs.
+Successful separate workflow dispatches provided independent acceptance
+evidence. GitHub still rejected the protected merge. GitHub documents this
+approval requirement for PRs created or updated with `GITHUB_TOKEN` and
+supports an installation access token or personal access token for the
+operation that creates or updates the PR.
+[GitHub token event rules](https://docs.github.com/en/actions/concepts/security/github_token)
+[PR-triggered Verify](https://github.com/farbotkol/butterbox/actions/runs/45948530590)
+
+Use an existing approved GitHub App if one has suitable permissions.
+The owner can check **Repository → Settings → Integrations → GitHub Apps**
+and **Account → Settings → Developer settings → GitHub Apps → App →
+Permissions & events**. The publisher currently uses `GITHUB_TOKEN`. The
+supported target is an installation access token restricted to Butterbox
+with **Contents: Read and write** for publishing to the verified work
+branch. Keep check and merge permission with the existing controller
+identities. Confirm an approved installation can publish and naturally
+trigger PR CI before adopting it. Keep its signing credential confined to
+trusted Development workflow code and keep it out of Copilot and PR jobs.
+There is no documented repository switch for disabling this token event
+approval. Do not loosen fork approval, branch rules or required checks.
+
+For the already-generated runs on #340, an owner-authorized exception would
+use **PR #340 → Conversation → Approve workflows to run** after verifying
+the current head and workflow scope. Approval starts the GitHub workflows.
+The controller still checks acceptance, merges under native rules, verifies
+the exact deployment, closes the issue and releases the existing lease.
 
 The live proof is one P0 delivery through confirmed Development deployment and
 issue closure, followed by dispatch of the next eligible item. Keep #327 open

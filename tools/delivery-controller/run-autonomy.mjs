@@ -29,6 +29,11 @@ const runId = 'actions_' + process.env.GITHUB_RUN_ID + '_' + process.env.GITHUB_
 const summary = process.env.GITHUB_STEP_SUMMARY;
 const report = message => {
   console.log(message);
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    const level = /^(?:STOPPED|FACTORY_BLOCKED|DISPATCH_BLOCKED)\b/.test(message) ? 'error' :
+      /^(?:FACTORY_RETRY|MERGE_BLOCKED|PRODUCT_VERIFICATION_EXHAUSTED)/.test(message) ? 'warning' : null;
+    if (level) console.log('::' + level + '::' + message.replaceAll('%', '%25').replaceAll('\r', '%0D').replaceAll('\n', '%0A'));
+  }
   if (summary) appendFileSync(summary, message + '\n');
 };
 
@@ -53,8 +58,7 @@ async function main() {
   if (!ghToken) throw new Error('Missing Actions repository token');
   if (!agentToken) {
     if (recovery !== 'none') throw new Error('Missing Copilot credential for recovery');
-    report('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
-    return;
+    throw new Error('DISPATCH_BLOCKED: COPILOT_AGENT_USER_TOKEN is unavailable.');
   }
 
   const request = async (url, options) => {
@@ -297,16 +301,18 @@ async function main() {
       report, verifyOnly: recovery === 'verify' });
     return;
   }
-  await withFactoryHealth({
+  const healthy = await withFactoryHealth({
     gh, paged, report, revision: process.env.GITHUB_SHA,
-    async probe() {
+    async probe(category) {
       await gh('/branches/' + development);
+      if (category === 'permission') await tasksApi.list({ states: ['queued', 'in_progress', 'waiting_for_user'] });
       await verifyAssessmentConnectivity(ghToken);
     },
     advance: () => runAcceptanceCycle({ repository: repo, gh, paged, tasksApi, leaseApi, runId, report,
       approval, repairBusy, readyPull, closingIssues, infer, assessor: 'copilot-cli-independent-v1', planScope,
       repair, recoverySource: issue => recoveryInstructions(paged, issue), p0Only: true }),
   });
+  if (!healthy) process.exitCode = 1;
 }
 
 export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leaseApi, runId, report, approval,
@@ -377,7 +383,7 @@ export async function runAcceptanceCycle({ repository, gh, paged, tasksApi, leas
   const initial = await candidateSnapshot();
   const { selection, issue } = initial;
   if (!issue) {
-    report(selection.action + ': ' + selection.reason);
+    report((selection.reason === 'No structurally eligible owner-opt-in story' ? 'HEALTHY_IDLE' : selection.action) + ': ' + selection.reason);
     return;
   }
   const number = issue.number;

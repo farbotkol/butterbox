@@ -31,18 +31,18 @@ export async function withFactoryHealth({ gh, paged, probe, advance, report, rev
     if (row.user?.id !== actionsBot || row.body !== body || !Number.isSafeInteger(row.id) ||
         row.created_at !== row.updated_at) throw new Error('Could not confirm factory health checkpoint');
   };
-  const unhealthy = prior && prior.category !== 'healthy';
+  // Earlier controllers recorded native merge rejections as factory requests.
+  const legacyMerge = prior?.category === 'request' &&
+    /^GitHub PUT HTTP (405|409|422) for \/pulls\/\d+\/merge · /.test(prior.reason ?? '');
+  const unhealthy = prior && prior.category !== 'healthy' && !legacyMerge;
   const open = unhealthy && (prior.attempt >= retryLimit || prior.category !== 'integration');
   const stalePublishDelay = unhealthy && prior.revision !== revision && prior.attempt === 1 &&
     prior.category === 'integration' && prior.reason?.startsWith(
       'GitHub publish repair HTTP 200 for /graphql · branch-verification/unconfirmed');
   if (unhealthy && !stalePublishDelay && now() < prior.nextAt) {
-    report('FACTORY_COOLDOWN integration retry ' + prior.attempt + ' until ' + new Date(prior.nextAt).toISOString());
-    return;
-  }
-  if (open && prior.category !== 'integration' && prior.revision === revision) {
-    report('FACTORY_BLOCKED ' + prior.category + ' failure; current controller revision requires investigation');
-    return;
+    report((open ? 'FACTORY_BLOCKED' : 'FACTORY_RETRY_SCHEDULED') + ' · ' + prior.category +
+      ' · attempt ' + prior.attempt + ' · reassess ' + new Date(prior.nextAt).toISOString());
+    return false;
   }
   const failed = async (error, healthCheck) => {
     if (!['CONTROLLER_API', 'COPILOT_TASK_GET', 'COPILOT_TASK_POST'].includes(error.code)) throw error;
@@ -53,24 +53,25 @@ export async function withFactoryHealth({ gh, paged, probe, advance, report, rev
     await save({ attempt, nextAt, category, stage: healthCheck ? 'health-probe' : 'delivery-cycle',
       reason: error.message.slice(0, 500) });
     report((attempt >= retryLimit || category !== 'integration' ? 'FACTORY_BLOCKED' : 'FACTORY_RETRY') +
-      ' · attempt ' + attempt + ' · ' + error.message);
+      ' · attempt ' + attempt + ' · reassess ' + new Date(nextAt).toISOString() + ' · ' + error.message);
   };
   if (open) {
     try {
-      await probe();
+      await probe(prior.category);
     } catch (error) {
       await failed(error, true);
-      return;
+      return false;
     }
   }
   try {
     await advance();
   } catch (error) {
     await failed(error, false);
-    return;
+    return false;
   }
-  if (unhealthy) {
+  if (unhealthy || legacyMerge) {
     await save({ attempt: 0, nextAt: 0, category: 'healthy' });
     report('FACTORY_HEALTH_RESTORED');
   }
+  return true;
 }

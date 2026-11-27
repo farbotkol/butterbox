@@ -1,3 +1,4 @@
+import { submitNativeMerge } from './native-merge.mjs';
 import { reconcileProductMetadata } from './product-metadata.mjs';
 import { queuePriority } from './queue.mjs';
 import { createHash } from 'node:crypto';
@@ -254,23 +255,11 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     if (!product) assert(Array.isArray(pr.requested_reviewers) && !pr.requested_reviewers.length &&
       Array.isArray(pr.requested_teams) && !pr.requested_teams.length, 'PR still has pending reviews or missing review evidence');
 
-    const [files, headProof, checks, ref, rules] = await Promise.all([
+    const [files, headProof, checks, ref] = await Promise.all([
       product ? readProductDiff(paged, gh, pr) : gh(endpoint + '/files?per_page=2'),
       product ? null : contentsAt(gh, path, head),
       gh('/commits/' + head + '/check-runs?filter=all&per_page=100'), gh('/git/ref/heads/' + development),
-      gh('/rules/branches/' + encodeURIComponent(development)),
     ]);
-    assert(Array.isArray(rules) && rules.some(rule => rule.type === 'pull_request' &&
-      rule.parameters?.allowed_merge_methods?.includes('squash')) &&
-      requiredChecks.every(name => rules.some(rule => rule.type === 'required_status_checks' &&
-        rule.parameters?.required_status_checks?.some(check => check.context === name && check.integration_id === 15368))),
-    'Required Development squash and GitHub Actions rules are unavailable');
-    if (product) assert(rules.filter(rule => rule.type === 'pull_request').every(rule =>
-      rule.parameters?.required_approving_review_count === 0 && !rule.parameters.require_code_owner_review &&
-      !rule.parameters.require_last_push_approval && !rule.parameters.require_extra_approval_for_unattributed_changes &&
-      Array.isArray(rule.parameters.required_reviewers) && !rule.parameters.required_reviewers.length),
-    'Development native pull_request rule requires approval or reviewer evidence: ' +
-      JSON.stringify(rules.filter(rule => rule.type === 'pull_request').map(rule => rule.parameters)));
     const productPaths = product && scopedProductFiles(scope, files);
     if (product) assert(files.length < 100, 'Product diff exceeds the verifiable squash bound');
     if (!product) assert(pr.changed_files === 1 && Array.isArray(files) && files.length === 1 &&
@@ -341,8 +330,8 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
       const comparison = await gh('/compare/' + lease.baseSha + '...' + head + '?per_page=1');
       assert(comparison.status === 'ahead' && comparison.merge_base_commit?.sha === lease.baseSha,
         'PR head is not based on the original leased Development commit');
-      assert(pr.auto_merge === null && typeof pr.draft === 'boolean' && pr.mergeable === true,
-        'PR mergeability, draft state or native auto-merge is unverified');
+      assert(pr.auto_merge === null && typeof pr.draft === 'boolean',
+        'PR draft state or native auto-merge is unverified');
       const currentIssue = await confirm(true, pr.body, pr.title, product && metadata.changed);
       assert(currentIssue.state === 'open' && !currentIssue.body?.includes(marker), 'Issue changed before merge');
       if (product && metadata.changed) {
@@ -415,6 +404,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         return;
       }
       if (product) {
+        report('ACCEPTANCE_IN_PROGRESS issue #' + lease.issue + ' PR #' + number + ' head ' + head);
         try {
           acceptance = await readAcceptance(infer);
           if (!acceptance) {
@@ -431,14 +421,16 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
         assert(JSON.stringify(verifiedChecks(currentChecks, head, now(), names)) === JSON.stringify(ci) &&
           (await readAcceptance())?.id === acceptance.id, 'Exact-head acceptance or CI evidence changed before merge');
       }
-      // GitHub enforces native merge requirements on the exact-head squash request.
-      // The advisory mergeable_state is not an additional controller gate.
-      report('MERGE_REQUEST PR #' + number + ' head ' + head + ' · GitHub state ' + (pr.mergeable_state ?? 'unknown'));
-      const merge = await gh(endpoint + '/merge', 'PUT', {
+      const merge = await submitNativeMerge({ gh, paged, pr, lease, tip, ci, report, now, body: {
         sha: head, merge_method: 'squash', commit_title: (product ? 'Deliver approved product issue #' : 'Add controller acceptance proof for #') + lease.issue,
         commit_message: 'Refs #' + lease.issue,
-      });
-      assert(merge.merged === true && isSha(merge.sha), 'GitHub did not confirm the protected squash merge');
+      } });
+      if (!merge) return;
+      if (merge.exhausted) {
+        const error = new Error('Native merge restriction exhausted: ' + merge.reason);
+        error.code = 'PRODUCT_REPAIR_STOP';
+        throw error;
+      }
       report('MERGE_CONFIRMED PR #' + number + ' head ' + head + ' merge ' + merge.sha + ' · ' + ci.join(' · '));
       return;
     }
@@ -467,6 +459,7 @@ export async function advanceAcceptance({ repository, gh, paged, tasksApi, lease
     if (product) {
       acceptance = await readAcceptance();
       assert(acceptance, 'Missing historical independent exact-head AI acceptance evidence');
+      report('DEPLOYMENT_VERIFICATION issue #' + lease.issue + ' PR #' + number + ' merge ' + merge);
       deployment = await developmentDeployment({ paged, gh, merge, mergedAt,
         migrations: productPaths.some(path => path.startsWith('supabase/migrations/')) });
       assert(deployment, 'Development deployment is pending, failed, or unverifiable for ' + merge);
