@@ -71,7 +71,10 @@ export async function repairProduct({ gh, paged, lease, pr, checks, failure, con
   });
   const receipt = await gh(route, 'POST', { body });
   if (receipt.user?.id !== bot || receipt.body !== body) throw new Error('Repair reservation was not confirmed');
-  if (kind === 'source' && !changes) return 'unsafe';
+  if (kind === 'source' && !changes) {
+    report('PRODUCT_REPAIR_REJECTED #' + lease.issue + ' · attempt ' + attempt + ' of 5; no changes published');
+    return attempt === 5 ? 'exhausted' : 'no-change';
+  }
   if (kind === 'source' && !publishable) return attempt === 5 ? 'exhausted' : 'no-change';
   if (kind === 'infra' && run) {
     await gh('/actions/runs/' + run.id + (failed.conclusion === 'cancelled' ? '/rerun' : '/rerun-failed-jobs'), 'POST');
