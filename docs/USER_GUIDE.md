@@ -470,7 +470,7 @@ accounts are provisioned by the operator.
 
 - The weekly people-by-day schedule groups assigned and open shifts by department. Shift blocks use venue-local time; choose a day in **Schedule view** to narrow the timetable on a small screen.
 - Create, edit or copy draft shifts, including unassigned shifts. The roster checks overlaps, availability and other configured conflicts.
-- Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. Published shifts and review snapshots have separate integrity controls.
+- Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. The quick-change drawer keeps keyboard focus inside; **Escape** and **Cancel** close it and return focus to the shift control that opened it. Published shifts and review snapshots have separate integrity controls.
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
 - If roster approval is enabled, a distinct authorized reviewer can approve or reject a submitted roster snapshot. Rejection requires a reason, and approval rechecks current blockers.
 
@@ -486,7 +486,9 @@ accounts are provisioned by the operator.
    shift remains private while it is a draft. The slot shortcuts are coarse
    six-hour intervals and are hidden where they overlap a shift already shown
    in that lane. For another start time, an open shift or an overnight shift,
-   expand **Add shift manually** and enter the date and times there.
+   expand **Add shift manually** and enter the date and times there. If
+   validation fails, the entered values remain; use the field error to correct
+   the input and save again.
 3. Check the draft block and any conflict warnings. For a further correction,
    choose the draft's edit control and **Update draft shift**. Choose
    **Publish this department** to publish directly, or follow **Submit for

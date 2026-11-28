@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { signInAction } from "@/app/actions";
 import { AuthLayout } from "@/components/auth-layout";
+import { FeedbackNotice, PendingButton } from "@/components/feedback";
 import { PasswordInput } from "@/components/password-input";
 import { AnnounceSessionEnd } from "@/components/session-sync";
 import { isPublicShowcase } from "@/lib/showcase";
@@ -46,15 +47,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
       </p>
 
       {publicShowcase && (
-        <p role="status" className="mt-5 rounded-lg border border-sand bg-soft-sand p-4 text-sm text-ocean">
+        <FeedbackNotice kind="info" className="mt-5 border border-sand bg-soft-sand p-4 text-sm text-ocean">
           This public demo uses pre-provisioned fictional accounts. Sign-up, password changes and
           recovery, and email invitations are unavailable; contact the demo operator for access.
-        </p>
+        </FeedbackNotice>
       )}
       {params.error && (
-        <p role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+        <FeedbackNotice kind="error" className="mt-5 border border-red-200 px-4 py-3 text-sm">
           {errors[params.error] ?? "Something went wrong. Please try again."}
-        </p>
+        </FeedbackNotice>
       )}
       {params.error === "signout" && (
         <Link href="/" className="mt-3 inline-block text-sm font-semibold text-ocean underline-offset-4 hover:underline">
@@ -62,29 +63,29 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
         </Link>
       )}
       {params.message === "confirm" && (
-        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+        <FeedbackNotice kind="success" className="mt-5 border border-sea-glass/50 px-4 py-3 text-sm">
           Check your inbox to confirm your email, then sign in.
-        </p>
+        </FeedbackNotice>
       )}
       {params.message === "reset" && (
-        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+        <FeedbackNotice kind="success" className="mt-5 border border-sea-glass/50 px-4 py-3 text-sm">
           If your account is registered, a password reset email is on its way.
-        </p>
+        </FeedbackNotice>
       )}
       {params.message === "password-updated" && (
-        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+        <FeedbackNotice kind="success" className="mt-5 border border-sea-glass/50 px-4 py-3 text-sm">
           Your password has been updated. Sign in with your new password.
-        </p>
+        </FeedbackNotice>
       )}
       {params.message === "signed-out" && (
-        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+        <FeedbackNotice kind="success" className="mt-5 border border-sea-glass/50 px-4 py-3 text-sm">
           You&apos;ve signed out.
-        </p>
+        </FeedbackNotice>
       )}
       {params.message === "qr-sign-in" && (
-        <p role="status" className="mt-5 rounded-lg border border-sea-glass/50 bg-soft-sea px-4 py-3 text-sm text-ocean">
+        <FeedbackNotice kind="info" className="mt-5 border border-sea-glass/50 px-4 py-3 text-sm">
           Sign in on your own device, then scan a fresh venue kiosk code.
-        </p>
+        </FeedbackNotice>
       )}
       {!configured && (
         <p className="mt-5 rounded-lg border border-sand bg-soft-sand px-4 py-3 text-sm leading-6 text-ocean">
@@ -115,13 +116,14 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
           </span>
           <PasswordInput autoComplete="current-password" id="password" name="password" />
         </label>
-        <button
+        <PendingButton
+          type="submit"
           className="flex min-h-12 w-full items-center justify-center gap-2 rounded-lg bg-ocean px-5 py-3 text-sm font-semibold text-white transition hover:bg-ocean/90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ocean disabled:cursor-not-allowed disabled:opacity-50"
           disabled={!configured}
-          type="submit"
+          pendingLabel="Signing in..."
         >
           Sign in <ArrowRight size={17} aria-hidden="true" />
-        </button>
+        </PendingButton>
       </form>
 
       {!publicShowcase && <>

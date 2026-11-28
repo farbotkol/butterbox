@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useState } from "react";
 import { saveShiftAction } from "@/app/actions";
+import { FeedbackNotice, FieldError, PendingButton } from "@/components/feedback";
 import type { ShiftFormState, ShiftFormValues } from "@/lib/shift-form";
 
 type EmployeeOption = { id: string; name: string; role_title: string };
@@ -34,7 +35,7 @@ export function ShiftEditor({
   shiftId,
   cancelHref,
 }: ShiftEditorProps) {
-  const [state, action, pending] = useActionState(saveShiftAction, initialState);
+  const [state, action] = useActionState(saveShiftAction, initialState);
   const [values, setValues] = useState(state.values ?? initialValues);
   const setField = (field: keyof ShiftFormValues, value: string) =>
     setValues((current) => ({ ...current, [field]: value }));
@@ -50,9 +51,9 @@ export function ShiftEditor({
       {shiftId && <input name="shift_id" type="hidden" value={shiftId} />}
       {collapsed.map((id) => <input key={id} name="collapsed" type="hidden" value={id} />)}
       {state.errors.form && (
-        <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-800 sm:col-span-2 xl:col-span-6">
+        <FeedbackNotice kind="error" className="px-3 py-2 text-sm sm:col-span-2 xl:col-span-6">
           {state.errors.form}
-        </p>
+        </FeedbackNotice>
       )}
       <p className="text-xs text-muted sm:col-span-2 xl:col-span-6">
         When clocks repeat a time, newly entered times use the later occurrence.
@@ -67,7 +68,7 @@ export function ShiftEditor({
         <datalist id="role-suggestions">
           {roleSuggestions.map((role) => <option key={role} value={role} />)}
         </datalist>
-        {state.errors.role && <p id="shift-role-error" role="alert" className="mt-1 text-red-800">{state.errors.role}</p>}
+        <FieldError id="shift-role-error" className="mt-1">{state.errors.role}</FieldError>
       </div>
       <div className="text-xs font-medium text-muted">
         <label htmlFor="shift-employee">Team member</label>
@@ -94,7 +95,7 @@ export function ShiftEditor({
             : "Automatic selection checks qualifications, overlaps, submitted availability, date blocks and approved leave. Unsubmitted availability is unknown."}
           {" "}Manual assignment may require qualifications for the selected role.
         </p>
-        {state.errors.employee && <p id="shift-employee-error" role="alert" className="mt-1 text-red-800">{state.errors.employee}</p>}
+        <FieldError id="shift-employee-error" className="mt-1">{state.errors.employee}</FieldError>
       </div>
       <div className="text-xs font-medium text-muted">
         <label htmlFor="shift-start">Starts</label>
@@ -102,7 +103,7 @@ export function ShiftEditor({
           value={values.start} aria-invalid={state.errors.start ? true : undefined}
           aria-describedby={state.errors.start ? "shift-start-error" : undefined}
           onChange={(event) => setField("start", event.target.value)} />
-        {state.errors.start && <p id="shift-start-error" role="alert" className="mt-1 text-red-800">{state.errors.start}</p>}
+        <FieldError id="shift-start-error" className="mt-1">{state.errors.start}</FieldError>
       </div>
       <div className="text-xs font-medium text-muted">
         <label htmlFor="shift-end">Ends</label>
@@ -110,7 +111,7 @@ export function ShiftEditor({
           value={values.end} aria-invalid={state.errors.end ? true : undefined}
           aria-describedby={state.errors.end ? "shift-end-error" : undefined}
           onChange={(event) => setField("end", event.target.value)} />
-        {state.errors.end && <p id="shift-end-error" role="alert" className="mt-1 text-red-800">{state.errors.end}</p>}
+        <FieldError id="shift-end-error" className="mt-1">{state.errors.end}</FieldError>
       </div>
       <div className="text-xs font-medium text-muted">
         <label htmlFor="shift-break">Break (mins)</label>
@@ -118,14 +119,14 @@ export function ShiftEditor({
           value={values.break} aria-invalid={state.errors.break ? true : undefined}
           aria-describedby={state.errors.break ? "shift-break-error" : undefined}
           onChange={(event) => setField("break", event.target.value)} />
-        {state.errors.break && <p id="shift-break-error" role="alert" className="mt-1 text-red-800">{state.errors.break}</p>}
+        <FieldError id="shift-break-error" className="mt-1">{state.errors.break}</FieldError>
       </div>
       <div className="flex items-end gap-2">
         {shiftId && <Link href={cancelHref} className="rounded-lg border border-line px-3 py-2.5 text-sm font-semibold">Cancel</Link>}
-        <button className="w-full rounded-lg bg-ocean px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ocean/90 disabled:opacity-60"
-          disabled={pending} type="submit">
-          {pending ? "Saving..." : shiftId ? "Update draft shift" : "Save draft shift"}
-        </button>
+        <PendingButton className="w-full rounded-lg bg-ocean px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ocean/90 disabled:opacity-60"
+          type="submit" pendingLabel="Saving...">
+          {shiftId ? "Update draft shift" : "Save draft shift"}
+        </PendingButton>
       </div>
     </form>
   );
