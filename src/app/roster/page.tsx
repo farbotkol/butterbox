@@ -568,6 +568,12 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
   const matchingGroups = search === null ? [] : rosterGroups.map((group) => ({
     ...group, employees: group.employees.filter((employee) => matchesRosterSearch(employee.name, search)),
   })).filter((group) => !search || group.employees.length > 0);
+  const matchingEmployeeIds = new Set(matchingGroups.flatMap(({ employees: groupEmployees }) =>
+    groupEmployees.map((employee) => employee.id),
+  ));
+  const agendaShifts = visibleShifts.filter((shift) =>
+    !shift.employee_id || matchingEmployeeIds.has(shift.employee_id),
+  );
   const days = Array.from({ length: 7 }, (_, index) => addDays(week, index));
   const selectedDay = typeof params.day === "string" && days.includes(params.day) ? params.day : undefined;
   const scheduleDays = selectedDay ? [selectedDay] : days;
@@ -725,6 +731,11 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       ),
     }));
   const weekLabel = `${formatDay(week)} – ${formatDay(addDays(week, 6))}`;
+  const primaryAddHref = canManageSelectedDepartment && selectedDepartmentActive && selectedDepartment
+    ? rosterCreateShiftHref(
+        week, selectedDepartment, collapsed, workspace.venue.id, workspace.business.id, selectedDay ?? week, "06:00",
+      )
+    : undefined;
   const copiedCount = params.copied && /^\d+$/.test(params.copied) &&
     Number.isSafeInteger(Number(params.copied)) ? Number(params.copied) : undefined;
 
@@ -735,16 +746,136 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
       role={workspace.membership.role}
       venueId={workspace.venue.id} venueName={workspace.venue.name}
     >
-      <div className="flex flex-col justify-between gap-5 lg:flex-row lg:items-end">
-        <div>
-          <p className="text-sm font-medium text-muted">Rostering</p>
-          <h1 className="mt-2 text-3xl font-semibold sm:text-[34px]">
-            Weekly roster
-          </h1>
-          <p className="mt-2 text-muted">
-            Build a balanced week for your FOH and BOH teams.
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="min-w-0">
+          <h1 className="text-2xl font-semibold sm:text-3xl">Weekly roster</h1>
+          <p className="mt-1 break-words text-sm text-muted">
+            {workspace.venue.name} · {selectedDepartment
+              ? departments.find((department) => department.id === selectedDepartment)?.name
+              : "All departments"} · Monday–Sunday
           </p>
-          <div className="mt-2 flex flex-wrap gap-x-5">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+          <div className="flex min-w-0 items-center justify-between gap-2 rounded-xl border border-line bg-white p-1.5">
+            <Link
+              id="roster-previous-week"
+              href={rosterViewHref(previousWeek, filterDepartment, collapsed, workspace.venue.id)}
+              aria-label="Previous week"
+              className="rounded-lg p-2 text-muted hover:bg-soft-sea"
+            >
+              <ArrowLeft size={18} aria-hidden="true" />
+            </Link>
+            <div className="min-w-[110px] text-center text-sm font-semibold sm:min-w-[155px]">
+              {weekLabel}
+            </div>
+            <Link
+              id="roster-next-week"
+              href={rosterViewHref(nextWeek, filterDepartment, collapsed, workspace.venue.id)}
+              aria-label="Next week"
+              className="rounded-lg p-2 text-muted hover:bg-soft-sea"
+            >
+              <ArrowRight size={18} aria-hidden="true" />
+            </Link>
+          </div>
+          {primaryAddHref && (
+            <Link href={primaryAddHref}
+              className="inline-flex min-h-11 items-center gap-2 whitespace-nowrap rounded-lg bg-ocean px-4 py-2 text-sm font-semibold text-white">
+              <Plus size={16} aria-hidden="true" />
+              Add a shift
+            </Link>
+          )}
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 sm:justify-between">
+        {(venueResult.data ?? []).length > 1 && (
+          <form action="/roster" className="flex min-w-0 flex-wrap items-center gap-2">
+            <input type="hidden" name="business" value={workspace.business.id} />
+            {search && <input type="hidden" name="q" value={search} />}
+            <input type="hidden" name="week" value={week} />
+            <label htmlFor="venue-filter" className="text-sm text-muted">Venue</label>
+            <select id="venue-filter" name="venue" defaultValue={workspace.venue.id}
+              className="max-w-full rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-ocean">
+              {venueResult.data?.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
+            </select>
+            <button type="submit" className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
+              Switch venue
+            </button>
+          </form>
+        )}
+        <form action="/roster" className="flex min-w-0 flex-wrap items-center gap-2">
+          <input type="hidden" name="business" value={workspace.business.id} />
+          {search && <input type="hidden" name="q" value={search} />}
+          <input type="hidden" name="week" value={week} />
+          <input type="hidden" name="venue" value={workspace.venue.id} />
+          <CollapsedFields departments={collapsed} />
+          <label htmlFor="department-filter" className="text-sm text-muted">
+            Department
+          </label>
+          <select
+            className="max-w-full rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-ocean"
+            defaultValue={selectedDepartment ?? (departments.length > 1 ? "all" : "")}
+            id="department-filter"
+            name="department"
+          >
+            {departments.length > 1 && <option value="all">All departments</option>}
+            {departments.map((department) => (
+              <option key={department.id} value={department.id}>
+                {department.name}{department.active ? "" : " (inactive)"}
+              </option>
+            ))}
+          </select>
+          <button type="submit" className="min-h-11 rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
+            Apply filter
+          </button>
+        </form>
+        <div className="ml-auto flex items-center gap-2 text-sm text-muted">
+          <UsersRound size={17} aria-hidden="true" />
+          <span>
+            {scheduleShifts.filter((shift) => shift.employee_id).length} assigned
+            <span className="mx-2 text-muted/40">·</span>
+            {scheduleShifts.filter((shift) => !shift.employee_id).length} open
+          </span>
+        </div>
+      </div>
+
+      <form action="/roster" aria-label="Choose schedule view" className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-line bg-white p-2">
+       <input type="hidden" name="business" value={workspace.business.id} />
+       <input type="hidden" name="venue" value={workspace.venue.id} />
+       <input type="hidden" name="week" value={week} />
+       {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
+       {search && <input type="hidden" name="q" value={search} />}
+       <CollapsedFields departments={collapsed} />
+       <div className="min-w-0 flex-1 text-sm font-medium">
+         <label htmlFor="roster-day-view">Schedule view</label>
+         <select id="roster-day-view" name="day" defaultValue={selectedDay ?? "week"}
+           className="mt-1 block min-h-11 w-full min-w-0 rounded-lg border border-line bg-white px-3">
+           <option value="week">Full week</option>
+           {days.map((date) => <option key={date} value={date}>{formatDay(date)}</option>)}
+         </select>
+       </div>
+       <button type="submit" className="min-h-11 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold">
+         Show schedule
+       </button>
+      </form>
+
+      <details id="roster-tools" open={Boolean(params.q !== undefined || search || params.error || params.saved || params.deleted ||
+        params.published || params.copied || params.ack_requirement || params.edit || params.create_start ||
+        params.offer || params.review)}
+        className="mt-2 rounded-lg border border-line bg-white">
+        <summary className="min-h-11 cursor-pointer px-3 py-2 text-sm font-semibold text-ocean focus-visible:outline-2 focus-visible:outline-ocean">
+          More roster tools
+        </summary>
+        <div className="space-y-3 border-t border-line p-3">
+          <p className="text-sm text-muted">
+            This editing and publication roster uses Monday–Sunday operational weeks.{" "}
+            <Link href={`/roster/planning?${new URLSearchParams({
+              business: workspace.business.id, venue: workspace.venue.id, date: week,
+            })}`} className="font-semibold text-ocean underline">
+              Open venue planning view
+            </Link>
+          </p>
+          <div className="flex flex-wrap gap-x-5">
             <Link href={helpHref(workspace.membership.role === "employee" ? "employee" : "rosters", workspace.business.id, workspace.venue.id)}
               className="inline-flex min-h-11 items-center text-sm font-semibold text-ocean underline">
               Help with rosters
@@ -758,110 +889,6 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
               Conversation history
             </Link>
           </div>
-          <p className="text-sm text-muted">
-            This editing and publication roster uses Monday–Sunday operational weeks.{" "}
-            <Link href={`/roster/planning?${new URLSearchParams({
-              business: workspace.business.id, venue: workspace.venue.id, date: week,
-            })}`} className="inline-flex min-h-11 items-center font-semibold text-ocean underline">
-              Open venue planning view
-            </Link>
-          </p>
-        </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-white p-2 sm:justify-start">
-          <Link
-            id="roster-previous-week"
-            href={rosterViewHref(previousWeek, filterDepartment, collapsed, workspace.venue.id)}
-            aria-label="Previous week"
-            className="rounded-lg p-2 text-muted hover:bg-soft-sea"
-          >
-            <ArrowLeft size={18} aria-hidden="true" />
-          </Link>
-          <div className="min-w-[155px] text-center text-sm font-semibold">
-            {weekLabel}
-          </div>
-          <Link
-            id="roster-next-week"
-            href={rosterViewHref(nextWeek, filterDepartment, collapsed, workspace.venue.id)}
-            aria-label="Next week"
-            className="rounded-lg p-2 text-muted hover:bg-soft-sea"
-          >
-            <ArrowRight size={18} aria-hidden="true" />
-          </Link>
-        </div>
-      </div>
-
-      <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        {(venueResult.data ?? []).length > 1 && (
-          <form action="/roster" className="flex items-center gap-2">
-            <input type="hidden" name="business" value={workspace.business.id} />
-            {search && <input type="hidden" name="q" value={search} />}
-            <input type="hidden" name="week" value={week} />
-            <label htmlFor="venue-filter" className="text-sm text-muted">Venue</label>
-            <select id="venue-filter" name="venue" defaultValue={workspace.venue.id}
-              className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-ocean">
-              {venueResult.data?.map((venue) => <option key={venue.id} value={venue.id}>{venue.name}</option>)}
-            </select>
-            <button type="submit" className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
-              Switch venue
-            </button>
-          </form>
-        )}
-        <form action="/roster" className="flex items-center gap-2">
-          <input type="hidden" name="business" value={workspace.business.id} />
-          {search && <input type="hidden" name="q" value={search} />}
-          <input type="hidden" name="week" value={week} />
-          <input type="hidden" name="venue" value={workspace.venue.id} />
-          <CollapsedFields departments={collapsed} />
-          <label htmlFor="department-filter" className="text-sm text-muted">
-            Department
-          </label>
-          <select
-            className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium outline-none focus:border-ocean"
-            defaultValue={selectedDepartment ?? (departments.length > 1 ? "all" : "")}
-            id="department-filter"
-            name="department"
-          >
-            {departments.length > 1 && <option value="all">All departments</option>}
-            {departments.map((department) => (
-              <option key={department.id} value={department.id}>
-                {department.name}{department.active ? "" : " (inactive)"}
-              </option>
-            ))}
-          </select>
-          <button type="submit" className="rounded-lg border border-line bg-white px-3 py-2 text-sm font-medium">
-            Apply filter
-          </button>
-        </form>
-        <div className="flex items-center gap-2 text-sm text-muted">
-          <UsersRound size={17} aria-hidden="true" />
-          <span>
-            {scheduleShifts.filter((shift) => shift.employee_id).length} assigned
-            <span className="mx-2 text-muted/40">·</span>
-            {scheduleShifts.filter((shift) => !shift.employee_id).length} open
-          </span>
-        </div>
-      </div>
-
-      <form action="/roster" aria-label="Choose schedule view" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
-       <input type="hidden" name="business" value={workspace.business.id} />
-       <input type="hidden" name="venue" value={workspace.venue.id} />
-       <input type="hidden" name="week" value={week} />
-       {filterDepartment && <input type="hidden" name="department" value={filterDepartment} />}
-       {search && <input type="hidden" name="q" value={search} />}
-       <CollapsedFields departments={collapsed} />
-       <div className="min-w-0 flex-1 text-sm font-medium">
-         <label htmlFor="roster-day-view">Schedule view</label>
-         <select id="roster-day-view" name="day" defaultValue={selectedDay ?? "week"}
-           className="mt-1 block min-h-11 w-full rounded-lg border border-line bg-white px-3">
-           <option value="week">Full week</option>
-           {days.map((date) => <option key={date} value={date}>{formatDay(date)}</option>)}
-         </select>
-       </div>
-       <button type="submit" className="min-h-11 rounded-lg border border-line bg-white px-4 py-2 text-sm font-semibold">
-         Show schedule
-       </button>
-      </form>
-
       <form action="/roster" aria-label="Search team members" className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-line bg-white p-4">
         <input type="hidden" name="business" value={workspace.business.id} />
         <input type="hidden" name="venue" value={workspace.venue.id} />
@@ -1092,6 +1119,8 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
           </p>
         </section>
       )}
+        </div>
+      </details>
 
       <RosterQuickChangeProvider key={`${workspace.business.id}:${workspace.venue.id}:${week}`}
         businessId={workspace.business.id} venueId={workspace.venue.id} week={week}
@@ -1121,6 +1150,64 @@ export default async function RosterPage({ searchParams }: RosterPageProps) {
             </details>
           </div>
           <CalendarDays size={18} className="text-muted" aria-hidden="true" />
+        </div>
+        <div role="region" aria-label="Roster agenda" className="divide-y divide-line sm:hidden">
+          {scheduleDays.map((date) => {
+            const dayTimeline = rosterDayTimeline(date, workspace.venue.timezone);
+            const dayShifts = dayTimeline
+              ? agendaShifts.filter((shift) =>
+                  Date.parse(shift.starts_at) < dayTimeline.endsAt &&
+                  Date.parse(shift.ends_at) > dayTimeline.startsAt,
+                )
+              : agendaShifts.filter((shift) =>
+                  getVenueDate(shift.starts_at, workspace.venue.timezone) === date,
+                );
+            return (
+              <section key={date} aria-labelledby={`roster-agenda-${date}`} className="min-w-0 px-4 py-3">
+                <h3 id={`roster-agenda-${date}`} className="text-sm font-semibold text-ink">
+                  {formatDay(date)}
+                </h3>
+                {dayShifts.length ? (
+                  <ul className="mt-2 space-y-2">
+                    {dayShifts.map((shift) => {
+                      const employeeName = shift.employee_id
+                        ? employeeNames.get(shift.employee_id) ?? "Former team member"
+                        : "Open shift";
+                      const shiftDate = getVenueDate(shift.starts_at, workspace.venue.timezone);
+                      return (
+                        <li key={`${date}:${shift.id}`} className="min-w-0 rounded-lg border border-line bg-white p-3">
+                          <p className="break-words text-sm font-semibold">
+                            {shift.role_title} · {employeeName}
+                          </p>
+                          <p className="mt-1 break-words text-xs text-muted">
+                            {shiftDate < date && "Continues from previous day · "}
+                            {departments.find((department) => department.id === shift.department_id)?.name}
+                            {" · "}{formatTime(shift.starts_at, workspace.venue.timezone)}–{formatTime(shift.ends_at, workspace.venue.timezone)}
+                            {" · "}{shift.is_published ? "Published" : "Draft"}
+                          </p>
+                          <ConflictNotice
+                            label={`Scheduling conflict for ${employeeName}, ${shift.role_title}, ${date}`}
+                            conflicts={conflictsByShift.get(shift.id) ?? []}
+                            open={!shift.employee_id}
+                          />
+                          {shift.requires_acknowledgement && (
+                            <p className="mt-1 text-xs font-semibold text-ocean">
+                              {!shift.is_published ? "Acknowledgement required"
+                                : !acknowledgementStatuses ? "Acknowledgement status unavailable"
+                                  : acknowledgementStatuses.get(shift.id) === null
+                                    ? "Awaiting acknowledgement" : "Acknowledged"}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p className="mt-1 text-sm text-muted">No shifts scheduled.</p>
+                )}
+              </section>
+            );
+          })}
         </div>
         <div className="overflow-x-auto">
           <table className={`w-full ${selectedDay ? "min-w-[360px]" : "min-w-[980px]"} border-collapse text-left`}>

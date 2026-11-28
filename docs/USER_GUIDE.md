@@ -468,7 +468,13 @@ accounts are provisioned by the operator.
 
 ### Rostering
 
-- The weekly people-by-day schedule groups assigned and open shifts by department. Shift blocks use venue-local time; choose a day in **Schedule view** to narrow the timetable on a small screen.
+- The roster toolbar keeps the venue, department and Monday–Sunday week in view.
+  On a phone, **Roster agenda** lists shifts by venue-local day; the detailed
+  timetable remains available below and can be narrowed with **Schedule view**.
+  Managers with access to the selected department can use **Add a shift** to
+  open a draft editor for the selected day at 06:00, or Monday when viewing the
+  full week. Search, shortcuts, reviews, copy, publication and history controls
+  are grouped under **More roster tools**.
 - Create, edit or copy draft shifts, including unassigned shifts. The roster checks overlaps, availability and other configured conflicts.
 - Use drag-and-drop or keyboard alternatives for supported **draft** shift moves and duplication, with preview and guarded undo. The quick-change drawer keeps keyboard focus inside; **Escape** and **Cancel** close it and return focus to the shift control that opened it. Published shifts and review snapshots have separate integrity controls.
 - Publish a roster explicitly; draft changes remain private until publication. Relevant staff receive in-app notices.
@@ -476,19 +482,21 @@ accounts are provisioned by the operator.
 
 #### First shift: from an empty time slot to published
 
-1. Open **Rostering**, select the department and choose a day in **Schedule view**
-   if you want a narrower timetable. In an eligible team-member lane, choose an
+1. Open **Rostering** and select the department. In the detailed timetable,
+   choose a day in **Schedule view** if you want a narrower view, then choose an
    empty **Add at 00:00**, **Add at 06:00**, **Add at 12:00** or **Add at 18:00**
-   slot. The date, time and team member are prefilled. The suggested end is four
-   hours later.
+   slot in an eligible team-member lane. The date, time and team member are
+   prefilled. On a phone, use **Add a shift** to open a draft editor for the
+   selected day at 06:00, or Monday when viewing the full week. The suggested
+   end is four hours later.
 2. Review **Role**, **Team member**, **Starts**, **Ends** and **Break (mins)**.
    Change **Ends** to correct the time, then choose **Save draft shift**. The
    shift remains private while it is a draft. The slot shortcuts are coarse
    six-hour intervals and are hidden where they overlap a shift already shown
    in that lane. For another start time, an open shift or an overnight shift,
-   expand **Add shift manually** and enter the date and times there. If
-   validation fails, the entered values remain; use the field error to correct
-   the input and save again.
+   open **More roster tools**, then expand **Add shift manually** and enter the
+   date and times there. If validation fails, the entered values remain; use
+   the field error to correct the input and save again.
 3. Check the draft block and any conflict warnings. For a further correction,
    choose the draft's edit control and **Update draft shift**. Choose
    **Publish this department** to publish directly, or follow **Submit for
@@ -498,22 +506,26 @@ accounts are provisioned by the operator.
 
 #### Find a team member and use optional shortcuts
 
-1. In **Weekly roster**, enter a name or part of a name in **Find team member**
-   and choose **Search roster**. Matching ignores case and is limited to the
-   people and departments your current access permits. Use **Clear roster search**
+1. In **Weekly roster**, open **More roster tools** and enter a name or part of a
+   name in **Find team member**, then choose **Search roster**. Matching ignores
+   case and is limited to the people and departments your current access
+   permits. Use **Clear roster search**
    to show the permitted rows again. A search can contain up to 100 characters;
    an invalid or repeated search in a link displays an error. If no rows match,
    the roster says **No team members match this search.**
 2. Search changes the display only; it does not narrow totals, open shifts,
-   conflict checks, copies or publication. Review the full selected department
-   before publishing. The search stays with week, department and collapse
-   navigation, but can clear after a roster action saves or publishes.
-3. **Roster keyboard shortcuts** start off. Select **Enable roster shortcuts**
-   to use **Alt+Shift+Left/Right** for the previous/next week and
-   **Alt+Shift+F** to focus team-member search. They apply when focus is in the
-   main roster, not inside forms, text editors or dialogs, and pause while a
-   quick-change preview or deletion confirmation is open. They do not replace
-   the ordinary week links or browser Find. The selection resets on a full page
+   conflict checks, copies or publication. On a phone, assigned shifts in
+   **Roster agenda** follow the search while open shifts remain visible. Review
+   the full selected department before publishing. The search stays with week,
+   department and collapse navigation, but can clear after a roster action
+   saves or publishes.
+3. Open **More roster tools**. **Roster keyboard shortcuts** start off. Select
+   **Enable roster shortcuts** to use **Alt+Shift+Left/Right** for the
+   previous/next week and **Alt+Shift+F** to focus team-member search. They
+   apply when focus is in the main roster, not inside forms, text editors or
+   dialogs, and pause while a quick-change preview or deletion confirmation is
+   open. They do not replace the ordinary week links or browser Find. The
+   selection resets on a full page
    load; turn it off if your browser, device or assistive technology uses those
    keys. These shortcuts have been tested in Chromium, not every browser.
 
@@ -538,13 +550,15 @@ trying again.
    four hours later. Review **Role**, **Team member**, **Starts**, **Ends** and
    **Break (mins)**, then choose **Save draft shift**. These six-hour slot
    shortcuts are hidden where they overlap a shift already shown in that lane.
-   Use **Add shift manually** for another time, an open shift or an overnight
-   shift. On a small screen, use **Schedule view** to show one day. To edit a
+   Open **More roster tools** to use **Add shift manually** for another time, an
+   open shift or an overnight shift. On a phone, **Roster agenda** lists shifts
+   by day; use **Schedule view** to narrow the detailed timetable. To edit a
    draft, choose its edit control and **Update draft shift**. A draft is not
    employee-visible; a planned break is not a recorded paid/unpaid break.
-3. **Copy a previous week** and **Copy into this week** create private editable
-   drafts in the selected department. Review each new shift for current
-   eligibility and conflicts before publication. This is week copying, not a
+3. Open **More roster tools**. **Copy a previous week** and **Copy into this
+   week** create private editable drafts in the selected department. Review
+   each new shift for current eligibility and conflicts before publication.
+   This is week copying, not a
    separate named-template library.
 4. For a quick change, activate the shift's **Move or duplicate** control with
    keyboard/touch, or drag to a team member/day. Choose the action/destination
