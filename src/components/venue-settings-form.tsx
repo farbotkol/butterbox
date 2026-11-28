@@ -4,7 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 import { saveVenueSettingsAction } from "@/app/actions";
-import { FeedbackNotice, FieldError, PendingButton } from "@/components/feedback";
+import { FeedbackNotice } from "@/components/feedback";
 import {
   venueSettingsSaveButtonState,
   venueSettingsFields,
@@ -59,7 +59,7 @@ export function VenueSettingsControl({
           disabled={disabled} aria-invalid={error ? true : undefined}
           aria-describedby={description} className={fieldClass} />
       )}
-      <FieldError id={errorId} className="mt-1 block text-sm">{error}</FieldError>
+      {error && <span id={errorId} role="alert" className="mt-1 block text-sm text-red-800">{error}</span>}
     </label>
   );
 }
@@ -178,10 +178,10 @@ export function VenueSettingsForm({
           </FeedbackNotice>
         )}
         <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-end">
-          <PendingButton type="submit" disabled={button.disabled} pendingLabel="Saving changes..."
+          <button type="submit" disabled={button.disabled}
             className="min-h-11 w-full rounded-lg bg-ocean px-5 py-3 font-semibold text-white disabled:opacity-50 sm:w-auto">
             {button.label}
-          </PendingButton>
+          </button>
         </div>
       </form>
     </SettingsErrorsContext.Provider>
