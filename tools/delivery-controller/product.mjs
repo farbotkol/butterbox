@@ -8,11 +8,17 @@ const overlaps = (a, b) => a === b || a.startsWith(b + '/') || b.startsWith(a + 
   (a.startsWith('supabase/') && b.startsWith('supabase/'));
 
 export function productScope(issue, plannedPaths) {
-  const sections = [...(issue.body ?? '').matchAll(/^##[ \t]+Autonomy scope[ \t]*\r?\n([\s\S]*?)(?=^#{1,2}[ \t]|$(?![\s\S]))/gim)];
+  // Reconciliation appends an audit record, not new authorised scope or criteria.
+  // Only closed completed issues may use the original body for replay; acceptance
+  // still independently verifies the digest, closure actor, evidence and writer.
+  const body = issue.state === 'closed' && issue.state_reason === 'completed'
+    ? (issue.body ?? '').split('\n\n<!-- butterbox-autonomy-reconciled:v1 -->')[0]
+    : (issue.body ?? '');
+  const sections = [...body.matchAll(/^##[ \t]+Autonomy scope[ \t]*\r?\n([\s\S]*?)(?=^#{1,2}[ \t]|$(?![\s\S]))/gim)];
   const paths = sections.length ? sections[0][1].trim().split(/\r?\n/)
     .map(line => /^- `([^`]+)`$/.exec(line.trim())?.[1]?.replace(/\/$/, '')) : plannedPaths;
-  const criteria = parseAcceptanceCriteria(issue.body).map(row => row.description);
-  if (!criteria.length && issue.body?.trim()) criteria.push(issue.title + '\n' + issue.body.trim());
+  const criteria = parseAcceptanceCriteria(body).map(row => row.description);
+  if (!criteria.length && body.trim()) criteria.push(issue.title + '\n' + body.trim());
   return sections.length <= 1 && Array.isArray(paths) && paths.length > 0 && paths.length <= 30 &&
     paths.every(validPath) && new Set(paths).size === paths.length && criteria.length > 0 ?
     { paths, criteria: [...new Set(criteria)], issue: issue.number } : null;

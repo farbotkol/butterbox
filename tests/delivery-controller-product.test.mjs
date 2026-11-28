@@ -368,3 +368,16 @@ test('GitHub error diagnostics preserve known messages and omit arbitrary struct
     /405.*A1:B2.*Pull Request is not mergeable.*PullRequest\/sha\/invalid/.test(error.message) &&
     !error.message.includes('ghp_testSecret'));
 });
+
+
+test('completed product reconciliation does not consume trailing audit evidence as scope', () => {
+  const issue = { number: 346, title: 'Shared feedback', state: 'open',
+    body: '## Acceptance criteria\n- Provide accessible feedback.\n\n## Autonomy scope\n- `src/components`\n- `tests/e2e`' };
+  const original = productScope(issue);
+  assert(original);
+  const body = issue.body + '\n\n<!-- butterbox-autonomy-reconciled:v1 -->\n\nIssue #346 · lease actions_1_1\nDevelopment deployment verified';
+  assert.equal(productScope({ ...issue, body }), null);
+  assert.equal(productScope({ ...issue, body, state: 'closed', state_reason: 'not_planned' }), null);
+  assert.deepEqual(productScope({ ...issue, body, state: 'closed', state_reason: 'completed' }), original);
+  assert.equal(productScope({ ...issue, body: body.replace('src/components', '.github/workflows'), state: 'closed', state_reason: 'completed' }), null);
+});
