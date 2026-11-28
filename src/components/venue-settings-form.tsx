@@ -4,6 +4,7 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import { useRouter } from "next/navigation";
 import { useActionState } from "react";
 import { saveVenueSettingsAction } from "@/app/actions";
+import { FeedbackNotice } from "@/components/feedback";
 import {
   venueSettingsSaveButtonState,
   venueSettingsFields,
@@ -150,31 +151,31 @@ export function VenueSettingsForm({
         <input type="hidden" name="pending_id" value={pendingId ?? ""} />
         <input type="hidden" name="request_id" value={requestId} />
         {state.status === "error" && showResponse && (
-          <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">
+          <FeedbackNotice kind="error" className="mt-5 p-4">
             {state.message ?? "We couldn't save the venue settings. Review the errors and try again."}
             {errors.form ? ` ${errors.form}` : ""}
-          </p>
+          </FeedbackNotice>
         )}
         {state.status === "partial" && showResponse && (
-          <p role="alert" className="mt-5 rounded-lg bg-amber-50 p-4 text-amber-950">
+          <FeedbackNotice kind="warning" className="mt-5 p-4">
             {state.message}{errors.form ? ` ${errors.form}` : ""}
-          </p>
+          </FeedbackNotice>
         )}
         {state.status === "saved" && showResponse && (
-          <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-ocean">
+          <FeedbackNotice kind="success" className="mt-5 p-4">
             All changed venue settings were saved.
-          </p>
+          </FeedbackNotice>
         )}
         {state.status === "unchanged" && showResponse && (
-          <p role="status" className="mt-5 rounded-lg bg-soft-sea p-4 text-ocean">
+          <FeedbackNotice kind="info" className="mt-5 p-4">
             No venue settings needed saving.
-          </p>
+          </FeedbackNotice>
         )}
         {children}
         {!saveAvailable && (
-          <p role="alert" className="mt-5 rounded-lg bg-red-50 p-4 text-red-800">
+          <FeedbackNotice kind="error" className="mt-5 p-4">
             Settings could not be loaded safely. Reload before editing or saving.
-          </p>
+          </FeedbackNotice>
         )}
         <div className="mt-6 flex flex-col gap-3 border-t border-line pt-5 sm:flex-row sm:items-center sm:justify-end">
           <button type="submit" disabled={button.disabled}

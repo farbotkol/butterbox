@@ -1,13 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
+import { PendingButton } from "@/components/feedback";
 
 export function SaveButton({ children, className }: { children: ReactNode; className: string }) {
-  const { pending } = useFormStatus();
-  return <button type="submit" disabled={pending} className={`${className} disabled:opacity-60`}>
-    {pending ? "Saving..." : children}
-  </button>;
+  return <PendingButton className={`${className} disabled:opacity-60`} pendingLabel="Saving...">
+    {children}
+  </PendingButton>;
 }
 
 export function InlineEditor({ label, read, editor, initialEditing = false }: {

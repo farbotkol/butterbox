@@ -2235,7 +2235,8 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     const source = page.getByRole("button", { name: /Move or duplicate Alex Quick, Quick service/ });
     const target = page.locator(`#roster-row-${fohId}-${samId} td`).nth(3).locator("div").first();
     await source.dragTo(target);
-    const panel = page.getByRole("region", { name: "Quick shift change" });
+    const panel = page.getByRole("dialog", { name: "Quick shift change" });
+    const receipt = page.getByRole("region", { name: "Quick shift change" });
     const preview = panel.locator('[aria-label="Shift change preview"]');
     await expect(preview).toContainText("Sam Quick");
     await panel.getByRole("heading", { name: "Quick shift change", exact: true }).focus();
@@ -2244,19 +2245,44 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await expect(panel.getByLabel("Target day")).toHaveValue("2032-04-01");
     await expect(preview).toContainText("unavailable or has approved leave");
     expect((await sourceShift()).starts_at).toBe("2032-03-29T09:00:00+00:00");
-    await preview.getByRole("button", { name: "Apply move" }).click();
-    await expect(panel.getByRole("status")).toContainText("Draft shift moved");
+    let releaseApplyRequest;
+    let applyRequestIntercepted = false;
+    const applyRequestHold = new Promise((resolve) => { releaseApplyRequest = resolve; });
+    await page.route("**/roster*", async (route) => {
+      if (!applyRequestIntercepted && route.request().method() === "POST") {
+        applyRequestIntercepted = true;
+        await applyRequestHold;
+      }
+      await route.continue();
+    });
+    const applying = preview.getByRole("button", { name: "Apply move" }).click();
+    await expect(panel.getByRole("button", { name: "Preview change" })).toBeDisabled();
+    releaseApplyRequest();
+    await applying;
+    await page.unroute("**/roster*");
+    await expect(receipt.getByRole("status")).toHaveCount(1);
+    await expect(receipt.getByRole("status")).toContainText("Draft shift moved");
     expect(await sourceShift()).toMatchObject({
       employee_id: samId, starts_at: "2032-04-01T09:00:00+00:00",
       is_published: false, requires_acknowledgement: true,
     });
-    await panel.getByRole("button", { name: "Undo last quick change" }).click();
-    await expect(panel.getByRole("status")).toHaveText("Draft shift move undone.");
+    await receipt.getByRole("button", { name: "Undo last quick change" }).click();
+    await expect(receipt.getByRole("status")).toHaveCount(1);
+    await expect(receipt.getByRole("status")).toHaveText("Draft shift move undone.");
     expect(await sourceShift()).toMatchObject({
       employee_id: alexId, starts_at: "2032-03-29T09:00:00+00:00", is_published: false,
     });
 
     await source.focus();
+    await page.keyboard.press("Enter");
+    await expect(panel.getByRole("heading", { name: "Quick shift change" })).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(panel.getByRole("button", { name: "Cancel" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(panel.getByLabel("Action")).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
+    await expect(source).toBeFocused();
     await page.keyboard.press("Enter");
     await expect(panel.getByRole("heading", { name: "Quick shift change" })).toBeFocused();
     await panel.getByLabel("Action").focus();
@@ -2278,14 +2304,16 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await panel.getByRole("button", { name: "Preview change" }).click();
     await expect(preview).toContainText("Sam Quick");
     await preview.getByRole("button", { name: "Create draft duplicate" }).click();
-    await expect(panel.getByRole("status")).toContainText("Draft duplicate created");
+    await expect(receipt.getByRole("status")).toHaveCount(1);
+    await expect(receipt.getByRole("status")).toContainText("Draft duplicate created");
     const duplicated = await admin.from("shifts").select("id, is_published, requires_acknowledgement")
       .eq("business_id", businessId).eq("employee_id", samId).eq("role_title", "Quick service");
     expect(duplicated.error).toBeNull();
     expect(duplicated.data).toHaveLength(1);
     expect(duplicated.data[0]).toMatchObject({ is_published: false, requires_acknowledgement: true });
-    await panel.getByRole("button", { name: "Undo last quick change" }).click();
-    await expect(panel.getByRole("status")).toHaveText("Draft duplicate removed.");
+    await receipt.getByRole("button", { name: "Undo last quick change" }).click();
+    await expect(receipt.getByRole("status")).toHaveCount(1);
+    await expect(receipt.getByRole("status")).toHaveText("Draft duplicate removed.");
 
     await page.setViewportSize({ width: 375, height: 812 });
     await source.click();
@@ -2293,6 +2321,8 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     expect((await panel.boundingBox()).width).toBeLessThanOrEqual(375);
     findingsMustBeEmpty(await accessibilityFindings(page, "mobile quick shift change"));
     await panel.getByRole("button", { name: "Cancel" }).click();
+    await expect(panel).toHaveCount(0);
+    await expect(source).toBeFocused();
     const workerContext = await browser.newContext({ baseURL: appUrl });
     contexts.push(workerContext);
     const worker = await workerContext.newPage();
@@ -6288,7 +6318,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await expect(page.getByText("Automatic selection checks qualifications, overlaps, submitted availability, date blocks and approved leave. Unsubmitted availability is unknown.")).toBeVisible();
     await page.getByRole("button", { name: "Save draft shift" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("No eligible worker");
+    await expect(page.getByRole("form", { name: "Add draft shift" }).getByRole("alert")).toContainText("No eligible worker");
     const none = await admin.from("shifts").select("id").eq("business_id", businessId);
     expect(none.error).toBeNull();
     expect(none.data).toHaveLength(0);
@@ -6337,7 +6367,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await page.locator('input[name="role_title"]').fill("Barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await page.getByRole("button", { name: "Save draft shift" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("No eligible worker");
+    await expect(page.getByRole("form", { name: "Add draft shift" }).getByRole("alert")).toContainText("No eligible worker");
 
     const signedIn = createClient(apiUrl, anonKey, options);
     const login = await signedIn.auth.signInWithPassword({ email: `roles-owner-${suffix}@example.test`, password });
@@ -7447,10 +7477,31 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await form.getByLabel("Role").fill("");
     await form.getByLabel("Starts").fill("");
     await form.getByLabel("Break (mins)").fill("241");
-    await form.getByRole("button", { name: "Update draft shift" }).click();
+    let releaseFirstSubmit;
+    let firstPostIntercepted = false;
+    const firstPostHold = new Promise((resolve) => { releaseFirstSubmit = resolve; });
+    await page.route("**/roster*", async (route) => {
+      if (!firstPostIntercepted && route.request().method() === "POST") {
+        firstPostIntercepted = true;
+        await firstPostHold;
+      }
+      await route.continue();
+    });
+    const submit = form.locator('button[type="submit"]');
+    await expect(submit).toHaveText("Update draft shift");
+    const firstSubmit = submit.click();
+    await expect(submit).toHaveText("Saving...");
+    await expect(submit).toBeDisabled();
+    releaseFirstSubmit();
+    await firstSubmit;
+    await page.unroute("**/roster*");
     await expect(form.getByText("Enter a role of up to 80 characters.")).toBeVisible();
     await expect(form.getByText("Enter a valid start date and time.")).toBeVisible();
     await expect(form.getByText("Enter a whole number from 0 to 240 minutes.")).toBeVisible();
+    await expect(form.getByLabel("Role")).toHaveAttribute("aria-invalid", "true");
+    await expect(form.getByLabel("Role")).toHaveAttribute("aria-describedby", "shift-role-error");
+    await expect(form.getByLabel("Role")).toHaveValue("");
+    await expect(form.getByLabel("Starts")).toHaveValue("");
     await expect(form.getByLabel("Break (mins)")).toHaveValue("241");
 
     await form.getByLabel("Role").fill("Changed server");
@@ -7459,6 +7510,7 @@ test("draft shifts can be created and edited with inline errors in permitted ven
     await form.getByLabel("Break (mins)").fill("20");
     await form.getByRole("button", { name: "Update draft shift" }).click();
     await expect(form.getByText("That employee already has a shift during this time.")).toBeVisible();
+    await expect(form.getByRole("button", { name: "Update draft shift" })).toBeEnabled();
     await expect(form.getByLabel("Role")).toHaveValue("Changed server");
     await expect(form.getByLabel("Starts")).toHaveValue("2032-03-16T09:30");
     const unchanged = await admin.from("shifts").select("role_title").eq("id", draftId).single();

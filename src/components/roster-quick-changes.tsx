@@ -7,6 +7,7 @@ import {
 import {
   applyQuickChangeAction, previewQuickChangeAction, undoQuickChangeAction,
 } from "@/app/roster/quick-change-actions";
+import { FeedbackNotice, FocusManagedDrawer, PendingButton, Skeleton } from "@/components/feedback";
 import { formatDay, formatTime, getVenueDate } from "@/lib/dates";
 import {
   quickChangeBlockingMessages, quickChangePreviewPayload, quickChangeWarningMessage,
@@ -69,13 +70,7 @@ export function RosterQuickChangeProvider({
   const [notice, setNotice] = useState<string | null>(null);
   const [uncertain, setUncertain] = useState<"apply" | "undo" | null>(null);
   const [pending, startTransition] = useTransition();
-  const headingRef = useRef<HTMLHeadingElement>(null);
-  const statusRef = useRef<HTMLDivElement>(null);
-  const selectedShiftId = selection?.source.id;
-
-  useEffect(() => {
-    if (selectedShiftId) headingRef.current?.focus();
-  }, [selectedShiftId]);
+  const statusRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     if (notice) statusRef.current?.focus();
@@ -185,6 +180,13 @@ export function RosterQuickChangeProvider({
     });
   }
 
+  function closeSelection() {
+    if (pending || uncertain) return;
+    setSelection(null);
+    setPreview(null);
+    setError(null);
+  }
+
   const availableWorkers = selection
     ? workers.filter((worker) => worker.departmentId === selection.source.departmentId)
     : [];
@@ -204,104 +206,119 @@ export function RosterQuickChangeProvider({
         Drag this control onto a team member and day, or activate it to select the destination with a keyboard.
         A preview appears before any change is applied.
       </p>
-      {(selection || undo || notice || error) && (
-        <section aria-label="Quick shift change" data-roster-editor={selection ? true : undefined}
-          className="mt-6 rounded-lg border border-ocean/25 bg-white p-4 shadow-sm">
-          {selection && (
-            <>
-              <h2 ref={headingRef} tabIndex={-1} className="text-base font-semibold focus:outline-2 focus:outline-ocean">
-                Quick shift change
-              </h2>
-              <p className="mt-1 text-sm text-muted">{selection.source.label}</p>
-              {selection.source.isPublished && (
-                <p className="mt-1 text-sm text-muted">Published shifts can only be duplicated as drafts.</p>
-              )}
-              <div className="mt-4 flex flex-wrap items-end gap-3">
-                <div>
-                  <label htmlFor="quick-change-operation" className="block text-sm font-medium">Action</label>
-                  <select id="quick-change-operation" value={selection.operation} disabled={pending || !!uncertain}
-                    onChange={(event) => updateSelection({
-                      operation: event.target.value === "duplicate" ? "duplicate" : "move",
-                    })}
-                    className="mt-1 min-h-11 rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
-                    <option value="move" disabled={selection.source.isPublished}>Move draft</option>
-                    <option value="duplicate">Duplicate as draft</option>
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="quick-change-date" className="block text-sm font-medium">Target day</label>
-                  <select id="quick-change-date" value={selection.targetDate} disabled={pending || !!uncertain}
-                    onChange={(event) => updateSelection({ targetDate: event.target.value })}
-                    className="mt-1 min-h-11 rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
-                    {days.map((day) => <option key={day} value={day}>{formatDay(day)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label htmlFor="quick-change-worker" className="block text-sm font-medium">Target team member</label>
-                  <select id="quick-change-worker" value={selection.targetEmployeeId ?? ""}
-                    disabled={pending || !!uncertain}
-                    onChange={(event) => updateSelection({ targetEmployeeId: event.target.value || null })}
-                    className="mt-1 min-h-11 max-w-full rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
-                    <option value="">Open shift</option>
-                    {availableWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
-                  </select>
-                </div>
-                <button type="button" disabled={pending || !!uncertain}
-                  onClick={() => requestPreview(selection)}
-                  className="min-h-11 rounded-lg border border-ocean px-4 text-sm font-semibold text-ocean disabled:opacity-60">
-                  {pending && !preview ? "Checking..." : "Preview change"}
-                </button>
-                <button type="button" disabled={pending || !!uncertain}
-                  onClick={() => { setSelection(null); setPreview(null); setError(null); }}
-                  className="min-h-11 rounded-lg px-3 text-sm font-semibold text-muted disabled:opacity-60">
-                  Cancel
-                </button>
-              </div>
-              {preview && (
-                <div aria-label="Shift change preview" aria-live="polite" className="mt-4 rounded-lg bg-cloud p-3 text-sm">
-                  <p className="font-semibold">
-                    {preview.operation === "move" ? "Move" : "Duplicate"} {preview.roleTitle} to{" "}
-                    {preview.targetEmployeeName ?? "an open shift"} on {formatDay(preview.targetDate)}
-                  </p>
-                  <p className="mt-1">
-                    <time dateTime={preview.startsAt}>{formatDay(startDay)} {formatTime(preview.startsAt, timezone)}</time>
-                    {" - "}
-                    <time dateTime={preview.endsAt}>
-                      {endDay !== startDay && `${formatDay(endDay)} `}{formatTime(preview.endsAt, timezone)}
-                    </time>
-                    {" "}({timezone.replaceAll("_", " ")}).
-                  </p>
-                  {preview.blocking.map((reason) => (
-                    <p key={reason} role="alert" className="mt-2 font-semibold text-red-800">
-                      {quickChangeBlockingMessages[reason]}
-                    </p>
-                  ))}
-                  {preview.warnings.map((reason) => (
-                    <p key={reason} className="mt-2 font-semibold text-amber-900">
-                      {quickChangeWarningMessage(reason, preview)}
-                    </p>
-                  ))}
-                  <button type="button" onClick={apply}
-                    disabled={pending || preview.blocking.length > 0 || uncertain === "undo"}
-                    className="mt-3 min-h-11 rounded-lg bg-ocean px-4 text-sm font-semibold text-white disabled:opacity-60">
-                    {pending ? "Applying..." : uncertain === "apply" ? "Retry same request"
-                      : preview.operation === "move" ? "Apply move" : "Create draft duplicate"}
-                  </button>
-                </div>
-              )}
-            </>
+      {selection && (
+        <FocusManagedDrawer labelledBy="quick-change-heading" closeDisabled={pending || !!uncertain}
+          onClose={closeSelection}>
+          <h2 id="quick-change-heading" data-drawer-initial-focus tabIndex={-1}
+            className="text-base font-semibold focus:outline-2 focus:outline-ocean">
+            Quick shift change
+          </h2>
+          <p className="mt-1 text-sm text-muted">{selection.source.label}</p>
+          {selection.source.isPublished && (
+            <p className="mt-1 text-sm text-muted">Published shifts can only be duplicated as drafts.</p>
           )}
-          {notice && (
-            <div ref={statusRef} role="status" tabIndex={-1} className="mt-2 text-sm font-semibold text-ocean">
-              {notice}
+          <div className="mt-4 flex flex-wrap items-end gap-3">
+            <div>
+              <label htmlFor="quick-change-operation" className="block text-sm font-medium">Action</label>
+              <select id="quick-change-operation" value={selection.operation} disabled={pending || !!uncertain}
+                onChange={(event) => updateSelection({
+                  operation: event.target.value === "duplicate" ? "duplicate" : "move",
+                })}
+                className="mt-1 min-h-11 rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
+                <option value="move" disabled={selection.source.isPublished}>Move draft</option>
+                <option value="duplicate">Duplicate as draft</option>
+              </select>
             </div>
+            <div>
+              <label htmlFor="quick-change-date" className="block text-sm font-medium">Target day</label>
+              <select id="quick-change-date" value={selection.targetDate} disabled={pending || !!uncertain}
+                onChange={(event) => updateSelection({ targetDate: event.target.value })}
+                className="mt-1 min-h-11 rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
+                {days.map((day) => <option key={day} value={day}>{formatDay(day)}</option>)}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="quick-change-worker" className="block text-sm font-medium">Target team member</label>
+              <select id="quick-change-worker" value={selection.targetEmployeeId ?? ""}
+                disabled={pending || !!uncertain}
+                onChange={(event) => updateSelection({ targetEmployeeId: event.target.value || null })}
+                className="mt-1 min-h-11 max-w-full rounded-lg border border-line bg-white px-3 text-sm disabled:opacity-60">
+                <option value="">Open shift</option>
+                {availableWorkers.map((worker) => <option key={worker.id} value={worker.id}>{worker.name}</option>)}
+              </select>
+            </div>
+            <PendingButton type="button" pending={pending && !preview} pendingLabel="Checking..."
+              disabled={pending || !!uncertain} onClick={() => requestPreview(selection)}
+              className="min-h-11 rounded-lg border border-ocean px-4 text-sm font-semibold text-ocean disabled:opacity-60">
+              Preview change
+            </PendingButton>
+            <button type="button" disabled={pending || !!uncertain} onClick={closeSelection}
+              className="min-h-11 rounded-lg px-3 text-sm font-semibold text-muted disabled:opacity-60">
+              Cancel
+            </button>
+          </div>
+          {pending && !preview && (
+            <div aria-hidden="true" className="mt-4 space-y-2 rounded-lg bg-cloud p-3">
+              <Skeleton className="h-4 w-2/3" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          )}
+          {preview && (
+            <div aria-label="Shift change preview" aria-live="polite" className="mt-4 rounded-lg bg-cloud p-3 text-sm">
+              <p className="font-semibold">
+                {preview.operation === "move" ? "Move" : "Duplicate"} {preview.roleTitle} to{" "}
+                {preview.targetEmployeeName ?? "an open shift"} on {formatDay(preview.targetDate)}
+              </p>
+              <p className="mt-1">
+                <time dateTime={preview.startsAt}>{formatDay(startDay)} {formatTime(preview.startsAt, timezone)}</time>
+                {" - "}
+                <time dateTime={preview.endsAt}>
+                  {endDay !== startDay && `${formatDay(endDay)} `}{formatTime(preview.endsAt, timezone)}
+                </time>
+                {" "}({timezone.replaceAll("_", " ")}).
+              </p>
+              {preview.blocking.map((reason) => (
+                <p key={reason} role="alert" className="mt-2 font-semibold text-red-800">
+                  {quickChangeBlockingMessages[reason]}
+                </p>
+              ))}
+              {preview.warnings.map((reason) => (
+                <p key={reason} className="mt-2 font-semibold text-amber-900">
+                  {quickChangeWarningMessage(reason, preview)}
+                </p>
+              ))}
+              <PendingButton type="button" pending={pending} pendingLabel="Applying..." onClick={apply}
+                disabled={preview.blocking.length > 0 || uncertain === "undo"}
+                className="mt-3 min-h-11 rounded-lg bg-ocean px-4 text-sm font-semibold text-white disabled:opacity-60">
+                {uncertain === "apply" ? "Retry same request"
+                  : preview.operation === "move" ? "Apply move" : "Create draft duplicate"}
+              </PendingButton>
+            </div>
+          )}
+          {error && <FeedbackNotice kind="error" className="mt-3 p-3 text-sm">{error}</FeedbackNotice>}
+          {uncertain && (
+            <p className="mt-2 text-sm text-muted">
+              Retry the same request above, or{" "}
+              <a className="font-semibold underline" href={`/roster?${reloadQuery}`}>reload the roster</a> and check the result.
+            </p>
+          )}
+        </FocusManagedDrawer>
+      )}
+      {!selection && (undo || notice || error) && (
+        <section aria-label="Quick shift change" className="mt-6 rounded-lg border border-ocean/25 bg-white p-4 shadow-sm">
+          {notice && (
+            <FeedbackNotice kind="success" focusRef={statusRef} tabIndex={-1}
+              className="mt-2 p-3 text-sm font-semibold">
+              {notice}
+            </FeedbackNotice>
           )}
           {undo && (
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <button type="button" onClick={undoChange} disabled={pending || uncertain === "apply"}
+              <PendingButton type="button" pending={pending} pendingLabel="Working..."
+                onClick={undoChange} disabled={uncertain === "apply"}
                 className="min-h-11 rounded-lg border border-ocean px-4 text-sm font-semibold text-ocean disabled:opacity-60">
-                {pending ? "Working..." : uncertain === "undo" ? "Retry undo" : "Undo last quick change"}
-              </button>
+                {uncertain === "undo" ? "Retry undo" : "Undo last quick change"}
+              </PendingButton>
               <button type="button" disabled={pending || !!uncertain}
                 onClick={() => { setUndo(null); setNotice(null); setError(null); }}
                 className="min-h-11 rounded-lg px-3 text-sm font-semibold text-muted disabled:opacity-60">
@@ -309,7 +326,7 @@ export function RosterQuickChangeProvider({
               </button>
             </div>
           )}
-          {error && <p role="alert" className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+          {error && <FeedbackNotice kind="error" className="mt-3 p-3 text-sm">{error}</FeedbackNotice>}
           {uncertain && (
             <p className="mt-2 text-sm text-muted">
               Retry the same request above, or{" "}
