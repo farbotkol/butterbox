@@ -65,7 +65,7 @@ export async function verifyAssessmentConnectivity(token) {
     throw integrationFailure('Independent assessment connectivity probe', 'incomplete-evidence');
 }
 
-export async function copilotRepair({ repository, token, head, scope, diagnostic, attempt }) {
+export async function copilotRepair({ repository, token, head, scope, diagnostic, attempt, report = () => {} }) {
   if (repository !== 'farbotkol/butterbox' || !isSha(head)) throw new Error('Invalid repair checkout');
   const root = await mkdtemp(join(tmpdir(), 'butterbox-repair-'));
   const checkout = join(root, 'source');
@@ -98,11 +98,13 @@ export async function copilotRepair({ repository, token, head, scope, diagnostic
       .filter(path => path && path !== dataPath);
     const edits = [...untracked.map(path => ['A', path])];
     for (let i = 0; i < changes.length; i += 2) edits.push([changes[i], changes[i + 1]]);
+    const reject = reason => { report('PRODUCT_REPAIR_REJECTED: ' + reason); return null; };
     if (edits.length > 30 || new Set(edits.map(([, path]) => path)).size !== edits.length ||
       edits.some(([status, path]) => !['A', 'M', 'D'].includes(status) || !validPath(path) ||
         /(?:^supabase\/|policy|security|payroll)/i.test(path) ||
-        !scope.paths.some(area => path === area || path.startsWith(area + '/')))) return null;
+        !scope.paths.some(area => path === area || path.startsWith(area + '/')))) return reject('path, status, or edit-count gate');
     const additions = [], deletions = [];
+    let totalBytes = 0;
     for (const [status, path] of edits) {
       if (status === 'D') {
         deletions.push({ path });
@@ -110,9 +112,18 @@ export async function copilotRepair({ repository, token, head, scope, diagnostic
       }
       const file = join(checkout, path);
       const stat = await lstat(file);
-      if (!stat.isFile() || stat.size > 100000 || (stat.mode & 0o111)) return null;
+      if (!stat.isFile() || (stat.mode & 0o111)) return reject('non-regular or executable file');
+      // Permit bounded edits to already large existing files, not arbitrary new large files.
+      let limit = 100000;
+      if (status === 'M' && stat.size > limit) {
+        const original = Number((await git('cat-file', '-s', 'HEAD:' + path)).stdout.trim());
+        if (!Number.isSafeInteger(original) || original < 0) return reject('invalid original file size');
+        limit = Math.min(1000000, Math.max(limit, original + 32768));
+      }
+      totalBytes += stat.size;
+      if (stat.size > limit || totalBytes > 1500000) return reject('bounded file or aggregate byte limit');
       const content = await readFile(file);
-      if (content.includes(0)) return null;
+      if (content.includes(0)) return reject('binary content');
       additions.push({ path, contents: content.toString('base64') });
     }
     return { additions, deletions };

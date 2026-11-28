@@ -217,9 +217,13 @@ test('a confirmed repair with no changes is recorded and never publishes', async
 test('a confirmed out-of-scope repair is recorded and never publishes', async () => {
   const { input, history, effects } = repairFixture();
   input.propose = async () => null;
-  assert.equal(await repairProduct(input), 'unsafe');
-  assert.match(history[0].body, /"outcome":"out-of-scope"/);
-  assert.deepEqual(effects, ['confirmed']);
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    assert.equal(await repairProduct(input), attempt === 5 ? 'exhausted' : 'no-change');
+  }
+  assert.equal(await repairProduct(input), 'exhausted');
+  assert.equal(history.length, 5);
+  assert(history.every(row => /"outcome":"out-of-scope"/.test(row.body)));
+  assert.deepEqual(effects, Array(5).fill('confirmed'));
 });
 
 test('an acknowledged rerun without a new attempt is not dispatched twice', async () => {

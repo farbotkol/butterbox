@@ -139,7 +139,7 @@ async function main() {
   const repair = input => repairProduct({ ...input, gh, paged, report,
     logs: jobId => downloadJobLog({ repository: repo, jobId, token: ghToken }),
     propose: (diagnostic, attempt) => copilotRepair({
-      repository: repo, token: ghToken, head: input.pr.head.sha, scope: input.scope, diagnostic, attempt,
+      repository: repo, token: ghToken, head: input.pr.head.sha, scope: input.scope, diagnostic, attempt, report,
     }),
     async publish(fileChanges) {
       const response = await request('https://api.github.com/graphql', {
