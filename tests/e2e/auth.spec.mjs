@@ -6318,7 +6318,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await expect(page.getByText("Automatic selection checks qualifications, overlaps, submitted availability, date blocks and approved leave. Unsubmitted availability is unknown.")).toBeVisible();
     await page.getByRole("button", { name: "Save draft shift" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("No eligible worker");
+    await expect(page.getByRole("form", { name: "Add draft shift" }).getByRole("alert")).toContainText("No eligible worker");
     const none = await admin.from("shifts").select("id").eq("business_id", businessId);
     expect(none.error).toBeNull();
     expect(none.data).toHaveLength(0);
@@ -6367,7 +6367,7 @@ test("qualified roles and primary role control restricted automatic assignment",
     await page.locator('input[name="role_title"]').fill("Barista");
     await page.locator('select[name="employee_id"]').selectOption("auto");
     await page.getByRole("button", { name: "Save draft shift" }).click();
-    await expect(page.locator('p[role="alert"]')).toContainText("No eligible worker");
+    await expect(page.getByRole("form", { name: "Add draft shift" }).getByRole("alert")).toContainText("No eligible worker");
 
     const signedIn = createClient(apiUrl, anonKey, options);
     const login = await signedIn.auth.signInWithPassword({ email: `roles-owner-${suffix}@example.test`, password });
@@ -7487,7 +7487,8 @@ test("draft shifts can be created and edited with inline errors in permitted ven
       }
       await route.continue();
     });
-    const submit = form.getByRole("button", { name: "Update draft shift" });
+    const submit = form.locator('button[type="submit"]');
+    await expect(submit).toHaveText("Update draft shift");
     const firstSubmit = submit.click();
     await expect(submit).toHaveText("Saving...");
     await expect(submit).toBeDisabled();
