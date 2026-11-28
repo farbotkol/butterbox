@@ -349,6 +349,9 @@ for (const role of ["owner", "foh_manager", "boh_manager", "employee"]) {
         business: state.plan.businessId, venue: state.plan.venueId, week: workflow.week ?? state.plan.currentWeek,
       });
       await page.goto(`${workflow.route}?${params}`);
+      if (workflow.route === "/roster") {
+        await page.getByText("More roster tools", { exact: true }).click();
+      }
       const link = page.getByRole("link", { name: workflow.label, exact: true });
       await expect(link).toBeVisible();
       expect(new URL(await link.getAttribute("href"), page.url()).searchParams.get("business")).toBe(state.plan.businessId);

@@ -88,9 +88,19 @@ async function followEmailLink(page, link, next) {
   await page.goto(next);
 }
 
+async function ensureRosterToolsOpen(page) {
+  const disclosure = page.locator("details#roster-tools");
+  await expect(disclosure).toHaveCount(1);
+  if (!(await disclosure.evaluate((element) => element.open))) {
+    await disclosure.locator(":scope > summary").click();
+  }
+  await expect(disclosure).toHaveAttribute("open", "");
+}
+
 // The roster's manual editor is a disclosure. Reopening by clicking unconditionally
 // can close it after a successful save, when the route opens it automatically.
 async function ensureManualRosterEditorOpen(page) {
+  await ensureRosterToolsOpen(page);
   const disclosure = page.locator("details").filter({ has: page.locator("form#shift-editor") }).last();
   await expect(disclosure).toHaveCount(1);
   if (!(await disclosure.evaluate((element) => element.open))) {
@@ -2033,9 +2043,31 @@ test("roster timetable supports slot creation, time correction, publication and 
       auth_user_id: users[1], name: "Jamie Timetable", role_title: "Server",
     })).error).toBeNull();
 
-    await page.setViewportSize({ width: 390, height: 844 });
+    await page.setViewportSize({ width: 320, height: 800 });
     await signIn(page, `roster-timetable-manager-${suffix}@example.test`, password);
     await page.goto(roster);
+    const emptyAgenda = page.getByRole("region", { name: "Roster agenda", exact: true });
+    await expect(emptyAgenda).toBeVisible();
+    const emptyDays = emptyAgenda.getByText("No shifts scheduled.", { exact: true });
+    await expect(emptyDays).toHaveCount(7);
+    for (let day = 0; day < 7; day += 1) {
+      await expect(emptyDays.nth(day)).toBeVisible();
+    }
+    const primaryAdd = page.getByRole("link", { name: "Add a shift", exact: true });
+    await expect(primaryAdd).toBeVisible();
+    await expect(page.getByText("Timetable venue · Front of House · Monday–Sunday", { exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await primaryAdd.click();
+    await expect(page).toHaveURL((url) =>
+      url.searchParams.get("department") === departmentId &&
+      url.searchParams.get("create_date") === "2032-03-29" &&
+      url.searchParams.get("create_start") === "2032-03-29T06:00" &&
+      url.hash === "#shift-editor");
+    await expect(page.getByLabel("Starts", { exact: true })).toHaveValue("2032-03-29T06:00");
+    await page.goto(roster);
+    await page.setViewportSize({ width: 1024, height: 768 });
+    await expect(page.getByRole("columnheader", { name: "Team member", exact: true })).toBeInViewport();
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.getByLabel("Schedule view", { exact: true }).selectOption("2032-03-29");
     await page.getByRole("button", { name: "Show schedule", exact: true }).click();
     await expect(page.locator("thead tr th")).toHaveCount(2);
@@ -2156,6 +2188,7 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await page.setViewportSize({ width: 1440, height: 900 });
     await signIn(page, `quick-browser-manager-${suffix}@example.test`, password);
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     const shortcuts = page.getByRole("checkbox", { name: "Enable roster shortcuts", exact: true });
     await expect(shortcuts).not.toBeChecked();
     await page.locator("#main-content").focus();
@@ -2169,6 +2202,12 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await page.keyboard.press("Alt+Shift+ArrowRight");
     expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-29");
     await page.getByRole("button", { name: "Search roster", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    const agenda = page.getByRole("region", { name: "Roster agenda", exact: true });
+    await expect(agenda.locator("li").filter({ hasText: "Alex Quick" })).toHaveCount(1);
+    await expect(agenda.locator("li").filter({ hasText: "Sam Quick" })).toHaveCount(0);
+    await expect(agenda.locator("li").filter({ hasText: "Open coverage" })).toHaveCount(1);
+    await page.setViewportSize({ width: 1440, height: 900 });
     await expect(page.locator(`#roster-row-${fohId}-${alexId}`)).toBeVisible();
     await expect(page.locator(`#roster-row-${fohId}-${samId}`)).toHaveCount(0);
     await expect(page.getByText("2 assigned", { exact: false })).toContainText("1 open");
@@ -2189,6 +2228,7 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
       url.searchParams.get("q") === "aLeX" && url.searchParams.get("business") === businessId);
     await page.getByRole("link", { name: "Clear roster search", exact: true }).click();
     await expect(page.getByLabel("Find team member", { exact: true })).toHaveValue("");
+    await ensureRosterToolsOpen(page);
     await shortcuts.check();
     await page.locator("#main-content").focus();
     const findPrevented = await page.locator("#main-content").evaluate((element) => {
@@ -2230,6 +2270,7 @@ test("quick roster changes preview drag targets, support keyboard and undo on mo
     await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
     await expect(page.getByText("Mira Outside", { exact: true })).toHaveCount(0);
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     await expect(shortcuts).not.toBeChecked();
     await shortcuts.check();
     const source = page.getByRole("button", { name: /Move or duplicate Alex Quick, Quick service/ });
@@ -4980,6 +5021,7 @@ test("venue planning weeks remain scoped, prospective and accessible on mobile",
     await expect(page.getByText("2032-03-21 to 2032-03-27")).toBeVisible();
     await page.getByRole("link", { name: "Operational week from 2032-03-15" }).click();
     await expect(page.getByRole("heading", { name: "Weekly roster" })).toBeVisible();
+    await ensureRosterToolsOpen(page);
     await expect(page.getByText("This editing and publication roster uses Monday–Sunday operational weeks.")).toBeVisible();
     expect(new URL(page.url()).searchParams.get("week")).toBe("2032-03-15");
     await page.goto(`/roster/planning?business=${businessId}&venue=${venueId}&date=2031-02-29`);
@@ -5112,6 +5154,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     await manager.goto(settings);
     await expect(manager.getByRole("form", { name: "Venue settings" })).toHaveCount(0);
     await manager.goto(roster);
+    await ensureRosterToolsOpen(manager);
     await expect(manager.getByRole("button", { name: "Publish this department" })).toHaveCount(0);
     await manager.getByRole("button", { name: "Submit for review" }).click();
     await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
@@ -5131,6 +5174,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
       ends_at: "2032-03-16T13:00:00Z", break_minutes: 0,
     })).error).toBeNull();
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     let ownerReview = page.locator(firstHash);
     await expect(ownerReview).toContainText("Reviewed service");
     await expect(ownerReview).not.toContainText("Later open draft");
@@ -5157,10 +5201,12 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     await expect(worker.getByRole("status")).toHaveText("Shift acknowledged.");
 
     await manager.goto(roster);
+    await ensureRosterToolsOpen(manager);
     await manager.getByRole("button", { name: "Submit for review" }).click();
     await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
     const secondHash = new URL(manager.url()).hash;
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     ownerReview = page.locator(secondHash);
     await expect(ownerReview).toContainText("Later open draft");
     await expect(ownerReview).toContainText("Open shift");
@@ -5180,6 +5226,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     await expect(page.getByRole("list", { name: "Sensitive action history" })).toContainText("Coverage changed");
 
     await manager.goto(roster);
+    await ensureRosterToolsOpen(manager);
     await manager.getByRole("button", { name: "Submit for review" }).click();
     await expect(manager.getByRole("status")).toContainText("Roster submitted for review");
     const thirdHash = new URL(manager.url()).hash;
@@ -5188,6 +5235,7 @@ test("owners and scoped managers review roster snapshots with mobile-safe audite
     await policy.getByRole("button", { name: "Save changes" }).click();
     await expect(page.getByRole("status")).toHaveText("All changed venue settings were saved.");
     await manager.goto(roster);
+    await ensureRosterToolsOpen(manager);
     await expect(manager.locator(thirdHash)).toContainText("drafts or the publication settings have changed");
     await expect(manager.locator(thirdHash).getByRole("button", { name: "Approve and publish" })).toHaveCount(0);
     await manager.locator(thirdHash).getByRole("button", { name: "Withdraw review" }).click();
@@ -5454,6 +5502,7 @@ test("configured conflict rules block assignments and publication until warnings
     const managerPage = await managerContext.newPage();
     await signIn(managerPage, `conflict-enforce-manager-${suffix}@example.test`, password);
     await managerPage.goto(roster);
+    await ensureRosterToolsOpen(managerPage);
     await expect(managerPage.locator("article", { hasText: "FOH conflict" }).getByRole("note"))
       .toContainText("Overlaps another shift");
     await expect(managerPage.getByText("Private BOH conflict", { exact: true })).toHaveCount(0);
@@ -5476,6 +5525,7 @@ test("configured conflict rules block assignments and publication until warnings
       .getByRole("button", { name: "Confirm deletion", exact: true }).click();
     await expect(page.getByRole("status")).toHaveText("Draft shift removed.");
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page).toHaveURL(/error=publish-unavailable/);
     await expect(page.locator('p[role="alert"]')).toContainText("unavailable workers");
@@ -7909,6 +7959,7 @@ test("published roster updates reach the right employees once and retain pending
     await signIn(page, `roster-notice-owner-${suffix}@example.test`, password);
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
     const history = page.getByRole("region", { name: "Publication history" });
@@ -8073,6 +8124,7 @@ test("required shift acknowledgements stay scoped and survive later publications
     await signIn(page, `ack-owner-${suffix}@example.test`, password);
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     const card = page.getByRole("article").filter({ has: page.getByText("Required service", { exact: true }) });
     await card.getByRole("button", { name: /Require acknowledgement for Ack worker/ }).click();
     await expect(page.getByRole("status")).toHaveText("Acknowledgement requirement updated.");
@@ -8654,6 +8706,7 @@ test("owners link shared workers and scoped rosters enforce cross-venue conflict
     await policy.getByRole("button", { name: "Save changes" }).click();
     await expect(page.locator('p[role="status"]')).toHaveText("All changed venue settings were saved.");
     await managerPage.goto(roster);
+    await ensureRosterToolsOpen(managerPage);
     await managerPage.getByRole("button", { name: "Publish this department" }).click();
     await expect(managerPage.locator('p[role="alert"]')).toContainText("overlapping shifts");
     await expect(managerPage.getByText("Private other venue", { exact: true })).toHaveCount(0);
@@ -11344,6 +11397,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
     await signIn(page, `copy-browser-foh-${suffix}@example.test`, password);
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(roster("2032-04-05"));
+    await ensureRosterToolsOpen(page);
     await page.getByLabel("Find team member", { exact: true }).fill("no matching team member");
     await page.getByRole("button", { name: "Search roster", exact: true }).click();
     await expect(page.getByText("No team members match this search.", { exact: true })).toBeVisible();
@@ -11417,6 +11471,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
       starts_on: "2032-04-12", ends_on: "2032-04-12", exception_type: "leave", status: "approved",
     })).error).toBeNull();
     await page.goto(roster("2032-04-12"));
+    await ensureRosterToolsOpen(page);
     await form.getByLabel("Source week commencing Monday").fill(source);
     await form.getByRole("button", { name: "Copy into this week" }).click();
     await expect(form.getByRole("alert")).toContainText("unavailable or has approved leave");
@@ -11427,6 +11482,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
       role_title: "Existing target", starts_at: "2032-04-18T23:30:00Z", ends_at: "2032-04-19T01:30:00Z",
     })).error).toBeNull();
     await page.goto(roster("2032-04-19"));
+    await ensureRosterToolsOpen(page);
     await form.getByLabel("Source week commencing Monday").fill(source);
     await form.getByRole("button", { name: "Copy into this week" }).click();
     await expect(form.getByRole("alert")).toContainText("overlaps an existing shift");
@@ -11436,6 +11492,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
       business_id: businessId, venue_id: venueId, employee_id: workerId,
     })).error).toBeNull();
     await page.goto(roster("2032-04-26"));
+    await ensureRosterToolsOpen(page);
     await form.getByLabel("Source week commencing Monday").fill(source);
     await form.getByRole("button", { name: "Copy into this week" }).click();
     await expect(form.getByRole("alert")).toContainText("unavailable or has approved leave");
@@ -11443,6 +11500,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
     expect((await admin.from("employee_availability_patterns").delete().eq("employee_id", workerId)).error).toBeNull();
 
     await page.goto(roster("2032-05-03"));
+    await ensureRosterToolsOpen(page);
     await form.getByLabel("Source week commencing Monday").fill("2032-02-02");
     await form.getByRole("button", { name: "Copy into this week" }).click();
     await expect(page.getByRole("status")).toContainText("No shifts were found");
@@ -11453,6 +11511,7 @@ test("managers copy scoped draft rosters with conflict checks and publication-on
     const noJs = await noJsContext.newPage();
     await signIn(noJs, `copy-browser-foh-${suffix}@example.test`, password);
     await noJs.goto(roster("2032-05-10"));
+    await noJs.getByText("More roster tools", { exact: true }).click();
     const noJsForm = noJs.getByRole("form", { name: "Copy a previous roster week" });
     const noJsRequest = await noJsForm.locator('input[name="request_id"]').inputValue();
     await noJsForm.getByLabel("Source week commencing Monday").fill("2032-03-30");
@@ -11614,6 +11673,7 @@ test("owner onboarding follows real staff, draft and publication progress withou
 
     await checklist.getByRole("link", { name: "Open the roster" }).click();
     await page.goto(`/roster?week=2032-03-29&venue=${venueId}&department=${departmentId}`);
+    await ensureRosterToolsOpen(page);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toContainText("roster published");
     await page.goto(`/?business=${businessId}&venue=${venueId}`);
@@ -11948,6 +12008,7 @@ test("core pages pass WCAG checks, keyboard controls and screen-reader smoke tes
     }
 
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     const publish = page.getByRole("button", { name: "Publish this department" });
     await publish.focus();
     await expect(publish).toBeFocused();
@@ -12167,6 +12228,7 @@ test("a 25 employee by 7 day roster meets the documented performance benchmark",
       rosterLoads.push(Date.now() - started);
     }
 
+    await ensureRosterToolsOpen(page);
     const publishStarted = Date.now();
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("main").getByRole("status").filter({ hasText: "roster published" }))
@@ -12266,6 +12328,7 @@ test("loading, failure and missing-page states are announced and recoverable", a
     await page.unroute("**/roster**");
 
     await page.goto(`/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`);
+    await ensureRosterToolsOpen(page);
     const publish = page.getByRole("button", { name: "Publish this department" });
     await expect(publish).toBeVisible();
     await page.route("**/roster**", async (route) => {
@@ -12465,6 +12528,7 @@ test("published roster updates reach uninvited staff once after they accept an i
     await signIn(page, ownerEmail, password);
     const roster = `/roster?week=2032-03-15&venue=${venueId}&department=${departmentId}`;
     await page.goto(roster);
+    await ensureRosterToolsOpen(page);
     await page.getByRole("button", { name: "Publish this department" }).click();
     await expect(page.getByRole("status")).toHaveText("Front of House roster published.");
     const history = page.getByRole("region", { name: "Publication history" });
